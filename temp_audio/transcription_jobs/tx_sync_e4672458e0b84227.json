@@ -1,0 +1,14 @@
+{
+  "job_id": "tx_sync_e4672458e0b84227",
+  "file_path": "D:\\voicespirit\\temp_audio\\transcription_jobs\\uploads\\upload_b6ac25ae922b.wav",
+  "mode": "sync",
+  "status": "completed",
+  "created_at": "2026-06-16T12:40:47.133077+00:00",
+  "updated_at": "2026-06-16T12:40:47.140583+00:00",
+  "transcript_path": "D:\\voicespirit\\temp_audio\\transcription_jobs\\tx_sync_e4672458e0b84227.txt",
+  "error": null,
+  "remote_job_id": null,
+  "source_url": null,
+  "memory_saved": true,
+  "original_filename": null
+}

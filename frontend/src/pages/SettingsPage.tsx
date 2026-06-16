@@ -1,4 +1,4 @@
-import { useState, ReactNode, useMemo } from "react";
+import { useState, ReactNode, useMemo, useEffect } from "react";
 import { Terminal, Globe, Cpu, Brain, Mic, Monitor } from "lucide-react";
 import { ProviderIcon } from "@lobehub/icons";
 import EvermindBadge from "../components/EvermindBadge";
@@ -75,6 +75,67 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose }:
   const [customUseMaxTokens, setCustomUseMaxTokens] = useState(false);
   const [customHeadersJson, setCustomHeadersJson] = useState("{}");
   const [customModalError, setCustomModalError] = useState("");
+
+  // Electron Auto Update States
+  const [updateStatus, setUpdateStatus] = useState<string>("idle");
+  const [updateVersionInfo, setUpdateVersionInfo] = useState<{ version: string; releaseNotes?: string } | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [appVersion, setAppVersion] = useState<string>("");
+
+  // Load App Version
+  useEffect(() => {
+    if (window.isElectron && window.electronAPI?.getAppVersion) {
+      window.electronAPI.getAppVersion().then(setAppVersion).catch(console.error);
+    }
+  }, []);
+
+  // Listen to update status
+  useEffect(() => {
+    if (window.isElectron && window.electronAPI?.onUpdateStatus) {
+      window.electronAPI.onUpdateStatus((status, data) => {
+        setUpdateStatus(status);
+        if (status === "available" || status === "downloaded") {
+          setUpdateVersionInfo(data);
+        }
+        if (status === "downloading" && data) {
+          setDownloadProgress(data.percent || 0);
+        }
+      });
+      return () => {
+        window.electronAPI?.removeUpdateStatusListener();
+      };
+    }
+  }, []);
+
+  const handleCheckUpdate = async () => {
+    if (window.isElectron && window.electronAPI?.checkForUpdates) {
+      setUpdateStatus("checking");
+      try {
+        await window.electronAPI.checkForUpdates();
+      } catch (err) {
+        console.error("Check for updates failed:", err);
+        setUpdateStatus("error");
+      }
+    }
+  };
+
+  const handleDownloadUpdate = async () => {
+    if (window.isElectron && window.electronAPI?.downloadUpdate) {
+      setUpdateStatus("downloading");
+      try {
+        await window.electronAPI.downloadUpdate();
+      } catch (err) {
+        console.error("Download update failed:", err);
+        setUpdateStatus("error");
+      }
+    }
+  };
+
+  const handleInstallUpdate = () => {
+    if (window.isElectron && window.electronAPI?.installUpdate) {
+      window.electronAPI.installUpdate();
+    }
+  };
 
   const providerDisplayNames = useMemo(() => {
     const base = getProviderDisplayNames(t);
@@ -823,6 +884,69 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose }:
                   <div className="vsSystemPath">
                     <span className="vsFieldLabel">{t("全局配置文件宿主路径:", "Config File Path:")}</span>
                     <code className="vsCodeBlock">{settings.settingsConfigPath}</code>
+                  </div>
+                )}
+
+                {window.isElectron && (
+                  <div className="vsCardSection border-top mt-4">
+                    <h3 className="vsCardSubTitle">{t("软件版本与自动更新", "App Version & Auto Update")}</h3>
+                    <div className="vsUpdateStatusArea">
+                      <p className="mb-2">
+                        {t("当前版本: ", "Current Version: ")} <strong>{appVersion || "2.0.0"}</strong>
+                      </p>
+                      
+                      {updateStatus === "idle" && (
+                        <button type="button" className="vsBtnGhost" onClick={handleCheckUpdate}>
+                          {t("检查更新", "Check for Updates")}
+                        </button>
+                      )}
+                      {updateStatus === "checking" && (
+                        <p className="vsSettingsNotice info">{t("正在检查新版本，请稍候...", "Checking for updates...")}</p>
+                      )}
+                      {updateStatus === "available" && (
+                        <div className="vsUpdateAvailableBox">
+                          <p className="vsSettingsNotice ok mb-2">
+                            {t(`发现新版本: v${updateVersionInfo?.version || ""}`, `New version available: v${updateVersionInfo?.version || ""}`)}
+                          </p>
+                          <button type="button" className="vsBtnGhost" onClick={handleDownloadUpdate}>
+                            {t("开始下载更新", "Download Update")}
+                          </button>
+                        </div>
+                      )}
+                      {updateStatus === "not-available" && (
+                        <div className="vsUpdateAvailableBox">
+                          <p className="vsSettingsNotice ok mb-2">{t("当前已是最新版本。", "You are using the latest version.")}</p>
+                          <button type="button" className="vsBtnGhost" onClick={handleCheckUpdate}>
+                            {t("重新检查", "Check Again")}
+                          </button>
+                        </div>
+                      )}
+                      {updateStatus === "downloading" && (
+                        <div className="vsDownloadProgressBox">
+                          <p className="mb-1">{t("正在下载更新...", "Downloading update...")}</p>
+                          <div className="vsProgressBarContainer">
+                            <div className="vsProgressBar" style={{ width: `${downloadProgress}%` }} />
+                          </div>
+                          <span className="text-sm text-gray-400">{downloadProgress.toFixed(1)}%</span>
+                        </div>
+                      )}
+                      {updateStatus === "downloaded" && (
+                        <div className="vsUpdateAvailableBox">
+                          <p className="vsSettingsNotice ok mb-2">{t("更新下载完成！", "Update downloaded successfully!")}</p>
+                          <button type="button" className="vsBtnGhost" onClick={handleInstallUpdate}>
+                            {t("立即安装并重启", "Install and Restart")}
+                          </button>
+                        </div>
+                      )}
+                      {updateStatus === "error" && (
+                        <div className="vsUpdateAvailableBox">
+                          <p className="vsSettingsNotice warning mb-2">{t("检查或下载更新时发生错误。", "An error occurred during update check or download.")}</p>
+                          <button type="button" className="vsBtnGhost" onClick={handleCheckUpdate}>
+                            {t("重试", "Retry")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

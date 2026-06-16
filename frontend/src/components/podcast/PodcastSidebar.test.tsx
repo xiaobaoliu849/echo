@@ -51,13 +51,13 @@ describe("PodcastSidebar", () => {
             {
               id: 1,
               run_id: 3,
-              source_type: "manual_text",
-              title: "User provided context",
-              uri: "",
+              source_type: "web_search",
+              title: "Research source",
+              uri: "https://example.com/research",
               snippet: "用户希望内容更贴近年轻上班族。",
-              content: "",
+              content: "Fetched research content",
               score: 1,
-              meta: {},
+              meta: { origin: "web_search" },
               created_at: ""
             }
           ],
@@ -77,7 +77,8 @@ describe("PodcastSidebar", () => {
     // Should match either English status or translated status
     expect(screen.getByText(/#3 (draft_ready|草稿已就绪)/)).toBeInTheDocument();
     expect(screen.getByText("检索")).toBeInTheDocument();
-    expect(screen.getByText("User provided context")).toBeInTheDocument();
+    expect(screen.getByText("Research source")).toBeInTheDocument();
+    expect(screen.getByText("Fetched research content")).toBeInTheDocument();
     expect(screen.getByText("草稿已生成")).toBeInTheDocument();
   });
 });

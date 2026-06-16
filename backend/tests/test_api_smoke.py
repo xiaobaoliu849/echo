@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import tempfile
 import time
 import unittest
@@ -152,17 +153,15 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertTrue(index_html.is_file())
         html = index_html.read_text(encoding="utf-8")
 
-        script_marker = 'src="/assets/'
-        style_marker = 'href="/assets/'
-        script_start = html.index(script_marker) + len('src="')
-        script_end = html.index('"', script_start)
-        style_start = html.index(style_marker) + len('href="')
-        style_end = html.index('"', style_start)
-        script_path = html[script_start:script_end]
-        style_path = html[style_start:style_end]
+        script_match = re.search(r'src="(\.?/assets/[^"]+)"', html)
+        style_match = re.search(r'href="(\.?/assets/[^"]+)"', html)
+        self.assertIsNotNone(script_match)
+        self.assertIsNotNone(style_match)
+        script_path = script_match.group(1) if script_match else ""
+        style_path = style_match.group(1) if style_match else ""
         assets_dir = frontend_dist / "assets"
-        self.assertTrue((assets_dir / script_path.removeprefix("/assets/")).is_file())
-        self.assertTrue((assets_dir / style_path.removeprefix("/assets/")).is_file())
+        self.assertTrue((assets_dir / script_path.removeprefix("./assets/").removeprefix("/assets/")).is_file())
+        self.assertTrue((assets_dir / style_path.removeprefix("./assets/").removeprefix("/assets/")).is_file())
 
         asset_mount_paths = {
             route.path
@@ -1512,6 +1511,9 @@ class ApiSmokeTests(unittest.TestCase):
                     language: str | None = None,
                     gap_ms: int = 250,
                     merge_strategy: str = "auto",
+                    intro_music: bool = False,
+                    intro_music_style: str = "warm",
+                    intro_music_duration_ms: int = 2500,
                 ) -> dict[str, Any]:
                     _ = (voice_a, voice_b, language, merge_strategy)
                     audio_file = output_dir / f"podcast_{podcast_id}.mp3"
@@ -1529,6 +1531,9 @@ class ApiSmokeTests(unittest.TestCase):
                         "gap_ms": gap_ms,
                         "gap_ms_applied": 0,
                         "merge_strategy": "ffmpeg",
+                        "intro_music": intro_music,
+                        "intro_music_style": intro_music_style if intro_music else "off",
+                        "intro_music_duration_ms": intro_music_duration_ms if intro_music else 0,
                     }
 
                 r_create = self._request(
@@ -1599,11 +1604,17 @@ class ApiSmokeTests(unittest.TestCase):
                             "voice_b": "zh-CN-XiaoxiaoNeural",
                             "gap_ms": 300,
                             "merge_strategy": "auto",
+                            "intro_music": True,
+                            "intro_music_style": "bright",
+                            "intro_music_duration_ms": 3200,
                         },
                     )
                 self.assertEqual(r_synth.status_code, 200)
                 self.assertIn("/api/audio-overview/podcasts/", r_synth.json()["audio_download_url"])
                 self.assertEqual(r_synth.json()["gap_ms"], 300)
+                self.assertTrue(r_synth.json()["intro_music"])
+                self.assertEqual(r_synth.json()["intro_music_style"], "bright")
+                self.assertEqual(r_synth.json()["intro_music_duration_ms"], 3200)
 
                 async def fake_synthesize_error(
                     podcast_id: int,
@@ -1614,8 +1625,22 @@ class ApiSmokeTests(unittest.TestCase):
                     language: str | None = None,
                     gap_ms: int = 250,
                     merge_strategy: str = "auto",
+                    intro_music: bool = False,
+                    intro_music_style: str = "warm",
+                    intro_music_duration_ms: int = 2500,
                 ) -> dict[str, Any]:
-                    _ = (podcast_id, voice_a, voice_b, rate, language, gap_ms, merge_strategy)
+                    _ = (
+                        podcast_id,
+                        voice_a,
+                        voice_b,
+                        rate,
+                        language,
+                        gap_ms,
+                        merge_strategy,
+                        intro_music,
+                        intro_music_style,
+                        intro_music_duration_ms,
+                    )
                     raise AudioOverviewServiceError(
                         code="AUDIO_MERGE_STRATEGY_INVALID",
                         message="Unsupported merge strategy: invalid",
@@ -1631,6 +1656,46 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertEqual(r_synth_error.status_code, 400)
                 detail = r_synth_error.json()["detail"]
                 self.assertEqual(detail["code"], "AUDIO_MERGE_STRATEGY_INVALID")
+
+                async def fake_intro_synthesize_error(
+                    podcast_id: int,
+                    *,
+                    voice_a: str | None = None,
+                    voice_b: str | None = None,
+                    rate: str = "+0%",
+                    language: str | None = None,
+                    gap_ms: int = 250,
+                    merge_strategy: str = "auto",
+                    intro_music: bool = False,
+                    intro_music_style: str = "warm",
+                    intro_music_duration_ms: int = 2500,
+                ) -> dict[str, Any]:
+                    _ = (
+                        podcast_id,
+                        voice_a,
+                        voice_b,
+                        rate,
+                        language,
+                        gap_ms,
+                        merge_strategy,
+                        intro_music,
+                        intro_music_style,
+                        intro_music_duration_ms,
+                    )
+                    raise AudioOverviewServiceError(
+                        code="AUDIO_INTRO_MUSIC_EXPORT_FAILED",
+                        message="Intro music export failed.",
+                        meta={"style": "bright"},
+                    )
+
+                with patch.object(test_service, "synthesize_podcast_audio", new=fake_intro_synthesize_error):
+                    r_intro_error = self._request(
+                        "POST",
+                        f"/api/audio-overview/podcasts/{podcast_id}/synthesize",
+                        json={"intro_music": True, "intro_music_style": "bright"},
+                    )
+                self.assertEqual(r_intro_error.status_code, 503)
+                self.assertEqual(r_intro_error.json()["detail"]["code"], "AUDIO_INTRO_MUSIC_EXPORT_FAILED")
 
                 r_audio = self._request("GET", f"/api/audio-overview/podcasts/{podcast_id}/audio")
                 self.assertEqual(r_audio.status_code, 200)
@@ -1699,9 +1764,49 @@ class ApiSmokeTests(unittest.TestCase):
                             {"role": "B", "text": f"本次草稿参考了 {len(sources)} 条线索。"},
                         ],
                         "evidence_summary": "1. 用户希望内容更贴近年轻上班族。",
+                        "research_brief": "Source mix: manual_text=1, manual_url=2",
                     }
 
-                with patch.object(test_service.script_writer, "generate_script", new=fake_generate_script):
+                async def fake_collect_sources(
+                    *,
+                    topic: str,
+                    use_memory: bool,
+                    source_urls: list[str] | None = None,
+                    source_text: str | None = None,
+                    request_headers: dict[str, Any] | None = None,
+                ) -> list[dict[str, Any]]:
+                    _ = (topic, use_memory, request_headers)
+                    sources: list[dict[str, Any]] = []
+                    if source_text:
+                        sources.append(
+                            {
+                                "source_type": "manual_text",
+                                "title": "User provided context",
+                                "uri": "",
+                                "snippet": source_text[:280],
+                                "content": source_text,
+                                "score": 1.0,
+                                "meta": {"origin": "user_input"},
+                            }
+                        )
+                    for idx, url in enumerate(source_urls or [], start=1):
+                        sources.append(
+                            {
+                                "source_type": "manual_url",
+                                "title": f"Manual source {idx}",
+                                "uri": url,
+                                "snippet": f"摘录 {idx}",
+                                "content": f"网页正文 {idx}",
+                                "score": 0.75,
+                                "meta": {"origin": "user_url", "fetch_status": "ok"},
+                            }
+                        )
+                    return sources
+
+                with (
+                    patch.object(test_service.retrieval_service, "collect_sources", new=fake_collect_sources),
+                    patch.object(test_service.script_writer, "generate_script", new=fake_generate_script),
+                ):
                     r_execute = self._request(
                         "POST",
                         f"/api/audio-agent/runs/{run_id}/execute",
@@ -1722,6 +1827,7 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertTrue(bool(loaded["podcast_id"]))
                 self.assertEqual(len(loaded["sources"]), 3)
                 self.assertEqual(loaded["result_payload"]["provider"], "DashScope")
+                self.assertIn("research_brief", loaded["result_payload"])
                 self.assertEqual(len(loaded["result_payload"]["script_lines"]), 4)
                 podcast_id = int(loaded["podcast_id"])
 
@@ -1734,6 +1840,9 @@ class ApiSmokeTests(unittest.TestCase):
                     language: str | None = None,
                     gap_ms: int = 250,
                     merge_strategy: str = "auto",
+                    intro_music: bool = False,
+                    intro_music_style: str = "warm",
+                    intro_music_duration_ms: int = 2500,
                 ) -> dict[str, Any]:
                     _ = (voice_a, voice_b, language)
                     audio_file = Path(tmp_dir) / "audio_out" / f"agent_podcast_{podcast_id}.mp3"
@@ -1751,6 +1860,9 @@ class ApiSmokeTests(unittest.TestCase):
                         "gap_ms": gap_ms,
                         "gap_ms_applied": 0,
                         "merge_strategy": merge_strategy,
+                        "intro_music": intro_music,
+                        "intro_music_style": intro_music_style if intro_music else "off",
+                        "intro_music_duration_ms": intro_music_duration_ms if intro_music else 0,
                     }
 
                 with patch.object(
@@ -1766,6 +1878,9 @@ class ApiSmokeTests(unittest.TestCase):
                             "voice_b": "zh-CN-XiaoxiaoNeural",
                             "gap_ms": 300,
                             "merge_strategy": "auto",
+                            "intro_music": True,
+                            "intro_music_style": "calm",
+                            "intro_music_duration_ms": 2800,
                         },
                     )
                 self.assertEqual(r_run_synth.status_code, 200)
@@ -1773,6 +1888,9 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertEqual(synthesized["status"], "completed")
                 self.assertEqual(synthesized["current_step"], "synthesize_audio")
                 self.assertEqual(synthesized["result_payload"]["cache_hits"], 2)
+                self.assertTrue(synthesized["result_payload"]["intro_music"])
+                self.assertEqual(synthesized["result_payload"]["intro_music_style"], "calm")
+                self.assertEqual(synthesized["result_payload"]["intro_music_duration_ms"], 2800)
                 self.assertEqual(synthesized["podcast_id"], podcast_id)
 
                 self.assertEqual(loaded["id"], run_id)
@@ -1792,9 +1910,58 @@ class ApiSmokeTests(unittest.TestCase):
                 event_types = [item["event_type"] for item in events["events"]]
                 self.assertIn("run_created", event_types)
                 self.assertIn("draft_created", event_types)
+                self.assertIn("research_brief_created", event_types)
                 self.assertIn("podcast_saved", event_types)
                 self.assertIn("synthesis_completed", event_types)
                 self.assertIn("execution_deferred", event_types)
+
+                async def fake_run_intro_error(
+                    podcast_id: int,
+                    *,
+                    voice_a: str | None = None,
+                    voice_b: str | None = None,
+                    rate: str = "+0%",
+                    language: str | None = None,
+                    gap_ms: int = 250,
+                    merge_strategy: str = "auto",
+                    intro_music: bool = False,
+                    intro_music_style: str = "warm",
+                    intro_music_duration_ms: int = 2500,
+                ) -> dict[str, Any]:
+                    _ = (
+                        podcast_id,
+                        voice_a,
+                        voice_b,
+                        rate,
+                        language,
+                        gap_ms,
+                        merge_strategy,
+                        intro_music,
+                        intro_music_style,
+                        intro_music_duration_ms,
+                    )
+                    raise AudioOverviewServiceError(
+                        code="AUDIO_INTRO_MUSIC_UNAVAILABLE",
+                        message="Intro music generation requires pydub and an audio backend.",
+                        meta={"reason": "missing pydub.generators"},
+                    )
+
+                with patch.object(
+                    test_service.audio_overview_service,
+                    "synthesize_podcast_audio",
+                    new=fake_run_intro_error,
+                ):
+                    r_run_intro_error = self._request(
+                        "POST",
+                        f"/api/audio-agent/runs/{run_id}/synthesize",
+                        json={"intro_music": True},
+                    )
+                self.assertEqual(r_run_intro_error.status_code, 502)
+                intro_error_detail = r_run_intro_error.json()["detail"]
+                self.assertEqual(intro_error_detail["code"], "AUDIO_INTRO_MUSIC_UNAVAILABLE")
+                failed_run = self._request("GET", f"/api/audio-agent/runs/{run_id}").json()
+                self.assertEqual(failed_run["status"], "failed")
+                self.assertEqual(failed_run["error_code"], "AUDIO_INTRO_MUSIC_UNAVAILABLE")
 
                 r_missing = self._request("GET", "/api/audio-agent/runs/999999")
                 self.assertEqual(r_missing.status_code, 404)

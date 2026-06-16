@@ -23,6 +23,7 @@ export default function PodcastSidebar({ audioOverview }: Props) {
       step_started: t("步骤开始", "Step started"),
       step_completed: t("步骤完成", "Step completed"),
       retrieval_summary: t("检索完成", "Retrieval completed"),
+      research_brief_created: t("研究摘要已生成", "Research brief created"),
       draft_created: t("草稿已生成", "Draft created"),
       podcast_saved: t("草稿已保存", "Draft saved"),
       synthesis_started: t("开始合成", "Synthesis started"),

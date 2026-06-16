@@ -1,0 +1,60 @@
+{
+  "name": "voicespirit",
+  "version": "1.0.0",
+  "description": "VoiceSpirit Desktop Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder build --windows",
+    "pack": "electron-builder --dir"
+  },
+  "author": "VoiceSpirit Team",
+  "license": "MIT",
+  "dependencies": {
+    "electron-updater": "^6.1.4"
+  },
+  "devDependencies": {
+    "electron": "^31.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.voicespirit.desktop",
+    "productName": "VoiceSpirit",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend/dist",
+        "to": "frontend/dist"
+      },
+      {
+        "from": "../backend/dist/voicespirit-backend",
+        "to": "backend-dist"
+      },
+      {
+        "from": "../resources/icons/logo.ico",
+        "to": "resources/icons/logo.ico"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "VoiceSpirit",
+      "useZip": true
+    }
+  }
+}

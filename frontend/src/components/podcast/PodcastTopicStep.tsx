@@ -147,8 +147,8 @@ export default function PodcastTopicStep({ audioOverview }: Props) {
                 value={audioOverview.audioAgentSourceUrlsText}
                 onChange={(e) => audioOverview.onSourceUrlsTextChange(e.target.value)}
                 placeholder={t(
-                  "每行一个 URL。后续可以扩展为抓取网页内容；当前阶段主要用于记录显式来源。",
-                  "One URL per line. For now these are stored as explicit sources and can be expanded to fetched web content later."
+                  "每行一个 URL。Agent 会尝试抓取网页正文；如果没有手动资料，也会尝试自动搜索公开网页。",
+                  "One URL per line. The agent will try to fetch page text; without manual sources it will also try public web search."
                 )}
               />
             </label>

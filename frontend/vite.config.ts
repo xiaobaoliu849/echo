@@ -11,6 +11,7 @@ const appVersion = String(process.env.VITE_APP_VERSION || packageJson.version ||
 
 export default defineConfig({
   plugins: [react()],
+  base: "./",
   define: {
     __APP_VERSION__: JSON.stringify(appVersion)
   },

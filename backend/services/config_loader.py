@@ -41,8 +41,8 @@ class BackendConfig:
 
     @staticmethod
     def _default_config_path() -> Path:
-        # /backend/services/config_loader.py -> project root/config.json
-        return Path(__file__).resolve().parents[2] / "config.json"
+        return get_data_dir() / "config.json"
+
 
     def reload(self) -> None:
         if not self.config_path.exists():
@@ -148,3 +148,15 @@ class BackendConfig:
             "base_url": base_url,
             "model": selected_model,
         }
+
+
+def get_data_dir() -> Path:
+    import os
+    data_dir = os.environ.get("VOICESPIRIT_DATA_DIR")
+    if data_dir:
+        p = Path(data_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    # Fallback to local project root
+    return Path(__file__).resolve().parents[2]
+

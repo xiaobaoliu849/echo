@@ -7,6 +7,7 @@ const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 const appVersion = String(process.env.VITE_APP_VERSION || packageJson.version || "N/A");
 export default defineConfig({
     plugins: [react()],
+    base: "./",
     define: {
         __APP_VERSION__: JSON.stringify(appVersion)
     },

@@ -25,6 +25,9 @@ export default function AudioOverviewPage({
   const [searchQuery, setSearchQuery] = useState("");
 
   const hasScript = audioOverview.audioOverviewScriptLines.length > 0;
+  const isAgentRunning =
+    audioOverview.audioAgentRunId !== null &&
+    ["queued", "running", "synthesizing"].includes(audioOverview.audioAgentStatus || "queued");
   const headerAudioOverview = {
     ...audioOverview,
     currentAudioOverviewLabel: audioOverview.currentAudioOverviewLabel.replace(/^播客 #/, "当前节目 #")
@@ -53,12 +56,7 @@ export default function AudioOverviewPage({
   };
 
   const handleOpenPodcast = (id: number) => {
-    // Assuming onLoadPodcast exists, although type might not expose it. 
-    // We cast as any just in case it's not strongly typed in UseAudioOverviewResult.
-    const hook = audioOverview as any;
-    if (hook.onLoadPodcast) {
-      hook.onLoadPodcast(id);
-    }
+    void audioOverview.onLoadPodcast(id);
     setViewMode("workspace");
   };
 
@@ -138,7 +136,7 @@ export default function AudioOverviewPage({
             </p>
           ) : null}
           
-          {audioOverview.audioAgentRunId !== null && audioOverview.audioAgentStatus !== "completed" ? (
+          {isAgentRunning ? (
             <div className="vsAgentRunningBanner">
                <div className="spinner vsAgentSpinner" />
                <span className="vsAgentRunningLabel">
@@ -275,17 +273,7 @@ export default function AudioOverviewPage({
                 onDelete={(e) => {
                   e.stopPropagation();
                   if (confirm(t("确定要删除这条播客记录吗？", "Are you sure you want to delete this podcast?"))) {
-                    // Quick way to delete since onDeleteCurrent only deletes active podcast.
-                    // Oh wait, audioOverview.onDeleteCurrent deletes the currently active one.
-                    // Let's set it active first, then delete. Or just use a hook method if available.
-                    const hook = audioOverview as any;
-                    if (hook.onDeletePodcastById) {
-                       hook.onDeletePodcastById(item.id);
-                    } else {
-                       // Workaround: Load it then delete.
-                       handleOpenPodcast(item.id);
-                       setTimeout(() => audioOverview.onDeleteCurrent(), 500);
-                    }
+                    void audioOverview.onDeletePodcastById(item.id);
                   }
                 }}
               />

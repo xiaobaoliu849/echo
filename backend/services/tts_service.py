@@ -111,8 +111,8 @@ class TTSService:
         config: BackendConfig | None = None,
     ):
         self.config = config or BackendConfig()
-        root = Path(__file__).resolve().parents[1]
-        resolved_output = output_dir or (root / "temp_audio")
+        from .config_loader import get_data_dir
+        resolved_output = output_dir or (get_data_dir() / "temp_audio")
         self.output_dir = resolved_output
         self.output_dir.mkdir(parents=True, exist_ok=True)
 

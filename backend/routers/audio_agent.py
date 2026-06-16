@@ -117,6 +117,9 @@ class AudioAgentSynthesizeRequest(BaseModel):
     language: str | None = Field(default=None, max_length=20)
     gap_ms: int = Field(default=250, ge=0, le=3000)
     merge_strategy: str = Field(default="auto", min_length=1, max_length=20)
+    intro_music: bool = Field(default=False)
+    intro_music_style: str = Field(default="warm", min_length=1, max_length=20)
+    intro_music_duration_ms: int = Field(default=2500, ge=800, le=8000)
 
 
 def _raise_structured(
@@ -348,6 +351,9 @@ async def synthesize_audio_agent_run(
             language=payload.language,
             gap_ms=payload.gap_ms,
             merge_strategy=payload.merge_strategy,
+            intro_music=payload.intro_music,
+            intro_music_style=payload.intro_music_style,
+            intro_music_duration_ms=payload.intro_music_duration_ms,
         )
     except AudioAgentServiceError as exc:
         status_code = 404 if exc.code == "AUDIO_AGENT_RUN_NOT_FOUND" else 502

@@ -51,6 +51,21 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
     try {
       const filename = "voicespirit_tts.mp3";
       const audioBlob: Blob = tts.audioBlob ?? await fetch(tts.audioUrl).then((response) => response.blob());
+      
+      // 1. Electron save
+      if (window.isElectron && window.electronAPI?.saveAudioFile) {
+        const result = await window.electronAPI.saveAudioFile({
+          filename,
+          mime_type: audioBlob.type || "audio/mpeg",
+          data_base64: await blobToBase64(audioBlob)
+        });
+        if (result?.ok || result?.cancelled) {
+          return;
+        }
+        throw new Error(result?.message || "Electron audio export failed.");
+      }
+
+      // 2. PyWebView save
       const desktopSaveAudio = (window as DesktopBridgeWindow).pywebview?.api?.save_audio_file;
       if (desktopSaveAudio) {
         const result = await desktopSaveAudio({

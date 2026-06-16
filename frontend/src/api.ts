@@ -300,6 +300,9 @@ export type AudioOverviewSynthesizeRequest = {
   language?: string;
   gap_ms?: number;
   merge_strategy?: "auto" | "pydub" | "ffmpeg" | "concat";
+  intro_music?: boolean;
+  intro_music_style?: "warm" | "bright" | "calm";
+  intro_music_duration_ms?: number;
 };
 
 export type AudioOverviewSynthesizeResponse = {
@@ -314,6 +317,9 @@ export type AudioOverviewSynthesizeResponse = {
   gap_ms: number;
   gap_ms_applied: number;
   merge_strategy: string;
+  intro_music: boolean;
+  intro_music_style: string;
+  intro_music_duration_ms: number;
 };
 
 export type AudioAgentStep = {
@@ -404,6 +410,9 @@ export type AudioAgentSynthesizeRequest = {
   language?: string;
   gap_ms?: number;
   merge_strategy?: "auto" | "pydub" | "ffmpeg" | "concat";
+  intro_music?: boolean;
+  intro_music_style?: "warm" | "bright" | "calm";
+  intro_music_duration_ms?: number;
 };
 
 export type ApiRuntimeInfo = {

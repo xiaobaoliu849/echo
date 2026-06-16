@@ -723,6 +723,12 @@ export default function useSettings({ formatErrorMessage }: Options) {
       }
 
       const result = await updateSettings(patch);
+      if (window.isElectron && window.electronAPI?.updateGlobalShortcut) {
+        const syncResult = await window.electronAPI.updateGlobalShortcut(desktopWakeShortcut.trim());
+        if (!syncResult.ok) {
+          console.warn("Failed to sync global shortcut to Electron:", syncResult.error);
+        }
+      }
       setSettingsData(result.settings);
       setSettingsConfigPath(result.config_path);
       setSettingsProviders(result.providers);

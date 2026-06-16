@@ -105,6 +105,41 @@ export default function PodcastSynthBar({ audioOverview }: Props) {
                 <option value="concat">concat</option>
               </select>
             </label>
+            <label className="vsSynthCheckboxLabel">
+              <input
+                type="checkbox"
+                checked={audioOverview.audioOverviewIntroMusic}
+                onChange={(e) => audioOverview.onIntroMusicChange(e.target.checked)}
+              />
+              {t("片头音乐", "Intro music")}
+            </label>
+            <label>
+              {t("片头风格", "Intro style")}
+              <select
+                value={audioOverview.audioOverviewIntroMusicStyle}
+                onChange={(e) =>
+                  audioOverview.onIntroMusicStyleChange(
+                    e.target.value as UseAudioOverviewResult["audioOverviewIntroMusicStyle"]
+                  )
+                }
+                disabled={!audioOverview.audioOverviewIntroMusic}
+              >
+                <option value="warm">{t("温暖", "Warm")}</option>
+                <option value="bright">{t("明亮", "Bright")}</option>
+                <option value="calm">{t("平静", "Calm")}</option>
+              </select>
+            </label>
+            <label>
+              {t("片头时长（毫秒）", "Intro duration (ms)")}
+              <input
+                type="number"
+                min={800}
+                max={8000}
+                value={audioOverview.audioOverviewIntroMusicDurationMs}
+                onChange={(e) => audioOverview.onIntroMusicDurationChange(e.target.value)}
+                disabled={!audioOverview.audioOverviewIntroMusic}
+              />
+            </label>
           </div>
         </div>
       ) : null}

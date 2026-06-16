@@ -21,7 +21,8 @@ class AudioAgentRepository:
 
     @staticmethod
     def _default_db_path() -> Path:
-        return Path(__file__).resolve().parents[2] / "voice_spirit.db"
+        from .config_loader import get_data_dir
+        return get_data_dir() / "voice_spirit.db"
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

@@ -93,7 +93,8 @@ class TranscriptionService:
     def __init__(self, config: BackendConfig | None = None):
         self.config = config or BackendConfig()
         self.llm_service = LLMService(self.config)
-        self.jobs_dir = Path(__file__).resolve().parents[1] / "temp_audio" / "transcription_jobs"
+        from .config_loader import get_data_dir
+        self.jobs_dir = get_data_dir() / "temp_audio" / "transcription_jobs"
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
 
     @property

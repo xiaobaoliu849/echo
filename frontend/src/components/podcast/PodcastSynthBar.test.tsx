@@ -19,6 +19,9 @@ describe("PodcastSynthBar", () => {
     );
 
     expect(screen.getByText("拼接策略")).toBeInTheDocument();
+    expect(screen.getByText("片头音乐")).toBeInTheDocument();
+    expect(screen.getByText("片头风格")).toBeInTheDocument();
+    expect(screen.getByText("片头时长（毫秒）")).toBeInTheDocument();
     expect(screen.getByDisplayValue("+0%")).toBeInTheDocument();
   });
 });

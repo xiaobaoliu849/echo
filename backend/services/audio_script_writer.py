@@ -67,17 +67,50 @@ class AudioScriptWriter:
         lines: list[str] = []
         for idx, source in enumerate(sources[:6], start=1):
             title = str(source.get("title", "")).strip()
+            uri = str(source.get("uri", "")).strip()
             snippet = str(source.get("snippet", "")).strip()
             content = str(source.get("content", "")).strip()
             body = snippet or content
             if not body:
-                uri = str(source.get("uri", "")).strip()
                 body = f"参考来源：{uri}" if uri else ""
             if not body:
                 continue
             prefix = f"{idx}. {title}: " if title else f"{idx}. "
+            if uri:
+                prefix = f"{prefix}[{uri}] "
             lines.append(f"{prefix}{body[:480]}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _build_research_brief(sources: list[dict[str, Any]]) -> str:
+        if not sources:
+            return ""
+
+        source_type_counts: dict[str, int] = {}
+        key_points: list[str] = []
+        citations: list[str] = []
+        for source in sources[:8]:
+            source_type = str(source.get("source_type", "unknown")).strip() or "unknown"
+            source_type_counts[source_type] = source_type_counts.get(source_type, 0) + 1
+            title = str(source.get("title", "")).strip()
+            uri = str(source.get("uri", "")).strip()
+            snippet = str(source.get("snippet", "")).strip()
+            content = str(source.get("content", "")).strip()
+            point = snippet or content[:280]
+            if point:
+                key_points.append(f"- {title or source_type}: {point[:360]}")
+            if uri:
+                citations.append(f"- {title or uri}: {uri}")
+
+        type_summary = ", ".join(
+            f"{name}={count}" for name, count in sorted(source_type_counts.items())
+        )
+        sections = [f"Source mix: {type_summary}"]
+        if key_points:
+            sections.append("Key evidence:\n" + "\n".join(key_points[:8]))
+        if citations:
+            sections.append("Citations:\n" + "\n".join(citations[:8]))
+        return "\n\n".join(sections)
 
     @staticmethod
     def _build_system_prompt(language: str, has_evidence: bool) -> str:
@@ -152,6 +185,10 @@ class AudioScriptWriter:
     ) -> dict[str, Any]:
         clean_language = self._normalize_language(language)
         evidence_summary = self._build_evidence_summary(sources)
+        research_brief = self._build_research_brief(sources)
+        prompt_evidence = "\n\n".join(
+            item for item in [research_brief, evidence_summary] if item
+        )
         completion = await self.llm_service.chat_completion(
             provider=provider,
             model=model,
@@ -169,7 +206,7 @@ class AudioScriptWriter:
                         topic=topic,
                         language=clean_language,
                         turn_count=max(2, min(int(turn_count), 40)),
-                        evidence_summary=evidence_summary,
+                        evidence_summary=prompt_evidence,
                         generation_constraints=str(generation_constraints or "").strip(),
                     ),
                 },
@@ -188,4 +225,5 @@ class AudioScriptWriter:
             "reply": reply,
             "script_lines": normalized,
             "evidence_summary": evidence_summary,
+            "research_brief": research_brief,
         }

@@ -6,7 +6,7 @@ import sqlite3
 import subprocess
 import tempfile
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +62,7 @@ Please output the dialogue content directly in English without additional explan
 
 SCRIPT_LINE_PATTERN = re.compile(r"^([AB])[：:]\s*(.+)$")
 SUPPORTED_MERGE_STRATEGIES = {"auto", "pydub", "ffmpeg", "concat"}
+SUPPORTED_INTRO_MUSIC_STYLES = {"warm", "bright", "calm"}
 logger = logging.getLogger(__name__)
 
 
@@ -105,11 +106,13 @@ class AudioOverviewService:
 
     @staticmethod
     def _default_db_path() -> Path:
-        return Path(__file__).resolve().parents[2] / "voice_spirit.db"
+        from .config_loader import get_data_dir
+        return get_data_dir() / "voice_spirit.db"
 
     @staticmethod
     def _default_output_dir() -> Path:
-        return Path(__file__).resolve().parents[1] / "temp_audio" / "audio_overview"
+        from .config_loader import get_data_dir
+        return get_data_dir() / "temp_audio" / "audio_overview"
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(
@@ -204,7 +207,7 @@ class AudioOverviewService:
 
     @staticmethod
     def _safe_filename(prefix: str = "audio_overview") -> str:
-        stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         return f"{prefix}_{stamp}_{uuid.uuid4().hex[:8]}.mp3"
 
     def _init_db(self) -> None:
@@ -622,8 +625,15 @@ class AudioOverviewService:
                 "0",
                 "-i",
                 str(list_file),
-                "-c",
-                "copy",
+                "-vn",
+                "-ac",
+                "2",
+                "-ar",
+                "44100",
+                "-c:a",
+                "libmp3lame",
+                "-b:a",
+                "192k",
                 str(output_path),
             ]
             result = subprocess.run(
@@ -698,6 +708,56 @@ class AudioOverviewService:
                         meta={"failures": failures},
                     ) from concat_exc
 
+    def _create_intro_music_file(
+        self,
+        *,
+        style: str,
+        duration_ms: int,
+    ) -> Path:
+        try:
+            from pydub import AudioSegment  # type: ignore
+            from pydub.generators import Sine  # type: ignore
+        except Exception as exc:
+            raise AudioOverviewServiceError(
+                code="AUDIO_INTRO_MUSIC_UNAVAILABLE",
+                message="Intro music generation requires pydub and an audio backend.",
+                meta={"reason": str(exc)[:400]},
+            ) from exc
+
+        selected_style = str(style or "warm").strip().lower() or "warm"
+        if selected_style not in SUPPORTED_INTRO_MUSIC_STYLES:
+            selected_style = "warm"
+        safe_duration_ms = max(800, min(int(duration_ms), 8000))
+        style_tones = {
+            "warm": (261.63, 329.63, 392.00),
+            "bright": (329.63, 493.88, 659.25),
+            "calm": (220.00, 277.18, 329.63),
+        }
+        tones = style_tones[selected_style]
+
+        bed = AudioSegment.silent(duration=safe_duration_ms)
+        for idx, frequency in enumerate(tones):
+            tone = Sine(frequency).to_audio_segment(duration=safe_duration_ms)
+            tone = tone.apply_gain(-19 - idx * 3)
+            bed = bed.overlay(tone)
+        intro = (
+            bed.fade_in(min(450, safe_duration_ms // 4))
+            .fade_out(min(900, safe_duration_ms // 3))
+            .set_frame_rate(44100)
+            .set_channels(2)
+        )
+
+        output_path = self.output_dir / self._safe_filename(prefix="podcast_intro")
+        try:
+            intro.export(str(output_path), format="mp3", bitrate="192k")
+        except Exception as exc:
+            raise AudioOverviewServiceError(
+                code="AUDIO_INTRO_MUSIC_EXPORT_FAILED",
+                message="Intro music export failed.",
+                meta={"style": selected_style, "duration_ms": safe_duration_ms, "reason": str(exc)[:400]},
+            ) from exc
+        return output_path
+
     async def synthesize_podcast_audio(
         self,
         podcast_id: int,
@@ -708,6 +768,9 @@ class AudioOverviewService:
         language: str | None = None,
         gap_ms: int = 250,
         merge_strategy: str = "auto",
+        intro_music: bool = False,
+        intro_music_style: str = "warm",
+        intro_music_duration_ms: int = 2500,
     ) -> dict[str, Any]:
         podcast = self.get_podcast(podcast_id, include_script=True)
         if podcast is None:
@@ -728,9 +791,21 @@ class AudioOverviewService:
         resolved_rate = str(rate or "").strip() or "+0%"
         resolved_gap_ms = max(0, min(int(gap_ms), 3000))
         resolved_merge_strategy = str(merge_strategy or "auto").strip().lower() or "auto"
+        resolved_intro_music = bool(intro_music)
+        resolved_intro_style = str(intro_music_style or "warm").strip().lower() or "warm"
+        if resolved_intro_style not in SUPPORTED_INTRO_MUSIC_STYLES:
+            resolved_intro_style = "warm"
+        resolved_intro_duration_ms = max(800, min(int(intro_music_duration_ms), 8000))
 
         segment_paths: list[Path] = []
         cache_hits = 0
+        intro_path: Path | None = None
+        if resolved_intro_music:
+            intro_path = self._create_intro_music_file(
+                style=resolved_intro_style,
+                duration_ms=resolved_intro_duration_ms,
+            )
+            segment_paths.append(intro_path)
         for idx, line in enumerate(script_lines):
             selected_voice = resolved_voice_a if line["role"] == "A" else resolved_voice_b
             try:
@@ -809,4 +884,8 @@ class AudioOverviewService:
             "gap_ms": resolved_gap_ms,
             "gap_ms_applied": int(merge_meta.get("gap_ms_applied", 0)),
             "merge_strategy": str(merge_meta.get("merge_strategy", "concat")),
+            "intro_music": resolved_intro_music,
+            "intro_music_style": resolved_intro_style if resolved_intro_music else "off",
+            "intro_music_duration_ms": resolved_intro_duration_ms if resolved_intro_music else 0,
+            "intro_music_path": str(intro_path) if intro_path is not None else "",
         }

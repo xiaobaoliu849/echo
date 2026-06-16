@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .audio_overview_service import AudioOverviewService
+from .audio_overview_service import AudioOverviewService, AudioOverviewServiceError
 from .audio_agent_repository import AudioAgentRepository
 from .audio_retrieval_service import AudioRetrievalService
 from .audio_script_writer import AudioScriptWriter
@@ -183,6 +183,9 @@ class AudioAgentService:
         language: str | None = None,
         gap_ms: int = 250,
         merge_strategy: str = "auto",
+        intro_music: bool = False,
+        intro_music_style: str = "warm",
+        intro_music_duration_ms: int = 2500,
     ) -> dict[str, Any]:
         run = self.get_run(run_id)
         podcast_id_raw = run.get("podcast_id")
@@ -215,6 +218,9 @@ class AudioAgentService:
                 language=language,
                 gap_ms=gap_ms,
                 merge_strategy=merge_strategy,
+                intro_music=intro_music,
+                intro_music_style=intro_music_style,
+                intro_music_duration_ms=intro_music_duration_ms,
             )
             self.repository.add_step(
                 run_id=run_id,
@@ -227,6 +233,9 @@ class AudioAgentService:
                     "line_count": int(result.get("line_count", 0)),
                     "merge_strategy": str(result.get("merge_strategy", "auto")),
                     "cache_hits": int(result.get("cache_hits", 0)),
+                    "intro_music": bool(result.get("intro_music", False)),
+                    "intro_music_style": str(result.get("intro_music_style", "off")),
+                    "intro_music_duration_ms": int(result.get("intro_music_duration_ms", 0)),
                 },
             )
             current_result_payload = dict(run.get("result_payload", {}))
@@ -241,6 +250,9 @@ class AudioAgentService:
                     "gap_ms": int(result.get("gap_ms", gap_ms)),
                     "gap_ms_applied": int(result.get("gap_ms_applied", 0)),
                     "merge_strategy": str(result.get("merge_strategy", merge_strategy)),
+                    "intro_music": bool(result.get("intro_music", False)),
+                    "intro_music_style": str(result.get("intro_music_style", "off")),
+                    "intro_music_duration_ms": int(result.get("intro_music_duration_ms", 0)),
                 }
             )
             self.repository.add_event(
@@ -250,6 +262,7 @@ class AudioAgentService:
                     "podcast_id": podcast_id_raw,
                     "audio_path": str(result.get("audio_path", "")),
                     "merge_strategy": str(result.get("merge_strategy", merge_strategy)),
+                    "intro_music": bool(result.get("intro_music", False)),
                 },
             )
             self.repository.update_run(
@@ -262,6 +275,25 @@ class AudioAgentService:
             return self.get_run(run_id)
         except AudioAgentServiceError:
             raise
+        except AudioOverviewServiceError as exc:
+            meta = {"run_id": run_id, **exc.meta}
+            self.repository.update_run(
+                run_id,
+                status="failed",
+                current_step="synthesize_audio",
+                error_code=exc.code,
+                error_message=exc.message,
+            )
+            self.repository.add_event(
+                run_id=run_id,
+                event_type="run_failed",
+                payload={"code": exc.code, "message": exc.message, "meta": exc.meta},
+            )
+            raise AudioAgentServiceError(
+                code=exc.code,
+                message=exc.message,
+                meta=meta,
+            ) from exc
         except ValueError as exc:
             self.repository.update_run(
                 run_id,
@@ -396,6 +428,7 @@ class AudioAgentService:
                 current_step="assemble_evidence",
             )
             evidence_summary = self.script_writer._build_evidence_summary(sources)
+            research_brief = self.script_writer._build_research_brief(sources)
             self.repository.add_step(
                 run_id=run_id,
                 step_name="assemble_evidence",
@@ -404,6 +437,7 @@ class AudioAgentService:
                 finished_at=self._now_string(),
                 meta={
                     "summary_length": len(evidence_summary),
+                    "brief_length": len(research_brief),
                     "source_count": len(sources),
                 },
             )
@@ -411,6 +445,14 @@ class AudioAgentService:
                 run_id=run_id,
                 event_type="step_completed",
                 payload={"step_name": "assemble_evidence", "status": "completed"},
+            )
+            self.repository.add_event(
+                run_id=run_id,
+                event_type="research_brief_created",
+                payload={
+                    "source_count": len(sources),
+                    "brief_length": len(research_brief),
+                },
             )
 
             self.repository.update_run(
@@ -496,6 +538,7 @@ class AudioAgentService:
                     "podcast_id": podcast_id,
                     "script_lines": podcast.get("script_lines", []),
                     "evidence_summary": script_result.get("evidence_summary", ""),
+                    "research_brief": script_result.get("research_brief", research_brief),
                     "provider": script_result["provider"],
                     "model": script_result["model"],
                 },
@@ -504,10 +547,11 @@ class AudioAgentService:
         except AudioAgentServiceError:
             raise
         except ValueError as exc:
+            latest = self.repository.get_run(run_id) or run
             self.repository.update_run(
                 run_id,
                 status="failed",
-                current_step=run.get("current_step", ""),
+                current_step=latest.get("current_step", ""),
                 error_code="AUDIO_AGENT_EXECUTION_BAD_REQUEST",
                 error_message=str(exc),
             )
@@ -522,10 +566,11 @@ class AudioAgentService:
                 meta={"run_id": run_id},
             ) from exc
         except RuntimeError as exc:
+            latest = self.repository.get_run(run_id) or run
             self.repository.update_run(
                 run_id,
                 status="failed",
-                current_step=run.get("current_step", ""),
+                current_step=latest.get("current_step", ""),
                 error_code="AUDIO_AGENT_EXECUTION_PROVIDER_ERROR",
                 error_message=str(exc),
             )
@@ -540,10 +585,11 @@ class AudioAgentService:
                 meta={"run_id": run_id},
             ) from exc
         except Exception as exc:
+            latest = self.repository.get_run(run_id) or run
             self.repository.update_run(
                 run_id,
                 status="failed",
-                current_step=run.get("current_step", ""),
+                current_step=latest.get("current_step", ""),
                 error_code="AUDIO_AGENT_EXECUTION_FAILED",
                 error_message=str(exc),
             )

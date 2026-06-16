@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
+            "null",
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             "http://localhost:3000",
@@ -283,10 +285,12 @@ def create_app() -> FastAPI:
     app.include_router(transcription.router, prefix="/api/transcription", tags=["transcription"])
     app.include_router(voice_chat.router, prefix="/api/voice-chat", tags=["voice-chat"])
 
-    frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+    frontend_dist_env = os.environ.get("VOICESPIRIT_FRONTEND_DIST", "").strip()
+    frontend_dist = Path(frontend_dist_env) if frontend_dist_env else Path(__file__).resolve().parents[1] / "frontend" / "dist"
     frontend_dist_resolved = frontend_dist.resolve()
     frontend_assets = frontend_dist / "assets"
-    transcription_public_dir = Path(__file__).resolve().parent / "temp_audio" / "transcription_jobs" / "published"
+    from services.config_loader import get_data_dir
+    transcription_public_dir = get_data_dir() / "temp_audio" / "transcription_jobs" / "published"
     transcription_public_dir.mkdir(parents=True, exist_ok=True)
     app.mount(
         "/public/transcription",
@@ -340,11 +344,15 @@ def create_app() -> FastAPI:
 
     return app
 
-
 app = create_app()
 
 
 if __name__ == "__main__":
+    import sys
     import uvicorn
 
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
+        uvicorn.run(app, host="127.0.0.1", port=8000)
+    else:
+        uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

@@ -3739,6 +3739,15 @@ button.danger:focus-visible {
   border-top: 1px solid color-mix(in oklab, var(--accent) 8%, var(--line));
 }
 
+.vsSynthCheckboxLabel {
+  justify-content: center;
+}
+
+.vsSynthCheckboxLabel input {
+  width: 16px;
+  height: 16px;
+}
+
 .roleIndicator {
   display: flex;
   align-items: center;
@@ -4351,6 +4360,30 @@ button.danger:focus-visible {
   background: #fffbeb;
   color: #92400e;
   border: 1px solid #fde68a;
+}
+
+.vsProgressBarContainer {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.vsProgressBar {
+  height: 100%;
+  background: #10b981;
+  transition: width 0.2s ease-out;
+}
+
+.vsUpdateAvailableBox {
+  margin-top: 12px;
+}
+
+.vsDownloadProgressBox {
+  margin-top: 12px;
 }
 
 .vsSystemActions {
