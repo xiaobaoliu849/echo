@@ -221,6 +221,18 @@ const DASHSCOPE_REALTIME_VOICES = [
   { value: "Gale", label: "Gale (Male)" },
 ];
 
+const QWEN_AUDIO_VOICES = [
+  { value: "longanqian", label: "longanqian · 龙千倩 (Female)" },
+  { value: "longanlingxin", label: "longanlingxin · 龙灵馨 (Female)" },
+  { value: "longanlingxi", label: "longanlingxi · 龙灵犀 (Female)" },
+  { value: "longanxiaoxin", label: "longanxiaoxin · 龙小新 (Female)" },
+  { value: "longanlufeng", label: "longanlufeng · 龙陆风 (Male)" },
+];
+
+function isQwenAudioModel(model: string | undefined): boolean {
+  return !!(model && model.toLowerCase().includes("qwen-audio"));
+}
+
 function formatVoiceOptionLabel(label: string, language: UiLanguage): string {
   if (language === "en-US") {
     return label;
@@ -232,11 +244,12 @@ function formatVoiceOptionLabel(label: string, language: UiLanguage): string {
 
 function formatRealtimeVoiceOptions(
   provider: string,
-  language: UiLanguage
+  language: UiLanguage,
+  model?: string,
 ): Array<{ value: string; label: string }> {
   let options: Array<{ value: string; label: string }>;
   if (provider === DASHSCOPE_PROVIDER) {
-    options = DASHSCOPE_REALTIME_VOICES;
+    options = isQwenAudioModel(model) ? QWEN_AUDIO_VOICES : DASHSCOPE_REALTIME_VOICES;
   } else if (provider === OPENAI_PROVIDER) {
     options = OPENAI_REALTIME_VOICES;
   } else {
@@ -579,12 +592,12 @@ export default function useVoiceChat({
   const resolvedProviders = [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER].filter(p => providerOptions.includes(p));
 
   const initialProvider = resolveRealtimeProvider(preferredProvider, resolvedProviders);
+  const initialModel = resolveDefaultModel(initialProvider, providerModelCatalog);
   const [voiceChatProvider, setVoiceChatProvider] = useState(initialProvider);
-  const [voiceChatModel, setVoiceChatModel] = useState(
-    resolveDefaultModel(initialProvider, providerModelCatalog)
-  );
+  const [voiceChatModel, setVoiceChatModel] = useState(initialModel);
   const [voiceChatVoice, setVoiceChatVoice] = useState(
-    initialProvider === DASHSCOPE_PROVIDER ? "Cherry"
+    initialProvider === DASHSCOPE_PROVIDER
+      ? (isQwenAudioModel(initialModel) ? "longanqian" : "Cherry")
       : initialProvider === OPENAI_PROVIDER ? "alloy"
       : "Puck"
   );
@@ -666,8 +679,8 @@ export default function useVoiceChat({
   const voiceChatModelOptions = resolveRealtimeModelOptions(voiceChatProvider, providerModelCatalog);
   const voiceChatLiveTranslate = isLiveTranslateModel(voiceChatProvider, voiceChatModel);
   const voiceChatVoiceOptions = useMemo(
-    () => formatRealtimeVoiceOptions(voiceChatProvider, language),
-    [language, voiceChatProvider]
+    () => formatRealtimeVoiceOptions(voiceChatProvider, language, voiceChatModel),
+    [language, voiceChatProvider, voiceChatModel]
   );
   const voiceChatTargetLanguageOptions = useMemo(
     () => formatLiveTranslateLanguageOptions(language),
@@ -730,8 +743,9 @@ export default function useVoiceChat({
 
   useEffect(() => {
     if (voiceChatProvider === DASHSCOPE_PROVIDER) {
-      if (!DASHSCOPE_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
-        setVoiceChatVoice("Cherry");
+      const validVoices = isQwenAudioModel(voiceChatModel) ? QWEN_AUDIO_VOICES : DASHSCOPE_REALTIME_VOICES;
+      if (!validVoices.some(v => v.value === voiceChatVoice)) {
+        setVoiceChatVoice(isQwenAudioModel(voiceChatModel) ? "longanqian" : "Cherry");
       }
     } else if (voiceChatProvider === OPENAI_PROVIDER) {
       if (!OPENAI_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
