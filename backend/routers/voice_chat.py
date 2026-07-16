@@ -190,11 +190,18 @@ async def voice_chat_ws(
 
     try:
         if selected_provider == "DashScope":
-            await voice_chat_service.stream_dashscope_session(
-                websocket,
-                model=model,
-                voice=(voice or DEFAULT_DASHSCOPE_REALTIME_VOICE).strip(),
-            )
+            if voice_chat_service._is_qwen_audio_model(model):
+                await voice_chat_service.stream_dashscope_audio_session(
+                    websocket,
+                    model=model,
+                    voice=(voice or DEFAULT_DASHSCOPE_REALTIME_VOICE).strip(),
+                )
+            else:
+                await voice_chat_service.stream_dashscope_session(
+                    websocket,
+                    model=model,
+                    voice=(voice or DEFAULT_DASHSCOPE_REALTIME_VOICE).strip(),
+                )
         elif selected_provider == "OpenAI":
             await voice_chat_service.stream_openai_session(
                 websocket,

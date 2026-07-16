@@ -28,7 +28,7 @@ from .interruption_classifier import (
     InterruptionIntent,
 )
 from .voice_agent_session_repository import VoiceAgentSessionRepository
-from .voice_agent_tools import VoiceAgentToolService, VoiceAgentToolSession
+from .voice_agent_tools import VoiceAgentToolService, VoiceAgentToolSession, VoiceToolRequest
 
 try:
     from google import genai
@@ -69,6 +69,27 @@ BASE_REALTIME_INSTRUCTIONS = (
     "Respond naturally and conversationally in the same language the user speaks. "
     "When the user asks you to search, look up, retrieve, or verify current information, briefly acknowledge "
     "that you are checking sources and wait for external tool context before giving a factual answer."
+)
+
+QWEN_AUDIO_REALTIME_INSTRUCTIONS = (
+    "你是一位智能语音助手，你的名字是小云，性别女，声音甜美，举止亲切，你能回复用户的各种问题。"
+    "请你按照下面的要求聊天：\n"
+    "1. 像朋友之间聊天那样，语气自然友好，避免使用正式的称谓和模板化的表达。"
+    "口语化只影响你的措辞和语气，不影响内容的完整性，该说的细节、数字、具体建议一个都不能少，"
+    "只是用轻松自然的方式说出来。\n"
+    "2. 充分考虑对话上下文中提到的所有约束条件（如预算、偏好、禁忌、之前达成的共识等），"
+    "涉及多个条件或需要综合判断时逐一回应，不要遗漏关键信息。\n"
+    "3. 除非用户要求，不要输出emoji等特殊符号，不要输出Markdown格式，尽量输出纯文本。\n"
+    "4. 对于简单的日常闲聊、打招呼、情感回应，保持简洁自然。"
+    "对于涉及事实判断、推理计算、多条件约束、推荐列表、安全建议的问题，"
+    "以回答完整正确为优先，确保关键信息完整且正确，多说的内容必须是解决问题所必需的"
+    "具体信息（如价格、地点、条件），而不是铺垫、重复或修辞。\n"
+    "5. 适当引入追问，遵循\"先把用户当前的问题答好、再在结尾自然地追问，"
+    "推动话题向前发展\"的原则，一次只问一个问题，不要连续追问或反复确认。"
+    "用户明确要求背诵某篇文章、古诗词时，须遵循指令完整背诵。\n"
+    "6. 当你需要搜索、查询、翻译、总结、生成语音或创建播客时，"
+    "请主动调用对应的工具函数来获取外部信息或执行操作。调用工具后，"
+    "等待工具返回结果再继续回复，不要凭空编造或猜测。"
 )
 
 
@@ -3242,6 +3263,515 @@ class RealtimeVoiceService:
             if recorder is not None:
                 await recorder.finish()
 
+    @staticmethod
+    def _is_qwen_audio_model(model: str | None) -> bool:
+        """Return True when *model* is a Qwen-Audio realtime model (supports native function calling)."""
+        return bool(model and "qwen-audio" in str(model).lower())
+
+    @staticmethod
+    def _build_qwen_audio_instructions(memory_context: str = "") -> str:
+        if not memory_context:
+            return QWEN_AUDIO_REALTIME_INSTRUCTIONS
+        return (
+            f"{QWEN_AUDIO_REALTIME_INSTRUCTIONS}\n\n"
+            "以下是系统检索到的长期记忆，用于个性化回复。当相关时请参考这些记忆，"
+            "但不要逐字引用，除非用户直接询问。\n"
+            f"{memory_context}"
+        )
+
+    async def _client_to_qwen_audio_loop(
+        self,
+        websocket: WebSocket,
+        dash_ws: Any,
+        memory_session: RealtimeMemorySession,
+        tool_session: VoiceAgentToolSession,
+        recorder: VoiceAgentSessionRecorder | None = None,
+        interruption: InterruptionDecisionCoordinator | None = None,
+    ) -> None:
+        interruption = interruption or InterruptionDecisionCoordinator()
+        while True:
+            message = await websocket.receive()
+            message_type = message.get("type")
+            if message_type == "websocket.disconnect":
+                break
+
+            text_data = message.get("text")
+            if text_data:
+                try:
+                    payload = json.loads(text_data)
+                except Exception:
+                    await self._send_event(websocket, "error", message="无效的实时语音消息。")
+                    continue
+                command_type = str(payload.get("type", "")).strip()
+                if command_type == "config":
+                    memory_session.configure(payload.get("memory"))
+                    await self._send_event(
+                        websocket,
+                        "memory_config",
+                        enabled=bool(memory_session._config.get_service()),
+                        scope=memory_session._config.memory_scope,
+                        group_id=memory_session._config.group_id,
+                    )
+                    continue
+                if command_type == "ping":
+                    await self._send_event(websocket, "pong")
+                    continue
+                if command_type == "interruption_client_stopped":
+                    await self._record_client_interruption_stop(recorder, payload, provider="DashScope")
+                    continue
+                if command_type == "interruption_timeout" and interruption.pending is not None:
+                    timeout_candidate_id = str(payload.get("candidate_id", ""))
+                    if timeout_candidate_id and timeout_candidate_id != interruption.pending.candidate_id:
+                        continue
+                    should_process_user, _ = await self._decide_interruption(
+                        websocket,
+                        interruption,
+                        "",
+                        memory_session=memory_session,
+                        tool_session=tool_session,
+                        recorder=recorder,
+                        expected_candidate_id=(timeout_candidate_id or interruption.pending.candidate_id),
+                        timeout_resolution=True,
+                    )
+                    if (
+                        not should_process_user
+                        and interruption.take_deferred_terminal() is not None
+                    ):
+                        await self._finalize_realtime_turn(
+                            websocket,
+                            memory_session,
+                            recorder,
+                            gated=tool_session.has_active_task,
+                        )
+                    continue
+                if command_type == "stop":
+                    async def send_stop_tool_event(event_type: str, payload: dict[str, Any]) -> None:
+                        if recorder is not None:
+                            await recorder.record_tool_event(event_type, payload)
+                        await self._send_event(websocket, event_type, **payload)
+
+                    await tool_session.cancel(
+                        send_event=send_stop_tool_event,
+                        reason="session_stopped",
+                    )
+                    break
+                continue
+
+            audio_bytes = message.get("bytes")
+            if audio_bytes:
+                await dash_ws.send(json.dumps({
+                    "type": "input_audio_buffer.append",
+                    "audio": base64.b64encode(audio_bytes).decode("ascii"),
+                }))
+
+    async def _qwen_audio_to_client_loop(
+        self,
+        websocket: WebSocket,
+        dash_ws: Any,
+        memory_session: RealtimeMemorySession,
+        voice: str,
+        tool_session: VoiceAgentToolSession,
+        recorder: VoiceAgentSessionRecorder | None = None,
+        interruption: InterruptionDecisionCoordinator | None = None,
+    ) -> None:
+        async def send_tool_event(event_type: str, payload: dict[str, Any]) -> None:
+            if recorder is not None:
+                await recorder.record_tool_event(event_type, payload)
+            await self._send_event(websocket, event_type, **payload)
+
+        gated_tool_turn_id = ""
+        # Track ALL pending native function_call ids in the current turn. A turn may
+        # contain multiple parallel function_calls; the follow-up response.create must
+        # only be sent after every call's function_call_output has been written back.
+        pending_native_fc_call_ids: set[str] = set()
+        # Marks whether the current response contains function_call(s); such a response
+        # is an intermediate round and must NOT finalize the turn on response.done.
+        current_response_has_function_call = False
+        interruption = interruption or InterruptionDecisionCoordinator()
+        suppressed_response_ids: set[str] = set()
+        while True:
+            try:
+                raw = await asyncio.wait_for(dash_ws.recv(), timeout=300)
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                break
+
+            try:
+                event = json.loads(raw) if isinstance(raw, str) else json.loads(str(raw))
+            except Exception:
+                continue
+
+            event_type = str(event.get("type", "")).strip()
+            if event_type == "closed":
+                break
+            if event_type in {"session.created", "session.updated"}:
+                continue
+            if event_type == "input_audio_buffer.speech_started":
+                if interruption.active_response_id or tool_session.has_active_task or (
+                    recorder is not None and bool(recorder.current_assistant_text)
+                ):
+                    await self._begin_interruption(
+                        websocket,
+                        interruption,
+                        provider="DashScope",
+                        provider_event_type=str(event.get("type", "input_audio_buffer.speech_started")),
+                        recorder=recorder,
+                        tool_session=tool_session,
+                    )
+                continue
+            if event_type == "response.created":
+                interruption.active_response_id = (
+                    str((event.get("response") or {}).get("id", "")) or interruption.active_response_id or "active"
+                )
+                # New response round begins; reset the per-response function_call marker.
+                current_response_has_function_call = False
+                continue
+            if event_type == "conversation.item.input_audio_transcription.completed":
+                user_text = str(event.get("transcript", "")).strip()
+                if interruption.pending is None and (
+                    interruption.active_response_id
+                    or tool_session.has_active_task
+                    or (recorder is not None and bool(recorder.current_assistant_text))
+                ):
+                    await self._begin_interruption(
+                        websocket,
+                        interruption,
+                        provider="DashScope",
+                        provider_event_type=str(event.get("type", "input_transcription.without_pending_vad")),
+                        recorder=recorder,
+                        tool_session=tool_session,
+                        supersede_timed_out=True,
+                    )
+                interrupted_response_id = interruption.active_response_id
+                had_deferred_terminal = interruption.has_deferred_terminal()
+                async def cancel_dashscope_response() -> None:
+                    try:
+                        await dash_ws.send(json.dumps({"type": "response.cancel"}))
+                    except Exception:
+                        logger.exception("qwen_audio_response_cancel_failed")
+
+                should_process_user, interruption_decision = await self._decide_interruption(
+                    websocket,
+                    interruption,
+                    user_text,
+                    memory_session=memory_session,
+                    tool_session=tool_session,
+                    recorder=recorder,
+                    cancel_provider=cancel_dashscope_response,
+                )
+                if interruption_decision is not None and (
+                    interruption_decision.get("classification") == InterruptionIntent.TRUE_BARGE_IN.value
+                ) and interrupted_response_id and not had_deferred_terminal:
+                    suppressed_response_ids.add(interrupted_response_id)
+                if not should_process_user:
+                    if had_deferred_terminal and interruption.take_deferred_terminal() is not None:
+                        await self._finalize_realtime_turn(
+                            websocket, memory_session, recorder, gated=bool(gated_tool_turn_id),
+                        )
+                        await dash_ws.send(json.dumps({
+                            "type": "session.update",
+                            "session": {"instructions": self._build_qwen_audio_instructions()},
+                        }))
+                    continue
+                if InterruptionClassifier.classify_interruption(user_text) == InterruptionIntent.NOISE_OR_SILENCE:
+                    continue
+                memory_session.note_user_transcript(user_text)
+                voice_turn_id = ""
+                if recorder is not None:
+                    voice_turn_id = await recorder.note_user_transcript(user_text)
+                retrieval = await memory_session.retrieve_memory_context()
+                memory_context = str(retrieval.get("context", ""))
+                memory_count = int(retrieval.get("memories_retrieved", 0))
+                local_pending_count = int(retrieval.get("local_pending_count", 0))
+                cloud_count = int(retrieval.get("cloud_count", 0))
+                if retrieval.get("attempted"):
+                    await self._send_event(
+                        websocket, "memory_context",
+                        memories_retrieved=memory_count,
+                        local_pending_count=local_pending_count,
+                        cloud_count=cloud_count,
+                        attempted=True,
+                    )
+                base_instructions = self._build_qwen_audio_instructions(memory_context)
+                if not memory_context and memory_session.is_forced_recall_query(user_text):
+                    base_instructions = self._build_recall_miss_instructions(user_text)
+                async def on_qwen_audio_tool_result(result: dict[str, Any]) -> None:
+                    nonlocal gated_tool_turn_id
+                    gated_tool_turn_id = ""
+                    await self._apply_qwen_audio_tool_result(websocket, dash_ws, result, recorder)
+
+                # Native function-call gating: if any function_call is still being
+                # processed, skip backend regex extraction so we don't double-trigger.
+                if pending_native_fc_call_ids:
+                    await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                    continue
+
+                tool_request = VoiceAgentToolService.extract_tool_request(user_text)
+                tool_turn_id = await tool_session.handle_user_transcript(
+                    user_text,
+                    send_event=send_tool_event,
+                    on_result=on_qwen_audio_tool_result,
+                )
+                if tool_turn_id:
+                    gated_tool_turn_id = tool_turn_id
+                    try:
+                        await dash_ws.send(json.dumps({"type": "response.cancel"}))
+                    except Exception:
+                        pass
+                    await self._send_response_gated(
+                        websocket, provider="DashScope",
+                        tool_name=tool_request.tool_name if tool_request else "voice_tool",
+                        query=tool_request.query if tool_request else "",
+                        turn_id=tool_turn_id, recorder=recorder,
+                    )
+                else:
+                    await dash_ws.send(json.dumps({"type": "response.create"}))
+                await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                continue
+            if event_type == "response.output_item.added":
+                item = event.get("item") or {}
+                if item.get("type") == "function_call":
+                    call_id = str(item.get("call_id", ""))
+                    if call_id:
+                        pending_native_fc_call_ids.add(call_id)
+                    current_response_has_function_call = True
+                continue
+            if event_type == "response.function_call_arguments.done":
+                call_id = str(event.get("call_id", ""))
+                name = str(event.get("name", ""))
+                arguments_str = str(event.get("arguments", "{}"))
+                # Execute the tool and write back its function_call_output (without
+                # triggering response.create yet). Only when every pending call in this
+                # turn has produced its output do we send a single response.create.
+                await self._handle_qwen_audio_function_call(
+                    websocket, dash_ws, call_id, name, arguments_str,
+                    tool_session=tool_session,
+                    recorder=recorder,
+                    send_tool_event=send_tool_event,
+                    trigger_response=False,
+                )
+                pending_native_fc_call_ids.discard(call_id)
+                if not pending_native_fc_call_ids:
+                    await dash_ws.send(json.dumps({"type": "response.create"}))
+                continue
+            if event_type == "response.audio.delta":
+                response_id = str(event.get("response_id", ""))
+                if response_id in suppressed_response_ids:
+                    continue
+                if not gated_tool_turn_id:
+                    await self._emit_assistant_output(
+                        websocket, interruption, {
+                            "type": "assistant_audio",
+                            "audio": str(event.get("delta", "")),
+                            "response_id": response_id,
+                        },
+                        memory_session=memory_session, recorder=recorder,
+                    )
+                continue
+            if event_type in {"response.audio_transcript.delta", "response.text.delta"}:
+                response_id = str(event.get("response_id", ""))
+                if response_id in suppressed_response_ids:
+                    continue
+                delta = str(event.get("delta", ""))
+                if not gated_tool_turn_id and delta:
+                    await self._emit_assistant_output(
+                        websocket, interruption, {
+                            "type": "assistant_text",
+                            "text": delta,
+                            "response_id": response_id,
+                        },
+                        memory_session=memory_session, recorder=recorder,
+                    )
+                continue
+            if event_type == "response.done":
+                response_data = event.get("response") or {}
+                response_id = str(response_data.get("id", ""))
+                if response_id in suppressed_response_ids:
+                    suppressed_response_ids.discard(response_id)
+                    if response_id == interruption.active_response_id:
+                        interruption.active_response_id = ""
+                    continue
+                if interruption.defer_terminal({"type": "turn_complete", "response_id": response_id,
+                                                 "status": str(response_data.get("status", "completed"))}):
+                    continue
+                if not response_id or response_id == interruption.active_response_id:
+                    interruption.active_response_id = ""
+                # A response that carried function_call(s) is an intermediate round:
+                # the turn continues after we send response.create, so do NOT finalize
+                # (flush memory / emit turn_complete) here. Reset the flag and stop.
+                if current_response_has_function_call:
+                    current_response_has_function_call = False
+                    pending_native_fc_call_ids.clear()
+                    continue
+                if str(response_data.get("status", "completed")) in {"cancelled", "canceled", "failed"}:
+                    continue
+                memory_result = await memory_session.flush_turn()
+                completed_turn_id = ""
+                if recorder is not None and not gated_tool_turn_id:
+                    completed_turn_id = await recorder.complete_turn(memory_result)
+                await self._send_event(
+                    websocket, "memory_write",
+                    attempted_count=int(memory_result.get("attempted_count", 0)),
+                    saved_count=int(memory_result.get("saved_count", 0)),
+                    failed_count=int(memory_result.get("failed_count", 0)),
+                    local_pending_count=int(memory_result.get("local_pending_count", 0)),
+                    reason=str(memory_result.get("reason", "")),
+                )
+                await dash_ws.send(json.dumps({
+                    "type": "session.update",
+                    "session": {"instructions": self._build_qwen_audio_instructions()},
+                }))
+                if not gated_tool_turn_id:
+                    await self._send_event(
+                        websocket, "turn_complete",
+                        turn_id=completed_turn_id, interrupted=False,
+                    )
+                continue
+            if gated_tool_turn_id and event_type in {"assistant_audio", "assistant_text", "turn_complete"}:
+                continue
+            if event_type == "error":
+                error_data = event.get("error")
+                if isinstance(error_data, dict):
+                    message = str(error_data.get("message", "")).strip() or str(event)
+                else:
+                    message = str(error_data or event).strip()
+                await self._send_event(websocket, "error", message=f"DashScope: {message}")
+                break
+
+    @staticmethod
+    async def _send_qwen_audio_function_call_output(dash_ws: Any, call_id: str, output: str) -> None:
+        """Write a function_call_output conversation item back to the model."""
+        await dash_ws.send(json.dumps({
+            "type": "conversation.item.create",
+            "item": {"type": "function_call_output", "call_id": call_id, "output": output},
+        }))
+
+    async def _handle_qwen_audio_function_call(
+        self,
+        websocket: WebSocket,
+        dash_ws: Any,
+        call_id: str,
+        name: str,
+        arguments_str: str,
+        *,
+        tool_session: VoiceAgentToolSession,
+        recorder: VoiceAgentSessionRecorder | None = None,
+        send_tool_event: Any = None,
+        trigger_response: bool = True,
+    ) -> None:
+        """Handle a native function_call from Qwen-Audio: execute tool and write back its output.
+
+        When *trigger_response* is True (single-call / standalone usage), a follow-up
+        ``response.create`` is sent immediately. When False, the caller is responsible
+        for sending ``response.create`` once every pending call in the turn has been
+        resolved (required for turns that contain multiple parallel function_calls).
+        """
+        import traceback as tb_module
+
+        logger.info("qwen_audio_function_call call_id=%s name=%s args=%s", call_id, name, arguments_str)
+        try:
+            arguments = json.loads(arguments_str) if arguments_str else {}
+        except json.JSONDecodeError:
+            arguments = {}
+
+        # Map function name → query text and tool_name for VoiceAgentToolService
+        name_lower = name.lower().strip()
+        if name_lower == "search_web":
+            query = str(arguments.get("query", "")).strip()
+            tool_name = "search_web"
+        elif name_lower == "translate_text":
+            text = str(arguments.get("text", "")).strip()
+            target = str(arguments.get("target_language", "英文")).strip()
+            query = f"{text}\n目标语言: {target}"
+            tool_name = "translate_text"
+        elif name_lower == "summarize_transcript":
+            content = str(arguments.get("content", "")).strip()
+            query = content
+            tool_name = "summarize_transcript"
+        elif name_lower == "synthesize_tts":
+            content = str(arguments.get("content", "")).strip()
+            query = content
+            tool_name = "synthesize_tts"
+        elif name_lower == "create_audio_agent_run":
+            topic = str(arguments.get("topic", "")).strip()
+            query = topic
+            tool_name = "create_audio_agent_run"
+        else:
+            await self._send_qwen_audio_function_call_output(
+                dash_ws, call_id, json.dumps({"error": f"未知工具: {name}"})
+            )
+            if trigger_response:
+                await dash_ws.send(json.dumps({"type": "response.create"}))
+            return
+
+        if not query:
+            await self._send_qwen_audio_function_call_output(
+                dash_ws, call_id, json.dumps({"error": "缺少必要的查询参数"})
+            )
+            if trigger_response:
+                await dash_ws.send(json.dumps({"type": "response.create"}))
+            return
+
+        request = VoiceToolRequest(tool_name=tool_name, query=query, display_name=tool_name, requires_confirmation=False)
+        send_event_fn = send_tool_event if send_tool_event is not None else (
+            lambda et, p: self._send_event(websocket, et, **p)
+        )
+
+        # Execute the tool and write back its output. The follow-up response.create is
+        # deferred to the caller unless trigger_response=True.
+        try:
+            result = await tool_session.service.run_tool(
+                request, send_event=send_event_fn, turn_id=f"native-fc-{call_id[:12]}",
+            )
+        except Exception as exc:
+            tb_module.print_exc()
+            await self._send_qwen_audio_function_call_output(
+                dash_ws, call_id, json.dumps({"error": str(exc)})
+            )
+            if trigger_response:
+                await dash_ws.send(json.dumps({"type": "response.create"}))
+            return
+
+        prompt = VoiceAgentToolService.build_model_context_prompt(result)
+        output = prompt if prompt.strip() else json.dumps({"status": "completed", "summary": str(result.get("answer", ""))})
+        await self._send_qwen_audio_function_call_output(dash_ws, call_id, output)
+        if trigger_response:
+            await dash_ws.send(json.dumps({"type": "response.create"}))
+
+    async def _apply_qwen_audio_tool_result(
+        self,
+        websocket: WebSocket,
+        dash_ws: Any,
+        result: dict[str, Any],
+        recorder: VoiceAgentSessionRecorder | None = None,
+    ) -> None:
+        """Inject backend regex-detected tool result as a user message (non-native fallback)."""
+        prompt = VoiceAgentToolService.build_model_context_prompt(result)
+        if not prompt.strip():
+            return
+        payload = {
+            "provider": "DashScope",
+            "tool_name": str(result.get("tool_name", "search_web") or "search_web"),
+            "query": str(result.get("query", "")),
+            "turn_id": str(result.get("turn_id", "")),
+            "source_count": int(result.get("source_count", 0) or 0),
+            "elapsed_ms": int(result.get("elapsed_ms", 0) or 0),
+        }
+        if recorder is not None:
+            await recorder.record_tool_event("tool_context_injected", payload)
+        await self._send_event(websocket, "tool_context_injected", **payload)
+        # For raw WebSocket, send tool result as a user message then trigger response
+        await dash_ws.send(json.dumps({
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": prompt}],
+            },
+        }))
+        await dash_ws.send(json.dumps({"type": "response.create"}))
+
     async def stream_dashscope_session(
         self,
         websocket: WebSocket,
@@ -3335,3 +3865,111 @@ class RealtimeVoiceService:
                 conversation.close()
             except Exception:
                 pass
+
+    async def stream_dashscope_audio_session(
+        self,
+        websocket: WebSocket,
+        *,
+        model: str | None = None,
+        voice: str | None = None,
+    ) -> None:
+        """Raw-WebSocket session for Qwen-Audio models with native function calling.
+
+        This bypasses the DashScope SDK (``OmniRealtimeConversation``) and
+        uses ``websockets.connect()`` directly so we can send ``tools`` in
+        ``session.update`` and handle ``function_call_arguments.done`` events.
+        """
+        settings = self._resolve_dashscope_settings(model)
+        memory_session = RealtimeMemorySession()
+        tool_session = VoiceAgentToolSession()
+        resolved_voice = (voice or DEFAULT_DASHSCOPE_REALTIME_VOICE).strip()
+        recorder = await self._create_voice_session_recorder(
+            provider="DashScope",
+            model=settings["model"],
+            voice=resolved_voice,
+        )
+
+        base_domain = "dashscope.aliyuncs.com" if settings["region"] == "cn" else "dashscope-intl.aliyuncs.com"
+        ws_url = f"wss://{base_domain}/api-ws/v1/realtime?model={settings['model']}"
+        extra_headers = {
+            "Authorization": f"Bearer {settings['api_key']}",
+        }
+        tools = VoiceAgentToolService.build_tools_schema()
+
+        try:
+            async with websockets.connect(
+                ws_url,
+                additional_headers=extra_headers,
+                max_size=2**24,
+            ) as dash_ws:
+                # ── session.update with tools + smart_turn ──
+                session_config: dict[str, Any] = {
+                    "modalities": ["text", "audio"],
+                    "voice": resolved_voice,
+                    "input_audio_format": "pcm",
+                    "output_audio_format": "pcm",
+                    "instructions": self._build_qwen_audio_instructions(),
+                    "tools": tools,
+                    "turn_detection": {
+                        "type": "smart_turn",
+                    },
+                    "max_history_turns": 50,
+                }
+                await dash_ws.send(json.dumps({
+                    "type": "session.update",
+                    "session": session_config,
+                }))
+
+                # Wait for session.created confirmation
+                try:
+                    raw = await asyncio.wait_for(dash_ws.recv(), timeout=10)
+                    created = json.loads(raw) if isinstance(raw, str) else {}
+                    session_id = (created.get("session") or {}).get("id", "")
+                except Exception:
+                    session_id = ""
+
+                await self._send_event(
+                    websocket,
+                    "session_open",
+                    provider="DashScope",
+                    model=settings["model"],
+                    voice=resolved_voice,
+                    session_id=recorder.session_id if recorder is not None else session_id,
+                )
+
+                interruption = InterruptionDecisionCoordinator()
+                send_task = asyncio.create_task(
+                    self._client_to_qwen_audio_loop(
+                        websocket, dash_ws, memory_session, tool_session, recorder, interruption
+                    )
+                )
+                receive_task = asyncio.create_task(
+                    self._qwen_audio_to_client_loop(
+                        websocket, dash_ws, memory_session, resolved_voice,
+                        tool_session, recorder, interruption,
+                    )
+                )
+                done, pending = await asyncio.wait(
+                    {send_task, receive_task},
+                    return_when=asyncio.FIRST_EXCEPTION,
+                )
+                for task in pending:
+                    task.cancel()
+                for task in done:
+                    task.result()
+        except WebSocketDisconnect:
+            return
+        except Exception as e:
+            print(f"DEBUG: Qwen-Audio Realtime Session Error: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            await self._send_event(websocket, "error", message=f"Qwen-Audio 实时会话启动失败: {str(e)}")
+            return
+        finally:
+            memory_result = await memory_session.flush_turn()
+            if recorder is not None:
+                await recorder.complete_turn(memory_result)
+            await memory_session.drain()
+            await tool_session.drain()
+            if recorder is not None:
+                await recorder.finish()

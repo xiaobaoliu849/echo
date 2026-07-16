@@ -705,6 +705,120 @@ class VoiceAgentToolService:
         }
 
     @staticmethod
+    def build_tools_schema() -> list[dict[str, Any]]:
+        """Build OpenAI-compatible tools schema for native function calling.
+
+        Returns a list of tool definitions that can be sent in
+        ``session.update`` to Qwen-Audio (or any OpenAI Realtime API
+        compatible model).  The backend regex-based extraction
+        (``extract_tool_request``) remains active as a fallback.
+        """
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_web",
+                    "description": (
+                        "搜索互联网获取实时信息。当用户询问需要最新数据、事实核查、"
+                        "新闻、或当前事件相关问题时调用此工具。"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "用户想要搜索的关键词或问题，用用户当前使用的语言",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "translate_text",
+                    "description": (
+                        "将文本翻译成其他语言。当用户明确要求翻译某段内容时调用此工具。"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": "需要翻译的原文内容",
+                            },
+                            "target_language": {
+                                "type": "string",
+                                "description": "目标语言，如：英文、中文、日文、法文、德文、韩文等",
+                            },
+                        },
+                        "required": ["text", "target_language"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "summarize_transcript",
+                    "description": (
+                        "对一段文本进行摘要总结。当用户要求总结、归纳、概括某段内容时调用此工具。"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "content": {
+                                "type": "string",
+                                "description": "需要被总结的文本内容",
+                            },
+                        },
+                        "required": ["content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "synthesize_tts",
+                    "description": (
+                        "将文字内容生成语音音频文件。当用户要求朗读、配音、"
+                        "或把文字转成语音时调用此工具。"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "content": {
+                                "type": "string",
+                                "description": "需要转换成语音的文字内容",
+                            },
+                        },
+                        "required": ["content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "create_audio_agent_run",
+                    "description": (
+                        "创建一个播客/音频草稿任务。当用户要求做播客、生成播客、"
+                        "创建音频节目或类似需求时调用此工具。调用后需要等待用户确认。"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "topic": {
+                                "type": "string",
+                                "description": "播客/音频节目的主题",
+                            },
+                        },
+                        "required": ["topic"],
+                    },
+                },
+            },
+        ]
+
+    @staticmethod
     def build_model_context_prompt(result: dict[str, Any]) -> str:
         tool_name = str(result.get("tool_name", "")).strip()
         query = str(result.get("query", "")).strip()
