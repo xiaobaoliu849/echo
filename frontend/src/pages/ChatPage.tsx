@@ -383,15 +383,34 @@ export default function ChatPage({
 
       let voice = configuredVoice;
       if (selectedEngine === "edge") {
-        const hasCjk = /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(cleanText);
+        const hasJapanese = /[\u3040-\u309f\u30a0-\u30ff]/.test(cleanText);
+        const hasKorean = /[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]/.test(cleanText);
+        const hasRussian = /[\u0400-\u04ff]/.test(cleanText);
+        const hasChinese = /[\u4e00-\u9fff]/.test(cleanText);
         const hasEnglish = /[a-zA-Z]/.test(cleanText);
-        const isZhVoice = configuredVoice ? /zh-cn|zh-tw|zh-hk/i.test(configuredVoice) : false;
-        const isEnVoice = configuredVoice ? /en-us|en-gb|en-au|en-ca/i.test(configuredVoice) : false;
 
-        if (hasEnglish && !hasCjk && (isZhVoice || !configuredVoice)) {
-          voice = "en-US-AvaNeural";
-        } else if (hasCjk && isEnVoice) {
-          voice = "zh-CN-XiaoxiaoNeural";
+        const voiceLower = (configuredVoice || "").toLowerCase();
+
+        if (hasJapanese) {
+          if (!voiceLower.includes("ja")) {
+            voice = "ja-JP-NanamiNeural";
+          }
+        } else if (hasKorean) {
+          if (!voiceLower.includes("ko")) {
+            voice = "ko-KR-SunHiNeural";
+          }
+        } else if (hasRussian) {
+          if (!voiceLower.includes("ru")) {
+            voice = "ru-RU-SvetlanaNeural";
+          }
+        } else if (hasChinese) {
+          if (!voiceLower.includes("zh")) {
+            voice = "zh-CN-XiaoxiaoNeural";
+          }
+        } else if (hasEnglish) {
+          if (!voiceLower.includes("en")) {
+            voice = "en-US-AvaNeural";
+          }
         }
       }
 

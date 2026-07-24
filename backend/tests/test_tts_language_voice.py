@@ -42,3 +42,18 @@ def test_resolve_edge_voice_for_text():
     mixed_text = "VoiceSpirit 支持 Edge TTS 和 Qwen 语音。"
     res = service._resolve_edge_voice_for_text(mixed_text, "zh-CN-XiaoxiaoNeural")
     assert res == "zh-CN-XiaoxiaoNeural"
+
+    # Japanese text with Chinese voice requested -> switches to Japanese voice
+    ja_text = "こんにちは、今日は良い天気ですね。"
+    res = service._resolve_edge_voice_for_text(ja_text, "zh-CN-XiaoxiaoNeural")
+    assert res == "ja-JP-NanamiNeural"
+
+    # Korean text with Chinese voice requested -> switches to Korean voice
+    ko_text = "안녕하세요, 반갑습니다."
+    res = service._resolve_edge_voice_for_text(ko_text, "zh-CN-XiaoxiaoNeural")
+    assert res == "ko-KR-SunHiNeural"
+
+    # Japanese text with Japanese voice requested -> keeps requested Japanese voice
+    res = service._resolve_edge_voice_for_text(ja_text, "ja-JP-KeitaNeural")
+    assert res == "ja-JP-KeitaNeural"
+

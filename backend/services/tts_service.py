@@ -410,29 +410,51 @@ class TTSService:
         return candidate
 
     def _detect_edge_voice(self, text: str) -> str:
-        if re.search(r"[\u4e00-\u9fff]", text):
-            return "zh-CN-XiaoxiaoNeural"
-        if re.search(r"[\u3040-\u30ff]", text):
+        if re.search(r"[\u3040-\u309f\u30a0-\u30ff]", text):
             return "ja-JP-NanamiNeural"
-        if re.search(r"[\uac00-\ud7af]", text):
+        if re.search(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", text):
             return "ko-KR-SunHiNeural"
+        if re.search(r"[\u0400-\u04ff]", text):
+            return "ru-RU-SvetlanaNeural"
+        if re.search(r"[\u4e00-\u9fff]", text):
+            return DEFAULT_EDGE_VOICE
+        if re.search(r"[äöüßÄÖÜ]", text):
+            return "de-DE-KatjaNeural"
+        if re.search(r"[œæçàéèêëîïôùûüÿÀÉÈÊËÎÏÔÙÛÜŸ]", text):
+            return "fr-FR-DeniseNeural"
+        if re.search(r"[ñ¿¡ÁÉÍÓÚáéíóú]", text):
+            return "es-ES-ElviraNeural"
         if re.search(r"[a-zA-Z]", text):
             return DEFAULT_EDGE_EN_VOICE
         return DEFAULT_EDGE_VOICE
 
     def _resolve_edge_voice_for_text(self, text: str, voice: str) -> str:
-        has_cjk = bool(re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", text))
-        has_english = bool(re.search(r"[a-zA-Z]", text))
-
         voice_lower = voice.lower()
-        is_zh_voice = "zh-cn" in voice_lower or "zh-tw" in voice_lower or "zh-hk" in voice_lower
-        is_en_voice = "en-us" in voice_lower or "en-gb" in voice_lower or "en-au" in voice_lower or "en-ca" in voice_lower
 
-        if has_english and not has_cjk and is_zh_voice:
-            return DEFAULT_EDGE_EN_VOICE
-
-        if has_cjk and is_en_voice:
-            return DEFAULT_EDGE_VOICE
+        if re.search(r"[\u3040-\u309f\u30a0-\u30ff]", text):
+            if not ("ja-jp" in voice_lower or "ja" in voice_lower):
+                return "ja-JP-NanamiNeural"
+        elif re.search(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", text):
+            if not ("ko-kr" in voice_lower or "ko" in voice_lower):
+                return "ko-KR-SunHiNeural"
+        elif re.search(r"[\u0400-\u04ff]", text):
+            if not ("ru-ru" in voice_lower or "ru" in voice_lower):
+                return "ru-RU-SvetlanaNeural"
+        elif re.search(r"[\u4e00-\u9fff]", text):
+            if not ("zh-cn" in voice_lower or "zh-tw" in voice_lower or "zh-hk" in voice_lower or "zh" in voice_lower):
+                return DEFAULT_EDGE_VOICE
+        elif re.search(r"[äöüßÄÖÜ]", text):
+            if not ("de-de" in voice_lower or "de" in voice_lower):
+                return "de-DE-KatjaNeural"
+        elif re.search(r"[œæçàéèêëîïôùûüÿÀÉÈÊËÎÏÔÙÛÜŸ]", text):
+            if not ("fr-fr" in voice_lower or "fr" in voice_lower):
+                return "fr-FR-DeniseNeural"
+        elif re.search(r"[ñ¿¡ÁÉÍÓÚáéíóú]", text):
+            if not ("es-es" in voice_lower or "es" in voice_lower):
+                return "es-ES-ElviraNeural"
+        elif re.search(r"[a-zA-Z]", text):
+            if not ("en-us" in voice_lower or "en-gb" in voice_lower or "en-au" in voice_lower or "en-ca" in voice_lower or "en" in voice_lower):
+                return DEFAULT_EDGE_EN_VOICE
 
         return voice
 

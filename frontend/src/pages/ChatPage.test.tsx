@@ -215,6 +215,46 @@ describe('ChatPage', () => {
         });
     });
 
+    it('uses Japanese voice for Japanese assistant messages when default voice is Chinese', async () => {
+        const fetchSpeakAudioMock = vi.spyOn(await import('../api'), 'fetchSpeakAudio').mockResolvedValue({
+            blob: new Blob(['audio'], { type: 'audio/mpeg' }),
+            voice: 'ja-JP-NanamiNeural',
+            engine: 'edge',
+            memorySaved: false
+        });
+
+        render(
+            <ChatPage
+                chat={createChatController({
+                    chatMessages: [
+                        { role: 'assistant', content: 'こんにちは、今日は良い天気ですね。' }
+                    ]
+                })}
+                voiceChat={createVoiceChatController()}
+                settings={{
+                    settingsData: {
+                        tts_settings: {
+                            provider: 'edge',
+                            default_voice: 'zh-CN-XiaoxiaoNeural'
+                        }
+                    }
+                } as any}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const playBtn = screen.getByRole('button', { name: '朗读回答' });
+        fireEvent.click(playBtn);
+
+        await waitFor(() => {
+            expect(fetchSpeakAudioMock).toHaveBeenCalledWith({
+                text: 'こんにちは、今日は良い天気ですね。',
+                voice: 'ja-JP-NanamiNeural',
+                engine: 'edge'
+            });
+        });
+    });
+
     it('toggles web search sources card when search badge is clicked', () => {
         render(
             <ChatPage
