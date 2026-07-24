@@ -43,30 +43,45 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Build unified provider groups (supporting both text and realtime models)
+  // Build unified provider groups (merging catalog choices and realtime choices)
   const providerGroups = useMemo<ProviderGroup[]>(() => {
-    if (chat && chat.chatModelChoices.length > 0) {
-      const map = new Map<string, ModelChoiceItem[]>();
-      for (const choice of chat.chatModelChoices) {
-        const list = map.get(choice.provider) || [];
-        list.push({
-          model: choice.model,
-          value: choice.value,
-          isRealtime: isVoiceRealtimeModel(choice.provider, choice.model),
-        });
-        map.set(choice.provider, list);
+    const map = new Map<string, Map<string, ModelChoiceItem>>();
+
+    // 1. Include all realtime choices from voiceChat
+    for (const group of voiceChat.voiceChatRealtimeChoicesByProvider) {
+      if (!map.has(group.provider)) {
+        map.set(group.provider, new Map());
       }
-      return Array.from(map.entries()).map(([provider, models]) => ({ provider, models }));
+      const providerMap = map.get(group.provider)!;
+      for (const m of group.models) {
+        providerMap.set(m, {
+          model: m,
+          value: `${group.provider}\u001f${m}`,
+          isRealtime: true,
+        });
+      }
     }
 
-    // Fallback to voiceChat realtime choices
-    return voiceChat.voiceChatRealtimeChoicesByProvider.map((g) => ({
-      provider: g.provider,
-      models: g.models.map((m) => ({
-        model: m,
-        value: `${g.provider}\u001f${m}`,
-        isRealtime: true,
-      })),
+    // 2. Merge all chatModelChoices (if available)
+    if (chat && chat.chatModelChoices.length > 0) {
+      for (const choice of chat.chatModelChoices) {
+        if (!map.has(choice.provider)) {
+          map.set(choice.provider, new Map());
+        }
+        const providerMap = map.get(choice.provider)!;
+        if (!providerMap.has(choice.model)) {
+          providerMap.set(choice.model, {
+            model: choice.model,
+            value: choice.value,
+            isRealtime: isVoiceRealtimeModel(choice.provider, choice.model),
+          });
+        }
+      }
+    }
+
+    return Array.from(map.entries()).map(([provider, modelMap]) => ({
+      provider,
+      models: Array.from(modelMap.values()),
     }));
   }, [chat, voiceChat.voiceChatRealtimeChoicesByProvider]);
 

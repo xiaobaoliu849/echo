@@ -120,6 +120,30 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("merges realtime choices (including qwen-audio) into Level 2 even when chat prop is present", () => {
+    const voiceChat = createVoiceChatController({
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "DashScope", models: ["qwen3.5-omni-plus-realtime", "qwen-audio-3.0-realtime-plus"] },
+      ],
+    });
+    const chat = {
+      chatProvider: "DashScope",
+      chatModel: "qwen-max",
+      chatProviderOptions: ["DashScope"],
+      chatModelChoices: [
+        { provider: "DashScope", model: "qwen-max", label: "DashScope / qwen-max", value: "DashScope\u001fqwen-max" },
+      ],
+      onProviderChange: vi.fn(),
+      onModelChoiceChange: vi.fn(),
+    } as unknown as Parameters<typeof VoiceCallSettingsPopover>[0]["chat"];
+
+    render(<VoiceCallSettingsPopover voiceChat={voiceChat} chat={chat} t={t} />);
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("DashScope"));
+    expect(screen.getByText("qwen-max")).toBeInTheDocument();
+    expect(screen.getByText("qwen-audio-3.0-realtime-plus")).toBeInTheDocument();
+  });
+
   it("hides the translation category for providers without live-translate support", () => {
     renderPopover();
     openPanel();
