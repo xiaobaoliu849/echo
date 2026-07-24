@@ -1677,4 +1677,79 @@ describe("useVoiceChat", () => {
     expect(context.resume).toHaveBeenCalledTimes(1);
     expect(FakeAudioContext.bufferSources).toHaveLength(0);
   });
+
+  it("handles Qwen LiveTranslate streaming without duplicating messages or previews", async () => {
+    ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-livetranslate");
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage: createFormatErrorMessageStub(),
+        providerOptions: ["DashScope"],
+        preferredProvider: "DashScope",
+        preferredModel: "qwen3.5-livetranslate-flash-realtime",
+        providerModelCatalog: {
+          DashScope: {
+            defaultModel: "qwen3.5-livetranslate-flash-realtime",
+            availableModels: ["qwen3.5-livetranslate-flash-realtime"],
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+    const socket = FakeWebSocket.instances[0];
+
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({
+        type: "session_open",
+        provider: "DashScope",
+        model: "qwen3.5-livetranslate-flash-realtime",
+        voice: "Tina",
+        mode: "live_translate",
+      });
+      // Source ASR arrives
+      socket.emitMessage({
+        type: "user_transcript",
+        text: "今天的太阳好大",
+        turn_id: "lt-turn-1",
+      });
+      // First confirmed translation chunk arrives
+      socket.emitMessage({
+        type: "assistant_text",
+        text: "今日の太陽、",
+        turn_id: "lt-turn-1",
+      });
+      // Speculative preview (stash) arrives
+      socket.emitMessage({
+        type: "translation_preview",
+        text: "今日の太陽、",
+        tentative: "すごく大きいですね。",
+        turn_id: "lt-turn-1",
+      });
+      // Final confirmed translation chunk arrives
+      socket.emitMessage({
+        type: "assistant_text",
+        text: "すごく大きいですね。",
+        turn_id: "lt-turn-1",
+      });
+      // Turn complete arrives
+      socket.emitMessage({
+        type: "turn_complete",
+        turn_id: "lt-turn-1",
+      });
+    });
+
+    expect(result.current.voiceChatMessages).toEqual([
+      expect.objectContaining({ role: "user", content: "今天的太阳好大", turnId: "lt-turn-1" }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "今日の太陽、すごく大きいですね。",
+        turnId: "lt-turn-1",
+      }),
+    ]);
+    expect(result.current.voiceChatReply).toBe("");
+    expect(result.current.voiceChatTranscript).toBe("");
+  });
 });

@@ -439,6 +439,13 @@ export default function useVoiceChat({
         ...(turnId ? { turnId } : {}),
       },
     ]);
+    if (liveTranslatePreviewRef.current) {
+      liveTranslateTargetStreamRef.current = mergeAssistantText(
+        liveTranslateTargetStreamRef.current,
+        liveTranslatePreviewRef.current
+      );
+      liveTranslatePreviewRef.current = "";
+    }
     liveTranslateConsumedSourceLengthRef.current = liveTranslateSourceStreamRef.current.length;
     liveTranslateConsumedTargetLengthRef.current = liveTranslateTargetStreamRef.current.length;
     liveTranslatePairStartedAtRef.current = 0;
@@ -476,8 +483,8 @@ export default function useVoiceChat({
       const hasCompletePunctuation =
         endsWithSentencePunctuation(pending.source) &&
         endsWithSentencePunctuation(pending.target);
-      const naturallySettled = hasCompletePunctuation && sourceStableMs >= 200 && targetStableMs >= 400;
-      const fallbackSettled = pairAgeMs >= 2500 && sourceStableMs >= 400 && targetStableMs >= 600;
+      const naturallySettled = hasCompletePunctuation && sourceStableMs >= 500 && targetStableMs >= 600;
+      const fallbackSettled = pairAgeMs >= 4500 && sourceStableMs >= 1200 && targetStableMs >= 1200;
       if ((naturallySettled || fallbackSettled) && commitPendingLiveTranslatePair()) {
         setVoiceChatStatus(t("本句翻译已完成，继续说话即可", "Sentence translated; keep speaking"));
         return;
@@ -1246,6 +1253,8 @@ export default function useVoiceChat({
               // call, producing exact duplicate messages.
               currentUserTurnRef.current = "";
               currentAssistantTurnRef.current = "";
+              setVoiceChatTranscript("");
+              setVoiceChatReply("");
             }
             resetLiveTranslateStreamTracking();
           } else {
