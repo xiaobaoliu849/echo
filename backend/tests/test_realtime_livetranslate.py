@@ -323,6 +323,31 @@ class LiveTranslateLoopTests(unittest.TestCase):
         self.assertNotIn("world", joined)
         self.assertEqual(joined.count("Hello"), 1)
 
+    def test_final_event_with_punctuation_does_not_duplicate(self):
+        # Streaming cumulative text delivered "Hello world"
+        # The done event (final=True) delivers "Hello world."
+        # Because streaming already delivered the text, final=True must NOT
+        # re-emit a duplicate chunk.
+        ws = self._run_loop(
+            [
+                {"type": "assistant_text", "text": "Hello world", "cumulative": True},
+                {"type": "assistant_text", "text": "Hello world.", "final": True},
+            ]
+        )
+        texts = [e["text"] for e in ws.of_type("assistant_text")]
+        self.assertEqual(texts, ["Hello world"])
+
+    def test_final_event_fallback_when_no_streaming_text(self):
+        # Ultra-fast single-token response where no streaming text.text arrived
+        # before the final=True event. It must emit the text once as fallback.
+        ws = self._run_loop(
+            [
+                {"type": "assistant_text", "text": "Hello world", "final": True},
+            ]
+        )
+        texts = [e["text"] for e in ws.of_type("assistant_text")]
+        self.assertEqual(texts, ["Hello world"])
+
     def test_cjk_confirmed_merge_has_no_stray_space_or_duplication(self):
         ws = self._run_loop(
             [

@@ -662,7 +662,12 @@ class DashScopeRealtimeMixin:
             nonlocal has_content, input_finished, output_finished
             if not has_content:
                 return
-            if not force and not (input_finished and output_finished):
+            # A turn is ready to finalize if either output_finished is True
+            # (the server finished generating the translation response) or
+            # force is True (inactivity timeout). Do NOT hang waiting for
+            # input_finished (conversation.item.input_audio_transcription.completed)
+            # which Qwen LiveTranslate often omits in continuous streaming.
+            if not force and not output_finished:
                 return
             # Clear the guard flags BEFORE any await so the inactivity monitor
             # and the event loop cannot both pass the guard and emit a duplicate
@@ -736,16 +741,26 @@ class DashScopeRealtimeMixin:
                     last_activity = time.time()
                     has_content = True
                     if event.get("final"):
-                        final_text = str(event.get("text", "")).strip()
-                        if final_text:
-                            display_translation, delta = _merge_streaming_text(
-                                display_translation, final_text
-                            )
-                            if delta:
+                        # response.text.done / response.audio_transcript.done:
+                        # The streaming cumulative events (response.text.text) have
+                        # already built up display_translation as a running prefix.
+                        # Merging the final text here causes duplication whenever the
+                        # final text and the accumulated stream differ even slightly
+                        # (e.g. trailing punctuation, spacing).
+                        #
+                        # We intentionally do NOT call _merge_streaming_text here.
+                        # The final text is only used as a fallback when NO streaming
+                        # events arrived before the done event (e.g. single-token
+                        # ultra-fast responses where the model emits text.done
+                        # before any text.text increments).
+                        if not display_translation:
+                            final_text = str(event.get("text", "")).strip()
+                            if final_text:
+                                display_translation = final_text
                                 await self._emit_assistant_output(
                                     websocket,
                                     interruption,
-                                    {"type": "assistant_text", "text": delta},
+                                    {"type": "assistant_text", "text": final_text},
                                     memory_session=memory_session,
                                     recorder=recorder,
                                     record_memory=False,
@@ -802,10 +817,16 @@ class DashScopeRealtimeMixin:
                     continue
 
                 if event_type == "turn_complete":
-                    # Server finished a translation response; the inactivity
-                    # monitor finalizes the client turn once output settles.
-                    output_finished = True
-                    await complete_turn()
+                    # response.done signals the end of the server response lifecycle.
+                    # Normally, response.text.done (assistant_text final=True) arrives
+                    # first and already sets output_finished=True + calls complete_turn.
+                    # This handler is a safety-net for modalities where no text.done
+                    # is emitted (e.g. audio-only, or if the server sends response.done
+                    # before text.done in a race).  Never overwrite a True flag here:
+                    # that would double-trigger complete_turn on a turn already closed.
+                    if not output_finished:
+                        output_finished = True
+                        await complete_turn()
                     continue
 
                 if event_type == "error":

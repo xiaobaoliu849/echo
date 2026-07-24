@@ -25,7 +25,12 @@ class DashScopeRealtimeCallback:
         stash = str(event.get("stash", ""))
         response_id = str(event.get("response_id", ""))
         if event_type == "assistant_text" and (text or stash):
-            sig = (response_id, text, stash, bool(event.get("final")))
+            # Dedup signature uses only (response_id, text, is_final).
+            # Previously including `stash` here caused the same confirmed prefix
+            # to bypass deduplication whenever only the prediction changed,
+            # letting _merge_streaming_text receive the same prefix twice and
+            # potentially producing a duplicate delta on the second pass.
+            sig = (response_id, text, bool(event.get("final")))
             if getattr(self, "_last_text_sig", None) == sig:
                 return
             self._last_text_sig = sig
@@ -130,6 +135,19 @@ class DashScopeRealtimeCallback:
             # (text + stash) into a running display string.
             confirmed = str(response.get("text", ""))
             stash = str(response.get("stash", ""))
+            response_id = str(response.get("response_id", ""))
+            # Monotonicity guard: the confirmed prefix is supposed to grow
+            # monotonically within one response.  If a new frame delivers a
+            # shorter prefix (model rollback or duplicate frame), discard it
+            # to prevent _merge_streaming_text from receiving a regression that
+            # could emit previously-seen text as a spurious new delta.
+            if not hasattr(self, "_last_confirmed_by_response"):
+                self._last_confirmed_by_response: dict[str, str] = {}
+            prev_confirmed = self._last_confirmed_by_response.get(response_id, "")
+            if len(confirmed) < len(prev_confirmed):
+                # Silently drop regressions — do not push to the queue.
+                return
+            self._last_confirmed_by_response[response_id] = confirmed
             if confirmed or stash:
                 self._push(
                     {
@@ -137,7 +155,7 @@ class DashScopeRealtimeCallback:
                         "text": confirmed,
                         "stash": stash,
                         "cumulative": True,
-                        "response_id": str(response.get("response_id", "")),
+                        "response_id": response_id,
                     }
                 )
             return
