@@ -14,10 +14,11 @@ function renderPopover(overrides: Parameters<typeof createVoiceChatController>[0
   const voiceChat = createVoiceChatController({
     voiceChatProvider: "DashScope",
     voiceChatModel: "qwen3.5-omni-plus-realtime",
-    voiceChatModelOptions: ["qwen3.5-omni-plus-realtime", "qwen-audio-3.0-realtime-plus"],
+    voiceChatModelOptions: ["qwen3.5-omni-plus-realtime", "qwen3.5-livetranslate-flash-realtime", "qwen-audio-3.0-realtime-plus"],
     voiceChatRealtimeChoicesByProvider: [
-      { provider: "DashScope", models: ["qwen3.5-omni-plus-realtime", "qwen-audio-3.0-realtime-plus"] },
+      { provider: "DashScope", models: ["qwen3.5-omni-plus-realtime", "qwen3.5-livetranslate-flash-realtime", "qwen-audio-3.0-realtime-plus"] },
       { provider: "Google", models: ["gemini-2.5-flash-native-audio-preview-12-2025"] },
+      { provider: "OpenAI", models: ["gpt-realtime-2"] },
     ],
     voiceChatVoice: "Tina",
     voiceChatVoiceLabel: "Tina · 甜甜 · 女声",
@@ -128,11 +129,24 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("hides the translation category in Level 2 for non-live-translate models", () => {
+  it("hides the translation category in Level 2 for providers without live-translate support", () => {
     renderPopover();
     openPanel();
-    fireEvent.mouseEnter(screen.getByText("DashScope"));
+    fireEvent.mouseEnter(screen.getByText("OpenAI"));
     expect(screen.queryByText("🌐 同传与复刻")).not.toBeInTheDocument();
+  });
+
+  it("keeps panel open and auto-navigates to translation category when selecting a live-translate model", () => {
+    const voiceChat = renderPopover();
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("DashScope"));
+    fireEvent.mouseEnter(screen.getByText("🤖 模型列表"));
+    fireEvent.click(screen.getByText("qwen3.5-livetranslate-flash-realtime"));
+    expect(voiceChat.onModelChange).toHaveBeenCalledWith("qwen3.5-livetranslate-flash-realtime");
+    // Popover remains open
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // Auto-navigates to Level 3 translation settings card
+    expect(screen.getByText("常用语对")).toBeInTheDocument();
   });
 
   it("shows the translation section for Google live-translate models with mode toggle, preset pills, and swap button", () => {

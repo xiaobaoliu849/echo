@@ -3,8 +3,10 @@ import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { formatModelHint } from "../hooks/useChat";
 import {
   DASHSCOPE_PROVIDER,
+  GOOGLE_PROVIDER,
   PRESET_LANGUAGE_PAIRS,
   formatVoiceChatSecondaryLabel,
+  isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
 
 type Translator = (zh: string, en: string) => string;
@@ -29,21 +31,38 @@ export default function VoiceCallSettingsPopover({ voiceChat, t, disabled = fals
 
   const rootRef = useRef<HTMLDivElement>(null);
 
+  const currentSelectedProvider = activeProvider || voiceChat.voiceChatProvider;
+
   const currentProviderGroup = voiceChat.voiceChatRealtimeChoicesByProvider.find(
-    (g) => g.provider === (activeProvider || voiceChat.voiceChatProvider)
+    (g) => g.provider === currentSelectedProvider
   ) || voiceChat.voiceChatRealtimeChoicesByProvider[0];
 
-  const isLiveTranslateModel = voiceChat.voiceChatLiveTranslate;
+  const isLiveTranslateModel =
+    voiceChat.voiceChatLiveTranslate ||
+    isLiveTranslateModelHelper(currentSelectedProvider, voiceChat.voiceChatModel);
   const isDashScopeLiveTranslate =
-    (activeProvider || voiceChat.voiceChatProvider) === DASHSCOPE_PROVIDER && isLiveTranslateModel;
+    currentSelectedProvider === DASHSCOPE_PROVIDER && isLiveTranslateModel;
+  const canShowTranslationCategory =
+    isLiveTranslateModel ||
+    currentSelectedProvider === DASHSCOPE_PROVIDER ||
+    currentSelectedProvider === GOOGLE_PROVIDER;
 
   function handleModelSelect(provider: string, model: string) {
     if (provider !== voiceChat.voiceChatProvider) {
       voiceChat.onProviderChange(provider);
     }
     voiceChat.onModelChange(model);
-    // Leaf selection = explicit choice: close so the updated summary pill confirms it
-    setOpen(false);
+
+    if (isLiveTranslateModelHelper(provider, model)) {
+      // For live-translate models, do not close popover immediately. Instead,
+      // auto-navigate to translation settings category so the user can configure
+      // target language, voice clone, and tone in the same interaction flow.
+      setActiveProvider(provider);
+      setActiveCategory("translation");
+    } else {
+      // Leaf selection for standard models = explicit choice: close so updated summary confirms it
+      setOpen(false);
+    }
   }
 
   function handleToggle() {
@@ -211,7 +230,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, t, disabled = fals
                 <span className="vsVoiceSettingsRowLabel">🎙️ {t("音色设定", "Voices")}</span>
                 <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
               </button>
-              {isLiveTranslateModel ? (
+              {canShowTranslationCategory ? (
                 <button
                   type="button"
                   className={`vsVoiceSettingsRow${activeCategory === "translation" ? " selected" : ""}`}
@@ -301,7 +320,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, t, disabled = fals
               ) : null}
 
               {/* LEVEL 3 - TRANSLATION & VOICE CLONE */}
-              {activeCategory === "translation" && isLiveTranslateModel ? (
+              {activeCategory === "translation" ? (
                 <div className="vsVoiceSettingsSection vsVoiceTranslationCard" style={{ width: 310 }}>
                   {isDashScopeLiveTranslate ? (
                     <div
