@@ -117,6 +117,38 @@ QWEN_FLASH_VOICES = [
     {"name": "Andre", "short_name": "安德雷 (Andre)", "locale": "multi", "gender": "Male"},
 ]
 
+# Qwen-Audio-TTS system voices (qwen-audio-3.0-tts-flash / qwen-audio-3.0-tts-plus).
+# These use the "longan v3.6" voice family per the official Qwen-Audio-TTS voice list
+# (https://help.aliyun.com/zh/model-studio/qwen-audio-tts-voice-list) and are NOT
+# interchangeable with the qwen3-tts-flash voices above (Cherry/Ono Anna/...).
+QWEN_AUDIO_TTS_VOICES = [
+    {"name": "longanhuan_v3.6", "short_name": "龙安欢 (longanhuan_v3.6)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanfengyue", "short_name": "龙安风悦 (longanfengyue)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanyuanfei", "short_name": "龙安元妃 (longanyuanfei)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanlingxi", "short_name": "龙安灵希 (longanlingxi)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanxiaoxin", "short_name": "龙安小昕 (longanxiaoxin)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longjielidou_v3.6", "short_name": "龙杰力豆 (longjielidou_v3.6)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longpaopao_v3.6", "short_name": "龙泡泡 (longpaopao_v3.6)", "locale": "zh-CN", "gender": "Neutral"},
+    {"name": "longhuohuo_v3.6", "short_name": "龙火火 (longhuohuo_v3.6)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longchuanshu_v3.6", "short_name": "龙川叔 (longchuanshu_v3.6)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "loongmary", "short_name": "Loong Mary (loongmary)", "locale": "en-GB", "gender": "Female"},
+    {"name": "loongeva_v3.6", "short_name": "Loong Eva (loongeva_v3.6)", "locale": "en-US", "gender": "Female"},
+    {"name": "loongjohn", "short_name": "Loong John (loongjohn)", "locale": "en-US", "gender": "Male"},
+]
+
+DEFAULT_QWEN_AUDIO_TTS_VOICE = "longanhuan_v3.6"
+
+
+def is_qwen_audio_tts_model(model: str | None) -> bool:
+    """True for the Qwen-Audio-TTS family (qwen-audio-3.0-tts-flash/plus).
+
+    These models use the longan voice family, unlike qwen3-tts-* models which
+    use the Cherry/Ono Anna voice family.
+    """
+    normalized = str(model or "").strip().lower()
+    return normalized.startswith("qwen-audio-") and "-tts-" in normalized
+
+
 MINIMAX_VOICES = [
     {"name": "female-shaonv", "short_name": "少女音色", "locale": "zh-CN", "gender": "Female"},
     {"name": "female-yujie", "short_name": "御姐音色", "locale": "zh-CN", "gender": "Female"},
@@ -697,6 +729,31 @@ class TTSService:
         except Exception as exc:
             raise RuntimeError(f"Edge TTS 朗读生成失败 ({exc})。请检查网络是否能够正常访问微软 Edge 语音服务。") from exc
 
+    def _resolve_qwen_voice_for_model(self, voice: str, model_name: str) -> str:
+        """Validate the voice against the model's voice family.
+
+        qwen-audio-3.0-tts-* models only accept the longan voice family, while
+        qwen3-tts-* models only accept the Cherry/Ono Anna family. Mixing them
+        makes the DashScope SDK return None audio with no useful error, so we
+        fail fast with an actionable message. Unknown (custom/cloned) voices are
+        passed through untouched.
+        """
+        if is_qwen_audio_tts_model(model_name):
+            if any(v["name"] == voice for v in QWEN_FLASH_VOICES):
+                raise ValueError(
+                    f"音色 {voice} 属于 qwen3-tts 系列，与模型 {model_name} 不兼容。"
+                    f"qwen-audio-3.0-tts 系列请使用龙系列音色（如 {DEFAULT_QWEN_AUDIO_TTS_VOICE}），"
+                    "或在模型版本中选择 qwen3-tts-flash。"
+                )
+            return voice
+        if any(v["name"] == voice for v in QWEN_AUDIO_TTS_VOICES):
+            raise ValueError(
+                f"音色 {voice} 属于 qwen-audio-3.0-tts 系列，与模型 {model_name} 不兼容。"
+                "qwen3-tts 系列请使用 Cherry/Ono Anna 等音色，"
+                "或在模型版本中选择 qwen-audio-3.0-tts-flash。"
+            )
+        return voice
+
     async def _generate_qwen_flash_audio(self, text: str, voice: str, path: Path, model: str | None = None) -> None:
         api_key = self._dashscope_key()
         if not api_key:
@@ -709,9 +766,24 @@ class TTSService:
 
         dashscope.api_key = api_key
         model_name = model or DEFAULT_QWEN_FLASH_MODEL
-        synthesizer = SpeechSynthesizer(model=model_name, voice=voice)
+        voice_name = self._resolve_qwen_voice_for_model(voice, model_name)
+        synthesizer = SpeechSynthesizer(model=model_name, voice=voice_name)
         # dashscope SDK 的 call() 是同步阻塞的网络调用，放到线程池里跑，避免卡住事件循环
         audio = await asyncio.to_thread(synthesizer.call, text)
+        if not audio:
+            # SDK 合成失败时 call() 返回 None（不会抛异常），常见原因是音色与模型
+            # 不兼容或配额/网络问题。带上 request_id 方便排查。
+            request_id = ""
+            try:
+                request_id = synthesizer.get_last_request_id() or ""
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"Qwen TTS 合成失败：服务未返回音频数据（模型 {model_name}，音色 {voice_name}"
+                f"{f'，request_id: {request_id}' if request_id else ''}）。"
+                "请确认音色与模型系列匹配（qwen-audio-3.0-tts 用龙系列音色，qwen3-tts 用 Cherry/Ono Anna 等音色），"
+                "并检查 DashScope 配额与网络。"
+            )
         self._atomic_write_bytes(path, audio)
 
     async def _generate_minimax_audio(self, text: str, voice: str, path: Path, model: str | None = None) -> None:
@@ -950,6 +1022,8 @@ class TTSService:
             return TTS_ENGINE_QWEN_FLASH
         if any(v["name"] == voice for v in QWEN_FLASH_VOICES):
             return TTS_ENGINE_QWEN_FLASH
+        if any(v["name"] == voice for v in QWEN_AUDIO_TTS_VOICES):
+            return TTS_ENGINE_QWEN_FLASH
         # 2. Check MiniMax voices
         if any(v["name"] == voice for v in MINIMAX_VOICES):
             return TTS_ENGINE_MINIMAX
@@ -985,7 +1059,12 @@ class TTSService:
         if normalized_engine == TTS_ENGINE_EDGE:
             selected_voice = self._resolve_edge_voice_for_text(cleaned, voice) if voice else self._detect_edge_voice(cleaned)
         elif normalized_engine == TTS_ENGINE_QWEN_FLASH:
-            selected_voice = voice or QWEN_FLASH_VOICES[0]["name"]
+            if voice:
+                selected_voice = voice
+            elif is_qwen_audio_tts_model(model):
+                selected_voice = DEFAULT_QWEN_AUDIO_TTS_VOICE
+            else:
+                selected_voice = QWEN_FLASH_VOICES[0]["name"]
         elif normalized_engine == TTS_ENGINE_MINIMAX:
             selected_voice = voice or MINIMAX_VOICES[0]["name"]
         elif normalized_engine == TTS_ENGINE_OPENAI:
@@ -1128,6 +1207,7 @@ class TTSService:
         self,
         locale: str | None = None,
         engine: str = TTS_ENGINE_EDGE,
+        model: str | None = None,
     ) -> list[dict[str, Any]]:
         normalized_engine = self._normalize_engine(engine)
         if normalized_engine == TTS_ENGINE_CHATTTS:
@@ -1136,6 +1216,10 @@ class TTSService:
             local_clones = self._get_local_gpt_sovits_voices()
             return self._filter_by_locale(GPT_SOVITS_VOICES + local_clones, locale)
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
+            # The two Qwen TTS families use incompatible voice sets; when the
+            # caller tells us the model, return only voices that work with it.
+            if is_qwen_audio_tts_model(model):
+                return self._filter_by_locale(QWEN_AUDIO_TTS_VOICES, locale)
             return self._filter_by_locale(QWEN_FLASH_VOICES, locale)
         if normalized_engine == TTS_ENGINE_MINIMAX:
             return self._filter_by_locale(MINIMAX_VOICES, locale)

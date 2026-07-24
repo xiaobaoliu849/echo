@@ -617,13 +617,16 @@ export async function fetchCurrentAuthUser(): Promise<AuthRuntimeConfig> {
   });
 }
 
-export async function fetchVoices(locale?: string, engine?: TtsEngine): Promise<VoicesResponse> {
+export async function fetchVoices(locale?: string, engine?: TtsEngine, model?: string): Promise<VoicesResponse> {
   const params = new URLSearchParams();
   if (locale) {
     params.set("locale", locale);
   }
   if (engine) {
     params.set("engine", engine);
+  }
+  if (model) {
+    params.set("model", model);
   }
   const query = params.toString();
   return cachedGetJson<VoicesResponse>(`${API_BASE_URL}/api/tts/voices${query ? `?${query}` : ""}`);

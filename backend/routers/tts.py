@@ -47,9 +47,13 @@ async def list_voices(
         default="edge",
         description="TTS engine: edge, qwen_flash, minimax, xiaomi, openai, elevenlabs, chattts, gpt_sovits",
     ),
+    model: str | None = Query(
+        default=None,
+        description="Optional TTS model; qwen_flash voices are filtered to the model's voice family.",
+    ),
 ) -> dict:
     try:
-        voices = await tts_service.list_voices(locale=locale, engine=engine)
+        voices = await tts_service.list_voices(locale=locale, engine=engine, model=model)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,

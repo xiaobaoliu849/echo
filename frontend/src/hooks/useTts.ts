@@ -106,7 +106,9 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     async function loadVoices() {
       try {
         setLoadingVoices(true);
-        const data = await fetchVoices(undefined, ttsEngine);
+        // Qwen TTS 的两个模型系列音色不通用，按当前模型过滤音色列表
+        const effectiveModel = ttsModel || DEFAULT_ENGINE_MODELS[ttsEngine]?.defaultModel || "";
+        const data = await fetchVoices(undefined, ttsEngine, effectiveModel || undefined);
         if (disposed) {
           return;
         }
@@ -133,7 +135,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     return () => {
       disposed = true;
     };
-  }, [formatErrorMessage, ttsEngine, language]);
+  }, [formatErrorMessage, ttsEngine, ttsModel, language]);
 
   useEffect(() => {
     let disposed = false;
@@ -141,7 +143,8 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     async function loadVoicesB() {
       try {
         setLoadingVoicesB(true);
-        const data = await fetchVoices(undefined, ttsEngineB);
+        const effectiveModelB = ttsModelB || DEFAULT_ENGINE_MODELS[ttsEngineB]?.defaultModel || "";
+        const data = await fetchVoices(undefined, ttsEngineB, effectiveModelB || undefined);
         if (disposed) {
           return;
         }
@@ -167,7 +170,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     return () => {
       disposed = true;
     };
-  }, [formatErrorMessage, ttsEngineB, language]);
+  }, [formatErrorMessage, ttsEngineB, ttsModelB, language]);
 
   const voiceOptions = useMemo(() => {
     const sorted = sortVoices(voices, language);
@@ -279,6 +282,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
 
   function onEngineBChange(engine: TtsEngine) {
     setTtsEngineB(engine);
+    setTtsModelB(DEFAULT_ENGINE_MODELS[engine]?.defaultModel || "");
     setTtsError("");
     setTtsInfo("");
     if (audioUrl.startsWith("blob:")) {

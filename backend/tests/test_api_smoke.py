@@ -417,8 +417,8 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertEqual(payload["status"], 400)
 
     def test_tts_voices_endpoint(self) -> None:
-        async def fake_list_voices(locale: str | None = None, engine: str = "edge") -> list[dict[str, Any]]:
-            _ = (locale, engine)
+        async def fake_list_voices(locale: str | None = None, engine: str = "edge", model: str | None = None) -> list[dict[str, Any]]:
+            _ = (locale, engine, model)
             return [{"name": "zh-CN-XiaoxiaoNeural", "short_name": "Xiaoxiao", "locale": "zh-CN", "gender": "Female"}]
 
         with patch.object(tts_router.tts_service, "list_voices", new=fake_list_voices):
@@ -436,8 +436,8 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertEqual(payload["voices"][0]["name"], "Cherry")
 
     def test_auth_token_protection(self) -> None:
-        async def fake_list_voices(locale: str | None = None, engine: str = "edge") -> list[dict[str, Any]]:
-            _ = (locale, engine)
+        async def fake_list_voices(locale: str | None = None, engine: str = "edge", model: str | None = None) -> list[dict[str, Any]]:
+            _ = (locale, engine, model)
             return [{"name": "zh-CN-XiaoxiaoNeural", "short_name": "Xiaoxiao", "locale": "zh-CN", "gender": "Female"}]
 
         async def fake_chat_completion(**kwargs: Any) -> dict[str, Any]:
