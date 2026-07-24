@@ -63,6 +63,7 @@ class DashScopeRealtimeCallback:
                 {
                     "type": "user_transcript",
                     "text": transcript,
+                    "final": True,
                     "provider_event_type": event_type,
                     "item_id": str(response.get("item_id", "")),
                 }

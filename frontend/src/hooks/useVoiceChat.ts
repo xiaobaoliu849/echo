@@ -47,6 +47,7 @@ import {
   resolveRealtimeModelOptions,
   resolveRealtimeProvider,
   shouldCoalesceLiveTranslateSegment,
+  isCJKPredominant,
   type Options,
   type TranslationMode,
   type VoiceChatInterruptionState,
@@ -742,40 +743,52 @@ export default function useVoiceChat({
         if (voiceChatLiveTranslate) {
           currentTurnIdRef.current = event.turn_id || currentTurnIdRef.current;
           liveTranslateLastSourceActivityAtRef.current = Date.now();
-          // Compute the previous pending (unconsumed) source text BEFORE merging
-          const previousPendingSource = liveTranslateSourceStreamRef.current
-            .slice(liveTranslateConsumedSourceLengthRef.current)
-            .trim();
-          // Determine what new text this event would add beyond the consumed pointer.
-          // For cumulative transcripts (Google Live Translate): event.text contains the
-          // full accumulated source. We merge it to get the updated stream, then derive
-          // the delta by comparing the new pending portion against the old one.
           const incomingSource = event.text || event.tentative || "";
-          const mergedSource = mergeAssistantText(
-            liveTranslateSourceStreamRef.current,
-            incomingSource
-          );
-          const newPendingSource = mergedSource
-            .slice(liveTranslateConsumedSourceLengthRef.current)
-            .trim();
-          const sourceDelta = newPendingSource.startsWith(previousPendingSource)
-            ? newPendingSource.slice(previousPendingSource.length).trim()
-            : newPendingSource;
-          const pendingTarget = getPendingLiveTranslatePair().target;
-          // Commit the PREVIOUS pending pair if it forms a complete sentence and the
-          // incoming delta is genuinely new content (not a continuation/short fragment).
-          if (
-            previousPendingSource &&
-            sourceDelta &&
-            pendingTarget &&
-            endsWithSentencePunctuation(pendingTarget) &&
-            endsWithSentencePunctuation(previousPendingSource) &&
-            !shouldCoalesceLiveTranslateSegment(previousPendingSource, sourceDelta)
-          ) {
-            commitPendingLiveTranslatePair();
+
+          if (event.final && event.text) {
+            // Completed ASR event: Qwen's canonical final text for this input item.
+            // Replace the uncommitted portion of the source stream with this exact
+            // text instead of merging (which would append the corrected text onto
+            // early flawed ASR drafts).
+            const consumed = liveTranslateConsumedSourceLengthRef.current;
+            const prefix = liveTranslateSourceStreamRef.current.slice(0, consumed);
+            const finalText = event.text.trim();
+            if (prefix) {
+              const needsSpace =
+                !isCJKPredominant(prefix) && !isCJKPredominant(finalText);
+              liveTranslateSourceStreamRef.current = `${prefix}${needsSpace ? " " : ""}${finalText}`;
+            } else {
+              liveTranslateSourceStreamRef.current = finalText;
+            }
+          } else {
+            // Streaming cumulative transcript: compute pending source delta & merge
+            const previousPendingSource = liveTranslateSourceStreamRef.current
+              .slice(liveTranslateConsumedSourceLengthRef.current)
+              .trim();
+            const mergedSource = mergeAssistantText(
+              liveTranslateSourceStreamRef.current,
+              incomingSource
+            );
+            const newPendingSource = mergedSource
+              .slice(liveTranslateConsumedSourceLengthRef.current)
+              .trim();
+            const sourceDelta = newPendingSource.startsWith(previousPendingSource)
+              ? newPendingSource.slice(previousPendingSource.length).trim()
+              : newPendingSource;
+            const pendingTarget = getPendingLiveTranslatePair().target;
+            if (
+              previousPendingSource &&
+              sourceDelta &&
+              pendingTarget &&
+              endsWithSentencePunctuation(pendingTarget) &&
+              endsWithSentencePunctuation(previousPendingSource) &&
+              !shouldCoalesceLiveTranslateSegment(previousPendingSource, sourceDelta)
+            ) {
+              commitPendingLiveTranslatePair();
+            }
+            liveTranslateSourceStreamRef.current = mergedSource;
           }
-          // NOW apply the merge
-          liveTranslateSourceStreamRef.current = mergedSource;
+
           syncPendingLiveTranslatePair();
           scheduleLiveTranslateBoundary();
           setVoiceChatStatus(t("正在识别本句原文…", "Transcribing this sentence…"));

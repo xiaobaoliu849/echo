@@ -731,7 +731,7 @@ class DashScopeRealtimeMixin:
                             if recorder is not None:
                                 voice_turn_id = await recorder.note_user_transcript(text)
                             await self._send_event(
-                                websocket, "user_transcript", text=text, turn_id=voice_turn_id
+                                websocket, "user_transcript", text=text, final=True, turn_id=voice_turn_id
                             )
                             input_finished = True
                     await complete_turn()
