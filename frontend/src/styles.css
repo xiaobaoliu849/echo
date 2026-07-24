@@ -1983,7 +1983,7 @@ button:focus-visible {
 .vsVoiceLevel3Flyout {
   position: absolute;
   top: -1px;
-  left: calc(200% + 12px);
+  left: calc(100% + 272px);
   min-width: 260px;
   max-width: calc(100vw - 48px);
   background: var(--bg-card);
@@ -2002,7 +2002,7 @@ button:focus-visible {
 
 .vsVoiceLevel3Flyout.flyLeft {
   left: auto;
-  right: calc(200% + 12px);
+  right: calc(100% + 272px);
   animation: vsFlyoutLeft 0.12s ease-out;
 }
 
@@ -2022,6 +2022,7 @@ button:focus-visible {
   position: absolute;
   top: -1px;
   left: calc(100% + 6px);
+  width: 260px;
   min-width: 260px;
   max-width: calc(100vw - 48px);
   overflow-y: auto;
