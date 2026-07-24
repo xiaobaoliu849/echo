@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
-import { formatModelHint, type UseChatResult } from "../hooks/useChat";
+import { formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
   DASHSCOPE_PROVIDER,
   GOOGLE_PROVIDER,
@@ -19,34 +19,71 @@ type Props = {
   onOpenSettings?: () => void;
 };
 
+type ModelChoiceItem = {
+  model: string;
+  value: string;
+  isRealtime: boolean;
+};
+
+type ProviderGroup = {
+  provider: string;
+  models: ModelChoiceItem[];
+};
+
 export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled = false, onOpenSettings }: Props) {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(true);
   const [flyoutToLeft, setFlyoutToLeft] = useState(false);
   const [panelMaxHeight, setPanelMaxHeight] = useState(480);
-  
-  // Level 1: Selected / Hovered Provider
+
+  // Level 1: Selected / Hovered Provider ("" = fallback to active provider)
   const [activeProvider, setActiveProvider] = useState<string>("");
-  // Level 2: Selected / Hovered Category ("model" | "voice" | "translation" | "")
-  const [activeCategory, setActiveCategory] = useState<"model" | "voice" | "translation" | "">("");
+  // Level 2 -> Level 3 Flyout Category: "voice" | "translation" | ""
+  const [activeCategory, setActiveCategory] = useState<"voice" | "translation" | "">("");
 
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const currentSelectedProvider = activeProvider || voiceChat.voiceChatProvider;
+  // Build unified provider groups (supporting both text and realtime models)
+  const providerGroups = useMemo<ProviderGroup[]>(() => {
+    if (chat && chat.chatModelChoices.length > 0) {
+      const map = new Map<string, ModelChoiceItem[]>();
+      for (const choice of chat.chatModelChoices) {
+        const list = map.get(choice.provider) || [];
+        list.push({
+          model: choice.model,
+          value: choice.value,
+          isRealtime: isVoiceRealtimeModel(choice.provider, choice.model),
+        });
+        map.set(choice.provider, list);
+      }
+      return Array.from(map.entries()).map(([provider, models]) => ({ provider, models }));
+    }
 
-  const currentProviderGroup = voiceChat.voiceChatRealtimeChoicesByProvider.find(
-    (g) => g.provider === currentSelectedProvider
-  ) || voiceChat.voiceChatRealtimeChoicesByProvider[0];
+    // Fallback to voiceChat realtime choices
+    return voiceChat.voiceChatRealtimeChoicesByProvider.map((g) => ({
+      provider: g.provider,
+      models: g.models.map((m) => ({
+        model: m,
+        value: `${g.provider}\u001f${m}`,
+        isRealtime: true,
+      })),
+    }));
+  }, [chat, voiceChat.voiceChatRealtimeChoicesByProvider]);
+
+  const currentProviderName = activeProvider || (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
+  const currentProviderGroup = providerGroups.find((g) => g.provider === currentProviderName) || providerGroups[0];
+
+  const currentModelName = chat ? chat.chatModel : voiceChat.voiceChatModel;
+  const isCurrentModelRealtime = isVoiceRealtimeModel(currentProviderName, currentModelName);
 
   const isLiveTranslateModel =
     voiceChat.voiceChatLiveTranslate ||
-    isLiveTranslateModelHelper(currentSelectedProvider, voiceChat.voiceChatModel);
-  const isDashScopeLiveTranslate =
-    currentSelectedProvider === DASHSCOPE_PROVIDER && isLiveTranslateModel;
+    isLiveTranslateModelHelper(currentProviderName, currentModelName);
+  const isDashScopeLiveTranslate = currentProviderName === DASHSCOPE_PROVIDER && isLiveTranslateModel;
   const canShowTranslationCategory =
     isLiveTranslateModel ||
-    currentSelectedProvider === DASHSCOPE_PROVIDER ||
-    currentSelectedProvider === GOOGLE_PROVIDER;
+    currentProviderName === DASHSCOPE_PROVIDER ||
+    currentProviderName === GOOGLE_PROVIDER;
 
   function handleModelSelect(provider: string, model: string) {
     if (chat) {
@@ -60,14 +97,19 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     }
     voiceChat.onModelChange(model);
 
-    if (isLiveTranslateModelHelper(provider, model)) {
-      // For live-translate models, do not close popover immediately. Instead,
-      // auto-navigate to translation settings category so the user can configure
-      // target language, voice clone, and tone in the same interaction flow.
+    const isRealtimeChoice = isVoiceRealtimeModel(provider, model);
+    const isTranslateChoice = isLiveTranslateModelHelper(provider, model);
+
+    if (isTranslateChoice) {
+      // Auto-navigate to translation category in Level 3 for live-translate models
       setActiveProvider(provider);
       setActiveCategory("translation");
+    } else if (isRealtimeChoice) {
+      // Auto-navigate to voice category in Level 3 for voice models
+      setActiveProvider(provider);
+      setActiveCategory("voice");
     } else {
-      // Leaf selection for standard models = explicit choice: close so updated summary confirms it
+      // Standard text model choice: close popover
       setOpen(false);
     }
   }
@@ -82,8 +124,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       setOpenUpward(upward);
       setFlyoutToLeft(rect.left + 660 > window.innerWidth);
       setPanelMaxHeight(Math.max(200, Math.min(520, upward ? spaceAbove : spaceBelow)));
-      
-      // Clear active states when toggling so user starts strictly at Level 1
+
+      // Clear active states on open so user starts cleanly at Level 1 / Level 2
       setActiveProvider("");
       setActiveCategory("");
     }
@@ -113,8 +155,6 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     };
   }, [open]);
 
-  // Secondary label next to the model name: Voice Clone takes precedence, and
-  // live-translate models show the language pair instead of a stale voice label.
   const secondaryLabel = formatVoiceChatSecondaryLabel({
     liveTranslate: voiceChat.voiceChatLiveTranslate,
     voiceCloneEnabled: Boolean(voiceChat.voiceChatEnableVoiceClone),
@@ -127,7 +167,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     t,
   });
 
-  const summaryText = `${voiceChat.voiceChatModel} · ${secondaryLabel}`;
+  const summaryText = isCurrentModelRealtime
+    ? `${currentModelName} · ${secondaryLabel}`
+    : currentModelName.trim()
+    ? `${currentProviderName} / ${currentModelName}`
+    : t("选择模型", "Select model");
 
   return (
     <div className="vsVoiceSettings" ref={rootRef}>
@@ -160,16 +204,16 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           role="dialog"
           aria-label={t("通话设置", "Call settings")}
         >
-          {/* LEVEL 1: PROVIDER SELECTION LIST */}
+          {/* LEVEL 1: PROVIDER SELECTION LIST (服务商) */}
           <div className="vsVoiceLevel1List">
-            {voiceChat.voiceChatRealtimeChoicesByProvider.map((group) => {
-              const isCurrentProvider = group.provider === voiceChat.voiceChatProvider;
-              const isActiveProvider = group.provider === activeProvider;
+            {providerGroups.map((group) => {
+              const isSelectedProvider = group.provider === (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
+              const isActiveProvider = group.provider === (activeProvider || currentProviderName);
               return (
                 <button
                   key={group.provider}
                   type="button"
-                  className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isCurrentProvider ? " selected" : ""}`}
+                  className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isSelectedProvider ? " selected" : ""}`}
                   onMouseEnter={() => {
                     setActiveProvider(group.provider);
                     setActiveCategory("");
@@ -180,7 +224,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                   }}
                 >
                   <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
-                    {isCurrentProvider ? "✓" : ""}
+                    {isSelectedProvider ? "✓" : ""}
                   </span>
                   <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
                   <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
@@ -216,67 +260,100 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
             </div>
           </div>
 
-          {/* LEVEL 2: CATEGORY SELECTION MENU (Flies out to the right/left ONLY when a Provider is hovered) */}
-          {activeProvider ? (
-            <div className={`vsVoiceLevel2Flyout${flyoutToLeft ? " flyLeft" : ""}`}>
-              <button
-                type="button"
-                className={`vsVoiceSettingsRow${activeCategory === "model" ? " selected" : ""}`}
-                onMouseEnter={() => setActiveCategory("model")}
-                onClick={() => setActiveCategory("model")}
-              >
-                <span className="vsVoiceSettingsRowLabel">🤖 {t("模型列表", "Models")}</span>
-                <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
-              </button>
-              <button
-                type="button"
-                className={`vsVoiceSettingsRow${activeCategory === "voice" ? " selected" : ""}`}
-                onMouseEnter={() => setActiveCategory("voice")}
-                onClick={() => setActiveCategory("voice")}
-              >
-                <span className="vsVoiceSettingsRowLabel">🎙️ {t("音色设定", "Voices")}</span>
-                <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
-              </button>
-              {canShowTranslationCategory ? (
+          {/* LEVEL 2: SPECIFIC MODELS LIST (具体的模型) */}
+          {currentProviderGroup ? (
+            <div
+              className={`vsModelFlyout${flyoutToLeft ? " flyLeft" : ""}`}
+              style={{ maxHeight: `${panelMaxHeight}px` }}
+            >
+              {/* List of Specific Models under Active Provider */}
+              <div className="vsVoiceSettingsList">
+                {currentProviderGroup.models.map((item) => {
+                  const isSelectedModel =
+                    currentProviderGroup.provider === (chat ? chat.chatProvider : voiceChat.voiceChatProvider) &&
+                    item.model === (chat ? chat.chatModel : voiceChat.voiceChatModel);
+                  const hint = formatModelHint(currentProviderGroup.provider, item.model, t);
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      className={`vsVoiceSettingsRow${isSelectedModel ? " selected" : ""}`}
+                      aria-current={isSelectedModel ? "true" : undefined}
+                      onMouseEnter={() => {
+                        if (isLiveTranslateModelHelper(currentProviderGroup.provider, item.model)) {
+                          setActiveCategory("translation");
+                        } else if (item.isRealtime) {
+                          setActiveCategory("voice");
+                        }
+                      }}
+                      onClick={() => handleModelSelect(currentProviderGroup.provider, item.model)}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                        <span className="vsVoiceSettingsRowLabel">{item.model}</span>
+                        {item.isRealtime ? (
+                          <span className="vsVoiceSettingsProviderChevron" aria-hidden="true" style={{ fontSize: 12, opacity: 0.6 }}>
+                            ›
+                          </span>
+                        ) : null}
+                      </div>
+                      {hint ? <span className="vsVoiceSettingsRowHint">{hint}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Option Shortcuts for Voice & Translation Settings */}
+              <div style={{ marginTop: 6, paddingTop: 4, borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 2 }}>
                 <button
                   type="button"
-                  className={`vsVoiceSettingsRow${activeCategory === "translation" ? " selected" : ""}`}
-                  onMouseEnter={() => setActiveCategory("translation")}
-                  onClick={() => setActiveCategory("translation")}
+                  className={`vsVoiceSettingsRow${activeCategory === "voice" ? " selected" : ""}`}
+                  onMouseEnter={() => setActiveCategory("voice")}
+                  onClick={() => setActiveCategory("voice")}
                 >
-                  <span className="vsVoiceSettingsRowLabel">🌐 {t("同传与复刻", "Translation")}</span>
-                  <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                    <span className="vsVoiceSettingsRowLabel">🎤 {t("音色设定", "Voices")}</span>
+                    <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
+                  </div>
                 </button>
-              ) : null}
+                {canShowTranslationCategory ? (
+                  <button
+                    type="button"
+                    className={`vsVoiceSettingsRow${activeCategory === "translation" ? " selected" : ""}`}
+                    onMouseEnter={() => setActiveCategory("translation")}
+                    onClick={() => setActiveCategory("translation")}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                      <span className="vsVoiceSettingsRowLabel">🌐 {t("同传与复刻", "Translation")}</span>
+                      <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
+                    </div>
+                  </button>
+                ) : null}
+              </div>
             </div>
           ) : null}
 
-          {/* LEVEL 3: SPECIFIC CONTENT PANEL (Flies out to the right/left ONLY when a Category is hovered) */}
+          {/* LEVEL 3: VOICE TIMBRE & TRANSLATION SETTINGS (音色与同传/扩展设定) */}
           {activeCategory ? (
             <div className={`vsVoiceLevel3Flyout${flyoutToLeft ? " flyLeft" : ""}`}>
-              {/* LEVEL 3 - MODEL LIST */}
-              {activeCategory === "model" && currentProviderGroup ? (
-                <div className="vsVoiceSettingsList">
-                  {currentProviderGroup.models.map((model) => {
-                    const isCurrentModel =
-                      currentProviderGroup.provider === voiceChat.voiceChatProvider &&
-                      model === voiceChat.voiceChatModel;
-                    const hint = formatModelHint(currentProviderGroup.provider, model, t);
-                    return (
-                      <button
-                        key={model}
-                        type="button"
-                        className={`vsVoiceSettingsRow${isCurrentModel ? " selected" : ""}`}
-                        aria-current={isCurrentModel ? "true" : undefined}
-                        onClick={() => handleModelSelect(currentProviderGroup.provider, model)}
-                      >
-                        <span className="vsVoiceSettingsRowLabel">{model}</span>
-                        {hint ? <span className="vsVoiceSettingsRowHint">{hint}</span> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
+              {/* Category Tab Bar at top of Level 3 */}
+              <div className="vsCascadingTabBar">
+                <button
+                  type="button"
+                  className={`vsCascadingTabItem${activeCategory === "voice" ? " active" : ""}`}
+                  onClick={() => setActiveCategory("voice")}
+                >
+                  🎤 {t("音色设定", "Voices")}
+                </button>
+                {canShowTranslationCategory ? (
+                  <button
+                    type="button"
+                    className={`vsCascadingTabItem${activeCategory === "translation" ? " active" : ""}`}
+                    onClick={() => setActiveCategory("translation")}
+                  >
+                    🌐 {t("同传与复刻", "Translation")}
+                  </button>
+                ) : null}
+              </div>
 
               {/* LEVEL 3 - VOICE LIST */}
               {activeCategory === "voice" ? (
@@ -312,7 +389,6 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                             voiceChat.onVoiceCloneToggle?.(false);
                           }
                           voiceChat.onVoiceChange(item.value);
-                          // Leaf selection = explicit choice: close so the updated summary pill confirms it
                           setOpen(false);
                         }}
                       >

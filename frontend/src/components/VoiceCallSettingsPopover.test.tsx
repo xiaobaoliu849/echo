@@ -61,19 +61,14 @@ describe("VoiceCallSettingsPopover", () => {
     openPanel();
     // Only Level 1 provider list is open initially
     expect(screen.getByText("DashScope")).toBeInTheDocument();
-    expect(screen.queryByText("🤖 模型列表")).not.toBeInTheDocument();
 
-    // Hover Level 1 Provider to open Level 2
+    // Hover Level 1 Provider to open Level 2 (Specific Models)
     fireEvent.mouseEnter(screen.getByText("DashScope"));
-    expect(screen.getByText("🤖 模型列表")).toBeInTheDocument();
-
-    // Hover Level 2 Category to open Level 3
-    fireEvent.mouseEnter(screen.getByText("🤖 模型列表"));
     expect(screen.getByText("全模态实时")).toBeInTheDocument();
     expect(screen.getByText("Qwen-Audio 原生实时")).toBeInTheDocument();
 
-    // Hover Level 2 Voice to open Voice flyout in Level 3
-    fireEvent.mouseEnter(screen.getByText("🎙️ 音色设定"));
+    // Hover Level 2 Voice shortcut to open Voice flyout in Level 3
+    fireEvent.mouseEnter(screen.getByText("🎤 音色设定"));
     expect(screen.getByText("像温热的奶茶，甜甜的暖暖的")).toBeInTheDocument();
     const selectedVoice = screen.getByText("Tina · 甜甜 · 女声").closest("button");
     expect(selectedVoice).toHaveClass("selected");
@@ -83,33 +78,29 @@ describe("VoiceCallSettingsPopover", () => {
     const voiceChat = renderPopover();
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
-    fireEvent.mouseEnter(screen.getByText("🎙️ 音色设定"));
+    fireEvent.mouseEnter(screen.getByText("🎤 音色设定"));
     fireEvent.click(screen.getByText("Ethan · 晨煦 · 男声"));
     expect(voiceChat.onVoiceChange).toHaveBeenCalledWith("Ethan");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("switches the model and closes the panel to confirm the selection", () => {
+  it("switches the model directly in Level 2", () => {
     const voiceChat = renderPopover();
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
-    fireEvent.mouseEnter(screen.getByText("🤖 模型列表"));
     fireEvent.click(screen.getByText("qwen-audio-3.0-realtime-plus"));
     expect(voiceChat.onModelChange).toHaveBeenCalledWith("qwen-audio-3.0-realtime-plus");
     expect(voiceChat.onProviderChange).not.toHaveBeenCalled();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("switches provider in Level 1 and selects model in Level 3, then closes", () => {
+  it("switches provider in Level 1 and selects model in Level 2", () => {
     const voiceChat = renderPopover();
     openPanel();
     expect(screen.queryByText("gemini-2.5-flash-native-audio-preview-12-2025")).not.toBeInTheDocument();
     fireEvent.mouseEnter(screen.getByText("Google"));
-    fireEvent.mouseEnter(screen.getByText("🤖 模型列表"));
     fireEvent.click(screen.getByText("gemini-2.5-flash-native-audio-preview-12-2025"));
     expect(voiceChat.onProviderChange).toHaveBeenCalledWith("Google");
     expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-2.5-flash-native-audio-preview-12-2025");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("always shows a Done button in the footer that closes the panel", () => {
@@ -129,7 +120,7 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("hides the translation category in Level 2 for providers without live-translate support", () => {
+  it("hides the translation category for providers without live-translate support", () => {
     renderPopover();
     openPanel();
     fireEvent.mouseEnter(screen.getByText("OpenAI"));
@@ -140,7 +131,6 @@ describe("VoiceCallSettingsPopover", () => {
     const voiceChat = renderPopover();
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
-    fireEvent.mouseEnter(screen.getByText("🤖 模型列表"));
     fireEvent.click(screen.getByText("qwen3.5-livetranslate-flash-realtime"));
     expect(voiceChat.onModelChange).toHaveBeenCalledWith("qwen3.5-livetranslate-flash-realtime");
     // Popover remains open

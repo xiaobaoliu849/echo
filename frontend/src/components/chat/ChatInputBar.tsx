@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { extractPdfText } from "../../api";
 import VoiceCallSettingsPopover from "../VoiceCallSettingsPopover";
-import ChatModelSelect from "./ChatModelSelect";
 import { isVoiceRealtimeModel } from "../../hooks/useChat";
 import { formatVoiceChatSecondaryLabel } from "../../hooks/useVoiceChatHelpers";
 import type { UseChatResult } from "../../hooks/useChat";
@@ -368,14 +367,14 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
             </button>
           )}
           
-          {/* Cascading provider → model picker */}
-          {!isRealtime && (
-            <ChatModelSelect chat={chat} t={t} onOpenSettings={onOpenSettings} />
-          )}
-
-          {isRealtime && (
-            <VoiceCallSettingsPopover voiceChat={voiceChat} chat={chat} t={t} disabled={isVoiceActive} onOpenSettings={onOpenSettings} />
-          )}
+          {/* Unified provider → model → voice picker */}
+          <VoiceCallSettingsPopover
+            voiceChat={voiceChat}
+            chat={chat}
+            t={t}
+            disabled={isVoiceActive}
+            onOpenSettings={onOpenSettings}
+          />
         </div>
 
         <div className="vsComposerToolbarRight">
