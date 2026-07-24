@@ -211,8 +211,8 @@ describe("VoiceCallSettingsPopover", () => {
     fireEvent.mouseEnter(screen.getByText("🌐 同传与复刻"));
     expect(screen.getByText("单向同传 (源语言 → 目标语言)")).toBeInTheDocument();
     expect(screen.queryByText("双向互翻 ⇄")).not.toBeInTheDocument();
-    expect(screen.getByText("源语言")).toBeInTheDocument();
-    expect(screen.getByText("目标语言")).toBeInTheDocument();
+    expect(screen.getByText("源语言 (提示)")).toBeInTheDocument();
+    expect(screen.getByText("🎯 目标语言")).toBeInTheDocument();
   });
 
   it("toggles the echo switch in unidirectional mode", () => {

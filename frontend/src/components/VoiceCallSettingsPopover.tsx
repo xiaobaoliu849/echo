@@ -446,6 +446,24 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     </div>
                   )}
 
+                  {/* Clarification Hint Box */}
+                  {isDashScopeLiveTranslate ? (
+                    <div
+                      style={{
+                        margin: "8px 0 4px",
+                        padding: "6px 10px",
+                        fontSize: 11,
+                        lineHeight: 1.4,
+                        color: "var(--muted)",
+                        background: "color-mix(in oklab, var(--brand) 8%, transparent)",
+                        border: "1px solid color-mix(in oklab, var(--brand) 20%, transparent)",
+                        borderRadius: 6,
+                      }}
+                    >
+                      💡 {t("同传模式会将您的任意发言实时翻译为【目标语言】。", "Translation converts any spoken audio into the Target Language.")}
+                    </div>
+                  ) : null}
+
                   {/* Preset Language Pairs */}
                   <div className="vsPresetPairSection">
                     <div className="vsPresetSubTitle">{t("常用语对", "Preset pairs")}</div>
@@ -474,7 +492,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       <label className="vsLanguageSelectLabel">
                         {!isDashScopeLiveTranslate && voiceChat.voiceChatTranslationMode === "bidirectional"
                           ? t("语言 A", "Language A")
-                          : t("源语言", "Source Lang")}
+                          : t("源语言 (提示)", "Source (Hint)")}
                       </label>
                       <select
                         className="vsLanguageSelectDropdown"
@@ -502,7 +520,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       <label className="vsLanguageSelectLabel">
                         {!isDashScopeLiveTranslate && voiceChat.voiceChatTranslationMode === "bidirectional"
                           ? t("语言 B", "Language B")
-                          : t("目标语言", "Target Lang")}
+                          : t("🎯 目标语言", "🎯 Target Lang")}
                       </label>
                       <select
                         className="vsLanguageSelectDropdown"
