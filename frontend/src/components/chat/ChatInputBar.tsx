@@ -374,7 +374,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
           )}
 
           {isRealtime && (
-            <VoiceCallSettingsPopover voiceChat={voiceChat} t={t} disabled={isVoiceActive} onOpenSettings={onOpenSettings} />
+            <VoiceCallSettingsPopover voiceChat={voiceChat} chat={chat} t={t} disabled={isVoiceActive} onOpenSettings={onOpenSettings} />
           )}
         </div>
 

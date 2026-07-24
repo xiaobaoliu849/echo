@@ -11,6 +11,7 @@ import {
 import { createInlineTranslator, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 import { createMessageId, ensureMessageIds } from "../utils/messageId";
+import { resolveRealtimeModelOptions } from "./useVoiceChatHelpers";
 
 type Options = {
   formatErrorMessage: FormatErrorMessage;
@@ -141,7 +142,7 @@ function resolveModelOptions(
 ): string[] {
   const providerMeta = providerModelCatalog?.[provider];
   if (!providerMeta) {
-    return [];
+    return resolveRealtimeModelOptions(provider, {});
   }
   const enabledModels = Array.isArray(providerMeta.enabledModels)
     ? providerMeta.enabledModels.filter((item) => item.trim())
@@ -151,9 +152,15 @@ function resolveModelOptions(
     : [];
   const availableModels = enabledModels.length > 0 ? enabledModels : rawAvailable;
 
-  return availableModels
+  if (availableModels.length > 0) {
+    return availableModels.map((item) => item.trim()).filter(Boolean);
+  }
+
+  const realtimeModels = resolveRealtimeModelOptions(provider, providerModelCatalog || {});
+  const combined = [...availableModels, ...realtimeModels]
     .map((item) => item.trim())
     .filter(Boolean);
+  return [...new Set(combined)];
 }
 
 function resolveAllModelChoices(

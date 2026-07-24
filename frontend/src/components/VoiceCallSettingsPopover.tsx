@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
-import { formatModelHint } from "../hooks/useChat";
+import { formatModelHint, type UseChatResult } from "../hooks/useChat";
 import {
   DASHSCOPE_PROVIDER,
   GOOGLE_PROVIDER,
@@ -13,12 +13,13 @@ type Translator = (zh: string, en: string) => string;
 
 type Props = {
   voiceChat: UseVoiceChatResult;
+  chat?: UseChatResult;
   t: Translator;
   disabled?: boolean;
   onOpenSettings?: () => void;
 };
 
-export default function VoiceCallSettingsPopover({ voiceChat, t, disabled = false, onOpenSettings }: Props) {
+export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled = false, onOpenSettings }: Props) {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(true);
   const [flyoutToLeft, setFlyoutToLeft] = useState(false);
@@ -48,6 +49,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, t, disabled = fals
     currentSelectedProvider === GOOGLE_PROVIDER;
 
   function handleModelSelect(provider: string, model: string) {
+    if (chat) {
+      if (provider !== chat.chatProvider) {
+        chat.onProviderChange(provider);
+      }
+      chat.onModelChoiceChange(`${provider}\u001f${model}`);
+    }
     if (provider !== voiceChat.voiceChatProvider) {
       voiceChat.onProviderChange(provider);
     }
