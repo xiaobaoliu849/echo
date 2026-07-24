@@ -40,6 +40,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const [activeProvider, setActiveProvider] = useState<string>("");
   // Level 2 -> Level 3 Flyout Category: "voice" | "translation" | ""
   const [activeCategory, setActiveCategory] = useState<"voice" | "translation" | "">("");
+  // Level 2: Hovered Model ("" = fallback to active model)
+  const [hoveredModel, setHoveredModel] = useState<string>("");
 
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -88,12 +90,15 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const currentProviderName = activeProvider || (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
   const currentProviderGroup = providerGroups.find((g) => g.provider === currentProviderName) || providerGroups[0];
 
-  const currentModelName = chat ? chat.chatModel : voiceChat.voiceChatModel;
+  const currentModelName =
+    hoveredModel ||
+    voiceChat.voiceChatModel ||
+    (chat ? chat.chatModel : "");
   const isCurrentModelRealtime = isVoiceRealtimeModel(currentProviderName, currentModelName);
 
   const isLiveTranslateModel =
-    voiceChat.voiceChatLiveTranslate ||
-    isLiveTranslateModelHelper(currentProviderName, currentModelName);
+    isLiveTranslateModelHelper(currentProviderName, currentModelName) ||
+    (currentModelName === voiceChat.voiceChatModel && voiceChat.voiceChatLiveTranslate);
   const isDashScopeLiveTranslate = currentProviderName === DASHSCOPE_PROVIDER && isLiveTranslateModel;
   const canShowTranslationCategory =
     isLiveTranslateModel ||
@@ -101,6 +106,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     currentProviderName === GOOGLE_PROVIDER;
 
   function handleModelSelect(provider: string, model: string) {
+    setHoveredModel(model);
     if (chat) {
       if (provider !== chat.chatProvider) {
         chat.onProviderChange(provider);
@@ -143,6 +149,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       // Clear active states on open so user starts cleanly at Level 1 / Level 2
       setActiveProvider("");
       setActiveCategory("");
+      setHoveredModel("");
     }
     setOpen((prev) => !prev);
   }
@@ -232,10 +239,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                   onMouseEnter={() => {
                     setActiveProvider(group.provider);
                     setActiveCategory("");
+                    setHoveredModel("");
                   }}
                   onClick={() => {
                     setActiveProvider(group.provider);
                     setActiveCategory("");
+                    setHoveredModel("");
                   }}
                 >
                   <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
@@ -295,6 +304,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       className={`vsVoiceSettingsRow${isSelectedModel ? " selected" : ""}`}
                       aria-current={isSelectedModel ? "true" : undefined}
                       onMouseEnter={() => {
+                        setHoveredModel(item.model);
                         if (isLiveTranslateModelHelper(currentProviderGroup.provider, item.model)) {
                           setActiveCategory("translation");
                         } else if (item.isRealtime) {

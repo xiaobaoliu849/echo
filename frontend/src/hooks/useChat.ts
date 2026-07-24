@@ -261,7 +261,10 @@ export default function useChat({
     const defaultModel = resolveDefaultModel(chatProvider, providerModelCatalog);
     const hasOptions = chatModelOptions.length > 0;
     const currentModelStillValid =
-      !hasOptions || !chatModel.trim() || chatModelOptions.includes(chatModel.trim());
+      !hasOptions ||
+      !chatModel.trim() ||
+      chatModelOptions.includes(chatModel.trim()) ||
+      isVoiceRealtimeModel(chatProvider, chatModel.trim());
 
     if (!chatModel.trim() || !currentModelStillValid) {
       setChatModel(defaultModel);

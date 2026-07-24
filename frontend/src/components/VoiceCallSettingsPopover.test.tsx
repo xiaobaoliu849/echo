@@ -160,7 +160,7 @@ describe("VoiceCallSettingsPopover", () => {
     // Popover remains open
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     // Auto-navigates to Level 3 translation settings card
-    expect(screen.getByText("常用语对")).toBeInTheDocument();
+    expect(screen.getByText("常用目标语")).toBeInTheDocument();
   });
 
   it("shows the translation section for Google live-translate models with mode toggle, preset pills, and swap button", () => {
@@ -217,6 +217,39 @@ describe("VoiceCallSettingsPopover", () => {
     // Click target language pill
     fireEvent.click(screen.getByText("日语"));
     expect(voiceChat.onTargetLanguageCodeChange).toHaveBeenCalledWith("ja");
+  });
+
+  it("shows target language only UI when hovering qwen3.5-livetranslate-flash-realtime in Level 2 even if active model was omni", () => {
+    const chat = {
+      chatProvider: "DashScope",
+      chatModel: "qwen3.5-omni-plus-realtime",
+      chatProviderOptions: ["DashScope"],
+      chatModelChoices: [
+        { provider: "DashScope", model: "qwen3.5-omni-plus-realtime", label: "DashScope / qwen3.5-omni-plus-realtime", value: "DashScope\u001fqwen3.5-omni-plus-realtime" },
+        { provider: "DashScope", model: "qwen3.5-livetranslate-flash-realtime", label: "DashScope / qwen3.5-livetranslate-flash-realtime", value: "DashScope\u001fqwen3.5-livetranslate-flash-realtime" },
+      ],
+      onProviderChange: vi.fn(),
+      onModelChoiceChange: vi.fn(),
+    } as unknown as Parameters<typeof VoiceCallSettingsPopover>[0]["chat"];
+
+    const voiceChat = createVoiceChatController({
+      voiceChatProvider: "DashScope",
+      voiceChatModel: "qwen3.5-omni-plus-realtime",
+      voiceChatLiveTranslate: false,
+      voiceChatModelOptions: ["qwen3.5-omni-plus-realtime", "qwen3.5-livetranslate-flash-realtime"],
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "DashScope", models: ["qwen3.5-omni-plus-realtime", "qwen3.5-livetranslate-flash-realtime"] },
+      ],
+    });
+
+    render(<VoiceCallSettingsPopover voiceChat={voiceChat} chat={chat} t={t} />);
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("DashScope"));
+    fireEvent.mouseEnter(screen.getByText("qwen3.5-livetranslate-flash-realtime"));
+
+    expect(screen.getByText("单向同传 (翻译为目标语言)")).toBeInTheDocument();
+    expect(screen.queryByText("双向互翻 ⇄")).not.toBeInTheDocument();
+    expect(screen.getByText("🎯 目标同传语言")).toBeInTheDocument();
   });
 
   it("toggles the echo switch in unidirectional mode", () => {
