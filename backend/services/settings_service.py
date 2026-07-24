@@ -68,7 +68,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "OpenRouter": {"default": "", "available": [], "enabled": []},
         "SiliconFlow": {"default": "", "available": [], "enabled": []},
         "Groq": {"default": "", "available": [], "enabled": []},
-        "DashScope": {"default": "", "available": [], "enabled": [], "tts_default": "qwen-audio-3.0-tts-flash", "tts_available": ["qwen-audio-3.0-tts-flash", "qwen-audio-3.0-tts-plus", "qwen3-tts-flash-2025-11-27", "cosyvoice-v2-1.5", "qwen-tts-v2"], "tts_enabled": ["qwen-audio-3.0-tts-flash", "qwen-audio-3.0-tts-plus", "qwen3-tts-flash-2025-11-27", "cosyvoice-v2-1.5"]},
+        "DashScope": {"default": "", "available": [], "enabled": [], "tts_default": "qwen-audio-3.0-tts-flash", "tts_available": ["qwen-audio-3.0-tts-flash", "qwen-audio-3.0-tts-plus", "qwen3-tts-flash-2025-11-27"], "tts_enabled": ["qwen-audio-3.0-tts-flash", "qwen-audio-3.0-tts-plus", "qwen3-tts-flash-2025-11-27"]},
         "Google": {"default": "", "available": [], "enabled": []},
         "MiniMax": {"default": "", "available": [], "enabled": [], "tts_default": "speech-02-turbo", "tts_available": ["speech-02-turbo", "speech-02-hd", "speech-01-turbo", "speech-01-hd"], "tts_enabled": ["speech-02-turbo", "speech-02-hd"]},
         "Xiaomi": {"default": "", "available": [], "enabled": [], "tts_default": "mimo-v2.5-tts", "tts_available": ["mimo-v2.5-tts", "mimo-v2-tts"], "tts_enabled": ["mimo-v2.5-tts"]},

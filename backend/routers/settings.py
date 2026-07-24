@@ -157,16 +157,12 @@ GOOGLE_MODEL_LIST_SUPPLEMENTS = [
     "gemini-3.5-live-translate-preview",
 ]
 DASHSCOPE_MODEL_LIST_SUPPLEMENTS = [
-    # TTS synthesis models
+    # TTS synthesis models (current generation only)
     "qwen-audio-3.0-tts-plus",
     "qwen-audio-3.0-tts-flash",
     "qwen-audio-3.0-realtime-plus",
     "qwen-audio-3.0-realtime-flash",
     "qwen3-tts-flash-2025-11-27",
-    "cosyvoice-v2-1.5",
-    "cosyvoice-v1",
-    "qwen-tts-v2",
-    "sambert-zhichu-v1",
     # Realtime omni models
     "qwen3.5-omni-plus-realtime-2026-03-15",
     # Live translation (DashScope Realtime WebSocket — integrated)

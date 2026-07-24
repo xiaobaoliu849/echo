@@ -310,8 +310,8 @@ export default function ProviderSettingsSection({ settings }: Props) {
               />
               <span className="vsFieldHint">
                 {t(
-                  "用于语音中心合成的标准 TTS 模型 (例如 qwen3-tts-flash-2025-11-27, cosyvoice-v2-1.5, speech-02-hd, tts-1-hd 等)",
-                  "Model used for Voice Center synthesis (e.g. qwen3-tts-flash-2025-11-27, cosyvoice-v2-1.5, speech-02-hd, tts-1-hd, etc.)"
+                  "用于语音中心合成的标准 TTS 模型 (例如 qwen-audio-3.0-tts-flash, qwen3-tts-flash-2025-11-27, speech-02-hd, tts-1-hd 等)",
+                  "Model used for Voice Center synthesis (e.g. qwen-audio-3.0-tts-flash, qwen3-tts-flash-2025-11-27, speech-02-hd, tts-1-hd, etc.)"
                 )}
               </span>
             </label>

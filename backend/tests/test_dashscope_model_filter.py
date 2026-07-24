@@ -53,13 +53,16 @@ class SupplementClassificationTests(unittest.TestCase):
             "qwen-audio-3.0-tts-plus",
             "qwen-audio-3.0-tts-flash",
             "qwen3-tts-flash-2025-11-27",
-            "cosyvoice-v2-1.5",
-            "sambert-zhichu-v1",
-            "qwen-tts-v2",
         ]
         for model in tts_supplements:
             self.assertIn(model, DASHSCOPE_MODEL_LIST_SUPPLEMENTS)
             self.assertTrue(_is_tts_model_id(model), model)
+
+    def test_legacy_tts_models_are_not_supplemented(self) -> None:
+        # Retired generations (cosyvoice/sambert/qwen-tts-v2) were removed from
+        # the curated list; only qwen-audio-3.0-tts and qwen3-tts-flash ship.
+        for legacy in ("cosyvoice-v2-1.5", "cosyvoice-v1", "sambert-zhichu-v1", "qwen-tts-v2"):
+            self.assertNotIn(legacy, DASHSCOPE_MODEL_LIST_SUPPLEMENTS)
 
     def test_livetranslate_and_omni_supplements_are_chat(self) -> None:
         chat_supplements = [
