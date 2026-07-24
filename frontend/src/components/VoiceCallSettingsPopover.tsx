@@ -421,120 +421,152 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
               {activeCategory === "translation" ? (
                 <div className="vsVoiceSettingsSection vsVoiceTranslationCard" style={{ width: 310 }}>
                   {isDashScopeLiveTranslate ? (
-                    <div
-                      className="vsTranslationModeSegment"
-                      style={{ justifyContent: "center", padding: "6px 12px", fontSize: 12, opacity: 0.9 }}
-                    >
-                      <span>{t("单向同传 (源语言 → 目标语言)", "Unidirectional (Source → Target)")}</span>
-                    </div>
-                  ) : (
-                    <div className="vsTranslationModeSegment">
-                      <button
-                        type="button"
-                        className={voiceChat.voiceChatTranslationMode === "bidirectional" ? "active" : ""}
-                        onClick={() => voiceChat.onTranslationModeChange("bidirectional")}
+                    <>
+                      <div
+                        className="vsTranslationModeSegment"
+                        style={{ justifyContent: "center", padding: "6px 12px", fontSize: 12, opacity: 0.9 }}
                       >
-                        {t("双向互翻 ⇄", "Bidirectional ⇄")}
-                      </button>
-                      <button
-                        type="button"
-                        className={voiceChat.voiceChatTranslationMode === "unidirectional" ? "active" : ""}
-                        onClick={() => voiceChat.onTranslationModeChange("unidirectional")}
-                      >
-                        {t("单向翻译 →", "Single Direction →")}
-                      </button>
-                    </div>
-                  )}
+                        <span>{t("单向同传 (翻译为目标语言)", "Unidirectional (Translate to Target)")}</span>
+                      </div>
 
-                  {/* Clarification Hint Box */}
-                  {isDashScopeLiveTranslate ? (
-                    <div
-                      style={{
-                        margin: "8px 0 4px",
-                        padding: "6px 10px",
-                        fontSize: 11,
-                        lineHeight: 1.4,
-                        color: "var(--muted)",
-                        background: "color-mix(in oklab, var(--brand) 8%, transparent)",
-                        border: "1px solid color-mix(in oklab, var(--brand) 20%, transparent)",
-                        borderRadius: 6,
-                      }}
-                    >
-                      💡 {t("同传模式会将您的任意发言实时翻译为【目标语言】。", "Translation converts any spoken audio into the Target Language.")}
-                    </div>
-                  ) : null}
+                      {/* Preset Target Languages for Qwen LiveTranslate */}
+                      <div className="vsPresetPairSection" style={{ marginTop: 8 }}>
+                        <div className="vsPresetSubTitle">{t("常用目标语", "Target languages")}</div>
+                        <div className="vsPresetPillsGroup">
+                          {[
+                            { label: "英语", code: "en" },
+                            { label: "日语", code: "ja" },
+                            { label: "韩语", code: "ko" },
+                            { label: "法语", code: "fr" },
+                            { label: "德语", code: "de" },
+                            { label: "西班牙语", code: "es" },
+                          ].map((item) => {
+                            const active = voiceChat.voiceChatTargetLanguageCode === item.code;
+                            return (
+                              <button
+                                key={`tgt-pill-${item.code}`}
+                                type="button"
+                                className={`vsPresetPillBtn${active ? " active" : ""}`}
+                                onClick={() => voiceChat.onTargetLanguageCodeChange(item.code)}
+                              >
+                                {item.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                  {/* Preset Language Pairs */}
-                  <div className="vsPresetPairSection">
-                    <div className="vsPresetSubTitle">{t("常用语对", "Preset pairs")}</div>
-                    <div className="vsPresetPillsGroup">
-                      {PRESET_LANGUAGE_PAIRS.map((pair) => {
-                        const active =
-                          voiceChat.voiceChatSourceLanguageCode === pair.source &&
-                          voiceChat.voiceChatTargetLanguageCode === pair.target;
-                        return (
-                          <button
-                            key={`${pair.source}-${pair.target}`}
-                            type="button"
-                            className={`vsPresetPillBtn${active ? " active" : ""}`}
-                            onClick={() => voiceChat.onPresetLanguagePairSelect(pair.source, pair.target)}
+                      {/* Single Full-Width Target Language Selector */}
+                      <div className="vsLanguageSelectorBox" style={{ marginTop: 8, flexDirection: "column", gap: 6 }}>
+                        <div className="vsLanguageSelectGroup" style={{ width: "100%" }}>
+                          <label className="vsLanguageSelectLabel">{t("🎯 目标同传语言", "🎯 Target Language")}</label>
+                          <select
+                            className="vsLanguageSelectDropdown"
+                            style={{ width: "100%" }}
+                            value={voiceChat.voiceChatTargetLanguageCode}
+                            onChange={(e) => voiceChat.onTargetLanguageCodeChange(e.target.value)}
                           >
-                            {pair.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                            {voiceChat.voiceChatTargetLanguageOptions.map((opt) => (
+                              <option key={`tgt-${opt.value}`} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="vsTranslationModeSegment">
+                        <button
+                          type="button"
+                          className={voiceChat.voiceChatTranslationMode === "bidirectional" ? "active" : ""}
+                          onClick={() => voiceChat.onTranslationModeChange("bidirectional")}
+                        >
+                          {t("双向互翻 ⇄", "Bidirectional ⇄")}
+                        </button>
+                        <button
+                          type="button"
+                          className={voiceChat.voiceChatTranslationMode === "unidirectional" ? "active" : ""}
+                          onClick={() => voiceChat.onTranslationModeChange("unidirectional")}
+                        >
+                          {t("单向翻译 →", "Single Direction →")}
+                        </button>
+                      </div>
 
-                  {/* Language Selector */}
-                  <div className="vsLanguageSelectorBox">
-                    <div className="vsLanguageSelectGroup">
-                      <label className="vsLanguageSelectLabel">
-                        {!isDashScopeLiveTranslate && voiceChat.voiceChatTranslationMode === "bidirectional"
-                          ? t("语言 A", "Language A")
-                          : t("源语言 (提示)", "Source (Hint)")}
-                      </label>
-                      <select
-                        className="vsLanguageSelectDropdown"
-                        value={voiceChat.voiceChatSourceLanguageCode}
-                        onChange={(e) => voiceChat.onSourceLanguageCodeChange(e.target.value)}
-                      >
-                        {voiceChat.voiceChatTargetLanguageOptions.map((opt) => (
-                          <option key={`src-${opt.value}`} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                      {/* Preset Language Pairs */}
+                      <div className="vsPresetPairSection">
+                        <div className="vsPresetSubTitle">{t("常用语对", "Preset pairs")}</div>
+                        <div className="vsPresetPillsGroup">
+                          {PRESET_LANGUAGE_PAIRS.map((pair) => {
+                            const active =
+                              voiceChat.voiceChatSourceLanguageCode === pair.source &&
+                              voiceChat.voiceChatTargetLanguageCode === pair.target;
+                            return (
+                              <button
+                                key={`${pair.source}-${pair.target}`}
+                                type="button"
+                                className={`vsPresetPillBtn${active ? " active" : ""}`}
+                                onClick={() => voiceChat.onPresetLanguagePairSelect(pair.source, pair.target)}
+                              >
+                                {pair.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                    <button
-                      type="button"
-                      className="vsVoiceSettingsSwapBtn"
-                      title={t("一键颠倒语言", "Swap languages")}
-                      onClick={voiceChat.onSwapLanguages}
-                    >
-                      ⇄
-                    </button>
+                      {/* Dual Language Selector */}
+                      <div className="vsLanguageSelectorBox">
+                        <div className="vsLanguageSelectGroup">
+                          <label className="vsLanguageSelectLabel">
+                            {voiceChat.voiceChatTranslationMode === "bidirectional"
+                              ? t("语言 A", "Language A")
+                              : t("源语言", "Source Lang")}
+                          </label>
+                          <select
+                            className="vsLanguageSelectDropdown"
+                            value={voiceChat.voiceChatSourceLanguageCode}
+                            onChange={(e) => voiceChat.onSourceLanguageCodeChange(e.target.value)}
+                          >
+                            {voiceChat.voiceChatTargetLanguageOptions.map((opt) => (
+                              <option key={`src-${opt.value}`} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                    <div className="vsLanguageSelectGroup">
-                      <label className="vsLanguageSelectLabel">
-                        {!isDashScopeLiveTranslate && voiceChat.voiceChatTranslationMode === "bidirectional"
-                          ? t("语言 B", "Language B")
-                          : t("🎯 目标语言", "🎯 Target Lang")}
-                      </label>
-                      <select
-                        className="vsLanguageSelectDropdown"
-                        value={voiceChat.voiceChatTargetLanguageCode}
-                        onChange={(e) => voiceChat.onTargetLanguageCodeChange(e.target.value)}
-                      >
-                        {voiceChat.voiceChatTargetLanguageOptions.map((opt) => (
-                          <option key={`tgt-${opt.value}`} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                        <button
+                          type="button"
+                          className="vsVoiceSettingsSwapBtn"
+                          title={t("一键颠倒语言", "Swap languages")}
+                          onClick={voiceChat.onSwapLanguages}
+                        >
+                          ⇄
+                        </button>
+
+                        <div className="vsLanguageSelectGroup">
+                          <label className="vsLanguageSelectLabel">
+                            {voiceChat.voiceChatTranslationMode === "bidirectional"
+                              ? t("语言 B", "Language B")
+                              : t("🎯 目标语言", "🎯 Target Lang")}
+                          </label>
+                          <select
+                            className="vsLanguageSelectDropdown"
+                            value={voiceChat.voiceChatTargetLanguageCode}
+                            onChange={(e) => voiceChat.onTargetLanguageCodeChange(e.target.value)}
+                          >
+                            {voiceChat.voiceChatTargetLanguageOptions.map((opt) => (
+                              <option key={`tgt-${opt.value}`} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {/* Single Direction Echo Checkbox */}
                   {voiceChat.voiceChatTranslationMode === "unidirectional" ? (

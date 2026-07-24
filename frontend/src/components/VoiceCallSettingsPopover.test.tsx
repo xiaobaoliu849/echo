@@ -197,8 +197,8 @@ describe("VoiceCallSettingsPopover", () => {
     expect(voiceChat.onTranslationModeChange).toHaveBeenCalledWith("unidirectional");
   });
 
-  it("shows single-direction notice for DashScope live-translate models in Translate category", () => {
-    renderPopover({
+  it("shows target language only UI for DashScope live-translate models in Translate category", () => {
+    const voiceChat = renderPopover({
       voiceChatProvider: "DashScope",
       voiceChatModel: "qwen3.5-livetranslate-flash-realtime",
       voiceChatLiveTranslate: true,
@@ -209,10 +209,14 @@ describe("VoiceCallSettingsPopover", () => {
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
     fireEvent.mouseEnter(screen.getByText("🌐 同传与复刻"));
-    expect(screen.getByText("单向同传 (源语言 → 目标语言)")).toBeInTheDocument();
+    expect(screen.getByText("单向同传 (翻译为目标语言)")).toBeInTheDocument();
     expect(screen.queryByText("双向互翻 ⇄")).not.toBeInTheDocument();
-    expect(screen.getByText("源语言 (提示)")).toBeInTheDocument();
-    expect(screen.getByText("🎯 目标语言")).toBeInTheDocument();
+    expect(screen.getByText("🎯 目标同传语言")).toBeInTheDocument();
+    expect(screen.queryByText("源语言")).not.toBeInTheDocument();
+
+    // Click target language pill
+    fireEvent.click(screen.getByText("日语"));
+    expect(voiceChat.onTargetLanguageCodeChange).toHaveBeenCalledWith("ja");
   });
 
   it("toggles the echo switch in unidirectional mode", () => {
