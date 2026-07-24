@@ -43,15 +43,21 @@ class CollectingWebSocket:
 
 
 class ModelDetectionTests(unittest.TestCase):
-    def test_matches_current_and_legacy_names(self):
+    def test_matches_current_35_names_only(self):
         self.assertTrue(_is_dashscope_live_translate_model("qwen3.5-livetranslate-flash-realtime"))
-        self.assertTrue(_is_dashscope_live_translate_model("qwen3-livetranslate-flash-realtime"))
         self.assertTrue(_is_dashscope_live_translate_model("qwen3.5-livetranslate-plus-realtime"))
         self.assertTrue(
             _is_dashscope_live_translate_model("qwen3.5-livetranslate-flash-realtime-2026-05-19")
         )
         # Case-insensitive
         self.assertTrue(_is_dashscope_live_translate_model("QWEN3.5-LiveTranslate-Flash-Realtime"))
+
+    def test_rejects_legacy_qwen3_livetranslate(self):
+        # The legacy qwen3-livetranslate series was removed; only qwen3.5 ships.
+        self.assertFalse(_is_dashscope_live_translate_model("qwen3-livetranslate-flash-realtime"))
+        self.assertFalse(
+            _is_dashscope_live_translate_model("qwen3-livetranslate-flash-realtime-2025-09-22")
+        )
 
     def test_rejects_other_models(self):
         self.assertFalse(_is_dashscope_live_translate_model("qwen3.5-omni-plus-realtime"))

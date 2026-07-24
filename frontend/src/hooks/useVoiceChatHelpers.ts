@@ -446,7 +446,7 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
     return /^qwen3\.5-omni-(plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel) ||
            /^qwen-audio-3\.0-realtime-(plus|flash)$/.test(normalizedModel) ||
-           /^qwen3(?:\.5)?-livetranslate-(flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel);
+           /^qwen3\.5-livetranslate-(flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel);
   }
   if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase()) {
     return SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS.some((item) => normalizedModel.includes(item));
@@ -464,9 +464,10 @@ export function isLiveTranslateModel(provider: string, model: string): boolean {
     return normalizedModel.includes("live-translate");
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
-    // qwen3.5-livetranslate-flash-realtime / qwen3-livetranslate-flash-realtime
+    // qwen3.5-livetranslate-flash-realtime only — the legacy qwen3-livetranslate
+    // series is removed (superseded by 3.5, which also covers more languages).
     // (mirror the backend _is_dashscope_live_translate_model regex exactly)
-    return /^qwen3(?:\.5)?-livetranslate-(flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(
+    return /^qwen3\.5-livetranslate-(flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(
       normalizedModel
     );
   }
@@ -516,7 +517,6 @@ export function resolveRealtimeModelOptions(
     ? [
         DEFAULT_DASHSCOPE_MODEL,
         "qwen3.5-livetranslate-flash-realtime",
-        "qwen3-livetranslate-flash-realtime",
         "qwen-audio-3.0-realtime-plus",
         "qwen-audio-3.0-realtime-flash",
       ]

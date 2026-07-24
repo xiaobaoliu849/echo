@@ -131,9 +131,11 @@ def _is_dashscope_omni_realtime_model(model: str | None) -> bool:
 
 
 def _is_dashscope_live_translate_model(model: str | None) -> bool:
+    # Only the qwen3.5-livetranslate series is supported; the legacy
+    # qwen3-livetranslate series has been removed (superseded by 3.5).
     return bool(
         re.fullmatch(
-            r"qwen3(?:\.5)?-livetranslate-(?:flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?",
+            r"qwen3\.5-livetranslate-(?:flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?",
             str(model or "").strip().lower(),
         )
     )
