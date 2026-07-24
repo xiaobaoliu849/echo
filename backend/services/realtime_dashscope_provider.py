@@ -771,13 +771,20 @@ class DashScopeRealtimeMixin:
                                 recorder=recorder,
                                 record_memory=False,
                             )
-                        if stash:
-                            await self._send_event(
-                                websocket,
-                                "translation_preview",
-                                text=confirmed,
-                                tentative=stash,
-                            )
+                        # Always notify the frontend of the current speculative
+                        # stash — even when it is empty — so it can clear
+                        # a stale preview left over from a prior event.
+                        # Without this, when the confirmed text is unchanged
+                        # but the stash is cleared (shrunk to nothing), the
+                        # frontend would never learn that the preview should
+                        # be blanked and its boundary timer could commit the
+                        # stale prediction as if it were confirmed text.
+                        await self._send_event(
+                            websocket,
+                            "translation_preview",
+                            text=confirmed,
+                            tentative=stash,
+                        )
                     await complete_turn()
                     continue
 

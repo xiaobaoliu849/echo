@@ -823,12 +823,10 @@ export default function useVoiceChat({
           liveTranslateLastTargetActivityAtRef.current = Date.now();
           // The stash from the translation model is a full speculative
           // suffix — it REPLACES the previous prediction, not extends it.
-          // Use the raw value (untrimmed) so that a leading space (present
-          // in Latin-script translations) is preserved for correct word
-          // boundary when concatenated with the confirmed target.
-          if (event.tentative) {
-            liveTranslatePreviewRef.current = event.tentative;
-          }
+          // Always apply (even when empty) so the preview is cleared
+          // when the model drops its speculative prediction without
+          // changing the confirmed text.
+          liveTranslatePreviewRef.current = event.tentative || "";
           syncPendingLiveTranslatePair();
           scheduleLiveTranslateBoundary();
           setVoiceChatStatus(t("正在生成本句译文…", "Translating this sentence…"));
