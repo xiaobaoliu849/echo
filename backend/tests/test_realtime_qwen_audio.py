@@ -675,8 +675,9 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
 
     async def test_duplicate_text_streams_forwarded_once(self):
         """With modalities [text,audio] the model streams identical content over
-        response.text.delta AND response.audio_transcript.delta; only the first
-        family may be forwarded or the client transcript duplicates every sentence.
+        response.text.delta AND response.audio_transcript.delta; only ONE family
+        may be forwarded or the client transcript duplicates every sentence, and
+        the clean text family is preferred over the audio transcript.
         """
         events = [
             {"type": "response.created", "response": {"id": "r1"}},
@@ -699,6 +700,88 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
                            if e.get("type") == "assistant_text"]
         self.assertEqual(assistant_texts, ["你好呀", "！今天过得怎么样"],
                          f"Only one delta family may be forwarded. Got: {assistant_texts}")
+
+    async def test_text_delta_family_preferred_over_degraded_audio_transcript(self):
+        """The audio_transcript family is a server-side ASR of the model's own TTS
+        audio and degrades for accented non-native speech (e.g. a Chinese voice
+        speaking English). When both families stream DIFFERENT content, the clean
+        text family must win even though audio_transcript arrived first.
+        """
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            # Garbled audio transcript arrives first...
+            {"type": "response.audio_transcript.delta", "response_id": "r1",
+             "delta": "raining data"},
+            # ...but the clean text delta claims the response.
+            {"type": "response.text.delta", "response_id": "r1",
+             "delta": "training data"},
+            {"type": "response.audio_transcript.delta", "response_id": "r1",
+             "delta": " might have influenced"},
+            {"type": "response.text.delta", "response_id": "r1",
+             "delta": " might have influenced"},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        assistant_texts = [e.get("text", "") for e in ws.events
+                           if e.get("type") == "assistant_text"]
+        self.assertEqual(assistant_texts, ["training data", " might have influenced"],
+                         f"Only the clean text family may be forwarded. Got: {assistant_texts}")
+
+    async def test_audio_transcript_only_stream_forwarded_after_hold(self):
+        """When no text.delta exists at all, the audio_transcript family must still
+        be forwarded: the first delta is held for one event, the second delta locks
+        the family and replays the held delta in order.
+        """
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.audio_transcript.delta", "response_id": "r1",
+             "delta": "第一句。"},
+            {"type": "response.audio_transcript.delta", "response_id": "r1",
+             "delta": "第二句。"},
+            {"type": "response.audio_transcript.delta", "response_id": "r1",
+             "delta": "第三句。"},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        assistant_texts = [e.get("text", "") for e in ws.events
+                           if e.get("type") == "assistant_text"]
+        self.assertEqual(assistant_texts, ["第一句。", "第二句。", "第三句。"],
+                         f"Audio-transcript-only stream must be forwarded in order. Got: {assistant_texts}")
+
+    async def test_single_held_audio_delta_flushed_on_response_done(self):
+        """A lone audio_transcript delta (held awaiting the family decision) must
+        be flushed when response.done arrives, not dropped."""
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "你好", "item_id": "msg_1"},
+            {"type": "response.audio_transcript.delta", "response_id": "r1",
+             "delta": "只有一句"},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        assistant_texts = [e.get("text", "") for e in ws.events
+                           if e.get("type") == "assistant_text"]
+        self.assertEqual(assistant_texts, ["只有一句"],
+                         f"Held delta must be flushed on response.done. Got: {assistant_texts}")
+        event_types = [e.get("type") for e in ws.events]
+        self.assertLess(event_types.index("assistant_text"), event_types.index("turn_complete"),
+                        f"assistant_text must come before turn_complete. Events: {event_types}")
 
     # ---- 13: benign server errors must not kill the session -------------------
 

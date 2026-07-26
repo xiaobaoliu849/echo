@@ -32,6 +32,13 @@ from .voice_agent_tools import VoiceAgentToolService, VoiceAgentToolSession, Voi
 
 logger = logging.getLogger(__name__)
 
+# Post-playback echo mute: after the AI finishes speaking, mic audio is dropped
+# for this long to avoid feeding speaker echo back as a false barge-in. The
+# official Qwen-Audio demo uses 0.5s in echo-suppression mode; 0.3s trims the
+# dead air so users who start speaking right after the AI don't lose the first
+# words of their turn (previously 1.0s, which ate utterance onsets).
+POST_PLAYBACK_MUTE_SECONDS = 0.3
+
 
 class QwenAudioRealtimeMixin:
     """Qwen-Audio raw-WebSocket provider methods for RealtimeVoiceService."""
@@ -105,8 +112,8 @@ class QwenAudioRealtimeMixin:
                         continue  # low energy → likely echo, suppress
                     # User is speaking loudly enough → let it through to interrupt
                 elif interruption and hasattr(interruption, "expected_playback_end_time"):
-                    # Add 1.0s buffer for frontend/network delays after AI finishes
-                    if time.time() < getattr(interruption, "expected_playback_end_time") + 1.0:
+                    # Brief buffer for frontend/network echo tail after AI finishes
+                    if time.time() < getattr(interruption, "expected_playback_end_time") + POST_PLAYBACK_MUTE_SECONDS:
                         continue
 
                 await dash_ws.send(json.dumps({
@@ -148,6 +155,28 @@ class QwenAudioRealtimeMixin:
                     )
                 _pending_ai_output.clear()
 
+        async def _emit_held_family_delta(response_id: str, state: dict[str, str] | None) -> None:
+            """Force the family decision for a response still holding its first
+            audio_transcript delta and emit the held text. audio_transcript wins
+            by default when no text.delta ever arrived for the response."""
+            if not state or state["decided"] or not state["held_audio"]:
+                return
+            state["decided"] = "audio_transcript"
+            held = state["held_audio"]
+            state["held_audio"] = ""
+            payload = {
+                "type": "assistant_text",
+                "text": held,
+                "response_id": response_id,
+            }
+            if not _user_transcript_emitted:
+                _pending_ai_output.append(("text", payload))
+            else:
+                await self._emit_assistant_output(
+                    websocket, interruption, payload,
+                    memory_session=memory_session, recorder=recorder,
+                )
+
         gated_tool_turn_id = ""
         # Track ALL pending native function_call ids in the current turn. A turn may
         # contain multiple parallel function_calls; the follow-up response.create must
@@ -168,11 +197,16 @@ class QwenAudioRealtimeMixin:
         # transcript of each response cycle from being misclassified as a barge-in
         # interruption (which would silently drop it and break the UI ordering).
         _first_transcript_this_response = True
-        # With modalities ["text","audio"] the model streams the SAME content over
-        # both response.text.delta and response.audio_transcript.delta. Forward only
-        # the first delta family seen per response, otherwise the client transcript
-        # shows every sentence twice (audio is unaffected - single audio stream).
-        response_text_delta_family: dict[str, str] = {}
+        # With modalities ["text","audio"] the model streams the same content over
+        # both response.text.delta (clean LLM text) and response.audio_transcript.delta
+        # (server-side ASR of its own TTS audio, which degrades badly for accented
+        # non-native speech, e.g. a Chinese voice speaking English). Only ONE family
+        # may be forwarded per response or the client transcript duplicates every
+        # sentence. The text family is preferred: the first audio_transcript delta
+        # is held back for one event so a near-simultaneous text.delta can claim
+        # the response; a second audio_transcript delta (or response.done / loop
+        # exit) locks the response to audio_transcript and replays the held delta.
+        response_delta_family_state: dict[str, dict[str, str]] = {}
         # Marks whether the current response contains function_call(s); such a response
         # is an intermediate round and must NOT finalize the turn on response.done.
         current_response_has_function_call = False
@@ -193,7 +227,7 @@ class QwenAudioRealtimeMixin:
             nonlocal pending_native_fc_call_ids
             response_data = response_done_event.get("response") or {}
             response_id = str(response_data.get("id", ""))
-            response_text_delta_family.pop(response_id, None)
+            family_state = response_delta_family_state.pop(response_id, None)
             if response_id in suppressed_response_ids:
                 suppressed_response_ids.discard(response_id)
                 if response_id == interruption.active_response_id:
@@ -206,13 +240,19 @@ class QwenAudioRealtimeMixin:
                 interruption.active_response_id = ""
             # A response that carried function_call(s) is an intermediate round:
             # the turn continues after we send response.create, so do NOT finalize
-            # (flush memory / emit turn_complete) here. Reset the flag and stop.
+            # (flush memory / emit turn_complete) here. Flush any held first
+            # audio_transcript delta (e.g. the model's "让我查一下" preface) so it
+            # isn't lost, then reset the flag and stop.
             if current_response_has_function_call:
+                await _emit_held_family_delta(response_id, family_state)
                 current_response_has_function_call = False
                 pending_native_fc_call_ids.clear()
                 return
             if str(response_data.get("status", "completed")) in {"cancelled", "canceled", "failed"}:
                 return
+            # Successful completion: emit a held first audio_transcript delta
+            # (no text.delta ever arrived) before finalizing the turn.
+            await _emit_held_family_delta(response_id, family_state)
             memory_result = await memory_session.flush_turn()
             completed_turn_id = ""
             if recorder is not None and not gated_tool_turn_id:
@@ -515,17 +555,38 @@ class QwenAudioRealtimeMixin:
                     if event_type.startswith("response.audio_transcript")
                     else "text"
                 )
-                seen_family = response_text_delta_family.get(response_id)
-                if seen_family is None:
-                    response_text_delta_family[response_id] = family
-                elif seen_family != family:
-                    # Duplicate content stream for this response; drop it.
-                    continue
                 delta = str(event.get("delta", ""))
-                if not gated_tool_turn_id and delta:
+                if gated_tool_turn_id or not delta:
+                    continue
+                state = response_delta_family_state.setdefault(
+                    response_id, {"decided": "", "held_audio": ""}
+                )
+                decided_family = state["decided"]
+                if decided_family:
+                    if family != decided_family:
+                        # Duplicate content stream for this response; drop it.
+                        continue
+                    deltas_to_emit = [delta]
+                elif family == "text":
+                    # Clean LLM text claims the response immediately; any held
+                    # audio_transcript delta is discarded.
+                    state["decided"] = "text"
+                    deltas_to_emit = [delta]
+                elif not state["held_audio"]:
+                    # First audio_transcript delta: hold it for one event so a
+                    # near-simultaneous text.delta (clean text) can still win.
+                    state["held_audio"] = delta
+                    continue
+                else:
+                    # Second audio_transcript delta and no text family in sight:
+                    # lock to audio_transcript, replaying the held delta first.
+                    state["decided"] = "audio_transcript"
+                    deltas_to_emit = [state["held_audio"], delta]
+                    state["held_audio"] = ""
+                for emit_delta in deltas_to_emit:
                     payload = {
                         "type": "assistant_text",
-                        "text": delta,
+                        "text": emit_delta,
                         "response_id": response_id,
                     }
                     if not _user_transcript_emitted:
@@ -578,6 +639,11 @@ class QwenAudioRealtimeMixin:
         # frontend doesn't miss the turn.
         if _deferred_response_done is not None:
             await _resolve_deferred_response_done()
+        # Force-decide any responses still holding their first audio_transcript
+        # delta (no text.delta ever came, no response.done seen) so the held
+        # text isn't lost when the connection drops mid-stream.
+        for held_response_id, held_state in list(response_delta_family_state.items()):
+            await _emit_held_family_delta(held_response_id, held_state)
     @staticmethod
     async def _send_qwen_audio_function_call_output(dash_ws: Any, call_id: str, output: str) -> None:
         """Write a function_call_output conversation item back to the model."""

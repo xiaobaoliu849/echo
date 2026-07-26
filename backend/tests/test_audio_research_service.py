@@ -473,6 +473,59 @@ class AudioResearchServiceTests(unittest.TestCase):
         # The first (canonical) endpoint was attempted, then the redirecting one succeeded.
         self.assertEqual(FakeAsyncClient.calls[0], "https://html.duckduckgo.com/html/?q=topic")
 
+    def test_search_duckduckgo_hang_does_not_starve_bing_fallback(self) -> None:
+        # Without a proxy, duckduckgo.com connections hang until timeout. Each DDG
+        # attempt is capped by DDG_PER_ENDPOINT_TIMEOUT_SECONDS so the whole
+        # SEARCH_TOTAL_TIMEOUT_SECONDS budget isn't eaten before the
+        # China-accessible cn.bing.com fallback gets to run.
+        import time as time_module
+
+        def hanging_ddg_fake(url: str, ip_address: str) -> Response:
+            if "duckduckgo.com" in url:
+                # Record the attempt, then simulate a GFW-dropped connection:
+                # hang past the per-endpoint budget and die. The orphan
+                # thread's error is discarded after wait_for times out.
+                FakeAsyncClient.calls.append(url)
+                time_module.sleep(0.2)
+                raise OSError("simulated unreachable host")
+            return fake_request_public_url_once(url, ip_address)
+
+        FakeAsyncClient.responses = [
+            Response(
+                200,
+                text="""
+                <li class="b_algo">
+                  <h2><a href="https://example.com/bing-a">Bing Title A</a></h2>
+                  <p>Snippet Bing A</p>
+                </li>
+                """,
+            )
+        ]
+        with (
+            patch(
+                "services.audio_research_service.AudioResearchService._request_public_url_once",
+                staticmethod(hanging_ddg_fake),
+            ),
+            patch("services.audio_research_service._resolve_public_host", fake_resolve_public_host),
+            patch("services.audio_research_service.DDG_PER_ENDPOINT_TIMEOUT_SECONDS", 0.05),
+        ):
+            started = time_module.perf_counter()
+            results = asyncio.run(AudioResearchService().search("topic", limit=2))
+            elapsed = time_module.perf_counter() - started
+        # Bing answered even though both DDG endpoints hung.
+        self.assertEqual([item["url"] for item in results], ["https://example.com/bing-a"])
+        # Both DDG endpoints were abandoned quickly instead of blocking for the
+        # full request timeout (10s each): two 0.05s budgets + fast Bing fetch.
+        self.assertLess(elapsed, 1.0)
+        self.assertEqual(
+            FakeAsyncClient.calls,
+            [
+                "https://html.duckduckgo.com/html/?q=topic",
+                "https://duckduckgo.com/html/?q=topic",
+                "https://cn.bing.com/search?q=topic",
+            ],
+        )
+
 
 class AudioRetrievalServiceTests(unittest.TestCase):
     def test_collect_sources_fetches_manual_urls_and_auto_searches_when_sparse(self) -> None:

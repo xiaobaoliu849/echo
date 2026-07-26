@@ -31,6 +31,13 @@ DUCKDUCKGO_HTML_ENDPOINTS = (
 MAX_SOURCE_CONTENT_CHARS = 5000
 MAX_SEARCH_RESULTS = 5
 REQUEST_TIMEOUT_SECONDS = 10.0
+# Per-endpoint budget for DuckDuckGo attempts inside search(). DDG is unreachable
+# from mainland China without a proxy, where a connection attempt hangs until the
+# full REQUEST_TIMEOUT_SECONDS. Two endpoints at 10s each (20s) exceed the 15s
+# total budget that VoiceAgentToolService.run_search enforces, so the cn.bing.com
+# fallback (China-accessible) never got a chance to run. Capping each DDG attempt
+# at 4s guarantees Bing always gets the remaining budget.
+DDG_PER_ENDPOINT_TIMEOUT_SECONDS = 4.0
 MAX_REDIRECTS = 5
 MAX_RESPONSE_BYTES = 600_000
 _IPV4_NUMBER_LABEL_PATTERN = re.compile(r"^(?:0x[0-9a-f]+|\d+)$", re.IGNORECASE)
@@ -440,7 +447,10 @@ class AudioResearchService:
         for endpoint in DUCKDUCKGO_HTML_ENDPOINTS:
             ddg_url = endpoint.format(query=encoded_query)
             try:
-                response = await self._get_public_response(ddg_url)
+                response = await asyncio.wait_for(
+                    self._get_public_response(ddg_url),
+                    timeout=DDG_PER_ENDPOINT_TIMEOUT_SECONDS,
+                )
                 response.raise_for_status()
                 parser = DuckDuckGoResultParser()
                 parser.feed(response.text[:300_000])
@@ -461,7 +471,7 @@ class AudioResearchService:
                 )
                 if results:
                     return results
-            except (httpx.HTTPError, ValueError) as exc:
+            except (httpx.HTTPError, ValueError, asyncio.TimeoutError) as exc:
                 self._logger.warning(
                     "voice_search_duckduckgo_failed endpoint=%s query=%r error=%s",
                     ddg_url.split("?")[0], cleaned[:200], exc,
