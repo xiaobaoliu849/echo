@@ -217,6 +217,10 @@ class QwenAudioRealtimeMixin:
         # response.done processing until the transcript arrives (or a timeout).
         _deferred_response_done: dict[str, Any] | None = None
         TRANSCRIPT_WAIT_TIMEOUT = 8.0  # seconds to wait for ASR transcript
+        # Interim (streaming) input ASR text per conversation item, used to
+        # give the frontend Google-style live transcription while the user is
+        # still speaking. Display-only: never touches interruption/memory logic.
+        _interim_transcripts: dict[str, str] = {}
         interruption = interruption or InterruptionDecisionCoordinator()
         suppressed_response_ids: set[str] = set()
 
@@ -344,7 +348,38 @@ class QwenAudioRealtimeMixin:
                 _user_transcript_emitted = False
                 _first_transcript_this_response = True
                 continue
+            if event_type in (
+                "conversation.item.input_audio_transcription.delta",
+                "conversation.item.input_audio_transcription.text",
+            ):
+                # Streaming interim ASR of the user's speech. Per the official
+                # docs, user speech transcription has delta and completed
+                # phases (like Google's input transcription); forwarding the
+                # interim text lets the frontend show words as they are
+                # recognized instead of waiting for the turn to finalize.
+                # Two shapes are handled defensively: incremental `delta`
+                # fragments and cumulative `text`(+tentative `stash`) frames.
+                item_id = str(event.get("item_id", ""))
+                raw_delta = event.get("delta")
+                if raw_delta is not None:
+                    interim_text = _interim_transcripts.get(item_id, "") + str(raw_delta)
+                else:
+                    interim_text = str(event.get("text", "")) + str(event.get("stash", ""))
+                _interim_transcripts[item_id] = interim_text
+                if len(_interim_transcripts) > 8:
+                    # Bound the map: drop the oldest item's state.
+                    _interim_transcripts.pop(next(iter(_interim_transcripts)), None)
+                if interim_text.strip():
+                    await self._send_event(
+                        websocket, "user_transcript", text=interim_text, interim=True,
+                    )
+                continue
+            if event_type.startswith("conversation.item.ambient_audio_transcription"):
+                # smart_turn ambient-noise transcript (非有效轮次): not a user
+                # turn, never written to context — ignore for display.
+                continue
             if event_type == "conversation.item.input_audio_transcription.completed":
+                _interim_transcripts.pop(str(event.get("item_id", "")), None)
                 user_text = str(event.get("transcript", "")).strip()
                 # ── Interruption vs. first-transcript dispatch ──
                 # The server may send response.created before the ASR transcript.
@@ -819,10 +854,44 @@ class QwenAudioRealtimeMixin:
                 ping_interval=None,
                 ping_timeout=None,
             ) as dash_ws:
-                # ── session.update with tools + server_vad ──
-                # Long silence_duration_ms (5000ms) + low threshold (0.3)
-                # gives language learners plenty of time to pause and think
-                # without the model cutting in. The API allows up to 6000ms.
+                # ── session.update with tools + turn detection ──
+                # Default: server_vad with a moderate 2000ms silence window.
+                # History: 5000ms made transcripts/replies appear ages after
+                # the user finished; smart_turn (semantic endpointing) was
+                # too eager — it fired on mid-sentence thinking pauses, the
+                # model cut in, and the user's resumed speech then barged in
+                # on that reply, looping "reply interrupted" states. 2000ms
+                # is the compromise: live interim transcription (streamed
+                # independently of VAD) keeps on-screen text instant, while
+                # the model waits out short thinking pauses before answering.
+                # config.json overrides (realtime section):
+                #   "qwen_audio_turn_detection": "smart_turn"  — semantic mode
+                #   "qwen_audio_silence_duration_ms": 800      — snappier VAD
+                #   (API range 200-6000; official dialogue recommendation
+                #    is 400-800, higher values suit language learners)
+                realtime_cfg: dict[str, Any] = {}
+                try:
+                    cfg_section = self.config.get_all().get("realtime", {})
+                    if isinstance(cfg_section, dict):
+                        realtime_cfg = cfg_section
+                except Exception:
+                    realtime_cfg = {}
+                turn_detection_mode = str(
+                    realtime_cfg.get("qwen_audio_turn_detection", "")
+                ).strip().lower()
+                if turn_detection_mode == "smart_turn":
+                    turn_detection: dict[str, Any] | None = {"type": "smart_turn"}
+                else:
+                    try:
+                        silence_ms = int(realtime_cfg.get("qwen_audio_silence_duration_ms", 2000))
+                    except (TypeError, ValueError):
+                        silence_ms = 2000
+                    silence_ms = max(200, min(6000, silence_ms))
+                    turn_detection = {
+                        "type": "server_vad",
+                        "threshold": 0.3,
+                        "silence_duration_ms": silence_ms,
+                    }
                 session_config: dict[str, Any] = {
                     "modalities": ["text", "audio"],
                     "voice": resolved_voice,
@@ -830,12 +899,10 @@ class QwenAudioRealtimeMixin:
                     "output_audio_format": "pcm",
                     "instructions": self._build_qwen_audio_instructions(),
                     "tools": tools,
-                    "turn_detection": {
-                        "type": "server_vad",
-                        "threshold": 0.3,
-                        "silence_duration_ms": 5000,
-                    },
-                    "max_history_turns": 50,
+                    "turn_detection": turn_detection,
+                    # Keep at the API default (20): larger history increases
+                    # token usage and per-turn inference latency.
+                    "max_history_turns": 20,
                 }
                 await dash_ws.send(json.dumps({
                     "type": "session.update",

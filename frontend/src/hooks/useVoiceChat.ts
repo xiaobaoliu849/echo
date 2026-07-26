@@ -132,6 +132,7 @@ export default function useVoiceChat({
   const nextPlaybackTimeRef = useRef(0);
   const audioInputReadyRef = useRef(false);
   const currentUserTurnRef = useRef("");
+  const currentUserTurnIsInterimRef = useRef(false);  // streaming ASR preview — replaced in place by the final transcript
   const currentAssistantTurnRef = useRef("");
   const liveTranslateSourceStreamRef = useRef("");
   const liveTranslateTargetStreamRef = useRef("");
@@ -559,6 +560,7 @@ export default function useVoiceChat({
       return next;
     });
     currentUserTurnRef.current = "";
+    currentUserTurnIsInterimRef.current = false;
     currentAssistantTurnRef.current = "";
     currentTurnIdRef.current = "";
     currentAssistantInterruptedRef.current = false;
@@ -794,7 +796,25 @@ export default function useVoiceChat({
           setVoiceChatStatus(t("正在识别本句原文…", "Transcribing this sentence…"));
           return;
         }
+        if (event.interim) {
+          // Streaming interim ASR (qwen-audio): show words as they are
+          // recognized, updating the in-progress user turn in place. Never
+          // commits a turn or resets tool/memory state — the final
+          // transcript replaces this preview via the branch below.
+          currentUserTurnIsInterimRef.current = true;
+          currentUserTurnRef.current = event.text;
+          setVoiceChatTranscript(event.text);
+          setVoiceChatStatus(t("正在听你说话…", "Listening…"));
+          return;
+        }
+        // A final transcript that replaces our interim preview must update
+        // the same turn in place — ASR corrections mean it is NOT always a
+        // prefix extension, so skip the continuation/commit checks that
+        // would otherwise split one utterance into two bubbles.
+        const replacingInterimPreview = currentUserTurnIsInterimRef.current;
+        currentUserTurnIsInterimRef.current = false;
         if (
+          !replacingInterimPreview &&
           event.turn_id &&
           currentUserTurnRef.current.trim() &&
           (currentUserTurnRef.current.trim().endsWith(event.text.trim()) ||
@@ -804,6 +824,7 @@ export default function useVoiceChat({
           return;
         }
         if (
+          !replacingInterimPreview &&
           currentUserTurnRef.current.trim() &&
           !isTranscriptContinuation(currentUserTurnRef.current, event.text)
         ) {
