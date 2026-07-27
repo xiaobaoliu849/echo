@@ -391,9 +391,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           {/* LEVEL 3: VOICE TIMBRE & TRANSLATION SETTINGS (音色与同传/扩展设定) */}
           {activeCategory ? (
             <div className={`vsVoiceLevel3Flyout${flyoutToLeft ? " flyLeft" : ""}`}>
-              {/* Category Tab Bar at top of Level 3 */}
-              <div className="vsCascadingTabBar">
-                {canShowVoiceCategory ? (
+              {/* Category Tab Bar: only useful when there is more than one category */}
+              {canShowVoiceCategory && canShowTranslationCategory ? (
+                <div className="vsCascadingTabBar">
                   <button
                     type="button"
                     className={`vsCascadingTabItem${activeCategory === "voice" ? " active" : ""}`}
@@ -401,8 +401,6 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                   >
                     🎤 {t("音色设定", "Voices")}
                   </button>
-                ) : null}
-                {canShowTranslationCategory ? (
                   <button
                     type="button"
                     className={`vsCascadingTabItem${activeCategory === "translation" ? " active" : ""}`}
@@ -410,8 +408,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                   >
                     🌐 {t("同传与复刻", "Translation")}
                   </button>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
 
               {/* LEVEL 3 - VOICE LIST */}
               {activeCategory === "voice" ? (
