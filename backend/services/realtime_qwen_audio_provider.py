@@ -133,20 +133,19 @@ class QwenAudioRealtimeMixin:
         async def send_tool_event(event_type: str, payload: dict[str, Any]) -> None:
             if recorder is not None:
                 await recorder.record_tool_event(event_type, payload)
-            if not _user_transcript_emitted:
-                _pending_tool_events.append((event_type, payload))
-            else:
-                await self._send_event(websocket, event_type, **payload)
+            # Tool events are status chrome (spinner/progress), not conversation
+            # content: the frontend renders them as a status line + sources panel,
+            # while the user's live interim transcript already occupies the user
+            # bubble. They must reach the UI the moment the tool starts — buffering
+            # them behind the final ASR transcript left the desktop silent for the
+            # entire search ("不知道模型在干嘛").
+            await self._send_event(websocket, event_type, **payload)
 
         async def _flush_pending_output() -> None:
-            """Send all buffered tool + AI text/audio events now that user transcript is emitted."""
-            nonlocal _pending_tool_events, _pending_ai_output, _user_transcript_emitted
+            """Send all buffered AI text/audio events now that the user transcript
+            has been emitted (keeps user text above the assistant reply)."""
+            nonlocal _pending_ai_output, _user_transcript_emitted
             _user_transcript_emitted = True
-            # 1. Flush tool events first (user transcript → tool status → AI reply)
-            for event_type, payload in _pending_tool_events:
-                await self._send_event(websocket, event_type, **payload)
-            _pending_tool_events.clear()
-            # 2. Flush AI text/audio events
             if _pending_ai_output:
                 for _, payload in _pending_ai_output:
                     await self._emit_assistant_output(
@@ -187,11 +186,18 @@ class QwenAudioRealtimeMixin:
         # prevent double-execution (native FC already handled the tool, then regex
         # fires again causing response.cancel + response_gated + duplicate tool call).
         _native_fc_occurred_this_turn = False
-        # Buffer tool events AND AI text/audio events until the user transcript has
-        # been emitted, so the frontend always shows: user speech → tool status → AI reply.
-        _pending_tool_events: list[tuple[str, dict[str, Any]]] = []
+        # Buffer AI text/audio events until the user transcript has been emitted,
+        # so the frontend always shows: user speech → AI reply. Tool events are
+        # NOT buffered (see send_tool_event) so tool progress is visible instantly.
         _pending_ai_output: list[tuple[str, dict[str, Any]]] = []
         _user_transcript_emitted = True  # starts True (no pending transcript before first turn)
+        # Whether the FINAL ASR transcript for the current user utterance has
+        # already been forwarded to the frontend. response.created uses this to
+        # decide whether the new response round must buffer its output: when the
+        # transcript beat response.created (common in server_vad), re-entering
+        # the buffering state would stall every tool event / reply delta until
+        # the 8s deferred-done timeout, since no second transcript ever comes.
+        _final_transcript_emitted_this_turn = True
         # When response.created arrives before the ASR transcript, the server has
         # started responding to the user's speech.  This flag prevents the first
         # transcript of each response cycle from being misclassified as a barge-in
@@ -323,6 +329,7 @@ class QwenAudioRealtimeMixin:
                 # transcription and function calls are handled correctly.
                 _first_transcript_this_response = True
                 _native_fc_occurred_this_turn = False
+                _final_transcript_emitted_this_turn = False
                 if interruption.active_response_id or tool_session.has_active_task or (
                     recorder is not None and bool(recorder.current_assistant_text)
                 ):
@@ -344,8 +351,12 @@ class QwenAudioRealtimeMixin:
                 )
                 # New response round begins; reset the per-response function_call marker.
                 current_response_has_function_call = False
-                # Start buffering AI output until the user transcript is sent first.
-                _user_transcript_emitted = False
+                # Buffer this round's AI output ONLY if the user turn's final
+                # transcript hasn't been forwarded yet (response.created beat the
+                # ASR transcript). When the transcript already went out, another
+                # one will never arrive this turn — buffering again would hide
+                # the reply behind the 8s deferred-done timeout.
+                _user_transcript_emitted = _final_transcript_emitted_this_turn
                 _first_transcript_this_response = True
                 continue
             if event_type in (
@@ -470,6 +481,7 @@ class QwenAudioRealtimeMixin:
                 # fires again causing response.cancel + response_gated + duplicate).
                 if _native_fc_occurred_this_turn:
                     await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                    _final_transcript_emitted_this_turn = True
                     await _flush_pending_output()
                     # Process a deferred response.done now that ordering is correct.
                     if _deferred_response_done is not None:
@@ -488,6 +500,7 @@ class QwenAudioRealtimeMixin:
                 # (response_gated, etc.), so the frontend shows the user's
                 # transcribed speech above the tool status.
                 await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                _final_transcript_emitted_this_turn = True
                 if tool_turn_id:
                     gated_tool_turn_id = tool_turn_id
                     try:

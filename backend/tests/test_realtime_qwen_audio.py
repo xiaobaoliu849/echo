@@ -813,13 +813,23 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(assistant_texts, ["继续回答"])
         self.assertIn("turn_complete", client_event_types)
 
-    async def test_tool_events_buffered_before_user_transcript(self):
+    async def test_tool_events_not_delayed_by_pending_transcript(self):
         """When a native function_call fires before the ASR transcript, tool events
         (tool_call_started, agent_progress, tool_call_completed, agent_result) must
-        be buffered and flushed only after user_transcript is sent.
+        be forwarded IMMEDIATELY — not buffered behind the final transcript.
+
+        Regression test for the "工具调用半天了桌面上才显示" bug: buffering tool
+        events until the (often late) server_vad transcript left the desktop UI
+        silent for the entire search. Tool events are status chrome; the user's
+        live interim transcript already occupies the user bubble, so forwarding
+        them instantly cannot scramble the conversation order. AI text/audio is
+        still held until the final transcript so the reply stays below the user
+        bubble.
         """
         events = [
-            # response.created starts buffering
+            # User speech starts (resets the per-turn transcript flag)
+            {"type": "input_audio_buffer.speech_started"},
+            # response.created starts buffering AI output
             {"type": "response.created", "response": {"id": "r1"}},
             # function_call fires BEFORE transcript
             {"type": "response.output_item.added",
@@ -859,7 +869,6 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         )
 
         event_types = [e.get("type") for e in ws.events]
-        # user_transcript must appear BEFORE tool events and assistant text
         user_idx = event_types.index("user_transcript") if "user_transcript" in event_types else -1
         tool_started_idx = event_types.index("tool_call_started") if "tool_call_started" in event_types else -1
         agent_result_idx = event_types.index("agent_result") if "agent_result" in event_types else -1
@@ -870,9 +879,14 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(agent_result_idx, -1, "agent_result must be emitted")
         self.assertGreater(assistant_idx, -1, "assistant_text must be emitted")
 
-        # Order: user_transcript → tool events → assistant text
-        self.assertLess(user_idx, tool_started_idx,
-            f"user_transcript must come before tool_call_started. Events: {event_types}")
+        # NEW guarantee: tool events reach the UI the moment the tool runs,
+        # even though the final transcript hasn't arrived yet.
+        self.assertLess(tool_started_idx, user_idx,
+            f"tool_call_started must be forwarded immediately, before the late "
+            f"user_transcript. Events: {event_types}")
+        # Conversation content order is preserved: reply still below user bubble.
+        self.assertLess(user_idx, assistant_idx,
+            f"user_transcript must come before assistant_text. Events: {event_types}")
         self.assertLess(agent_result_idx, assistant_idx,
             f"agent_result must come before assistant_text. Events: {event_types}")
 
@@ -1037,6 +1051,8 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         asynchronously and doesn't block model inference.
         """
         events = [
+            # User speech starts first (production server_vad sequence)
+            {"type": "input_audio_buffer.speech_started"},
             # Model starts responding
             {"type": "response.created", "response": {"id": "r1"}},
             # Model streams text
@@ -1087,6 +1103,7 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         """Same as above but with audio deltas — both text and audio must be
         buffered and flushed after the user transcript."""
         events = [
+            {"type": "input_audio_buffer.speech_started"},
             {"type": "response.created", "response": {"id": "r1"}},
             {"type": "response.audio.delta", "response_id": "r1",
              "delta": "AAAA"},  # base64 audio
@@ -1114,14 +1131,17 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
 
     # ---- 15: tool call ordering when response.done arrives first -------------
 
-    async def test_tool_events_after_user_transcript_when_response_done_first(self):
+    async def test_tool_events_immediate_when_response_done_first(self):
         """When a native function_call fires and response.done arrives before the
-        ASR transcript, tool events must still appear AFTER user_transcript.
+        ASR transcript, tool events are forwarded the moment they happen (UI
+        progress), while the AI reply still waits for the user transcript.
 
-        Sequence: response.created → function_call → response.done(fc round)
-                  → response.created(r2) → transcript → audio → response.done(r2)
+        Sequence: speech_started → response.created → function_call
+                  → response.done(fc round) → response.created(r2) → transcript
+                  → audio → response.done(r2)
         """
         events = [
+            {"type": "input_audio_buffer.speech_started"},
             # First response round: function call
             {"type": "response.created", "response": {"id": "r1"}},
             {"type": "response.output_item.added",
@@ -1162,7 +1182,6 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
 
         event_types = [e.get("type") for e in ws.events]
 
-        # user_transcript must be present and before tool events
         self.assertIn("user_transcript", event_types,
             f"user_transcript must be emitted. Events: {event_types}")
         self.assertIn("tool_call_started", event_types,
@@ -1171,9 +1190,10 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         user_idx = event_types.index("user_transcript")
         tool_idx = event_types.index("tool_call_started")
 
-        self.assertLess(user_idx, tool_idx,
-            f"user_transcript (idx={user_idx}) must come BEFORE tool_call_started "
-            f"(idx={tool_idx}). Events: {event_types}")
+        # Tool progress is instant — it must NOT wait for the late transcript.
+        self.assertLess(tool_idx, user_idx,
+            f"tool_call_started (idx={tool_idx}) must be forwarded immediately, "
+            f"before the late user_transcript (idx={user_idx}). Events: {event_types}")
 
         # No premature turn_complete on the FC round
         # turn_complete should only appear once (after r2)
@@ -1217,6 +1237,7 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         processing the new turn."""
         events = [
             # First turn: response completes but no transcript
+            {"type": "input_audio_buffer.speech_started"},
             {"type": "response.created", "response": {"id": "r1"}},
             {"type": "response.audio_transcript.delta", "response_id": "r1",
              "delta": "第一轮回复"},

@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Awaitable, Callable
 
+import httpx
+
 from .audio_agent_service import AudioAgentService
 from .audio_research_service import AudioResearchService
 from .llm_service import LLMService
 from .tts_service import TTSService
+
+logger = logging.getLogger(__name__)
 
 
 def _current_date_string() -> str:
@@ -26,11 +31,67 @@ def _current_date_string() -> str:
 # concurrently after this returns.
 SEARCH_TOTAL_TIMEOUT_SECONDS = 15.0
 
+# Budget for the DashScope ``enable_search`` LLM fallback. Only runs when the
+# scraped engines (DuckDuckGo/Bing) produced nothing usable — DuckDuckGo is
+# unreachable from mainland China without a proxy and Bing HTML scraping has
+# poor recall for fresh news — so this is the path that actually answers
+# current-event questions for mainland users without a VPN.
+LLM_SEARCH_TIMEOUT_SECONDS = 20.0
+LLM_SEARCH_FALLBACK_MODEL = "qwen-plus"
+
 
 SendEvent = Callable[[str, Any], Awaitable[None]]
 ToolResultHandler = Callable[[dict[str, Any]], Awaitable[None]]
 ToolErrorHandler = Callable[[str], Awaitable[None]]
 ToolCancelPrepareHandler = Callable[[str], Awaitable[bool]]
+
+
+def _extract_search_citations(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Pull cited web sources out of a DashScope enable_search response.
+
+    The citation payload shape differs between the native DashScope API and
+    the OpenAI-compatible mode (and has changed over time), so scan the few
+    known locations defensively and normalize to the voice-tool source shape.
+    """
+    candidate_lists: list[Any] = []
+    search_info = data.get("search_info")
+    if isinstance(search_info, dict):
+        candidate_lists.append(search_info.get("search_results"))
+    try:
+        message = (data.get("choices") or [{}])[0].get("message", {})
+    except Exception:
+        message = {}
+    if isinstance(message, dict):
+        candidate_lists.append(message.get("search_results"))
+        msg_search_info = message.get("search_info")
+        if isinstance(msg_search_info, dict):
+            candidate_lists.append(msg_search_info.get("search_results"))
+
+    citations: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for candidate in candidate_lists:
+        if not isinstance(candidate, list):
+            continue
+        for item in candidate:
+            if not isinstance(item, dict):
+                continue
+            url = str(item.get("url") or item.get("link") or "").strip()
+            title = str(item.get("title") or item.get("name") or item.get("site_name") or "").strip()
+            snippet = str(item.get("snippet") or item.get("text") or item.get("content") or "").strip()
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            citations.append(
+                {
+                    "title": (title or url)[:240],
+                    "uri": url[:1000],
+                    "snippet": snippet[:500],
+                    "content": snippet[:2000],
+                    "source_type": "llm_web_search",
+                    "score": 0.7,
+                }
+            )
+    return citations
 
 
 @dataclass(frozen=True)
@@ -396,6 +457,36 @@ class VoiceAgentToolService:
                 }
             )
 
+        # ── LLM web-search fallback ──────────────────────────────────
+        # The scraped engines regularly yield nothing usable for mainland
+        # users (DuckDuckGo is blocked without a proxy; Bing HTML scraping
+        # has poor recall for fresh news — e.g. a same-week announcement).
+        # When that happens, fall back to a DashScope chat model with
+        # server-side web search (enable_search), which works in mainland
+        # China without any VPN and is grounded on live results.
+        if self._sources_are_degenerate(sources):
+            await send_event(
+                "agent_progress",
+                {
+                    "stage": "search_web",
+                    "message": "网页抓取没有找到可用结果，正在切换联网模型搜索...",
+                    "turn_id": turn_id,
+                    "elapsed_ms": int((time.perf_counter() - started_at) * 1000),
+                },
+            )
+            fallback_sources = await self._llm_web_search_fallback(clean_query)
+            if fallback_sources:
+                sources = fallback_sources
+                await send_event(
+                    "agent_progress",
+                    {
+                        "stage": "search_web",
+                        "message": "联网模型搜索完成，正在整理回答...",
+                        "turn_id": turn_id,
+                        "elapsed_ms": int((time.perf_counter() - started_at) * 1000),
+                    },
+                )
+
         answer = self._build_grounded_answer(clean_query, sources)
         await send_event(
             "tool_call_completed",
@@ -429,6 +520,124 @@ class VoiceAgentToolService:
             "source_count": len(sources),
             "elapsed_ms": elapsed_ms,
         }
+
+    @staticmethod
+    def _sources_are_degenerate(sources: list[dict[str, Any]]) -> bool:
+        """Mirror the degenerate-content rule in build_model_context_prompt:
+        no usable source at all, or the combined signal is negligible with no
+        single substantive snippet/content (>= 40 chars)."""
+        if not sources:
+            return True
+        total_content_len = sum(
+            len(str(s.get("content") or s.get("snippet") or "")) for s in sources
+        )
+        has_substantive_source = any(
+            len(str(s.get("snippet") or s.get("content") or "")) >= 40 for s in sources
+        )
+        return total_content_len < 100 and not has_substantive_source
+
+    async def _llm_web_search_fallback(self, query: str) -> list[dict[str, Any]]:
+        """Search the live web via a DashScope chat model (``enable_search``).
+
+        Returns a synthetic source list grounded on the model's search-based
+        answer, or [] when DashScope is not configured / the call fails.
+        This path needs no VPN in mainland China (unlike DuckDuckGo) and has
+        far better recall for fresh news than scraped Bing HTML.
+        """
+        # Resolve settings tolerantly: realtime-only users typically have a
+        # DashScope API key but NO default chat model configured, so the strict
+        # LLMService._resolve_settings (which requires a model) would raise and
+        # silently disable the fallback. The key is the only hard requirement;
+        # the model defaults to a known search-capable one.
+        try:
+            settings = self.llm_service.config.get_provider_settings("DashScope", None)
+        except Exception as exc:
+            logger.info("llm_web_search_fallback skipped: %s", exc)
+            return []
+        api_key = str(settings.get("api_key", "")).strip()
+        base_url = str(settings.get("base_url", "")).strip().rstrip("/")
+        configured_model = str(settings.get("model", "")).strip()
+        if not api_key or not base_url:
+            logger.info("llm_web_search_fallback skipped: no DashScope api_key/base_url")
+            return []
+
+        # Try the configured chat model first, then a known search-capable one
+        # (some configured models may not support enable_search).
+        candidate_models = [configured_model] if configured_model else []
+        if LLM_SEARCH_FALLBACK_MODEL not in candidate_models:
+            candidate_models.append(LLM_SEARCH_FALLBACK_MODEL)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是联网搜索助手。基于实时联网搜索结果，用简洁中文如实回答用户查询。"
+                    "优先采用最新、权威（官方、主流媒体）的来源；信息不确定就明说，绝不编造。"
+                    "回答控制在300字以内，直接给结论和关键事实（时间、人物、事件）。"
+                ),
+            },
+            {"role": "user", "content": query},
+        ]
+        for model in candidate_models:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "temperature": 0.2,
+                "max_tokens": 900,
+                "enable_search": True,
+                "search_options": {
+                    "forced_search": True,
+                    "enable_source": True,
+                    "enable_citation": True,
+                },
+            }
+            try:
+                async with httpx.AsyncClient(timeout=LLM_SEARCH_TIMEOUT_SECONDS) as client:
+                    response = await client.post(
+                        f"{base_url}/chat/completions",
+                        json=payload,
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
+                    )
+                response.raise_for_status()
+                data = response.json()
+            except Exception as exc:
+                logger.warning(
+                    "llm_web_search_fallback failed model=%s query=%r error=%s",
+                    model, query[:120], exc,
+                )
+                continue
+            answer = ""
+            try:
+                answer = str(
+                    (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+                ).strip()
+            except Exception:
+                answer = ""
+            if not answer:
+                continue
+            sources: list[dict[str, Any]] = [
+                {
+                    "title": f"联网搜索摘要（{model}）",
+                    "uri": "",
+                    "snippet": answer[:500],
+                    "content": answer[:2000],
+                    "source_type": "llm_web_search",
+                    "score": 0.85,
+                }
+            ]
+            # Attach any cited sources the API returned (shape varies between
+            # native and compatible-mode responses; parse defensively).
+            for cited in _extract_search_citations(data)[:3]:
+                sources.append(cited)
+            logger.info(
+                "llm_web_search_fallback ok model=%s query=%r answer_len=%s citations=%s",
+                model, query[:120], len(answer), len(sources) - 1,
+            )
+            return sources
+        return []
 
     async def run_create_audio_agent_run(
         self,

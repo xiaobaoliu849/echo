@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import unittest
+import unittest.mock
 from datetime import date
 
 from services.audio_research_service import ResearchDocument
@@ -43,6 +44,63 @@ class HangingResearchService:
     async def search(self, query: str, *, limit: int = 3) -> list[dict[str, str]]:
         await asyncio.sleep(30)
         return []
+
+
+class EmptyResearchService:
+    """Scraped engines produced nothing (DDG blocked, Bing useless)."""
+
+    async def search(self, query: str, *, limit: int = 3) -> list[dict[str, str]]:
+        return []
+
+
+class FakeDashScopeSettingsLLM:
+    """Minimal LLM-service fake exposing the config surface the web-search
+    fallback uses (tolerant get_provider_settings resolution)."""
+
+    def __init__(self) -> None:
+        def get_provider_settings(provider: str, model: object = None) -> dict[str, str]:
+            if provider != "DashScope":
+                raise ValueError(f"Unsupported provider: {provider}")
+            return {
+                "api_key": "sk-test",
+                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "model": "qwen3.5-plus",
+            }
+
+        from types import SimpleNamespace
+
+        self.config = SimpleNamespace(get_provider_settings=get_provider_settings)
+
+
+class _FakeHTTPResponse:
+    def __init__(self, payload: dict, status_error: Exception | None = None) -> None:
+        self._payload = payload
+        self._status_error = status_error
+
+    def raise_for_status(self) -> None:
+        if self._status_error is not None:
+            raise self._status_error
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeAsyncClient:
+    """Stand-in for httpx.AsyncClient capturing POSTs and replaying responses."""
+
+    def __init__(self, responses: list[_FakeHTTPResponse]) -> None:
+        self._responses = list(responses)
+        self.requests: list[dict[str, object]] = []
+
+    async def __aenter__(self) -> "_FakeAsyncClient":
+        return self
+
+    async def __aexit__(self, *args: object) -> bool:
+        return False
+
+    async def post(self, url: str, json: object = None, headers: object = None) -> _FakeHTTPResponse:
+        self.requests.append({"url": url, "json": json, "headers": headers})
+        return self._responses.pop(0)
 
 
 class FakeAudioAgentService:
@@ -166,6 +224,205 @@ class VoiceAgentToolServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(self.events[0]["turn_id"], "")
         self.assertIsInstance(self.events[-1]["elapsed_ms"], int)
+
+    # ---- LLM web-search fallback (DashScope enable_search) ------------------
+
+    async def test_run_search_skips_llm_fallback_when_scrape_good(self) -> None:
+        service = VoiceAgentToolService(research_service=FakeResearchService())  # type: ignore[arg-type]
+        service._llm_web_search_fallback = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+            side_effect=AssertionError("fallback must not run when scraped sources are good")
+        )
+
+        result = await service.run_search("voice agent", send_event=self._send_event)
+
+        self.assertEqual(len(result["sources"]), 1)
+        self.assertEqual(
+            [event["type"] for event in self.events],
+            ["tool_call_started", "agent_progress", "tool_call_completed", "agent_result"],
+        )
+
+    async def test_run_search_falls_back_to_llm_when_scrape_empty(self) -> None:
+        service = VoiceAgentToolService(research_service=EmptyResearchService())  # type: ignore[arg-type]
+        fallback_sources = [
+            {
+                "title": "联网搜索摘要（qwen-plus）",
+                "uri": "",
+                "snippet": "黄仁勋签署了支持开源模型的协议。",
+                "content": "黄仁勋签署了支持开源模型的协议。",
+                "source_type": "llm_web_search",
+                "score": 0.85,
+            }
+        ]
+        service._llm_web_search_fallback = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+            return_value=fallback_sources
+        )
+
+        result = await service.run_search(
+            "Jason Huang 签署支持开源模型的协议",
+            send_event=self._send_event,
+            turn_id="t1",
+        )
+
+        service._llm_web_search_fallback.assert_awaited_once()  # type: ignore[union-attr]
+        self.assertEqual(result["source_count"], 1)
+        self.assertIn("黄仁勋", result["sources"][0]["snippet"])
+        progress_messages = [
+            str(event.get("message", ""))
+            for event in self.events
+            if event["type"] == "agent_progress"
+        ]
+        self.assertTrue(
+            any("联网模型" in message for message in progress_messages),
+            f"fallback progress must be surfaced to the UI. Events: {self.events}",
+        )
+
+    async def test_run_search_returns_no_results_when_fallback_also_empty(self) -> None:
+        service = VoiceAgentToolService(research_service=EmptyResearchService())  # type: ignore[arg-type]
+        service._llm_web_search_fallback = unittest.mock.AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+        result = await service.run_search(" obscure query ", send_event=self._send_event)
+
+        service._llm_web_search_fallback.assert_awaited_once()  # type: ignore[union-attr]
+        self.assertEqual(result["source_count"], 0)
+        self.assertIn("NO RESULTS", result["answer"])
+
+    def test_sources_are_degenerate_rules(self) -> None:
+        self.assertTrue(VoiceAgentToolService._sources_are_degenerate([]))
+        self.assertTrue(VoiceAgentToolService._sources_are_degenerate(
+            [{"snippet": "x", "content": ""}],
+        ))
+        self.assertFalse(VoiceAgentToolService._sources_are_degenerate(
+            [{"snippet": "黄仁勋签署了支持开源模型的协议，涉及多个开源社区项目，协议内容覆盖模型权重开放与商用授权条款。", "content": ""}],
+        ))
+
+    def test_extract_search_citations_shapes(self) -> None:
+        from services.voice_agent_tools import _extract_search_citations
+
+        native_shape = {
+            "search_info": {
+                "search_results": [
+                    {"title": "新闻A", "url": "https://a.example.com/1", "snippet": "内容A"},
+                    {"site_name": "站点B", "link": "https://b.example.com/2", "text": "内容B"},
+                ],
+            },
+        }
+        citations = _extract_search_citations(native_shape)
+        self.assertEqual(len(citations), 2)
+        self.assertEqual(citations[0]["uri"], "https://a.example.com/1")
+        self.assertEqual(citations[1]["title"], "站点B")
+
+        compat_shape = {
+            "choices": [
+                {"message": {"content": "answer", "search_results": [
+                    {"title": "新闻C", "url": "https://c.example.com/3"},
+                ]}},
+            ],
+        }
+        citations = _extract_search_citations(compat_shape)
+        self.assertEqual(len(citations), 1)
+        self.assertEqual(citations[0]["uri"], "https://c.example.com/3")
+
+        self.assertEqual(_extract_search_citations({}), [])
+        self.assertEqual(_extract_search_citations({"search_info": {"search_results": "oops"}}), [])
+
+    async def test_llm_web_search_fallback_success_with_citations(self) -> None:
+        payload = {
+            "choices": [{"message": {"content": "黄仁勋签署了支持开源模型的协议。"}}],
+            "search_info": {"search_results": [
+                {"title": "新闻报道", "url": "https://example.com/news", "snippet": "签署细节"},
+            ]},
+        }
+        client = _FakeAsyncClient([_FakeHTTPResponse(payload)])
+        service = VoiceAgentToolService(
+            research_service=EmptyResearchService(),  # type: ignore[arg-type]
+            llm_service=FakeDashScopeSettingsLLM(),  # type: ignore[arg-type]
+        )
+        with unittest.mock.patch(
+            "services.voice_agent_tools.httpx.AsyncClient", lambda **kwargs: client
+        ):
+            sources = await service._llm_web_search_fallback("Jason Huang 签署开源协议")
+
+        self.assertEqual(len(sources), 2)
+        self.assertIn("黄仁勋", sources[0]["snippet"])
+        self.assertEqual(sources[0]["source_type"], "llm_web_search")
+        self.assertEqual(sources[1]["uri"], "https://example.com/news")
+        request_payload = client.requests[0]["json"]
+        assert isinstance(request_payload, dict)
+        self.assertTrue(request_payload["enable_search"])
+        self.assertEqual(request_payload["model"], "qwen3.5-plus")
+        self.assertEqual(
+            client.requests[0]["url"],
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        )
+
+    async def test_llm_web_search_fallback_retries_known_model_on_failure(self) -> None:
+        client = _FakeAsyncClient([
+            _FakeHTTPResponse({}, status_error=RuntimeError("enable_search unsupported")),
+            _FakeHTTPResponse({"choices": [{"message": {"content": "兜底答案"}}]}),
+        ])
+        service = VoiceAgentToolService(
+            research_service=EmptyResearchService(),  # type: ignore[arg-type]
+            llm_service=FakeDashScopeSettingsLLM(),  # type: ignore[arg-type]
+        )
+        with unittest.mock.patch(
+            "services.voice_agent_tools.httpx.AsyncClient", lambda **kwargs: client
+        ):
+            sources = await service._llm_web_search_fallback("查询")
+
+        self.assertEqual(len(client.requests), 2)
+        models_tried = [req["json"]["model"] for req in client.requests]  # type: ignore[index]
+        self.assertEqual(models_tried, ["qwen3.5-plus", "qwen-plus"])
+        self.assertEqual(sources[0]["snippet"], "兜底答案")
+
+    async def test_llm_web_search_fallback_defaults_model_when_unset(self) -> None:
+        """Realtime-only users have a DashScope key but no default chat model;
+        the fallback must still fire with the known search-capable model."""
+        from types import SimpleNamespace
+
+        class RealtimeOnlyLLM:
+            config = SimpleNamespace(
+                get_provider_settings=lambda provider, model=None: {
+                    "api_key": "sk-test",
+                    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    "model": "",
+                }
+            )
+
+        client = _FakeAsyncClient([
+            _FakeHTTPResponse({"choices": [{"message": {"content": "答案"}}]}),
+        ])
+        service = VoiceAgentToolService(
+            research_service=EmptyResearchService(),  # type: ignore[arg-type]
+            llm_service=RealtimeOnlyLLM(),  # type: ignore[arg-type]
+        )
+        with unittest.mock.patch(
+            "services.voice_agent_tools.httpx.AsyncClient", lambda **kwargs: client
+        ):
+            sources = await service._llm_web_search_fallback("查询")
+
+        self.assertEqual(len(client.requests), 1)
+        self.assertEqual(client.requests[0]["json"]["model"], "qwen-plus")  # type: ignore[index]
+        self.assertEqual(sources[0]["snippet"], "答案")
+
+    async def test_llm_web_search_fallback_unconfigured_returns_empty(self) -> None:
+        from types import SimpleNamespace
+
+        class UnconfiguredLLM:
+            config = SimpleNamespace(
+                get_provider_settings=lambda provider, model=None: {
+                    "api_key": "",
+                    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    "model": "",
+                }
+            )
+
+        service = VoiceAgentToolService(
+            research_service=EmptyResearchService(),  # type: ignore[arg-type]
+            llm_service=UnconfiguredLLM(),  # type: ignore[arg-type]
+        )
+        sources = await service._llm_web_search_fallback("查询")
+        self.assertEqual(sources, [])
+
 
     async def test_create_audio_agent_run_emits_artifact_result(self) -> None:
         fake_audio_agent = FakeAudioAgentService()
@@ -468,6 +725,9 @@ class VoiceAgentToolServiceTests(unittest.IsolatedAsyncioTestCase):
         degrades to the honest 0-results path instead of stalling the turn."""
         import services.voice_agent_tools as vat
         service = VoiceAgentToolService(research_service=HangingResearchService())  # type: ignore[arg-type]
+        # Isolate the scrape-timeout path from the LLM fallback (which would
+        # otherwise fire on the empty result and hit a real network in tests).
+        service._llm_web_search_fallback = unittest.mock.AsyncMock(return_value=[])  # type: ignore[method-assign]
         original = vat.SEARCH_TOTAL_TIMEOUT_SECONDS
         vat.SEARCH_TOTAL_TIMEOUT_SECONDS = 0.05
         try:
