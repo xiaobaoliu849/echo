@@ -55,9 +55,11 @@ type AudioContextWindow = Window & {
 export const GOOGLE_PROVIDER = "Google";
 export const DASHSCOPE_PROVIDER = "DashScope";
 export const OPENAI_PROVIDER = "OpenAI";
-export const DEFAULT_GOOGLE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
+// The legacy gemini-2.5-flash-native-audio-preview-12-2025 model has been retired;
+// the current Flash Live model is the default Google realtime voice model.
+export const DEFAULT_GOOGLE_MODEL = GOOGLE_FLASH_LIVE_MODEL;
 export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
@@ -508,7 +510,7 @@ export function resolveRealtimeModelOptions(
     ? preferredDefault
     : resolveRealtimeFallbackModel(provider);
   const googleBuiltIns = provider === GOOGLE_PROVIDER
-    ? [DEFAULT_GOOGLE_MODEL, GOOGLE_FLASH_LIVE_MODEL, GOOGLE_LIVE_TRANSLATE_MODEL]
+    ? [GOOGLE_FLASH_LIVE_MODEL, GOOGLE_LIVE_TRANSLATE_MODEL]
     : [];
   const openaiBuiltIns = provider === OPENAI_PROVIDER
     ? [DEFAULT_OPENAI_MODEL]

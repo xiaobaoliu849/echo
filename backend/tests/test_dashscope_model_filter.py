@@ -5,9 +5,11 @@ import unittest
 from routers.settings import (
     DASHSCOPE_MODEL_LIST_SUPPLEMENTS,
     _filter_dashscope_models,
+    _is_retired_dashscope_model,
     _is_tts_model_id,
     _merge_dashscope_supplements,
 )
+from services.settings_service import SettingsService
 
 
 class FilterDashScopeModelsTests(unittest.TestCase):
@@ -138,6 +140,92 @@ class GetSettingsRefilterIntegrationTests(unittest.TestCase):
         self.assertNotIn("qwen3-livetranslate-flash-realtime", entry["available"])
         self.assertLess(len(entry["available"]), 30)
         self.assertNotIn("qwen2.5-72b-instruct", entry["available"])
+
+
+class RetiredDashScopeModelTests(unittest.TestCase):
+    def test_legacy_qwen3_omni_and_livetranslate_are_retired(self) -> None:
+        for legacy in (
+            "qwen3-omni-flash-2025-12-01",
+            "qwen3-omni-flash",
+            "qwen3-omni-flash-realtime",
+            "qwen3-livetranslate-flash-realtime",
+        ):
+            self.assertTrue(_is_retired_dashscope_model(legacy), legacy)
+
+    def test_current_qwen35_and_audio_models_are_not_retired(self) -> None:
+        for current in (
+            "qwen3.5-omni-plus-realtime",
+            "qwen3.5-omni-plus-realtime-2026-03-15",
+            "qwen3.5-omni-flash-realtime",
+            "qwen3.5-livetranslate-flash-realtime",
+            "qwen-audio-3.0-realtime-plus",
+            "qwen-plus",
+        ):
+            self.assertFalse(_is_retired_dashscope_model(current), current)
+
+    def test_filter_drops_legacy_qwen3_omni_keeps_qwen35(self) -> None:
+        filtered = _filter_dashscope_models(
+            [
+                "qwen3-omni-flash-2025-12-01",
+                "qwen3-omni-flash-realtime",
+                "qwen3.5-omni-plus-realtime",
+                "qwen-plus",
+            ]
+        )
+        self.assertNotIn("qwen3-omni-flash-2025-12-01", filtered)
+        self.assertNotIn("qwen3-omni-flash-realtime", filtered)
+        self.assertIn("qwen3.5-omni-plus-realtime", filtered)
+        self.assertIn("qwen-plus", filtered)
+
+
+class GetSettingsEnabledSanitizationTests(unittest.TestCase):
+    """The GET /settings path must strip retired legacy models from the persisted
+    DashScope enabled/available lists so they no longer reach the model picker."""
+
+    def test_legacy_models_removed_from_enabled_and_available_on_load(self) -> None:
+        import asyncio
+        import json
+        import tempfile
+        from pathlib import Path
+
+        import routers.settings as settings_router
+        from services.config_loader import BackendConfig
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "default_models": {
+                            "DashScope": {
+                                "default": "",
+                                "available": ["qwen-plus", "qwen3-omni-flash-2025-12-01"],
+                                "enabled": [
+                                    "qwen3-omni-flash-2025-12-01",
+                                    "qwen3.5-omni-plus-realtime-2026-03-15",
+                                    "qwen-audio-3.0-realtime-plus",
+                                ],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            test_service = SettingsService(config=BackendConfig(config_path))
+            original_service = settings_router.settings_service
+            settings_router.settings_service = test_service
+            try:
+                response = asyncio.run(settings_router.get_settings())
+            finally:
+                settings_router.settings_service = original_service
+
+            ds = response.settings["default_models"]["DashScope"]
+            # Legacy model stripped from both lists; current models preserved.
+            self.assertNotIn("qwen3-omni-flash-2025-12-01", ds["enabled"])
+            self.assertNotIn("qwen3-omni-flash-2025-12-01", ds["available"])
+            self.assertIn("qwen3.5-omni-plus-realtime-2026-03-15", ds["enabled"])
+            self.assertIn("qwen-audio-3.0-realtime-plus", ds["enabled"])
+            self.assertIn("qwen-plus", ds["available"])
 
 
 if __name__ == "__main__":

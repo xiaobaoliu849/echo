@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -75,6 +76,18 @@ async def get_settings() -> SettingsResponse:
                 raw_avail = ds_entry.get("available", [])
                 if isinstance(raw_avail, list) and len(raw_avail) > 30:
                     ds_entry["available"] = _filter_dashscope_models(raw_avail)
+                # Drop retired legacy realtime models (qwen3-omni-*, qwen3-livetranslate-*)
+                # from BOTH the available and enabled lists so superseded checkpoints such as
+                # qwen3-omni-flash-2025-12-01 no longer surface in the model picker. This runs
+                # on every load (not only when the list is bloated) and mutates only the API
+                # response, never the persisted config.json.
+                for list_key in ("available", "enabled"):
+                    existing = ds_entry.get(list_key)
+                    if isinstance(existing, list):
+                        ds_entry[list_key] = [
+                            item for item in existing
+                            if not _is_retired_dashscope_model(str(item))
+                        ]
                 # Merge the curated supplements regardless of whether the filter ran, so
                 # versioned voice models (qwen3.5-livetranslate-flash-realtime, omni/tts
                 # checkpoints) are always present — consistent with the fetch-models
@@ -152,7 +165,7 @@ class FetchModelsResponse(BaseModel):
 
 
 GOOGLE_MODEL_LIST_SUPPLEMENTS = [
-    "gemini-2.5-flash-native-audio-preview-12-2025",
+    # The legacy gemini-2.5-flash-native-audio-preview-12-2025 model is retired.
     "gemini-3.1-flash-live-preview",
     "gemini-3.5-live-translate-preview",
 ]
@@ -169,6 +182,18 @@ DASHSCOPE_MODEL_LIST_SUPPLEMENTS = [
     "qwen3.5-livetranslate-flash-realtime",
 ]
 GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
+
+
+# Legacy DashScope realtime families retired in favour of the qwen3.5 series:
+#   qwen3-omni-*          -> superseded by qwen3.5-omni-*
+#   qwen3-livetranslate-* -> superseded by qwen3.5-livetranslate-*
+# The pattern requires a hyphen immediately after "qwen3", so the current qwen3.5-*
+# models (which carry a minor version: "qwen3.5-...") never match.
+_RETIRED_DASHSCOPE_REALTIME_RE = re.compile(r"^qwen3-(?:omni|livetranslate)-", re.IGNORECASE)
+
+
+def _is_retired_dashscope_model(model_id: str) -> bool:
+    return bool(_RETIRED_DASHSCOPE_REALTIME_RE.match(str(model_id).strip().lower()))
 
 
 def _filter_dashscope_models(model_ids: list[str]) -> list[str]:
@@ -247,10 +272,10 @@ def _filter_dashscope_models(model_ids: list[str]) -> list[str]:
         if not any(low.startswith(p) for p in _DASHSCOPE_PREFIXES):
             continue
 
-        # 1b. Drop the legacy qwen3-livetranslate series (superseded by
-        #     qwen3.5-livetranslate, the only LiveTranslate model VoiceSpirit ships).
-        #     qwen3.5-livetranslate-* is unaffected (its name has a minor version).
-        if re.match(r"qwen3-livetranslate-", low):
+        # 1b. Drop retired legacy realtime families (superseded by the qwen3.5
+        #     series): qwen3-omni-* and qwen3-livetranslate-*. The qwen3.5-* models
+        #     are unaffected (their names carry a minor version, e.g. qwen3.5-omni-*).
+        if _is_retired_dashscope_model(low):
             continue
 
         # 2. Strip off-topic Qwen sub-families (image, coder, math, search, research)

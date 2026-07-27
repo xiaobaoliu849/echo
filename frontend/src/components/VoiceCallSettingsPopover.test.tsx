@@ -17,7 +17,7 @@ function renderPopover(overrides: Parameters<typeof createVoiceChatController>[0
     voiceChatModelOptions: ["qwen3.5-omni-plus-realtime", "qwen3.5-livetranslate-flash-realtime", "qwen-audio-3.0-realtime-plus"],
     voiceChatRealtimeChoicesByProvider: [
       { provider: "DashScope", models: ["qwen3.5-omni-plus-realtime", "qwen3.5-livetranslate-flash-realtime", "qwen-audio-3.0-realtime-plus"] },
-      { provider: "Google", models: ["gemini-2.5-flash-native-audio-preview-12-2025"] },
+      { provider: "Google", models: ["gemini-3.1-flash-live-preview"] },
       { provider: "OpenAI", models: ["gpt-realtime-2"] },
     ],
     voiceChatVoice: "Tina",
@@ -96,11 +96,11 @@ describe("VoiceCallSettingsPopover", () => {
   it("switches provider in Level 1 and selects model in Level 2", () => {
     const voiceChat = renderPopover();
     openPanel();
-    expect(screen.queryByText("gemini-2.5-flash-native-audio-preview-12-2025")).not.toBeInTheDocument();
+    expect(screen.queryByText("gemini-3.1-flash-live-preview")).not.toBeInTheDocument();
     fireEvent.mouseEnter(screen.getByText("Google"));
-    fireEvent.click(screen.getByText("gemini-2.5-flash-native-audio-preview-12-2025"));
+    fireEvent.click(screen.getByText("gemini-3.1-flash-live-preview"));
     expect(voiceChat.onProviderChange).toHaveBeenCalledWith("Google");
-    expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-2.5-flash-native-audio-preview-12-2025");
+    expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-3.1-flash-live-preview");
   });
 
   it("always shows a Done button in the footer that closes the panel", () => {
@@ -163,8 +163,8 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.getByText("常用目标语")).toBeInTheDocument();
   });
 
-  it("shows the translation section for Google live-translate models with mode toggle, preset pills, and swap button", () => {
-    const voiceChat = renderPopover({
+  it("hides the translation category for Google models (including Google live-translate)", () => {
+    renderPopover({
       voiceChatProvider: "Google",
       voiceChatModel: "gemini-3.5-live-translate-preview",
       voiceChatLiveTranslate: true,
@@ -180,21 +180,15 @@ describe("VoiceCallSettingsPopover", () => {
     });
     openPanel();
     fireEvent.mouseEnter(screen.getByText("Google"));
-    fireEvent.mouseEnter(screen.getByText("🌐 同传与复刻"));
-    expect(screen.getByText("双向互翻 ⇄")).toBeInTheDocument();
-    expect(screen.getByText("常用语对")).toBeInTheDocument();
-    
-    // Preset pill click
-    fireEvent.click(screen.getByText("中 ⇄ 日"));
-    expect(voiceChat.onPresetLanguagePairSelect).toHaveBeenCalledWith("zh-Hans", "ja");
+    // 同传与复刻 is a DashScope LiveTranslate-only feature; Google models never show it.
+    expect(screen.queryByText("🌐 同传与复刻")).not.toBeInTheDocument();
+  });
 
-    // Swap button click
-    fireEvent.click(screen.getByTitle("一键颠倒语言"));
-    expect(voiceChat.onSwapLanguages).toHaveBeenCalledTimes(1);
-
-    // Mode switch click
-    fireEvent.click(screen.getByText("单向翻译 →"));
-    expect(voiceChat.onTranslationModeChange).toHaveBeenCalledWith("unidirectional");
+  it("hides the translation category for DashScope voice models (omni / audio)", () => {
+    renderPopover(); // DashScope qwen3.5-omni-plus-realtime by default
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("DashScope"));
+    expect(screen.queryByText("🌐 同传与复刻")).not.toBeInTheDocument();
   });
 
   it("shows target language only UI for DashScope live-translate models in Translate category", () => {

@@ -3,7 +3,6 @@ import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
   DASHSCOPE_PROVIDER,
-  GOOGLE_PROVIDER,
   PRESET_LANGUAGE_PAIRS,
   formatVoiceChatSecondaryLabel,
   isLiveTranslateModel as isLiveTranslateModelHelper,
@@ -100,10 +99,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     isLiveTranslateModelHelper(currentProviderName, currentModelName) ||
     (currentModelName === voiceChat.voiceChatModel && voiceChat.voiceChatLiveTranslate);
   const isDashScopeLiveTranslate = currentProviderName === DASHSCOPE_PROVIDER && isLiveTranslateModel;
-  const canShowTranslationCategory =
-    isLiveTranslateModel ||
-    currentProviderName === DASHSCOPE_PROVIDER ||
-    currentProviderName === GOOGLE_PROVIDER;
+  // The 同传与复刻 (translation & voice-clone) category is a DashScope LiveTranslate
+  // feature only. It must NOT appear for omni / audio voice models, plain chat models,
+  // or any Google model (Google live-translate included).
+  const canShowTranslationCategory = isDashScopeLiveTranslate;
 
   function handleModelSelect(provider: string, model: string) {
     setHoveredModel(model);

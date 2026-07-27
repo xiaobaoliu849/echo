@@ -1728,7 +1728,6 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertEqual(
                     response.models,
                     [
-                        "gemini-2.5-flash-native-audio-preview-12-2025",
                         "gemini-3.1-flash-live-preview",
                         "gemini-3.5-flash",
                         "gemini-3.5-live-translate-preview",
