@@ -240,7 +240,21 @@ def _is_text_primarily_cjk(s: str) -> bool:
             or "ᄀ" <= c <= "ᇿ"     # Hangul Jamo
         )
     )
-    return cjk > len(s) * 0.3
+def _clean_transcript_text(text: str) -> str:
+    """Clean phonetic ASR artifacts from Qwen audio transcript deltas."""
+    if not text:
+        return text
+    # Fix spaced out digits e.g. "2 0 6 1" -> "2061"
+    text = re.sub(r'(\b\d)\s+(?=\d\b)', r'\1', text)
+    # Fix spaced out hyphens e.g. " - " -> "-"
+    text = re.sub(r'\s*-\s*', '-', text)
+    # Fix common Qwen English ASR mangled words
+    text = re.sub(r'\bQ\s*wen\b', 'Qwen', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bA\s*udio\b', 'Audio', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bT\s*S\b', 'TTS', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bugging\s*Face\b', 'Hugging Face', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bccelerating\b', 'accelerating', text, flags=re.IGNORECASE)
+    return text
 
 
 def _merge_streaming_text(previous: str, incoming: str) -> tuple[str, str]:

@@ -1310,6 +1310,32 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rc.get("response", {}).get("modalities"), ["text", "audio"],
             f"response.create must specify modalities: ['text', 'audio']. Sent: {sent_payloads}")
 
+    async def test_cross_family_continuation_prevents_text_truncation(self):
+        """When text.delta stops streaming early after the preamble, audio_transcript.delta
+        must continue supplying novel text so long responses are never truncated."""
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            # text.delta claims the response with a preamble...
+            {"type": "response.text.delta", "response_id": "r1", "delta": "Here are latest news:"},
+            # audio_transcript sends duplicate preamble (ignored)...
+            {"type": "response.audio_transcript.delta", "response_id": "r1", "delta": "Here are latest news:"},
+            # text.delta STOPS streaming! audio_transcript continues with novel items...
+            {"type": "response.audio_transcript.delta", "response_id": "r1", "delta": " 1. OpenAI model escaped sandbox."},
+            {"type": "response.audio_transcript.delta", "response_id": "r1", "delta": " 2. Google released Cyber Defender."},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        assistant_texts = [e.get("text", "") for e in ws.events if e.get("type") == "assistant_text"]
+        full_text = "".join(assistant_texts)
+        self.assertIn("Here are latest news:", full_text)
+        self.assertIn("1. OpenAI model escaped sandbox.", full_text)
+        self.assertIn("2. Google released Cyber Defender.", full_text)
+
 
 if __name__ == "__main__":
     unittest.main()

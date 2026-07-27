@@ -21,6 +21,7 @@ from .realtime_constants import (
     QWEN_AUDIO_REALTIME_VOICES,
     DEFAULT_QWEN_AUDIO_REALTIME_VOICE,
     _audio_energy_qwen,
+    _clean_transcript_text,
     _is_dashscope_audio_realtime_model,
     _merge_streaming_text,
     _normalize_dashscope_realtime_voice,
@@ -610,18 +611,29 @@ class QwenAudioRealtimeMixin:
                 if gated_tool_turn_id or not delta:
                     continue
                 state = response_delta_family_state.setdefault(
-                    response_id, {"decided": "", "held_audio": ""}
+                    response_id, {"decided": "", "held_audio": "", "accumulated_text": ""}
                 )
+                if family == "audio_transcript":
+                    delta = _clean_transcript_text(delta)
                 decided_family = state["decided"]
+                deltas_to_emit: list[str] = []
                 if decided_family:
-                    if family != decided_family:
-                        # Duplicate content stream for this response; drop it.
-                        continue
-                    deltas_to_emit = [delta]
+                    if family == decided_family:
+                        deltas_to_emit = [delta]
+                    else:
+                        # Cross-family continuation: if text.delta claimed the response but stopped
+                        # streaming, allow audio_transcript delta if it contains novel text.
+                        acc = state.get("accumulated_text", "")
+                        _, novel = _merge_streaming_text(acc, delta)
+                        if novel:
+                            deltas_to_emit = [novel]
+                        else:
+                            continue
                 elif family == "text":
                     # Clean LLM text claims the response immediately; any held
                     # audio_transcript delta is discarded.
                     state["decided"] = "text"
+                    state["held_audio"] = ""
                     deltas_to_emit = [delta]
                 elif not state["held_audio"]:
                     # First audio_transcript delta: hold it for one event so a
@@ -635,9 +647,16 @@ class QwenAudioRealtimeMixin:
                     deltas_to_emit = [state["held_audio"], delta]
                     state["held_audio"] = ""
                 for emit_delta in deltas_to_emit:
+                    if not emit_delta:
+                        continue
+                    acc = state.get("accumulated_text", "")
+                    new_acc, novel = _merge_streaming_text(acc, emit_delta)
+                    if not novel:
+                        continue
+                    state["accumulated_text"] = new_acc
                     payload = {
                         "type": "assistant_text",
-                        "text": emit_delta,
+                        "text": novel,
                         "response_id": response_id,
                     }
                     if not _user_transcript_emitted:
