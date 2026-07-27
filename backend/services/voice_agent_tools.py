@@ -37,10 +37,9 @@ SEARCH_TOTAL_TIMEOUT_SECONDS = 15.0
 # poor recall for fresh news — so this is the path that actually answers
 # current-event questions for mainland users without a VPN.
 LLM_SEARCH_TIMEOUT_SECONDS = 20.0
-# qwen-flash: cheapest + fastest search-capable model (enable_search verified
-# live 2026-07-27 — correct answer with citations for same-week news), the
-# right fit for a latency-sensitive voice-turn fallback.
-LLM_SEARCH_FALLBACK_MODEL = "qwen-flash"
+# qwen3.7-flash: lower output cost (0.8元/百万 tokens vs 1.5元 for qwen-flash),
+# supports context caching (0.04元/百万), and strong search synthesis quality.
+LLM_SEARCH_FALLBACK_MODEL = "qwen3.7-flash"
 
 # Query-term extraction for the scraped-source relevance check.
 _LATIN_TERM_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+.#-]{2,}")
@@ -616,11 +615,11 @@ class VoiceAgentToolService:
             logger.info("llm_web_search_fallback skipped: no DashScope api_key/base_url")
             return []
 
-        # Try the configured chat model first, then a known search-capable one
-        # (some configured models may not support enable_search).
+        # Try the configured chat model first, then qwen3.7-flash, then qwen-flash.
         candidate_models = [configured_model] if configured_model else []
-        if LLM_SEARCH_FALLBACK_MODEL not in candidate_models:
-            candidate_models.append(LLM_SEARCH_FALLBACK_MODEL)
+        for model_option in [LLM_SEARCH_FALLBACK_MODEL, "qwen-flash"]:
+            if model_option not in candidate_models:
+                candidate_models.append(model_option)
 
         messages = [
             {
