@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildVoiceChatSessionConfig,
   buildVoiceChatWebSocketUrl,
@@ -174,6 +174,12 @@ export default function useVoiceChat({
   const voiceChatVoiceOptions = useMemo(
     () => formatRealtimeVoiceOptions(voiceChatProvider, language, voiceChatModel),
     [language, voiceChatProvider, voiceChatModel]
+  );
+  // Voice list for an arbitrary (possibly uncommitted) provider/model so pickers
+  // can preview voices before committing the selection.
+  const voiceChatVoiceOptionsFor = useCallback(
+    (provider: string, model: string) => formatRealtimeVoiceOptions(provider, language, model),
+    [language]
   );
   const voiceChatTargetLanguageOptions = useMemo(
     () => formatLiveTranslateLanguageOptions(language),
@@ -1746,6 +1752,7 @@ export default function useVoiceChat({
     voiceChatVoice,
     voiceChatVoiceLabel,
     voiceChatVoiceOptions,
+    voiceChatVoiceOptionsFor,
     voiceChatLiveTranslate,
     voiceChatTranslationMode,
     voiceChatSourceLanguageCode,

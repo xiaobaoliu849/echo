@@ -77,7 +77,7 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
   return t("实时通话", "Realtime call");
 }
 
-function buildModelChoiceValue(provider: string, model: string): string {
+export function buildModelChoiceValue(provider: string, model: string): string {
   return `${provider}${MODEL_CHOICE_SEPARATOR}${model}`;
 }
 

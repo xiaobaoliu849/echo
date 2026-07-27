@@ -113,6 +113,7 @@ export function createTtsController(
 export function createVoiceChatController(
   overrides: Partial<UseVoiceChatResult> = {}
 ): UseVoiceChatResult {
+  const voiceOptions = overrides.voiceChatVoiceOptions ?? [{ value: "Puck", label: "Puck" }];
   return {
     voiceChatProvider: "Google",
     voiceChatProviderOptions: ["Google"],
@@ -123,7 +124,8 @@ export function createVoiceChatController(
     ],
     voiceChatVoice: "Puck",
     voiceChatVoiceLabel: "Puck",
-    voiceChatVoiceOptions: [{ value: "Puck", label: "Puck" }],
+    voiceChatVoiceOptions: voiceOptions,
+    voiceChatVoiceOptionsFor: (_provider: string, _model: string) => voiceOptions,
     voiceChatLiveTranslate: false,
     voiceChatTranslationMode: "bidirectional",
     voiceChatSourceLanguageCode: "zh-Hans",

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
-import { formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
+import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
   DASHSCOPE_PROVIDER,
   PRESET_LANGUAGE_PAIRS,
@@ -57,7 +57,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       for (const m of group.models) {
         providerMap.set(m, {
           model: m,
-          value: `${group.provider}\u001f${m}`,
+          value: buildModelChoiceValue(group.provider, m),
           isRealtime: true,
         });
       }
@@ -84,7 +84,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       provider,
       models: Array.from(modelMap.values()),
     }));
-  }, [chat, voiceChat.voiceChatRealtimeChoicesByProvider]);
+  }, [chat?.chatModelChoices, voiceChat.voiceChatRealtimeChoicesByProvider]);
 
   const currentProviderName = activeProvider || (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
   const currentProviderGroup = providerGroups.find((g) => g.provider === currentProviderName) || providerGroups[0];
@@ -95,6 +95,35 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     (chat ? chat.chatModel : "");
   const isCurrentModelRealtime = isVoiceRealtimeModel(currentProviderName, currentModelName);
 
+  // Realtime model whose voices the Level-3 list previews while the user browses
+  // the cascade; empty when the browsed provider has no realtime models.
+  const previewModel = useMemo(() => {
+    if (hoveredModel && isVoiceRealtimeModel(currentProviderName, hoveredModel)) {
+      return hoveredModel;
+    }
+    if (
+      currentProviderName === voiceChat.voiceChatProvider &&
+      isVoiceRealtimeModel(currentProviderName, voiceChat.voiceChatModel)
+    ) {
+      return voiceChat.voiceChatModel;
+    }
+    const realtimeGroup = voiceChat.voiceChatRealtimeChoicesByProvider.find(
+      (g) => g.provider === currentProviderName
+    );
+    return realtimeGroup?.models[0] || "";
+  }, [
+    hoveredModel,
+    currentProviderName,
+    voiceChat.voiceChatProvider,
+    voiceChat.voiceChatModel,
+    voiceChat.voiceChatRealtimeChoicesByProvider,
+  ]);
+
+  const previewVoiceOptions = useMemo(
+    () => voiceChat.voiceChatVoiceOptionsFor(currentProviderName, previewModel),
+    [voiceChat.voiceChatVoiceOptionsFor, currentProviderName, previewModel]
+  );
+
   const isLiveTranslateModel =
     isLiveTranslateModelHelper(currentProviderName, currentModelName) ||
     (currentModelName === voiceChat.voiceChatModel && voiceChat.voiceChatLiveTranslate);
@@ -103,19 +132,24 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   // feature only. It must NOT appear for omni / audio voice models, plain chat models,
   // or any Google model (Google live-translate included).
   const canShowTranslationCategory = isDashScopeLiveTranslate;
+  const canShowVoiceCategory = Boolean(previewModel);
 
-  function handleModelSelect(provider: string, model: string) {
-    setHoveredModel(model);
+  function commitProviderModel(provider: string, model: string) {
     if (chat) {
       if (provider !== chat.chatProvider) {
         chat.onProviderChange(provider);
       }
-      chat.onModelChoiceChange(`${provider}\u001f${model}`);
+      chat.onModelChoiceChange(buildModelChoiceValue(provider, model));
     }
     if (provider !== voiceChat.voiceChatProvider) {
       voiceChat.onProviderChange(provider);
     }
     voiceChat.onModelChange(model);
+  }
+
+  function handleModelSelect(provider: string, model: string) {
+    setHoveredModel(model);
+    commitProviderModel(provider, model);
 
     const isRealtimeChoice = isVoiceRealtimeModel(provider, model);
     const isTranslateChoice = isLiveTranslateModelHelper(provider, model);
@@ -328,17 +362,19 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
               {/* Option Shortcuts for Voice & Translation Settings */}
               <div style={{ marginTop: 6, paddingTop: 4, borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 2 }}>
-                <button
-                  type="button"
-                  className={`vsVoiceSettingsRow${activeCategory === "voice" ? " selected" : ""}`}
-                  onMouseEnter={() => setActiveCategory("voice")}
-                  onClick={() => setActiveCategory("voice")}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                    <span className="vsVoiceSettingsRowLabel">🎤 {t("音色设定", "Voices")}</span>
-                    <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
-                  </div>
-                </button>
+                {canShowVoiceCategory ? (
+                  <button
+                    type="button"
+                    className={`vsVoiceSettingsRow${activeCategory === "voice" ? " selected" : ""}`}
+                    onMouseEnter={() => setActiveCategory("voice")}
+                    onClick={() => setActiveCategory("voice")}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                      <span className="vsVoiceSettingsRowLabel">🎤 {t("音色设定", "Voices")}</span>
+                      <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
+                    </div>
+                  </button>
+                ) : null}
                 {canShowTranslationCategory ? (
                   <button
                     type="button"
@@ -361,13 +397,15 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
             <div className={`vsVoiceLevel3Flyout${flyoutToLeft ? " flyLeft" : ""}`}>
               {/* Category Tab Bar at top of Level 3 */}
               <div className="vsCascadingTabBar">
-                <button
-                  type="button"
-                  className={`vsCascadingTabItem${activeCategory === "voice" ? " active" : ""}`}
-                  onClick={() => setActiveCategory("voice")}
-                >
-                  🎤 {t("音色设定", "Voices")}
-                </button>
+                {canShowVoiceCategory ? (
+                  <button
+                    type="button"
+                    className={`vsCascadingTabItem${activeCategory === "voice" ? " active" : ""}`}
+                    onClick={() => setActiveCategory("voice")}
+                  >
+                    🎤 {t("音色设定", "Voices")}
+                  </button>
+                ) : null}
                 {canShowTranslationCategory ? (
                   <button
                     type="button"
@@ -399,16 +437,22 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     </div>
                   ) : null}
                   <div className="vsVoiceSettingsList" style={{ maxHeight: 300, overflowY: "auto" }}>
-                    {voiceChat.voiceChatVoiceOptions.map((item) => (
+                    {previewVoiceOptions.map((item) => (
                       <button
                         key={item.value}
                         type="button"
                         className={`vsVoiceSettingsRow${
-                          !voiceChat.voiceChatEnableVoiceClone && item.value === voiceChat.voiceChatVoice
+                          !voiceChat.voiceChatEnableVoiceClone &&
+                          item.value === voiceChat.voiceChatVoice &&
+                          currentProviderName === voiceChat.voiceChatProvider &&
+                          previewModel === voiceChat.voiceChatModel
                             ? " selected"
                             : ""
                         }`}
                         onClick={() => {
+                          if (previewModel) {
+                            commitProviderModel(currentProviderName, previewModel);
+                          }
                           if (voiceChat.voiceChatEnableVoiceClone) {
                             voiceChat.onVoiceCloneToggle?.(false);
                           }
