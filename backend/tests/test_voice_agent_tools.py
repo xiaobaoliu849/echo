@@ -436,7 +436,7 @@ class VoiceAgentToolServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(client.requests), 2)
         models_tried = [req["json"]["model"] for req in client.requests]  # type: ignore[index]
-        self.assertEqual(models_tried, ["qwen3.5-plus", "qwen3.7-flash"])
+        self.assertEqual(models_tried, ["qwen3.5-plus", "qwen-flash"])
         self.assertEqual(sources[0]["snippet"], "兜底答案")
 
     async def test_llm_web_search_fallback_defaults_model_when_unset(self) -> None:
@@ -466,7 +466,7 @@ class VoiceAgentToolServiceTests(unittest.IsolatedAsyncioTestCase):
             sources = await service._llm_web_search_fallback("查询")
 
         self.assertEqual(len(client.requests), 1)
-        self.assertEqual(client.requests[0]["json"]["model"], "qwen3.7-flash")  # type: ignore[index]
+        self.assertEqual(client.requests[0]["json"]["model"], "qwen-flash")  # type: ignore[index]
         self.assertEqual(sources[0]["snippet"], "答案")
 
     async def test_llm_web_search_fallback_unconfigured_returns_empty(self) -> None:
