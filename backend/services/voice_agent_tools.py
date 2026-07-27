@@ -37,7 +37,10 @@ SEARCH_TOTAL_TIMEOUT_SECONDS = 15.0
 # poor recall for fresh news — so this is the path that actually answers
 # current-event questions for mainland users without a VPN.
 LLM_SEARCH_TIMEOUT_SECONDS = 20.0
-LLM_SEARCH_FALLBACK_MODEL = "qwen-plus"
+# qwen-flash: cheapest + fastest search-capable model (enable_search verified
+# live 2026-07-27 — correct answer with citations for same-week news), the
+# right fit for a latency-sensitive voice-turn fallback.
+LLM_SEARCH_FALLBACK_MODEL = "qwen-flash"
 
 
 SendEvent = Callable[[str, Any], Awaitable[None]]
