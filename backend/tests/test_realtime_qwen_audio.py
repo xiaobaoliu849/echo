@@ -1277,6 +1277,40 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
             f"Exactly 1 user_transcript expected (second turn). Events: {event_types}")
         self.assertEqual(user_transcripts[0].get("text"), "第二轮你好")
 
+    # ---- 18: Qwen punctuation and response modalities tests -----------------
+
+    def test_qwen_instructions_include_punctuation_directive(self):
+        """_build_qwen_audio_instructions must include punctuation directive for clear sentence segmentation."""
+        instructions = RealtimeVoiceService._build_qwen_audio_instructions()
+        self.assertIn("标点符号", instructions)
+        self.assertIn("切句清晰", instructions)
+
+    async def test_response_create_specifies_explicit_modalities(self):
+        """Function call follow-up response.create must send modalities: ['text', 'audio']."""
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.output_item.added", "item": {
+                "type": "function_call", "call_id": "call_123", "name": "search_web",
+            }},
+            {"type": "response.function_call_arguments.done",
+             "call_id": "call_123", "name": "search_web",
+             "arguments": json.dumps({"query": "英伟达 微软 开源模型"})},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        sent_payloads = dash_ws.sent_payloads()
+        response_creates = [p for p in sent_payloads if p.get("type") == "response.create"]
+        self.assertTrue(len(response_creates) > 0, "response.create must be sent after tool output")
+        rc = response_creates[0]
+        self.assertEqual(rc.get("response", {}).get("modalities"), ["text", "audio"],
+            f"response.create must specify modalities: ['text', 'audio']. Sent: {sent_payloads}")
+
 
 if __name__ == "__main__":
     unittest.main()
+

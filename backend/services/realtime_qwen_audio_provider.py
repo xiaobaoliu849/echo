@@ -562,7 +562,10 @@ class QwenAudioRealtimeMixin:
                 )
                 pending_native_fc_call_ids.discard(call_id)
                 if not pending_native_fc_call_ids:
-                    await dash_ws.send(json.dumps({"type": "response.create"}))
+                    await dash_ws.send(json.dumps({
+                        "type": "response.create",
+                        "response": {"modalities": ["text", "audio"]}
+                    }))
                 continue
             if event_type == "response.audio.delta":
                 response_id = str(event.get("response_id", ""))
@@ -752,7 +755,10 @@ class QwenAudioRealtimeMixin:
                 dash_ws, call_id, json.dumps({"error": f"未知工具: {name}"})
             )
             if trigger_response:
-                await dash_ws.send(json.dumps({"type": "response.create"}))
+                await dash_ws.send(json.dumps({
+                    "type": "response.create",
+                    "response": {"modalities": ["text", "audio"]}
+                }))
             return
 
         if not query:
@@ -760,7 +766,10 @@ class QwenAudioRealtimeMixin:
                 dash_ws, call_id, json.dumps({"error": "缺少必要的查询参数"})
             )
             if trigger_response:
-                await dash_ws.send(json.dumps({"type": "response.create"}))
+                await dash_ws.send(json.dumps({
+                    "type": "response.create",
+                    "response": {"modalities": ["text", "audio"]}
+                }))
             return
 
         request = VoiceToolRequest(tool_name=tool_name, query=query, display_name=tool_name, requires_confirmation=False)
@@ -780,14 +789,20 @@ class QwenAudioRealtimeMixin:
                 dash_ws, call_id, json.dumps({"error": str(exc)})
             )
             if trigger_response:
-                await dash_ws.send(json.dumps({"type": "response.create"}))
+                await dash_ws.send(json.dumps({
+                    "type": "response.create",
+                    "response": {"modalities": ["text", "audio"]}
+                }))
             return
 
         prompt = VoiceAgentToolService.build_model_context_prompt(result)
         output = prompt if prompt.strip() else json.dumps({"status": "completed", "summary": str(result.get("answer", ""))})
         await self._send_qwen_audio_function_call_output(dash_ws, call_id, output)
         if trigger_response:
-            await dash_ws.send(json.dumps({"type": "response.create"}))
+            await dash_ws.send(json.dumps({
+                "type": "response.create",
+                "response": {"modalities": ["text", "audio"]}
+            }))
     async def _apply_qwen_audio_tool_result(
         self,
         websocket: WebSocket,
@@ -820,7 +835,10 @@ class QwenAudioRealtimeMixin:
                 "content": [{"type": "input_text", "text": prompt}],
             },
         }))
-        await dash_ws.send(json.dumps({"type": "response.create"}))
+        await dash_ws.send(json.dumps({
+            "type": "response.create",
+            "response": {"modalities": ["text", "audio"]}
+        }))
     async def stream_dashscope_audio_session(
         self,
         websocket: WebSocket,
