@@ -356,22 +356,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                 })}
               </div>
 
-              {/* Option Shortcuts for Voice & Translation Settings */}
-              <div style={{ marginTop: 6, paddingTop: 4, borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 2 }}>
-                {canShowVoiceCategory ? (
-                  <button
-                    type="button"
-                    className={`vsVoiceSettingsRow${activeCategory === "voice" ? " selected" : ""}`}
-                    onMouseEnter={() => setActiveCategory("voice")}
-                    onClick={() => setActiveCategory("voice")}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                      <span className="vsVoiceSettingsRowLabel">🎤 {t("音色设定", "Voices")}</span>
-                      <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
-                    </div>
-                  </button>
-                ) : null}
-                {canShowTranslationCategory ? (
+              {/* Shortcut to translation settings (DashScope LiveTranslate only) */}
+              {canShowTranslationCategory ? (
+                <div style={{ marginTop: 6, paddingTop: 4, borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 2 }}>
                   <button
                     type="button"
                     className={`vsVoiceSettingsRow${activeCategory === "translation" ? " selected" : ""}`}
@@ -383,8 +370,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
                     </div>
                   </button>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 

@@ -67,8 +67,8 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.getByText("全模态实时")).toBeInTheDocument();
     expect(screen.getByText("Qwen-Audio 原生实时")).toBeInTheDocument();
 
-    // Hover Level 2 Voice shortcut to open Voice flyout in Level 3
-    fireEvent.mouseEnter(screen.getByText("🎤 音色设定"));
+    // Hover a realtime model in Level 2 to auto-open the Voice flyout in Level 3
+    fireEvent.mouseEnter(screen.getByText("qwen3.5-omni-plus-realtime"));
     expect(screen.getByText("像温热的奶茶，甜甜的暖暖的")).toBeInTheDocument();
     const selectedVoice = screen.getByText("Tina · 甜甜 · 女声").closest("button");
     expect(selectedVoice).toHaveClass("selected");
@@ -78,7 +78,7 @@ describe("VoiceCallSettingsPopover", () => {
     const voiceChat = renderPopover();
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
-    fireEvent.mouseEnter(screen.getByText("🎤 音色设定"));
+    fireEvent.mouseEnter(screen.getByText("qwen3.5-omni-plus-realtime"));
     fireEvent.click(screen.getByText("Ethan · 晨煦 · 男声"));
     expect(voiceChat.onVoiceChange).toHaveBeenCalledWith("Ethan");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
