@@ -163,9 +163,10 @@ describe('ChatPage', () => {
         );
 
         expect(screen.getByTitle('通话设置')).toBeDisabled();
-        // Live-translate badge shows the language pair, not the stale TTS voice label
+        // Live-translate badge shows the target language only (source is
+        // auto-detected), not the stale TTS voice label
         expect(document.querySelector('.vsVoiceModelBadge')).toHaveTextContent(
-            'Google / gemini-3.5-live-translate-preview · 双向互翻 (English ⇄ 中文)'
+            'Google / gemini-3.5-live-translate-preview · 单向翻译 (→ 中文)'
         );
         expect(screen.getByText('原文实时转写')).toBeInTheDocument();
         expect(screen.getByText('译文：中文（简体）/ Chinese (Simplified) (zh-Hans)')).toBeInTheDocument();

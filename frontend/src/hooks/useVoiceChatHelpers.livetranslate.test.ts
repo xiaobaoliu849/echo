@@ -64,8 +64,8 @@ describe("formatVoiceChatSecondaryLabel", () => {
     expect(formatVoiceChatSecondaryLabel({ ...base, voiceCloneEnabled: true })).toBe("声音复刻 (本人音色)");
   });
 
-  it("shows the language pair instead of a stale voice label for live-translate models", () => {
-    expect(formatVoiceChatSecondaryLabel({ ...base, liveTranslate: true })).toBe("单向翻译 (中文 → English)");
+  it("shows the target language instead of a stale voice label for live-translate models", () => {
+    expect(formatVoiceChatSecondaryLabel({ ...base, liveTranslate: true })).toBe("单向翻译 (→ English)");
   });
 
   it("prioritizes Voice Clone over the language pair for live-translate models", () => {
@@ -93,10 +93,12 @@ describe("formatVoiceChatSecondaryLabel (DashScope unidirectional guard)", () =>
         model: "qwen3.5-livetranslate-flash-realtime",
         t,
       })
-    ).toBe("单向翻译 (中文 → English)");
+    ).toBe("单向翻译 (→ English)");
   });
 
-  it("keeps 双向互翻 for Google live-translate which supports it", () => {
+  it("always renders 单向翻译 for Google live-translate even if mode says bidirectional", () => {
+    // gemini-3.5-live-translate-preview only supports translation_config with a
+    // single target language; the label must never claim 双向互翻 for it.
     expect(
       formatVoiceChatSecondaryLabel({
         liveTranslate: true,
@@ -109,6 +111,6 @@ describe("formatVoiceChatSecondaryLabel (DashScope unidirectional guard)", () =>
         model: "gemini-3.5-live-translate-preview",
         t,
       })
-    ).toBe("双向互翻 (中文 ⇄ English)");
+    ).toBe("单向翻译 (→ English)");
   });
 });

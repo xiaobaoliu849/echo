@@ -83,15 +83,6 @@ export const GOOGLE_REALTIME_VOICES = [
 
 export type TranslationMode = "bidirectional" | "unidirectional";
 
-export const PRESET_LANGUAGE_PAIRS = [
-  { label: "中 ⇄ 英", source: "zh-Hans", target: "en" },
-  { label: "中 ⇄ 日", source: "zh-Hans", target: "ja" },
-  { label: "中 ⇄ 韩", source: "zh-Hans", target: "ko" },
-  { label: "中 ⇄ 法", source: "zh-Hans", target: "fr" },
-  { label: "中 ⇄ 德", source: "zh-Hans", target: "de" },
-  { label: "中 ⇄ 西", source: "zh-Hans", target: "es" },
-];
-
 export const LIVE_TRANSLATE_LANGUAGE_PRIORITY = [
   "zh-Hans",
   "zh-Hant",
@@ -213,20 +204,24 @@ export function formatTranslationSummary(
   sourceCode: string,
   targetCode: string
 ): string {
-  const src = getLanguageShortLabel(sourceCode);
   const tgt = getLanguageShortLabel(targetCode);
   if (mode === "bidirectional") {
+    const src = getLanguageShortLabel(sourceCode);
     return `双向互翻 (${src} ⇄ ${tgt})`;
   }
-  return `单向翻译 (${src} → ${tgt})`;
+  // Unidirectional live-translate auto-detects the source language, so the
+  // summary shows only the target (e.g. "单向翻译 (→ English)"). Rendering a
+  // source→target pair would imply a fixed direction the user never chose.
+  return `单向翻译 (→ ${tgt})`;
 }
 
 /**
  * The secondary label shown next to the model name (settings pill + live-call badge).
- * Voice Clone takes precedence; live-translate models show the language pair
+ * Voice Clone takes precedence; live-translate models show the target language
  * instead of a (meaningless) TTS voice label.
- * DashScope LiveTranslate only supports unidirectional mode (single target_language
- * per the API), so the pair is always rendered as 单向翻译 for it.
+ * Both DashScope and Google live-translate are unidirectional (single
+ * target_language, source auto-detected), so the label is always rendered as
+ * 单向翻译 (→ target) and never a source→target pair.
  */
 export function formatVoiceChatSecondaryLabel(params: {
   liveTranslate: boolean;
@@ -254,10 +249,9 @@ export function formatVoiceChatSecondaryLabel(params: {
     if (voiceCloneEnabled) {
       return t("声音复刻 (本人)", "Voice Clone");
     }
-    const effectiveMode: TranslationMode =
-      provider === DASHSCOPE_PROVIDER && isLiveTranslateModel(provider, model)
-        ? "unidirectional"
-        : translationMode;
+    const effectiveMode: TranslationMode = isLiveTranslateModel(provider, model)
+      ? "unidirectional"
+      : translationMode;
     return formatTranslationSummary(effectiveMode, sourceLanguageCode, targetLanguageCode);
   }
   return voiceCloneEnabled

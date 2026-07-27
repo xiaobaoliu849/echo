@@ -184,6 +184,36 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.queryByText("🌐 同传与复刻")).not.toBeInTheDocument();
   });
 
+  it("shows unidirectional-only translation UI for Google live-translate", () => {
+    const voiceChat = renderPopover({
+      voiceChatProvider: "Google",
+      voiceChatModel: "gemini-3.5-live-translate-preview",
+      voiceChatLiveTranslate: true,
+      voiceChatTranslationMode: "unidirectional",
+      voiceChatTargetLanguageCode: "en",
+      voiceChatTargetLanguageOptions: [
+        { value: "zh-Hans", label: "中文 / Chinese (Simplified) (zh-Hans)" },
+        { value: "en", label: "英语 / English (en)" },
+        { value: "ja", label: "日语 / Japanese (ja)" },
+      ],
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "Google", models: ["gemini-3.1-flash-live-preview", "gemini-3.5-live-translate-preview"] },
+      ],
+    });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    fireEvent.mouseEnter(screen.getByText("gemini-3.5-live-translate-preview"));
+
+    expect(screen.getByText("单向同传 (翻译为目标语言)")).toBeInTheDocument();
+    expect(screen.getByText("自动识别输入语言（70+ 种）· 输出自动复刻说话人音色")).toBeInTheDocument();
+    expect(screen.queryByText("双向互翻 ⇄")).not.toBeInTheDocument();
+    expect(screen.queryByText("源语言")).not.toBeInTheDocument();
+    expect(screen.getByText("🎯 目标同传语言")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("日语"));
+    expect(voiceChat.onTargetLanguageCodeChange).toHaveBeenCalledWith("ja");
+  });
+
   it("hides the translation category for DashScope voice models (omni / audio)", () => {
     renderPopover(); // DashScope qwen3.5-omni-plus-realtime by default
     openPanel();
@@ -202,7 +232,7 @@ describe("VoiceCallSettingsPopover", () => {
     });
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
-    fireEvent.mouseEnter(screen.getByText("🌐 同传与复刻"));
+    fireEvent.mouseEnter(screen.getByText("qwen3.5-livetranslate-flash-realtime"));
     expect(screen.getByText("单向同传 (翻译为目标语言)")).toBeInTheDocument();
     expect(screen.queryByText("双向互翻 ⇄")).not.toBeInTheDocument();
     expect(screen.getByText("🎯 目标同传语言")).toBeInTheDocument();
@@ -254,7 +284,7 @@ describe("VoiceCallSettingsPopover", () => {
     });
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
-    fireEvent.mouseEnter(screen.getByText("🌐 同传与复刻"));
+    fireEvent.mouseEnter(screen.getByText("qwen3.5-livetranslate-flash-realtime"));
     fireEvent.click(screen.getByLabelText("同语回放"));
     expect(voiceChat.onEchoTargetLanguageChange).toHaveBeenCalledWith(false);
   });
@@ -269,7 +299,7 @@ describe("VoiceCallSettingsPopover", () => {
     });
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
-    fireEvent.mouseEnter(screen.getByText("🌐 同传与复刻"));
+    fireEvent.mouseEnter(screen.getByText("qwen3.5-livetranslate-flash-realtime"));
     expect(screen.getByText("声音复刻 (用本人音色朗读)")).toBeInTheDocument();
     expect(screen.getByText("单人实时复刻")).toBeInTheDocument();
     expect(screen.getByText("动态实时复刻")).toBeInTheDocument();
