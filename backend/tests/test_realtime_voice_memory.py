@@ -494,7 +494,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
     def test_google_live_translate_config_uses_translation_settings_only(self) -> None:
         with patch("services.realtime_google_provider.types", new=_FakeGoogleTypes):
             config = RealtimeVoiceService._build_live_translate_config(
-                "zh-Hans", True, translation_mode="target_only"
+                "zh-Hans", True
             )
 
         self.assertEqual(config.kwargs["response_modalities"], ["AUDIO"])

@@ -229,34 +229,11 @@ class GoogleRealtimeMixin:
     def _build_live_translate_config(
         target_language_code: str,
         echo_target_language: bool,
-        translation_mode: str = "bidirectional",
-        source_language_code: str = "zh-Hans",
-        voice: str = DEFAULT_GOOGLE_REALTIME_VOICE,
     ):
+        # Gemini Live Translate only accepts translation_config (target language +
+        # echo toggle). system_instruction / speech_config are unsupported: input
+        # language is auto-detected and output voice replicates the speaker.
         target = (target_language_code or "en").strip() or "en"
-        source = (source_language_code or "zh-Hans").strip() or "zh-Hans"
-        selected_mode = (translation_mode or "bidirectional").strip().lower()
-
-        if selected_mode == "bidirectional":
-            system_inst = (
-                f"You are a real-time bi-directional simultaneous interpreter between {source} and {target}. "
-                f"When you hear speech in {source}, output only the fluent spoken translation in {target}. "
-                f"When you hear speech in {target}, output only the fluent spoken translation in {source}. "
-                "Respond in natural, clean, spoken-style text and audio. "
-                "Do not add any commentary, greetings, explanations, or conversational filler. "
-                "Output only the translated speech directly."
-            )
-            return types.LiveConnectConfig(
-                response_modalities=["AUDIO"],
-                system_instruction=system_inst,
-                input_audio_transcription=types.AudioTranscriptionConfig(),
-                output_audio_transcription=types.AudioTranscriptionConfig(),
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice or DEFAULT_GOOGLE_REALTIME_VOICE)
-                    )
-                ),
-            )
 
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
@@ -994,9 +971,6 @@ class GoogleRealtimeMixin:
             self._build_live_translate_config(
                 target_language_code,
                 echo_target_language,
-                translation_mode=translation_mode,
-                source_language_code=source_language_code,
-                voice=voice,
             )
             if is_live_translate
             else self._build_live_config(voice, self._build_realtime_instructions())
