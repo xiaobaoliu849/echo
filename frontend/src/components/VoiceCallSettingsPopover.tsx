@@ -89,35 +89,31 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const currentProviderName = activeProvider || (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
   const currentProviderGroup = providerGroups.find((g) => g.provider === currentProviderName) || providerGroups[0];
 
-  const currentModelName =
-    hoveredModel ||
-    voiceChat.voiceChatModel ||
-    (chat ? chat.chatModel : "");
+  // Model being browsed for the browsed provider: the hovered model, else the
+  // committed model only when it belongs to that provider (no mixed pairs).
+  const currentModelName = useMemo(() => {
+    if (hoveredModel) return hoveredModel;
+    if (currentProviderName === voiceChat.voiceChatProvider && voiceChat.voiceChatModel) {
+      return voiceChat.voiceChatModel;
+    }
+    if (chat && currentProviderName === chat.chatProvider && chat.chatModel) {
+      return chat.chatModel;
+    }
+    return "";
+  }, [hoveredModel, currentProviderName, voiceChat.voiceChatProvider, voiceChat.voiceChatModel, chat?.chatProvider, chat?.chatModel]);
   const isCurrentModelRealtime = isVoiceRealtimeModel(currentProviderName, currentModelName);
 
   // Realtime model whose voices the Level-3 list previews while the user browses
   // the cascade; empty when the browsed provider has no realtime models.
   const previewModel = useMemo(() => {
-    if (hoveredModel && isVoiceRealtimeModel(currentProviderName, hoveredModel)) {
-      return hoveredModel;
-    }
-    if (
-      currentProviderName === voiceChat.voiceChatProvider &&
-      isVoiceRealtimeModel(currentProviderName, voiceChat.voiceChatModel)
-    ) {
-      return voiceChat.voiceChatModel;
+    if (currentModelName && isVoiceRealtimeModel(currentProviderName, currentModelName)) {
+      return currentModelName;
     }
     const realtimeGroup = voiceChat.voiceChatRealtimeChoicesByProvider.find(
       (g) => g.provider === currentProviderName
     );
     return realtimeGroup?.models[0] || "";
-  }, [
-    hoveredModel,
-    currentProviderName,
-    voiceChat.voiceChatProvider,
-    voiceChat.voiceChatModel,
-    voiceChat.voiceChatRealtimeChoicesByProvider,
-  ]);
+  }, [currentModelName, currentProviderName, voiceChat.voiceChatRealtimeChoicesByProvider]);
 
   const previewVoiceOptions = useMemo(
     () => voiceChat.voiceChatVoiceOptionsFor(currentProviderName, previewModel),
