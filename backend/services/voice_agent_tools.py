@@ -42,6 +42,36 @@ LLM_SEARCH_TIMEOUT_SECONDS = 20.0
 # right fit for a latency-sensitive voice-turn fallback.
 LLM_SEARCH_FALLBACK_MODEL = "qwen-flash"
 
+# Query-term extraction for the scraped-source relevance check.
+_LATIN_TERM_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+.#-]{2,}")
+_CJK_RUN_PATTERN = re.compile(r"[一-鿿]+")
+_QUERY_STOPWORDS = frozenset({
+    "the", "and", "for", "with", "about", "what", "when", "where", "which",
+    "that", "this", "from", "your", "you", "are", "was", "were", "will",
+    "would", "can", "could", "how", "why", "who", "whom", "does", "did",
+    "has", "have", "had", "not",
+})
+
+
+def _query_terms(query: str) -> set[str]:
+    """Extract distinctive terms from a search query for relevance scoring.
+
+    Latin words (minus stopwords) are used as-is; CJK runs contribute the
+    whole run (when short) plus bigrams, so "黄仁勋" matches via "黄仁"/"仁勋"
+    and a page about the surname "黄" alone does NOT count as relevant.
+    """
+    terms: set[str] = set()
+    for word in _LATIN_TERM_PATTERN.findall(query):
+        lowered = word.lower()
+        if lowered not in _QUERY_STOPWORDS:
+            terms.add(lowered)
+    for run in _CJK_RUN_PATTERN.findall(query):
+        if 2 <= len(run) <= 4:
+            terms.add(run)
+        for i in range(len(run) - 1):
+            terms.add(run[i : i + 2])
+    return terms
+
 
 SendEvent = Callable[[str, Any], Awaitable[None]]
 ToolResultHandler = Callable[[dict[str, Any]], Awaitable[None]]
@@ -467,7 +497,7 @@ class VoiceAgentToolService:
         # When that happens, fall back to a DashScope chat model with
         # server-side web search (enable_search), which works in mainland
         # China without any VPN and is grounded on live results.
-        if self._sources_are_degenerate(sources):
+        if self._sources_are_degenerate(sources, clean_query):
             await send_event(
                 "agent_progress",
                 {
@@ -525,10 +555,16 @@ class VoiceAgentToolService:
         }
 
     @staticmethod
-    def _sources_are_degenerate(sources: list[dict[str, Any]]) -> bool:
-        """Mirror the degenerate-content rule in build_model_context_prompt:
-        no usable source at all, or the combined signal is negligible with no
-        single substantive snippet/content (>= 40 chars)."""
+    def _sources_are_degenerate(sources: list[dict[str, Any]], query: str = "") -> bool:
+        """Check if search sources are empty, low-signal, or irrelevant to query.
+
+        Sources are degenerate when:
+        1. No sources returned at all.
+        2. Total content is under 100 chars with no substantive snippet (>= 40 chars).
+        3. A query was provided but the scraped pages contain insufficient term matches
+           (e.g., query for "Jason Huang Nvidia" matching only a generic name page for "Jason",
+           or "黄仁勋" matching only a single character "黄" dictionary page).
+        """
         if not sources:
             return True
         total_content_len = sum(
@@ -537,7 +573,23 @@ class VoiceAgentToolService:
         has_substantive_source = any(
             len(str(s.get("snippet") or s.get("content") or "")) >= 40 for s in sources
         )
-        return total_content_len < 100 and not has_substantive_source
+        if total_content_len < 100 and not has_substantive_source:
+            return True
+
+        if query:
+            terms = _query_terms(query)
+            if terms:
+                combined_text = " ".join(
+                    f"{s.get('title', '')} {s.get('snippet', '')} {s.get('content', '')}"
+                    for s in sources
+                ).lower()
+                matched_terms = {t for t in terms if t in combined_text}
+                required_matches = min(2, len(terms))
+                match_ratio = len(matched_terms) / len(terms)
+                if len(matched_terms) < required_matches or (len(terms) >= 4 and match_ratio < 0.20):
+                    return True
+
+        return False
 
     async def _llm_web_search_fallback(self, query: str) -> list[dict[str, Any]]:
         """Search the live web via a DashScope chat model (``enable_search``).
@@ -1009,7 +1061,12 @@ class VoiceAgentToolService:
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "The search query in the user's language / 用用户当前语言的搜索关键词",
+                                "description": (
+                                    "搜索关键词。请提取核心实体词（如人名、公司名、技术名、事件）。"
+                                    "如果是中文/跨国科技人物或事件，请务必在关键词中包含其中文标准译名或常用名称"
+                                    "（例如：用'黄仁勋'或'黄仁勋 Jensen Huang'而非仅'Jason Huang'；"
+                                    "用'英伟达'或'Nvidia'；用'微软'或'Microsoft'），用空格分隔核心词，避免输入口语化长句。"
+                                ),
                             },
                         },
                         "required": ["query"],
@@ -1216,15 +1273,7 @@ class VoiceAgentToolService:
         # no source carries a substantive snippet/content. The 40-char bar avoids
         # suppressing a short but complete answer while still catching 1-2 char junk.
         source_list = sources if isinstance(sources, list) else []
-        total_content_len = sum(
-            len(str(s.get("content") or s.get("snippet") or ""))
-            for s in source_list
-        )
-        has_substantive_source = any(
-            len(str(s.get("snippet") or s.get("content") or "")) >= 40
-            for s in source_list
-        )
-        if total_content_len < 100 and not has_substantive_source:
+        if VoiceAgentToolService._sources_are_degenerate(source_list, query):
             return (
                 f"【搜索指令 - 搜索返回了无效结果】\n"
                 f"用户查询: {query}\n"

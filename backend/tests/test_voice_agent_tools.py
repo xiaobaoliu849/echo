@@ -276,6 +276,44 @@ class VoiceAgentToolServiceTests(unittest.IsolatedAsyncioTestCase):
             f"fallback progress must be surfaced to the UI. Events: {self.events}",
         )
 
+    async def test_run_search_falls_back_to_llm_when_scraped_sources_are_irrelevant(self) -> None:
+        class IrrelevantResearchService:
+            async def search(self, query: str, *, limit: int = 3) -> list[dict[str, str]]:
+                return [{"title": "Jason (英文名字) 百度百科", "url": "https://example.com/jason"}]
+
+            async def fetch_document(self, url: str, **kwargs: object) -> ResearchDocument:
+                return ResearchDocument(
+                    title="Jason (英文名字) 百度百科",
+                    url=url,
+                    snippet="Jason是源自古希腊神话的英语男性人名。",
+                    content="Jason是源自古希腊神话的英语人名，用来作为英文名字。",
+                    score=0.7,
+                    source_type="web_search",
+                )
+
+        fallback_sources = [
+            {
+                "title": "联网搜索摘要（qwen-flash）",
+                "uri": "",
+                "snippet": "黄仁勋（Jensen Huang）与微软签署了合作框架。",
+                "content": "黄仁勋（Jensen Huang）与微软签署了合作框架。",
+                "source_type": "llm_web_search",
+                "score": 0.85,
+            }
+        ]
+        service = VoiceAgentToolService(research_service=IrrelevantResearchService())  # type: ignore[arg-type]
+        service._llm_web_search_fallback = unittest.mock.AsyncMock(return_value=fallback_sources)  # type: ignore[method-assign]
+
+        result = await service.run_search(
+            "Jason Huang Nvidia Microsoft agreement open source models",
+            send_event=self._send_event,
+            turn_id="t2",
+        )
+
+        service._llm_web_search_fallback.assert_awaited_once()  # type: ignore[union-attr]
+        self.assertEqual(result["source_count"], 1)
+        self.assertIn("黄仁勋", result["sources"][0]["snippet"])
+
     async def test_run_search_returns_no_results_when_fallback_also_empty(self) -> None:
         service = VoiceAgentToolService(research_service=EmptyResearchService())  # type: ignore[arg-type]
         service._llm_web_search_fallback = unittest.mock.AsyncMock(return_value=[])  # type: ignore[method-assign]
@@ -286,6 +324,22 @@ class VoiceAgentToolServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["source_count"], 0)
         self.assertIn("NO RESULTS", result["answer"])
 
+    def test_query_terms_extraction(self) -> None:
+        from services.voice_agent_tools import _query_terms
+
+        terms = _query_terms("Jason Huang Nvidia Microsoft agreement")
+        self.assertIn("jason", terms)
+        self.assertIn("huang", terms)
+        self.assertIn("nvidia", terms)
+        self.assertIn("microsoft", terms)
+        self.assertNotIn("the", terms)
+
+        cjk_terms = _query_terms("黄仁勋 微软")
+        self.assertIn("黄仁勋", cjk_terms)
+        self.assertIn("黄仁", cjk_terms)
+        self.assertIn("仁勋", cjk_terms)
+        self.assertIn("微软", cjk_terms)
+
     def test_sources_are_degenerate_rules(self) -> None:
         self.assertTrue(VoiceAgentToolService._sources_are_degenerate([]))
         self.assertTrue(VoiceAgentToolService._sources_are_degenerate(
@@ -293,6 +347,17 @@ class VoiceAgentToolServiceTests(unittest.IsolatedAsyncioTestCase):
         ))
         self.assertFalse(VoiceAgentToolService._sources_are_degenerate(
             [{"snippet": "黄仁勋签署了支持开源模型的协议，涉及多个开源社区项目，协议内容覆盖模型权重开放与商用授权条款。", "content": ""}],
+            query="黄仁勋",
+        ))
+        # Irrelevant page about English name "Jason" when searching for "Jason Huang Nvidia Microsoft"
+        self.assertTrue(VoiceAgentToolService._sources_are_degenerate(
+            [{"title": "Jason (英文名字) 百度百科", "snippet": "Jason是源自古希腊神话的英语男性人名。", "content": "Jason是源自古希腊神话的英语人名。"}],
+            query="Jason Huang Nvidia Microsoft agreement",
+        ))
+        # Irrelevant page about surname "黄" when searching for "黄仁勋"
+        self.assertTrue(VoiceAgentToolService._sources_are_degenerate(
+            [{"title": "黄 (汉字) 百度百科", "snippet": "黄，汉语常用字，读作huáng，最早见于商代甲骨文。", "content": "黄字本义为佩玉。"}],
+            query="黄仁勋",
         ))
 
     def test_extract_search_citations_shapes(self) -> None:
