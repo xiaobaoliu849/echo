@@ -240,6 +240,9 @@ def _is_text_primarily_cjk(s: str) -> bool:
             or "ᄀ" <= c <= "ᇿ"     # Hangul Jamo
         )
     )
+    return cjk > len(s) * 0.3
+
+
 def _clean_transcript_text(text: str) -> str:
     """Clean phonetic ASR artifacts from Qwen audio transcript deltas."""
     if not text:
