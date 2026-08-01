@@ -27,6 +27,16 @@ QWEN_COMPATIBLE_CHAT_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/ch
 # Alternate specialized endpoint for direct ASR tasks
 QWEN_ASR_DIRECT_URL = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription"
 
+# Qwen-Audio-3.0-ASR-Flash (Fun-ASR Flash) — multimodal-generation API.
+# Supports word-level timestamps, instant hotwords (vocabulary) and language hints.
+# https://help.aliyun.com/zh/model-studio/non-real-time-speech-recognition-for-fun-asr-flash
+QWEN_AUDIO_ASR_MODEL = "qwen-audio-3.0-asr-flash"
+QWEN_AUDIO_ASR_PATH = "/services/aigc/multimodal-generation/generation"
+# Base64 data-URI uploads are limited to 10MB by the API.
+QWEN_AUDIO_ASR_MAX_BASE64_BYTES = 10 * 1024 * 1024
+# language_hints accepts at most 4 codes for this model family.
+QWEN_AUDIO_ASR_MAX_LANGUAGE_HINTS = 4
+
 # Xiaomi MiMo ASR (OpenAI-compatible)
 MIMO_ASR_MODEL = "mimo-v2.5-asr"
 MIMO_DEFAULT_CHAT_URL = "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions"
@@ -318,7 +328,14 @@ class TranscriptionService:
         job.updated_at = self._now_iso()
         return self._write_job(job)
 
-    async def transcribe_file(self, file_path: str | Path, provider: str | None = None) -> dict:
+    async def transcribe_file(
+        self,
+        file_path: str | Path,
+        provider: str | None = None,
+        *,
+        language_hints: list[str] | None = None,
+        vocabulary: dict[str, int] | None = None,
+    ) -> dict:
         """Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}."""
         path = Path(file_path).expanduser().resolve()
         self._validate_file(path)
@@ -336,7 +353,17 @@ class TranscriptionService:
                 if not api_key:
                     raise ValueError("OpenAI API key not configured.")
                 return await self._transcribe_with_openai_whisper(path, api_key)
-            elif provider == "dashscope" or provider == "qwen":
+            elif provider in {"dashscope", "qwen", "qwen-audio", "qwen-audio-asr", "funasr", "fun-asr"}:
+                api_key = self._dashscope_key()
+                if not api_key:
+                    raise ValueError("DashScope API key not configured.")
+                return await self._transcribe_with_qwen_audio_asr(
+                    path,
+                    api_key,
+                    language_hints=language_hints,
+                    vocabulary=vocabulary,
+                )
+            elif provider in {"qwen-legacy", "qwen3-asr"}:
                 api_key = self._dashscope_key()
                 if not api_key:
                     raise ValueError("DashScope API key not configured.")
@@ -372,20 +399,24 @@ class TranscriptionService:
         if assemblyai_key:
             return await self._transcribe_with_assemblyai(path, assemblyai_key)
 
-        # MiMo and DashScope don't support word-level timestamps
+        # Qwen-Audio-3.0-ASR-Flash also returns word-level timestamps
+        dashscope_key = self._dashscope_key()
+        if dashscope_key:
+            return await self._transcribe_with_qwen_audio_asr(
+                path,
+                dashscope_key,
+                language_hints=language_hints,
+                vocabulary=vocabulary,
+            )
+
+        # MiMo doesn't support word-level timestamps
         xiaomi_key = self._xiaomi_key()
         if xiaomi_key:
             return await self._transcribe_with_openai_asr(
                 path, xiaomi_key, self._mimo_chat_url(), MIMO_ASR_MODEL, "MiMo"
             )
 
-        dashscope_key = self._dashscope_key()
-        if dashscope_key:
-            return await self._transcribe_with_openai_asr(
-                path, dashscope_key, QWEN_COMPATIBLE_CHAT_URL, QWEN_ASR_SYNC_MODEL, "Qwen"
-            )
-
-        raise ValueError("No ASR API key configured. Set deepgram_api_key, openai_api_key, assemblyai_api_key, xiaomi_api_key, or dashscope_api_key.")
+        raise ValueError("No ASR API key configured. Set deepgram_api_key, openai_api_key, assemblyai_api_key, dashscope_api_key, or xiaomi_api_key.")
 
     async def _transcribe_with_openai_asr(
         self, path: Path, api_key: str, url: str, model: str, provider_name: str
@@ -463,6 +494,125 @@ class TranscriptionService:
                 duration_seconds = float(secs)
 
         return {"text": text, "duration_seconds": duration_seconds, "words": None}
+
+    async def _transcribe_with_qwen_audio_asr(
+        self,
+        path: Path,
+        api_key: str,
+        *,
+        language_hints: list[str] | None = None,
+        vocabulary: dict[str, int] | None = None,
+    ) -> dict:
+        """Transcribe with Qwen-Audio-3.0-ASR-Flash via the multimodal-generation API.
+
+        Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}.
+        Supports instant hotwords (vocabulary, weight 1-5 or 50) and up to 4 language hints.
+        """
+        audio_bytes = path.read_bytes()
+        if len(audio_bytes) > QWEN_AUDIO_ASR_MAX_BASE64_BYTES:
+            raise ValueError(
+                "Qwen-Audio ASR accepts base64 audio up to 10MB. "
+                "Use the async from-url pipeline for larger files."
+            )
+
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        extension = path.suffix.lower().lstrip(".") or "wav"
+        if extension in {"mp3", "mpga"}:
+            mime_type = "audio/mpeg"
+        else:
+            mime_type = f"audio/{extension}"
+
+        parameters: dict[str, Any] = {"format": extension}
+        if language_hints:
+            parameters["language_hints"] = language_hints[:QWEN_AUDIO_ASR_MAX_LANGUAGE_HINTS]
+        if vocabulary:
+            parameters["vocabulary"] = vocabulary
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "X-DashScope-SSE": "disable",
+        }
+        payload = {
+            "model": QWEN_AUDIO_ASR_MODEL,
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_audio",
+                                "input_audio": {
+                                    "data": f"data:{mime_type};base64,{audio_b64}"
+                                },
+                            }
+                        ],
+                    }
+                ]
+            },
+            "parameters": parameters,
+        }
+
+        url = f"{self._dashscope_async_base_url()}{QWEN_AUDIO_ASR_PATH}"
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text.strip()
+            raise RuntimeError(f"Qwen-Audio ASR request failed: {detail}") from exc
+
+        response_json = response.json()
+        output = response_json.get("output", {})
+        if not isinstance(output, dict):
+            output = {}
+        text = str(output.get("text", "")).strip()
+        if not text:
+            raise RuntimeError(f"Qwen-Audio ASR returned empty transcript: {response_json}")
+
+        words = self._extract_qwen_audio_words(output)
+
+        duration_seconds = None
+        usage = response_json.get("usage", {})
+        if isinstance(usage, dict):
+            duration = usage.get("duration")
+            if isinstance(duration, (int, float)) and duration > 0:
+                duration_seconds = float(duration)
+
+        return {"text": text, "duration_seconds": duration_seconds, "words": words}
+
+    @staticmethod
+    def _extract_qwen_audio_words(output: dict[str, Any]) -> list[dict[str, Any]] | None:
+        """Extract word-level timestamps (ms -> s) from a Qwen-Audio ASR output object."""
+        sentences: list[Any] = []
+        sentence = output.get("sentence")
+        if isinstance(sentence, dict):
+            sentences.append(sentence)
+        extra = output.get("sentences")
+        if isinstance(extra, list):
+            sentences.extend(extra)
+
+        words: list[dict[str, Any]] = []
+        for item in sentences:
+            if not isinstance(item, dict):
+                continue
+            words_raw = item.get("words")
+            if not isinstance(words_raw, list):
+                continue
+            for w in words_raw:
+                if not isinstance(w, dict):
+                    continue
+                word_text = str(w.get("text", "") or w.get("word", "")).strip()
+                begin_time = w.get("begin_time")
+                end_time = w.get("end_time")
+                if word_text and begin_time is not None and end_time is not None:
+                    words.append({
+                        "text": word_text,
+                        "start": float(begin_time) / 1000.0,
+                        "end": float(end_time) / 1000.0,
+                    })
+        return words if words else None
 
     async def _transcribe_with_deepgram(self, path: Path, api_key: str) -> dict:
         """Transcribe with Deepgram API. Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}."""

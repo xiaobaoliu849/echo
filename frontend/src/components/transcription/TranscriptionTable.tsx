@@ -27,7 +27,7 @@ type Props = {
   onCardClick: (item: HistoryItem) => void;
   onDeleteJob: (jobId: string) => void;
   onRetryJob: (jobId: string) => void;
-  onLocalTranscribe: (file: File) => Promise<void>;
+  onLocalTranscribe: (file: File, provider?: string) => Promise<void>;
   onRemoteSubmit: (url: string) => Promise<void>;
 };
 

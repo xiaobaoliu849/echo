@@ -208,14 +208,48 @@ async def transcribe_audio(
     file: UploadFile = File(...),
     provider: str | None = Query(
         default=None,
-        description="ASR provider to use: deepgram, openai/whisper, dashscope/qwen, xiaomi/mimo. Auto-selects if not specified.",
+        description=(
+            "ASR provider to use: deepgram, openai/whisper, assemblyai, "
+            "dashscope/qwen (Qwen-Audio-3.0-ASR-Flash), xiaomi/mimo, "
+            "qwen-legacy (qwen3-asr-flash). Auto-selects if not specified."
+        ),
+    ),
+    language_hints: str | None = Query(
+        default=None,
+        description="Comma-separated language codes (e.g. zh,en). Qwen-Audio ASR only, max 4.",
+    ),
+    vocabulary: str | None = Query(
+        default=None,
+        description='JSON object of instant hotwords with weights 1-5 or 50, e.g. {"通义千问": 5}. Qwen-Audio ASR only.',
     ),
 ) -> TranscriptionSyncResponse:
     suffix = _validate_upload(file)
 
     try:
+        parsed_language_hints = [
+            code.strip()
+            for code in (language_hints or "").split(",")
+            if code.strip()
+        ] or None
+        parsed_vocabulary = None
+        if vocabulary and vocabulary.strip():
+            try:
+                raw_vocabulary = json.loads(vocabulary)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"vocabulary must be a JSON object of hotword weights: {exc}") from exc
+            if not isinstance(raw_vocabulary, dict):
+                raise ValueError("vocabulary must be a JSON object of hotword weights.")
+            parsed_vocabulary = {
+                str(word): int(weight) for word, weight in raw_vocabulary.items()
+            }
+
         upload_path = await _persist_upload(file, transcription_service.jobs_dir / "uploads", suffix)
-        result = await transcription_service.transcribe_file(upload_path, provider=provider)
+        result = await transcription_service.transcribe_file(
+            upload_path,
+            provider=provider,
+            language_hints=parsed_language_hints,
+            vocabulary=parsed_vocabulary,
+        )
         transcript = result["text"]
         duration_seconds = result.get("duration_seconds")
         words_raw = result.get("words")

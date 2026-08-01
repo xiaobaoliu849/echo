@@ -136,14 +136,14 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     };
   }, [activePollingJobId, addOrUpdateJob, t]);
 
-  async function handleLocalTranscription(file: File) {
+  async function handleLocalTranscription(file: File, provider?: string) {
     setModalError(null);
     setError(null);
     setInfoMessage("");
     setIsSyncBusy(true);
 
     try {
-      const resp = await transcribeAudio(file);
+      const resp = await transcribeAudio(file, provider);
       const localJob: TranscriptionJobResponse = {
         job_id: resp.job_id || `sync_${Date.now()}`,
         mode: (resp as any).mode || "sync",

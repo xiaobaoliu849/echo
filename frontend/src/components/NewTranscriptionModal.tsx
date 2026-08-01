@@ -134,8 +134,9 @@ export const NewTranscriptionModal: React.FC<Props> = ({
                 <option value="deepgram">Deepgram (Nova-3)</option>
                 <option value="openai">OpenAI Whisper</option>
                 <option value="assemblyai">AssemblyAI</option>
+                <option value="dashscope">Qwen-Audio 3.0 ASR Flash ({t("阿里云", "Alibaba Cloud")})</option>
                 <option value="xiaomi">{t("小米 MiMo", "Xiaomi MiMo")}</option>
-                <option value="dashscope">{t("阿里 DashScope Qwen", "Alibaba DashScope Qwen")}</option>
+                <option value="qwen-legacy">Qwen3 ASR Flash ({t("旧版", "Legacy")})</option>
               </select>
               <span
                 style={{
@@ -145,8 +146,8 @@ export const NewTranscriptionModal: React.FC<Props> = ({
                 }}
               >
                 {t(
-                  "Deepgram、OpenAI Whisper 和 AssemblyAI 支持精确单词级时间戳，适合生成字幕。",
-                  "Deepgram, OpenAI Whisper, and AssemblyAI support precise word-level timestamps, ideal for subtitle generation."
+                  "Deepgram、OpenAI Whisper、AssemblyAI 和 Qwen-Audio 3.0 ASR Flash 支持精确单词级时间戳，适合生成字幕。Qwen-Audio 还支持热词定制与多语种混合识别。",
+                  "Deepgram, OpenAI Whisper, AssemblyAI, and Qwen-Audio 3.0 ASR Flash support precise word-level timestamps, ideal for subtitle generation. Qwen-Audio also supports instant hotwords and mixed-language recognition."
                 )}
               </span>
             </div>
