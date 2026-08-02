@@ -3,7 +3,9 @@ import {
   buildRealtimeTranscriptionWebSocketUrl,
   saveTranscriptionText,
   type TranscriptionJobResponse,
+  type WordTimestamp,
 } from "../../api";
+import { REALTIME_ASR_MODELS } from "../../utils/asrProviders";
 import { encodePcm16k, getAudioContextCtor } from "../../hooks/useVoiceChatHelpers";
 import ErrorNotice from "../ErrorNotice";
 import { useI18n } from "../../i18n";
@@ -18,12 +20,13 @@ type RealtimeServerMessage =
       sentence_end: boolean;
       begin_ms?: number | null;
       end_ms?: number | null;
+      words?: WordTimestamp[] | null;
     }
   | { type: "finished" }
   | { type: "error"; message?: string };
 
 type Props = {
-  onComplete: (job: TranscriptionJobResponse) => void;
+  onComplete: (job: TranscriptionJobResponse, words?: WordTimestamp[]) => void;
 };
 
 const LANGUAGE_OPTIONS: { value: string; hints?: string[]; zh: string; en: string }[] = [
@@ -76,6 +79,7 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [language, setLanguage] = useState("auto");
+  const [model, setModel] = useState(REALTIME_ASR_MODELS[0].id);
   const [finalized, setFinalized] = useState<string[]>([]);
   const [interim, setInterim] = useState("");
   const [elapsed, setElapsed] = useState(0);
@@ -90,13 +94,16 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const muteGainRef = useRef<GainNode | null>(null);
   const finalizedRef = useRef<string[]>([]);
+  const wordsRef = useRef<WordTimestamp[]>([]);
   const languageRef = useRef(language);
+  const modelRef = useRef(model);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const finishTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptBoxRef = useRef<HTMLDivElement | null>(null);
   const aliveRef = useRef(true);
 
   languageRef.current = language;
+  modelRef.current = model;
 
   const displayTranscript = joinSegments([...finalized, interim]);
   const finalizedText = joinSegments(finalized);
@@ -157,6 +164,12 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
             finalizedRef.current = [...finalizedRef.current, data.text];
             setFinalized(finalizedRef.current);
             setInterim("");
+            // Only final results carry stable per-word timestamps; interim
+            // sentences are partial and get overwritten. Accumulate so the
+            // saved job can drive precise SRT/VTT export.
+            if (data.words && data.words.length) {
+              wordsRef.current = [...wordsRef.current, ...data.words];
+            }
           } else {
             setInterim(data.text);
           }
@@ -215,6 +228,7 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
     setInterim("");
     finalizedRef.current = [];
     setFinalized([]);
+    wordsRef.current = [];
 
     const AudioContextCtor = getAudioContextCtor();
     if (!navigator.mediaDevices?.getUserMedia || typeof WebSocket === "undefined" || !AudioContextCtor) {
@@ -264,7 +278,7 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
       ws.onopen = () => {
         if (wsRef.current !== ws) return;
         const hints = LANGUAGE_OPTIONS.find((option) => option.value === languageRef.current)?.hints;
-        ws.send(JSON.stringify({ type: "config", ...(hints ? { language_hints: hints } : {}) }));
+        ws.send(JSON.stringify({ type: "config", model: modelRef.current, ...(hints ? { language_hints: hints } : {}) }));
 
         const source = audioContext.createMediaStreamSource(stream);
         const processor = audioContext.createScriptProcessor(4096, 1, 1);
@@ -356,6 +370,7 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
     setInterim("");
     finalizedRef.current = [];
     setFinalized([]);
+    wordsRef.current = [];
     setElapsed(0);
     setError(null);
     setInfo("");
@@ -367,8 +382,13 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const job = await saveTranscriptionText(text, t("实时转写", "Realtime transcription"));
-      onComplete(job);
+      const savedWords = wordsRef.current;
+      const job = await saveTranscriptionText(
+        text,
+        t("实时转写", "Realtime transcription"),
+        savedWords
+      );
+      onComplete(job, savedWords);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
@@ -404,6 +424,34 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div className="vsField" style={{ gap: "8px" }}>
+        <label
+          className="vsFieldLabel"
+          style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}
+        >
+          {t("识别模型", "Recognition model")}
+        </label>
+        <select
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          disabled={running}
+          className="vsSelect"
+          style={{ width: "100%", height: "44px", borderRadius: "10px", fontSize: "14px" }}
+        >
+          {REALTIME_ASR_MODELS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {t(option.zh, option.en)}
+            </option>
+          ))}
+        </select>
+        <span style={{ fontSize: "12px", color: "var(--muted)", lineHeight: 1.4 }}>
+          {(() => {
+            const selected = REALTIME_ASR_MODELS.find((option) => option.id === model);
+            return selected ? t(selected.noteZh, selected.noteEn) : "";
+          })()}
+        </span>
+      </div>
+
       <div className="vsField" style={{ gap: "8px" }}>
         <label
           className="vsFieldLabel"

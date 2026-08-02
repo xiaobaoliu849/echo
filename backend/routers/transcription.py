@@ -78,6 +78,7 @@ except ImportError:
 try:
     from services.realtime_asr_service import (
         RealtimeAsrError,
+        STREAMING_MODEL_LANGUAGE_HINT_CAPS,
         build_streaming_asr_session,
     )
 except ImportError:  # pragma: no cover - IDE fallback
@@ -113,6 +114,7 @@ class TranscriptionSyncResponse(BaseModel):
     memory_saved: bool = False
     duration_seconds: float | None = None
     words: list[WordTimestamp] | None = None
+    provider: str | None = None
 
 
 class TranscriptionJobResponse(BaseModel):
@@ -129,6 +131,7 @@ class TranscriptionJobResponse(BaseModel):
     source_url: str | None = None
     error: str | None = None
     memory_saved: bool = False
+    provider: str | None = None
 
 
 class TranscriptionJobListResponse(BaseModel):
@@ -138,6 +141,7 @@ class TranscriptionJobListResponse(BaseModel):
 
 class TranscriptionUrlJobRequest(BaseModel):
     file_url: str = Field(..., min_length=1, max_length=4000)
+    provider: str | None = None
 
 
 def _error(code: str, message: str, meta: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -203,6 +207,7 @@ def _job_to_response(job: TranscriptionJob) -> TranscriptionJobResponse:
         "source_url": source_url,
         "error": job.error,
         "memory_saved": bool(job.memory_saved),
+        "provider": job.provider,
     }
     return TranscriptionJobResponse(**data)
 
@@ -286,6 +291,8 @@ async def transcribe_audio(
             original_filename=file.filename or "sync_upload",
             transcript=transcript
         )
+        if result.get("provider"):
+            transcription_service.update_job(job.job_id or "", provider=result.get("provider"))
 
         # Save words to job if available
         if words:
@@ -307,6 +314,7 @@ async def transcribe_audio(
                 "memory_saved": memory_saved,
                 "duration_seconds": duration_seconds,
                 "words": words,
+                "provider": result.get("provider"),
             }
         )
     except ValueError as exc:
@@ -371,7 +379,9 @@ async def create_transcription_job(file: UploadFile = File(...)) -> Transcriptio
 )
 async def create_transcription_job_from_url(payload: TranscriptionUrlJobRequest) -> TranscriptionJobResponse:
     try:
-        job = await transcription_service.prepare_long_transcription_url_job(payload.file_url)
+        job = await transcription_service.prepare_long_transcription_url_job(
+            payload.file_url, provider=payload.provider
+        )
         job = await transcription_service.submit_long_transcription_job(job.job_id or "")
         return _job_to_response(job)
     except ValueError as exc:
@@ -638,6 +648,7 @@ async def get_transcription_job_words(job_id: str) -> list[WordTimestamp]:
 class TranscriptionTextSaveRequest(BaseModel):
     transcript: str
     file_name: str | None = None
+    words: list[WordTimestamp] = Field(default_factory=list)
 
 
 @router.post( # type: ignore
@@ -662,6 +673,11 @@ async def save_transcription_text(payload: TranscriptionTextSaveRequest) -> Tran
             original_filename=(payload.file_name or "").strip() or "实时转写",
             transcript=transcript,
         )
+        if payload.words:
+            transcription_service._persist_words(
+                job.job_id or "",
+                [w.model_dump() for w in payload.words],
+            )
         return _job_to_response(job)
     except Exception as exc:
         raise HTTPException(
@@ -700,6 +716,10 @@ def _parse_realtime_config(raw: Any) -> dict[str, Any]:
     silence = raw.get("max_sentence_silence")
     if isinstance(silence, (int, float)) and 200 <= int(silence) <= 6000:
         config["max_sentence_silence"] = int(silence)
+
+    model = raw.get("model")
+    if isinstance(model, str) and model.strip() in STREAMING_MODEL_LANGUAGE_HINT_CAPS:
+        config["model"] = model.strip()
 
     return config
 

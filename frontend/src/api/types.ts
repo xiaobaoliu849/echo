@@ -552,6 +552,7 @@ export type TranscriptionResponse = {
   memory_saved?: boolean;
   duration_seconds?: number | null;
   words?: WordTimestamp[] | null;
+  provider?: string | null;
 };
 
 export type TranscriptionJobResponse = {
@@ -568,6 +569,7 @@ export type TranscriptionJobResponse = {
   source_url?: string | null;
   error?: string | null;
   memory_saved?: boolean;
+  provider?: string | null;
 };
 
 export type TranscriptionJobListResponse = {

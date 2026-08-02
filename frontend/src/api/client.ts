@@ -27,6 +27,7 @@ import type {
   TranscriptionJobResponse,
   TranscriptionResponse,
   TranslateRequest,
+  WordTimestamp,
   TranslateResponse,
   TtsAudioResponse,
   TtsEngine,
@@ -1209,14 +1210,14 @@ export async function createTranscriptionJob(file: File): Promise<TranscriptionJ
   return response.json();
 }
 
-export async function createTranscriptionJobFromUrl(fileUrl: string): Promise<TranscriptionJobResponse> {
+export async function createTranscriptionJobFromUrl(fileUrl: string, provider?: string): Promise<TranscriptionJobResponse> {
   const response = await apiFetch(`${API_BASE_URL}/api/transcription/jobs/from-url`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...buildEverMemHeaders(true, "transcription")
     },
-    body: JSON.stringify({ file_url: fileUrl }),
+    body: JSON.stringify({ file_url: fileUrl, ...(provider ? { provider } : {}) }),
   });
 
   if (!response.ok) {
@@ -1301,7 +1302,8 @@ export function buildRealtimeTranscriptionWebSocketUrl(): string {
 
 export async function saveTranscriptionText(
   transcript: string,
-  fileName?: string
+  fileName?: string,
+  words?: WordTimestamp[] | null
 ): Promise<TranscriptionJobResponse> {
   const response = await apiFetch(`${API_BASE_URL}/api/transcription/jobs/save-text`, {
     method: "POST",
@@ -1309,8 +1311,25 @@ export async function saveTranscriptionText(
       "Content-Type": "application/json",
       ...buildEverMemHeaders(true, "transcription"),
     },
-    body: JSON.stringify({ transcript, file_name: fileName }),
+    body: JSON.stringify({ transcript, file_name: fileName, words: words || [] }),
   });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function getTranscriptionJobWords(jobId: string): Promise<WordTimestamp[]> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/transcription/jobs/${encodeURIComponent(jobId)}/words`,
+    {
+      headers: buildEverMemHeaders(true, "transcription"),
+    }
+  );
+  if (response.status === 404) {
+    // No word-level timestamps stored (e.g. a MiMo job or a legacy realtime job).
+    return [];
+  }
   if (!response.ok) {
     await throwApiError(response);
   }

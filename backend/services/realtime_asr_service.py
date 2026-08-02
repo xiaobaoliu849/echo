@@ -23,10 +23,20 @@ from .config_loader import BackendConfig
 logger = logging.getLogger(__name__)
 
 QWEN_AUDIO_ASR_STREAMING_MODEL = "qwen-audio-3.0-asr-flash-streaming"
+FUN_ASR_REALTIME_MODEL = "fun-asr-realtime"
 DEFAULT_STREAMING_WS_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
 # language_hints accepts at most 4 codes for this model family.
 STREAMING_MAX_LANGUAGE_HINTS = 4
 TASK_STARTED_TIMEOUT = 15.0
+
+# Realtime streaming models selectable from the transcription UI, mapped to the
+# max language_hints each accepts. The default Qwen-Audio streaming model also
+# supports instant hotwords; the Fun-ASR-Realtime family accepts a single hint
+# and no instant hotwords.
+STREAMING_MODEL_LANGUAGE_HINT_CAPS = {
+    QWEN_AUDIO_ASR_STREAMING_MODEL: 4,
+    FUN_ASR_REALTIME_MODEL: 1,
+}
 
 
 @dataclass(slots=True)
@@ -266,6 +276,7 @@ def build_streaming_asr_session(
     vocabulary: dict[str, int] | None = None,
     semantic_punctuation: bool | None = None,
     max_sentence_silence: int | None = None,
+    model: str | None = None,
 ) -> QwenAudioStreamingAsrSession:
     """Factory: resolve API key + WS URL from config and build a session."""
     config.reload()
@@ -286,9 +297,16 @@ def build_streaming_asr_session(
         if host:
             ws_url = f"wss://{host}/api-ws/v1/inference"
 
+    # Cap language hints per the selected streaming model's limits.
+    resolved_model = model or QWEN_AUDIO_ASR_STREAMING_MODEL
+    hint_cap = STREAMING_MODEL_LANGUAGE_HINT_CAPS.get(resolved_model, STREAMING_MAX_LANGUAGE_HINTS)
+    if language_hints:
+        language_hints = language_hints[:hint_cap]
+
     return QwenAudioStreamingAsrSession(
         api_key,
         ws_url=ws_url,
+        model=resolved_model,
         language_hints=language_hints,
         vocabulary=vocabulary,
         semantic_punctuation=semantic_punctuation,
