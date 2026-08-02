@@ -6666,6 +6666,128 @@ button.danger:focus-visible {
   margin-left: auto;
 }
 
+.vsBtnGhost.active {
+  color: var(--brand-dark);
+  background: rgba(107, 76, 246, 0.1);
+  border-color: rgba(107, 76, 246, 0.3);
+}
+
+.vsBtnDanger {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  background: rgba(244, 63, 94, 0.1);
+  color: #e11d48;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.vsBtnDanger:hover:not(:disabled) {
+  background: #f43f5e;
+  border-color: #f43f5e;
+  color: #fff;
+}
+
+.vsBtnDanger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Manage (batch) mode bar ── */
+.vsTranscribeBatchBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 24px;
+  flex-shrink: 0;
+  background: rgba(107, 76, 246, 0.06);
+  border-bottom: 1px solid rgba(107, 76, 246, 0.15);
+}
+
+.vsTranscribeBatchSelectAll {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.vsTranscribeBatchCount {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.vsTranscribeBatchActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Selection checkbox — on the card cover (absolute) or inline in the batch bar */
+.vsTranscribeCardCheckbox {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(4px);
+}
+
+.vsTranscribeCardCheckbox:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.vsTranscribeCardCheckbox.checked {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.vsTranscribeCardCheckbox.inline {
+  position: static;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  font-size: 12px;
+  border-color: rgba(98, 76, 54, 0.3);
+  background: #fff;
+}
+
+.vsTranscribeCardCheckbox.inline.checked {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.vsTranscribeCard.selectable.selected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px rgba(107, 76, 246, 0.25), 0 8px 20px rgba(56, 41, 27, 0.08);
+}
+
+.vsTranscribeCard.selectable:hover {
+  transform: none;
+}
+
 /* ── Card Grid ── */
 .vsTranscribeGridWrap {
   flex: 1;
@@ -7166,6 +7288,124 @@ button.danger:focus-visible {
   min-height: 300px;
   color: var(--muted);
   gap: 16px;
+}
+
+/* ── Synced subtitle player ── */
+.vsSubtitlePlayer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px 8px;
+}
+
+.vsSubtitlePlayerTransport {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.vsSubtitlePlayerTransport audio {
+  width: 100%;
+  max-width: 720px;
+  height: 40px;
+  border-radius: 8px;
+  outline: none;
+}
+
+.vsSubtitleNow {
+  flex-shrink: 0;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto 12px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: rgba(107, 76, 246, 0.06);
+  border: 1px solid rgba(107, 76, 246, 0.12);
+}
+
+.vsSubtitleNowText {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--brand-dark);
+}
+
+.vsSubtitleNowPlaceholder {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.vsSubtitleList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 4px 4px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vsSubtitleCue {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  text-align: left;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  font-family: inherit;
+}
+
+.vsSubtitleCue:hover {
+  background: rgba(98, 76, 54, 0.05);
+}
+
+.vsSubtitleCue:disabled {
+  cursor: default;
+}
+
+.vsSubtitleCueTime {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+}
+
+.vsSubtitleCueText {
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.vsSubtitleCue.active {
+  background: rgba(107, 76, 246, 0.1);
+}
+
+.vsSubtitleCue.active .vsSubtitleCueText {
+  color: var(--brand-dark);
+  font-weight: 600;
+}
+
+.vsSubtitleCue.active .vsSubtitleCueTime {
+  color: var(--brand);
 }
 
 .vsTranscribeDetailFooter {

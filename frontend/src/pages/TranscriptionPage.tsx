@@ -5,6 +5,7 @@ import {
   getTranscriptionJobWords,
   transcribeAudio,
   createTranscriptionJobFromUrl,
+  saveTranscriptionJobMemory,
   type TranscriptionJobResponse,
   type WordTimestamp,
 } from "../api";
@@ -72,8 +73,14 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     refreshHistory,
     addOrUpdateJob,
     removeJob,
+    removeJobs,
     retryJob,
   } = useTranscriptionHistory();
+
+  const [manageMode, setManageMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [memorySaving, setMemorySaving] = useState(false);
 
   // Filter history by search term
   const filteredHistory = useMemo(() => {
@@ -322,6 +329,94 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     setActiveFilter(filter);
   }
 
+  function toggleManageMode() {
+    setManageMode((prev) => {
+      const next = !prev;
+      // Leaving manage mode drops any pending selection.
+      if (!next) setSelectedIds(new Set());
+      return next;
+    });
+  }
+
+  function toggleSelect(jobId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const item of filteredHistory) next.add(item.job_id);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function handleBatchDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const ok = confirm(
+      t(
+        `确定要删除所选的 ${ids.length} 条记录吗？此操作不可撤销。`,
+        `Delete ${ids.length} selected record(s)? This cannot be undone.`
+      )
+    );
+    if (!ok) return;
+    setBatchDeleting(true);
+    setError(null);
+    try {
+      const result = await removeJobs(ids);
+      setSelectedIds(new Set());
+      if (result.failed && result.failed.length > 0) {
+        setInfoMessage(
+          t(
+            `部分记录删除失败（${result.failed.length} 条）`,
+            `Some records failed to delete (${result.failed.length}).`
+          )
+        );
+      } else {
+        setInfoMessage(
+          t(
+            `已删除 ${result.deleted.length} 条记录`,
+            `Deleted ${result.deleted.length} record(s).`
+          )
+        );
+      }
+      setTimeout(() => setInfoMessage(""), 3000);
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      setError(e);
+    } finally {
+      setBatchDeleting(false);
+    }
+  }
+
+  async function handleSaveMemory() {
+    if (!job?.job_id) return;
+    setMemorySaving(true);
+    setError(null);
+    try {
+      const updated = await saveTranscriptionJobMemory(job.job_id);
+      setJob(updated);
+      setMemorySaved(true);
+      addOrUpdateJob(updated);
+      setInfoMessage(t("已存入长期记忆", "Saved to long-term memory."));
+      setTimeout(() => setInfoMessage(""), 3000);
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      setError(e);
+    } finally {
+      setMemorySaving(false);
+    }
+  }
+
   const isBusy = isSyncBusy || isAsyncBusy || isPollingStatus(job?.status);
 
   if (viewMode === "detail") {
@@ -344,6 +439,8 @@ export function TranscriptionPage({ onSendToChat }: Props) {
         onExport={handleExport}
         onAudioDurationChange={setAudioDuration}
         onReservedAction={handleReservedAction}
+        onSaveMemory={handleSaveMemory}
+        memorySaving={memorySaving}
       />
     );
   }
@@ -376,6 +473,14 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       onLocalTranscribe={handleLocalTranscription}
       onRemoteSubmit={handleRemoteJobStart}
       onRealtimeComplete={handleRealtimeComplete}
+      manageMode={manageMode}
+      selectedIds={selectedIds}
+      batchDeleting={batchDeleting}
+      onToggleManageMode={toggleManageMode}
+      onToggleSelect={toggleSelect}
+      onSelectAllVisible={selectAllVisible}
+      onClearSelection={clearSelection}
+      onBatchDelete={handleBatchDelete}
     />
   );
 }

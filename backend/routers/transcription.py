@@ -144,6 +144,17 @@ class TranscriptionUrlJobRequest(BaseModel):
     provider: str | None = None
 
 
+class TranscriptionBatchDeleteRequest(BaseModel):
+    job_ids: list[str] = Field(default_factory=list)
+
+
+class TranscriptionBatchDeleteResponse(BaseModel):
+    deleted: list[str]
+    failed: list[str]
+    deleted_count: int
+    failed_count: int
+
+
 def _error(code: str, message: str, meta: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"code": code, "message": message, "meta": meta or {}}
 
@@ -542,6 +553,116 @@ async def delete_transcription_job(job_id: str) -> dict[str, bool]:
         raise HTTPException(
             status_code=500,
             detail=_error("TRANSCRIPTION_JOB_DELETE_FAILED", str(exc)),
+        ) from exc
+
+
+@router.post( # type: ignore
+    "/jobs/batch-delete",
+    response_model=TranscriptionBatchDeleteResponse,
+    responses={
+        400: {"description": "Invalid batch delete request.", "model": StructuredErrorResponse},
+        500: {"description": "Failed to delete transcription jobs.", "model": StructuredErrorResponse},
+    },
+)
+async def batch_delete_transcription_jobs(
+    payload: TranscriptionBatchDeleteRequest,
+) -> TranscriptionBatchDeleteResponse:
+    job_ids = [str(job_id).strip() for job_id in (payload.job_ids or []) if str(job_id).strip()]
+    if not job_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=_error("TRANSCRIPTION_JOB_BAD_REQUEST", "job_ids must not be empty."),
+        )
+    try:
+        result = transcription_service.delete_jobs(job_ids)
+        deleted = cast(list[str], result["deleted"])
+        failed = cast(list[str], result["failed"])
+        return TranscriptionBatchDeleteResponse(
+            **{
+                "deleted": deleted,
+                "failed": failed,
+                "deleted_count": len(deleted),
+                "failed_count": len(failed),
+            }
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_error("TRANSCRIPTION_JOB_DELETE_FAILED", str(exc)),
+        ) from exc
+
+
+@router.post( # type: ignore
+    "/jobs/{job_id}/save-memory",
+    response_model=TranscriptionJobResponse,
+    responses={
+        404: {"description": "Transcription job not found.", "model": StructuredErrorResponse},
+        400: {"description": "Job not ready or memory service unavailable.", "model": StructuredErrorResponse},
+        500: {"description": "Failed to save transcription to memory.", "model": StructuredErrorResponse},
+    },
+)
+async def save_transcription_job_memory(request: Request, job_id: str) -> TranscriptionJobResponse:
+    """Explicitly persist a finished transcript to EverMem on user request.
+
+    Unlike the automatic save on completion, this is a deliberate action, so the
+    client sends EverMem headers that bypass the ``remember_recordings`` auto
+    toggle. Idempotent: an already-saved job is returned unchanged.
+    """
+    job = transcription_service.get_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail=_error("TRANSCRIPTION_JOB_NOT_FOUND", f"Transcription job not found: {job_id}"),
+        )
+    if job.status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=_error(
+                "TRANSCRIPTION_NOT_COMPLETED",
+                "Only completed transcriptions can be saved to memory.",
+            ),
+        )
+    if job.memory_saved:
+        return _job_to_response(job)
+
+    transcript_path = Path(job.transcript_path or "")
+    if not transcript_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=_error(
+                "TRANSCRIPTION_TRANSCRIPT_NOT_FOUND",
+                f"Transcript not found for job: {job_id}",
+            ),
+        )
+
+    try:
+        transcript_text = transcript_path.read_text(encoding="utf-8")
+        memory_saved = await transcription_service.maybe_save_memory(
+            transcript_text=transcript_text,
+            headers=dict(request.headers),
+            source="transcription_manual",
+        )
+        if not memory_saved:
+            raise HTTPException(
+                status_code=400,
+                detail=_error(
+                    "TRANSCRIPTION_MEMORY_UNAVAILABLE",
+                    "Memory service is not configured or rejected the request.",
+                ),
+            )
+        job = transcription_service.update_job(job_id, memory_saved=True)
+        return _job_to_response(job)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=_error("TRANSCRIPTION_JOB_BAD_REQUEST", str(exc)),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_error("TRANSCRIPTION_MEMORY_SAVE_FAILED", str(exc)),
         ) from exc
 
 

@@ -31,6 +31,15 @@ type Props = {
   onLocalTranscribe: (file: File, provider?: string) => Promise<void>;
   onRemoteSubmit: (url: string) => Promise<void>;
   onRealtimeComplete: (job: TranscriptionJobResponse) => void;
+  /** Manage (batch) mode */
+  manageMode: boolean;
+  selectedIds: Set<string>;
+  batchDeleting: boolean;
+  onToggleManageMode: () => void;
+  onToggleSelect: (jobId: string) => void;
+  onSelectAllVisible: () => void;
+  onClearSelection: () => void;
+  onBatchDelete: () => void;
 };
 
 export default function TranscriptionTable({
@@ -57,6 +66,14 @@ export default function TranscriptionTable({
   onLocalTranscribe,
   onRemoteSubmit,
   onRealtimeComplete,
+  manageMode,
+  selectedIds,
+  batchDeleting,
+  onToggleManageMode,
+  onToggleSelect,
+  onSelectAllVisible,
+  onClearSelection,
+  onBatchDelete,
 }: Props) {
   const { t } = useI18n();
 
@@ -66,6 +83,10 @@ export default function TranscriptionTable({
     { key: "running" as const, label: t("进行中", "In Progress") },
     { key: "failed" as const, label: t("失败", "Failed") },
   ];
+
+  const allVisibleSelected =
+    filteredHistory.length > 0 &&
+    filteredHistory.every((item) => selectedIds.has(item.job_id));
 
   return (
     <section className="vsTranscribeLibrary">
@@ -99,6 +120,14 @@ export default function TranscriptionTable({
         {/* Actions */}
         <div className="vsTranscribeToolbarActions">
           <button
+            onClick={onToggleManageMode}
+            className={`vsBtnGhost ${manageMode ? "active" : ""}`}
+            style={{ fontSize: 12, padding: "6px 12px" }}
+            title={t("批量管理", "Batch manage")}
+          >
+            {manageMode ? t("✓ 完成", "✓ Done") : t("☰ 管理", "☰ Manage")}
+          </button>
+          <button
             onClick={onRefresh}
             className="vsBtnGhost"
             style={{ fontSize: 12, padding: "6px 12px" }}
@@ -121,6 +150,47 @@ export default function TranscriptionTable({
           </button>
         </div>
       </div>
+
+      {/* Batch action bar (manage mode) */}
+      {manageMode && (
+        <div className="vsTranscribeBatchBar">
+          <button
+            type="button"
+            className="vsTranscribeBatchSelectAll"
+            onClick={allVisibleSelected ? onClearSelection : onSelectAllVisible}
+          >
+            <span className={`vsTranscribeCardCheckbox inline ${allVisibleSelected ? "checked" : ""}`}>
+              {allVisibleSelected ? "✓" : ""}
+            </span>
+            {allVisibleSelected
+              ? t("取消全选", "Deselect all")
+              : t("全选当前列表", "Select all visible")}
+          </button>
+          <span className="vsTranscribeBatchCount">
+            {t(`已选 ${selectedIds.size} 项`, `${selectedIds.size} selected`)}
+          </span>
+          <div className="vsTranscribeBatchActions">
+            <button
+              type="button"
+              className="vsBtnDanger"
+              disabled={selectedIds.size === 0 || batchDeleting}
+              onClick={onBatchDelete}
+            >
+              {batchDeleting
+                ? t("删除中…", "Deleting…")
+                : t(`删除所选 (${selectedIds.size})`, `Delete selected (${selectedIds.size})`)}
+            </button>
+            <button
+              type="button"
+              className="vsBtnGhost"
+              onClick={onToggleManageMode}
+              style={{ fontSize: 12, padding: "6px 12px" }}
+            >
+              {t("取消", "Cancel")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Card Grid */}
       <div className="vsTranscribeGridWrap custom-scrollbar">
@@ -202,6 +272,12 @@ export default function TranscriptionTable({
                   e.stopPropagation();
                   onRetryJob(item.job_id);
                 } : undefined}
+                selectable={manageMode}
+                selected={selectedIds.has(item.job_id)}
+                onToggleSelect={(e) => {
+                  e.stopPropagation();
+                  onToggleSelect(item.job_id);
+                }}
               />
             ))}
           </div>

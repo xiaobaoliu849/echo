@@ -71,8 +71,29 @@ export function splitTranscriptToSegments(text: string): string[] {
   return segments;
 }
 
-export function generateSrtFromWords(words: WordTimestamp[]): string {
-  const segments: Array<{ start: number; end: number; text: string }> = [];
+export type SubtitleCue = { start: number; end: number; text: string };
+
+/**
+ * Join word tokens into a display string. ASR word lists for CJK audio carry
+ * one token per character/phrase, so joining with a space would sprinkle spaces
+ * through Chinese text. Join without spaces when the tokens are CJK-dominant.
+ */
+function joinWordTokens(words: WordTimestamp[]): string {
+  const joined = words.map((w) => w.text).join("");
+  const cjkCount = (joined.match(/[一-鿿぀-ヿ]/g) || []).length;
+  if (joined.length > 0 && cjkCount / joined.length >= 0.3) {
+    return joined;
+  }
+  return words.map((w) => w.text).join(" ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Group word-level timestamps into subtitle cues. A cue closes on a sentence
+ * boundary, after ~10 tokens, or once it spans ~5s — whichever comes first —
+ * mirroring the SRT/VTT export so on-screen cues match exported files.
+ */
+export function buildCuesFromWords(words: WordTimestamp[]): SubtitleCue[] {
+  const segments: SubtitleCue[] = [];
   let currentSegment: WordTimestamp[] = [];
   let segmentStart = words[0]?.start ?? 0;
 
@@ -85,7 +106,7 @@ export function generateSrtFromWords(words: WordTimestamp[]): string {
       segments.push({
         start: segmentStart,
         end: word.end,
-        text: currentSegment.map(w => w.text).join(" "),
+        text: joinWordTokens(currentSegment),
       });
       currentSegment = [];
       segmentStart = word.end;
@@ -96,11 +117,39 @@ export function generateSrtFromWords(words: WordTimestamp[]): string {
     segments.push({
       start: segmentStart,
       end: currentSegment[currentSegment.length - 1].end,
-      text: currentSegment.map(w => w.text).join(" "),
+      text: joinWordTokens(currentSegment),
     });
   }
 
-  return segments
+  return segments;
+}
+
+/**
+ * Build display cues from whatever timing data is available: prefer word-level
+ * timestamps, otherwise fall back to evenly splitting the transcript across the
+ * known duration (used for providers without per-word timing).
+ */
+export function buildCues(
+  text: string,
+  durationSec: number,
+  words?: WordTimestamp[] | null
+): SubtitleCue[] {
+  if (words && words.length > 0) {
+    return buildCuesFromWords(words);
+  }
+  const segments = splitTranscriptToSegments(text);
+  if (segments.length === 0) return [];
+  const safeDuration = durationSec > 0 ? durationSec : segments.length * 5;
+  const segDuration = safeDuration / segments.length;
+  return segments.map((seg, i) => ({
+    start: i * segDuration,
+    end: Math.min((i + 1) * segDuration, safeDuration),
+    text: seg,
+  }));
+}
+
+export function generateSrtFromWords(words: WordTimestamp[]): string {
+  return buildCuesFromWords(words)
     .map((seg, i) => {
       return `${i + 1}\n${formatSrtTime(seg.start)} --> ${formatSrtTime(seg.end)}\n${seg.text}`;
     })
@@ -127,35 +176,7 @@ export function generateSrt(text: string, durationSec: number, words?: WordTimes
 }
 
 export function generateVttFromWords(words: WordTimestamp[]): string {
-  const segments: Array<{ start: number; end: number; text: string }> = [];
-  let currentSegment: WordTimestamp[] = [];
-  let segmentStart = words[0]?.start ?? 0;
-
-  for (const word of words) {
-    currentSegment.push(word);
-
-    const segmentDuration = word.end - segmentStart;
-    const isSentenceEnd = /[。！？!?\n]$/.test(word.text);
-    if (currentSegment.length >= 10 || segmentDuration >= 5 || isSentenceEnd) {
-      segments.push({
-        start: segmentStart,
-        end: word.end,
-        text: currentSegment.map(w => w.text).join(" "),
-      });
-      currentSegment = [];
-      segmentStart = word.end;
-    }
-  }
-
-  if (currentSegment.length > 0) {
-    segments.push({
-      start: segmentStart,
-      end: currentSegment[currentSegment.length - 1].end,
-      text: currentSegment.map(w => w.text).join(" "),
-    });
-  }
-
-  const cues = segments
+  const cues = buildCuesFromWords(words)
     .map((seg) => {
       return `${formatVttTime(seg.start)} --> ${formatVttTime(seg.end)}\n${seg.text}`;
     })

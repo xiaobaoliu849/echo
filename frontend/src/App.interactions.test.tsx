@@ -487,7 +487,7 @@ describe("App interactions", () => {
     const fileInput = screen.getByLabelText("选择转写音频");
     const audioFile = new File(["audio"], "note.wav", { type: "audio/wav" });
     fireEvent.change(fileInput, { target: { files: [audioFile] } });
-    fireEvent.click(screen.getByRole("button", { name: "开始同步转写" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始转写" }));
 
     await waitFor(() => {
       expect(mockedTranscribeAudio.mock.calls[0][0]).toBe(audioFile);

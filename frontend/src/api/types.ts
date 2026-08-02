@@ -577,6 +577,13 @@ export type TranscriptionJobListResponse = {
   jobs: TranscriptionJobResponse[];
 };
 
+export type TranscriptionBatchDeleteResponse = {
+  deleted: string[];
+  failed: string[];
+  deleted_count: number;
+  failed_count: number;
+};
+
 export type VoiceChatServerEvent =
   | {
       type: "session_open";

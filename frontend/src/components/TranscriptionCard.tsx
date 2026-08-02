@@ -8,6 +8,10 @@ type Props = {
   onClick: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onRetry?: (e: React.MouseEvent) => void;
+  /** Manage mode: card click toggles selection instead of opening detail. */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (e: React.MouseEvent) => void;
 };
 
 /* Deterministic gradient palette based on filename hash */
@@ -85,6 +89,9 @@ export const TranscriptionCard: React.FC<Props> = ({
   onClick,
   onDelete,
   onRetry,
+  selectable,
+  selected,
+  onToggleSelect,
 }) => {
   const { t } = useI18n();
   const fileName = item.file_name || t("未知文件", "Unknown file");
@@ -101,19 +108,48 @@ export const TranscriptionCard: React.FC<Props> = ({
       ? "submitted"
       : "running";
 
+  const handleActivate = (e: React.MouseEvent) => {
+    if (selectable && onToggleSelect) {
+      onToggleSelect(e);
+    } else {
+      onClick();
+    }
+  };
+
   return (
     <div
-      className={`vsTranscribeCard ${statusClass} ${isActive ? "active" : ""}`}
-      onClick={onClick}
+      className={`vsTranscribeCard ${statusClass} ${isActive ? "active" : ""} ${
+        selectable ? "selectable" : ""
+      } ${selected ? "selected" : ""}`}
+      onClick={handleActivate}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onClick();
+          if (selectable && onToggleSelect) {
+            onToggleSelect(e as unknown as React.MouseEvent);
+          } else {
+            onClick();
+          }
         }
       }}
     >
+      {/* Selection checkbox (manage mode) */}
+      {selectable && (
+        <button
+          type="button"
+          className={`vsTranscribeCardCheckbox ${selected ? "checked" : ""}`}
+          aria-label={selected ? t("取消选择", "Deselect") : t("选择", "Select")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.(e);
+          }}
+        >
+          {selected ? "✓" : ""}
+        </button>
+      )}
+
       {/* Cover */}
       <div className="vsTranscribeCardCover">
         <div
@@ -167,24 +203,26 @@ export const TranscriptionCard: React.FC<Props> = ({
         ) : (
           <span />
         )}
-        <div className="vsTranscribeCardActions">
-          {item.status === "failed" && onRetry && (
+        {!selectable && (
+          <div className="vsTranscribeCardActions">
+            {item.status === "failed" && onRetry && (
+              <button
+                className="vsTranscribeCardRetryBtn"
+                onClick={onRetry}
+                title={t("重试转写", "Retry transcription")}
+              >
+                {t("重试", "Retry")}
+              </button>
+            )}
             <button
-              className="vsTranscribeCardRetryBtn"
-              onClick={onRetry}
-              title={t("重试转写", "Retry transcription")}
+              className="vsTranscribeCardDeleteBtn"
+              onClick={onDelete}
+              title={t("删除记录", "Delete record")}
             >
-              {t("重试", "Retry")}
+              {t("删除", "Delete")}
             </button>
-          )}
-          <button
-            className="vsTranscribeCardDeleteBtn"
-            onClick={onDelete}
-            title={t("删除记录", "Delete record")}
-          >
-            {t("删除", "Delete")}
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

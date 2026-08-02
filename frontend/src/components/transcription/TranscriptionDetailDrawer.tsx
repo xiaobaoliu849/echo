@@ -3,6 +3,7 @@ import type { TranscriptionJobResponse, WordTimestamp } from "../../api";
 import ErrorNotice from "../ErrorNotice";
 import { useI18n } from "../../i18n";
 import { asrProviderLabel } from "../../utils/asrProviders";
+import TranscriptionSubtitlePlayer from "./TranscriptionSubtitlePlayer";
 
 type Props = {
   job: TranscriptionJobResponse | null;
@@ -22,11 +23,14 @@ type Props = {
   onExport: (format: "txt" | "srt" | "vtt") => void;
   onAudioDurationChange: (dur: number) => void;
   onReservedAction: (action: string) => void;
+  onSaveMemory: () => void;
+  memorySaving: boolean;
 };
 
 export default function TranscriptionDetailDrawer({
   job,
   transcript,
+  words,
   statusMessage,
   memorySaved,
   isBusy,
@@ -41,6 +45,8 @@ export default function TranscriptionDetailDrawer({
   onExport,
   onAudioDurationChange,
   onReservedAction,
+  onSaveMemory,
+  memorySaving,
 }: Props) {
   const { t } = useI18n();
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -85,6 +91,19 @@ export default function TranscriptionDetailDrawer({
           </div>
         </div>
         <div className="vsTranscribeDetailActions">
+          <button
+            onClick={onSaveMemory}
+            disabled={!transcript || memorySaving || memorySaved}
+            className="vsBtnSecondary"
+            title={t("把这段转写存入长期记忆", "Save this transcript to long-term memory")}
+            style={{ height: 34, fontSize: 13, padding: "0 14px" }}
+          >
+            {memorySaved
+              ? t("✓ 已入记忆", "✓ In memory")
+              : memorySaving
+              ? t("存入中…", "Saving…")
+              : t("🧠 存入记忆", "🧠 Save to memory")}
+          </button>
           <button
             onClick={onCopy}
             disabled={!transcript}
@@ -134,25 +153,6 @@ export default function TranscriptionDetailDrawer({
         </div>
       </div>
 
-      {/* Audio Player */}
-      {audioSourceUrl && (
-        <div style={{ padding: "16px 24px 0", flexShrink: 0, display: "flex", justifyContent: "center" }}>
-          <audio
-            controls
-            src={audioSourceUrl}
-            aria-label={t("转写音频播放器", "Transcription audio player")}
-            style={{ width: "100%", maxWidth: "720px", height: "40px", borderRadius: "8px", outline: "none" }}
-            controlsList="nodownload"
-            onLoadedMetadata={(e) => {
-              const d = (e.target as HTMLAudioElement).duration;
-              if (d && isFinite(d) && d > 0 && audioDuration === 0) {
-                onAudioDurationChange(d);
-              }
-            }}
-          />
-        </div>
-      )}
-
       {/* Status Banner */}
       {statusMessage && (
         <div className={`vsTranscribeStatusBanner ${detailStatusClass}`}>
@@ -186,9 +186,9 @@ export default function TranscriptionDetailDrawer({
         </div>
       )}
 
-      {/* Transcript Content */}
-      <div className="vsTranscribeDetailContent custom-scrollbar">
-        {detailLoading ? (
+      {/* Transcript + synced subtitle player */}
+      {detailLoading ? (
+        <div className="vsTranscribeDetailContent custom-scrollbar">
           <div className="vsTranscribeDetailTranscript loading">
             <div
               className="spinner"
@@ -204,9 +204,17 @@ export default function TranscriptionDetailDrawer({
               {t("加载中…", "Loading...")}
             </p>
           </div>
-        ) : transcript ? (
-          <div className="vsTranscribeDetailTranscript">{transcript}</div>
-        ) : isBusy ? (
+        </div>
+      ) : transcript ? (
+        <TranscriptionSubtitlePlayer
+          transcript={transcript}
+          words={words || []}
+          audioSourceUrl={audioSourceUrl}
+          audioDuration={audioDuration}
+          onAudioDurationChange={onAudioDurationChange}
+        />
+      ) : isBusy ? (
+        <div className="vsTranscribeDetailContent custom-scrollbar">
           <div className="vsTranscribeDetailTranscript loading">
             <div
               className="spinner"
@@ -222,14 +230,16 @@ export default function TranscriptionDetailDrawer({
               {t("转写处理中，请稍候...", "Transcribing audio, please wait...")}
             </p>
           </div>
-        ) : (
+        </div>
+      ) : (
+        <div className="vsTranscribeDetailContent custom-scrollbar">
           <div className="vsTranscribeDetailTranscript loading">
             <p style={{ fontSize: 14 }}>
               {t("暂无转写内容", "No transcript content available")}
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Error */}
       {error && (

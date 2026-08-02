@@ -310,6 +310,30 @@ class TranscriptionService:
 
         return True
 
+    def delete_jobs(self, job_ids: list[str]) -> dict[str, Any]:
+        """Bulk-delete transcription jobs. Returns counts + per-id failures.
+
+        Missing/invalid ids are reported in ``failed`` rather than aborting the
+        whole batch, so one stale client entry can't block a bulk cleanup.
+        """
+        seen: set[str] = set()
+        deleted: list[str] = []
+        failed: list[str] = []
+        for raw_id in job_ids:
+            job_id = str(raw_id or "").strip()
+            if not job_id or job_id in seen:
+                continue
+            seen.add(job_id)
+            try:
+                if self.delete_job(job_id):
+                    deleted.append(job_id)
+                else:
+                    failed.append(job_id)
+            except Exception:
+                logger.exception("Failed to delete transcription job %s", job_id)
+                failed.append(job_id)
+        return {"deleted": deleted, "failed": failed}
+
     def update_job(
         self,
         job_id: str,

@@ -23,6 +23,7 @@ import type {
   EverMemConversationMetaResponse,
   SettingsResponse,
   StreamEventHandlers,
+  TranscriptionBatchDeleteResponse,
   TranscriptionJobListResponse,
   TranscriptionJobResponse,
   TranscriptionResponse,
@@ -265,6 +266,13 @@ type EverMemSceneConfig = {
 
 type EverMemHeaderOptions = {
   groupId?: string;
+  /**
+   * Bypass the per-scene "remember_*" auto toggle. Used for deliberate,
+   * user-initiated saves (e.g. "save this transcript to memory") where the
+   * global auto-save switch should not veto an explicit action. The global
+   * `enabled` / `temporary_session` gates still apply.
+   */
+  forceScene?: boolean;
 };
 
 function buildEverMemSceneConfig(
@@ -279,11 +287,13 @@ function buildEverMemSceneConfig(
   if (!evermem.enabled || evermem.temporary_session) {
     return null;
   }
-  if (scene === "chat" && !evermem.remember_chat) return null;
-  if (scene === "voice_chat" && !evermem.remember_voice_chat) return null;
-  if (scene === "transcription" && !evermem.remember_recordings) return null;
-  if (scene === "podcast" && !evermem.remember_podcast) return null;
-  if (scene === "tts" && !evermem.remember_tts) return null;
+  if (!options.forceScene) {
+    if (scene === "chat" && !evermem.remember_chat) return null;
+    if (scene === "voice_chat" && !evermem.remember_voice_chat) return null;
+    if (scene === "transcription" && !evermem.remember_recordings) return null;
+    if (scene === "podcast" && !evermem.remember_podcast) return null;
+    if (scene === "tts" && !evermem.remember_tts) return null;
+  }
   const resolvedScopeId = evermem.scope_id || `client:${getClientId()}`;
 
   return {
@@ -1330,6 +1340,41 @@ export async function getTranscriptionJobWords(jobId: string): Promise<WordTimes
     // No word-level timestamps stored (e.g. a MiMo job or a legacy realtime job).
     return [];
   }
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function batchDeleteTranscriptionJobs(
+  jobIds: string[]
+): Promise<TranscriptionBatchDeleteResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/api/transcription/jobs/batch-delete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...buildEverMemHeaders(true, "transcription"),
+    },
+    body: JSON.stringify({ job_ids: jobIds }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function saveTranscriptionJobMemory(
+  jobId: string
+): Promise<TranscriptionJobResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/transcription/jobs/${encodeURIComponent(jobId)}/save-memory`,
+    {
+      method: "POST",
+      // forceScene: an explicit user action should not be vetoed by the
+      // "remember recordings" auto-save toggle.
+      headers: buildEverMemHeaders(true, "transcription", { forceScene: true }),
+    }
+  );
   if (!response.ok) {
     await throwApiError(response);
   }

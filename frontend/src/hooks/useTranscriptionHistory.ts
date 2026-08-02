@@ -3,6 +3,7 @@ import {
   listTranscriptionJobs,
   retryTranscriptionJob,
   deleteTranscriptionJob,
+  batchDeleteTranscriptionJobs,
   type TranscriptionJobResponse
 } from "../api";
 
@@ -150,6 +151,24 @@ export function useTranscriptionHistory() {
     });
   };
 
+  const removeJobs = async (jobIds: string[]) => {
+    if (jobIds.length === 0) return { deleted: [], failed: [] };
+    let result: { deleted: string[]; failed: string[] } = { deleted: jobIds, failed: [] };
+    try {
+      result = await batchDeleteTranscriptionJobs(jobIds);
+    } catch {
+      // If the batch call fails (e.g. stale ids), still clear them locally,
+      // matching removeJob's tolerant behaviour.
+    }
+    const idSet = new Set(jobIds);
+    setHistory((prev) => {
+      const next = prev.filter(item => !idSet.has(item.job_id));
+      safeSaveHistory(next);
+      return next;
+    });
+    return result;
+  };
+
   return {
     history,
     historyBusy,
@@ -161,5 +180,6 @@ export function useTranscriptionHistory() {
     retryJob,
     clearHistory,
     removeJob,
+    removeJobs,
   };
 }
