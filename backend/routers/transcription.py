@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import tempfile
@@ -7,19 +8,20 @@ from typing import Any, cast
 
 # Ensure robust imports for both runtime and IDE
 try:
-    from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile # type: ignore
+    from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect # type: ignore
     from fastapi.responses import Response # type: ignore
     from pydantic import BaseModel, Field # type: ignore
 except ImportError:
     # Rich mocks for IDE to silence "unexpected keyword" and "no attribute" errors
     class MockDecorator:
         def __call__(self, f: Any) -> Any: return f
-    
+
     class APIRouter:
         def post(self, *args, **kwargs): return lambda f: f
         def get(self, *args, **kwargs): return lambda f: f
         def put(self, *args, **kwargs): return lambda f: f
         def delete(self, *args, **kwargs): return lambda f: f
+        def websocket(self, *args, **kwargs): return lambda f: f
         def include_router(self, *args, **kwargs): pass
 
     class BaseModel:
@@ -47,6 +49,15 @@ except ImportError:
         headers: dict[str, str] = {}
         state: Any = None
 
+    class WebSocket:
+        async def accept(self) -> None: pass
+        async def receive(self) -> dict: return {}
+        async def send_json(self, data: Any) -> None: pass
+        async def close(self, code: int = 1000) -> None: pass
+
+    class WebSocketDisconnect(Exception):
+        pass
+
     class UploadFile:
         filename: str | None = None
         async def read(self) -> bytes: return b""
@@ -63,6 +74,17 @@ except ImportError:
     except ImportError:
         # Last resort
         from services.transcription_service import SUPPORTED_AUDIO_SUFFIXES, TranscriptionJob, TranscriptionService # type: ignore
+
+try:
+    from services.realtime_asr_service import (
+        RealtimeAsrError,
+        build_streaming_asr_session,
+    )
+except ImportError:  # pragma: no cover - IDE fallback
+    from backend.services.realtime_asr_service import (  # type: ignore
+        RealtimeAsrError,
+        build_streaming_asr_session,
+    )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -611,3 +633,213 @@ async def get_transcription_job_words(job_id: str) -> list[WordTimestamp]:
             status_code=500,
             detail=_error("TRANSCRIPTION_WORDS_READ_FAILED", f"Failed to read words data: {str(exc)}"),
         ) from exc
+
+
+class TranscriptionTextSaveRequest(BaseModel):
+    transcript: str
+    file_name: str | None = None
+
+
+@router.post( # type: ignore
+    "/jobs/save-text",
+    response_model=TranscriptionJobResponse,
+    responses={
+        400: {"description": "Invalid transcript text.", "model": StructuredErrorResponse},
+        500: {"description": "Failed to save transcript.", "model": StructuredErrorResponse},
+    },
+)
+async def save_transcription_text(payload: TranscriptionTextSaveRequest) -> TranscriptionJobResponse:
+    """Persist a finished realtime transcription as a completed job record."""
+    transcript = (payload.transcript or "").strip()
+    if not transcript:
+        raise HTTPException(
+            status_code=400,
+            detail=_error("TRANSCRIPTION_VALIDATION_ERROR", "transcript must not be empty."),
+        )
+    try:
+        job = await transcription_service.create_completed_sync_job(
+            file_path="realtime_mic",
+            original_filename=(payload.file_name or "").strip() or "实时转写",
+            transcript=transcript,
+        )
+        return _job_to_response(job)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_error("TRANSCRIPTION_JOB_CREATE_FAILED", str(exc)),
+        ) from exc
+
+
+def _parse_realtime_config(raw: Any) -> dict[str, Any]:
+    """Validate the realtime WS config message. Returns kwargs for the session factory."""
+    if not isinstance(raw, dict):
+        return {}
+    config: dict[str, Any] = {}
+
+    hints = raw.get("language_hints")
+    if isinstance(hints, list):
+        cleaned = [str(code).strip() for code in hints if str(code).strip()]
+        if cleaned:
+            config["language_hints"] = cleaned[:4]
+
+    vocabulary = raw.get("vocabulary")
+    if isinstance(vocabulary, dict):
+        parsed: dict[str, int] = {}
+        for word, weight in vocabulary.items():
+            try:
+                parsed[str(word)] = int(weight)
+            except (TypeError, ValueError):
+                continue
+        if parsed:
+            config["vocabulary"] = parsed
+
+    semantic = raw.get("semantic_punctuation")
+    if isinstance(semantic, bool):
+        config["semantic_punctuation"] = semantic
+
+    silence = raw.get("max_sentence_silence")
+    if isinstance(silence, (int, float)) and 200 <= int(silence) <= 6000:
+        config["max_sentence_silence"] = int(silence)
+
+    return config
+
+
+# If the browser stops sending frames and the upstream stays quiet for this long,
+# assume the client vanished (tab killed / network drop without a TCP close) and
+# tear the session down rather than holding a live paid upstream socket forever.
+REALTIME_IDLE_TIMEOUT = 120.0
+
+
+@router.websocket("/realtime") # type: ignore
+async def transcription_realtime_ws(websocket: WebSocket) -> None:
+    """Proxy browser mic PCM (16kHz mono) to Qwen-Audio-3.0-ASR-Flash-Streaming.
+
+    Client protocol:
+      1. (optional) text JSON {"type": "config", "language_hints": [...], "vocabulary": {...}}
+      2. binary PCM16 frames
+      3. text JSON {"type": "finish"} to flush and end
+    Server sends: started / sentence / finished / error.
+    """
+    await websocket.accept()
+    session = None
+    upstream_task: asyncio.Task | None = None
+    receive_task: asyncio.Task | None = None
+    try:
+        # First message may be a JSON config; audio frames follow.
+        try:
+            first = await asyncio.wait_for(websocket.receive(), timeout=10.0)
+        except asyncio.TimeoutError as exc:
+            raise ValueError("Realtime transcription config message timed out.") from exc
+        if first.get("type") == "websocket.disconnect":
+            return
+        config_kwargs: dict[str, Any] = {}
+        pending_audio: bytes | None = None
+        if first.get("text"):
+            try:
+                config_kwargs = _parse_realtime_config(json.loads(first["text"]))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid realtime config JSON: {exc}") from exc
+        elif first.get("bytes"):
+            pending_audio = bytes(first["bytes"])
+
+        session = build_streaming_asr_session(
+            transcription_service.config,
+            **config_kwargs,
+        )
+        await session.start()
+        await websocket.send_json({"type": "started"})
+        if pending_audio:
+            await session.send_audio(pending_audio)
+
+        async def _forward_upstream() -> None:
+            assert session is not None
+            async for sentence in session.events():
+                await websocket.send_json(sentence.to_client_dict())
+
+        upstream_task = asyncio.create_task(_forward_upstream())
+        client_finished = False
+        disconnected = False
+
+        while not disconnected and not (client_finished and upstream_task.done()):
+            receive_task = asyncio.create_task(websocket.receive())
+            done, _pending = await asyncio.wait(
+                {receive_task, upstream_task},
+                return_when=asyncio.FIRST_COMPLETED,
+                timeout=REALTIME_IDLE_TIMEOUT,
+            )
+            if not done:
+                # Idle timeout: no client frames and no upstream results. The
+                # client almost certainly went away without a clean close; drop
+                # the session instead of blocking (and billing) forever.
+                receive_task.cancel()
+                logger.info("Realtime ASR session closed after idle timeout.")
+                break
+            if upstream_task in done:
+                exc = upstream_task.exception()
+                if exc is not None:
+                    receive_task.cancel()
+                    raise exc
+                # Upstream finished cleanly (task-finished).
+                if not receive_task.done():
+                    receive_task.cancel()
+                break
+            message = receive_task.result()
+            if message.get("type") == "websocket.disconnect":
+                disconnected = True
+                break
+            if message.get("bytes") is not None:
+                await session.send_audio(bytes(message["bytes"]))
+            elif message.get("text"):
+                try:
+                    data = json.loads(message["text"])
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(data, dict) and data.get("type") == "finish":
+                    await session.finish()
+                    client_finished = True
+
+        if client_finished and not disconnected:
+            try:
+                await asyncio.wait_for(asyncio.shield(upstream_task), timeout=30.0)
+            except asyncio.TimeoutError:
+                logger.warning("Realtime ASR upstream drain timed out after finish-task")
+            await websocket.send_json({"type": "finished"})
+            await websocket.close(code=1000)
+        elif not disconnected:
+            # Upstream ended on its own (or the session idled out). Tell the
+            # client the session is finished so it can surface whatever was
+            # transcribed, then close cleanly instead of leaving it hanging.
+            try:
+                await websocket.send_json({"type": "finished"})
+            except Exception:
+                pass
+            try:
+                await websocket.close(code=1000)
+            except Exception:
+                pass
+    except WebSocketDisconnect:
+        pass
+    except (ValueError, RealtimeAsrError) as exc:
+        try:
+            await websocket.send_json({"type": "error", "message": str(exc)})
+            await websocket.close(code=1003)
+        except Exception:
+            pass
+    except Exception as exc:
+        logger.exception("Realtime transcription session failed")
+        try:
+            await websocket.send_json({"type": "error", "message": str(exc)})
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+    finally:
+        pending_tasks = [
+            task for task in (receive_task, upstream_task)
+            if task is not None and not task.done()
+        ]
+        for task in pending_tasks:
+            task.cancel()
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
+        if session is not None:
+            await session.close()

@@ -1293,6 +1293,30 @@ export async function deleteTranscriptionJob(jobId: string): Promise<void> {
   }
 }
 
+export function buildRealtimeTranscriptionWebSocketUrl(): string {
+  const httpUrl = new URL(API_BASE_URL);
+  const protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${httpUrl.host}/api/transcription/realtime`;
+}
+
+export async function saveTranscriptionText(
+  transcript: string,
+  fileName?: string
+): Promise<TranscriptionJobResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/api/transcription/jobs/save-text`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...buildEverMemHeaders(true, "transcription"),
+    },
+    body: JSON.stringify({ transcript, file_name: fileName }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
 export async function saveAudioOverviewScript(
   podcastId: number,
   scriptLines: AudioOverviewScriptLine[]

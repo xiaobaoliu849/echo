@@ -1,13 +1,16 @@
 import React, { useState } from "react";
 import { AudioDropZone } from "./AudioDropZone";
 import ErrorNotice from "./ErrorNotice";
+import RealtimeTranscriptionPanel from "./transcription/RealtimeTranscriptionPanel";
 import { useI18n } from "../i18n";
+import type { TranscriptionJobResponse } from "../api";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onLocalTranscribe: (file: File, provider?: string) => void;
   onRemoteSubmit: (url: string) => void;
+  onRealtimeComplete: (job: TranscriptionJobResponse) => void;
   isBusy: boolean;
   isSyncBusy: boolean;
   isAsyncBusy: boolean;
@@ -19,13 +22,14 @@ export const NewTranscriptionModal: React.FC<Props> = ({
   onClose,
   onLocalTranscribe,
   onRemoteSubmit,
+  onRealtimeComplete,
   isBusy,
   isSyncBusy,
   isAsyncBusy,
   error,
 }) => {
   const { t } = useI18n();
-  const [inputMode, setInputMode] = useState<"local" | "remote">("local");
+  const [inputMode, setInputMode] = useState<"local" | "remote" | "realtime">("local");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [remoteUrl, setRemoteUrl] = useState("");
   const [asrProvider, setAsrProvider] = useState<string>("auto");
@@ -92,10 +96,20 @@ export const NewTranscriptionModal: React.FC<Props> = ({
           >
             {t("链式转写", "Async Pipeline")}
           </button>
+          <button
+            type="button"
+            className={`vsTranscribeFilterTab ${inputMode === "realtime" ? "active" : ""}`}
+            onClick={() => setInputMode("realtime")}
+            style={{ flex: 1, justifyContent: "center" }}
+          >
+            {t("实时转写", "Realtime")}
+          </button>
         </div>
 
         {/* Content */}
-        {inputMode === "local" ? (
+        {inputMode === "realtime" ? (
+          <RealtimeTranscriptionPanel onComplete={onRealtimeComplete} />
+        ) : inputMode === "local" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <AudioDropZone
               onFileDrop={handleFileDrop}

@@ -201,6 +201,18 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     }
   }
 
+  function handleRealtimeComplete(job: TranscriptionJobResponse) {
+    setJob(job);
+    setTranscript(job.transcript || "");
+    setWords([]);
+    setMemorySaved(Boolean(job.memory_saved));
+    setStatusMessage(getJobStatusMessage(job, t));
+    addOrUpdateJob(job);
+    setError(null);
+    setViewMode("detail");
+    setShowNewModal(false);
+  }
+
   async function handleCardClick(item: HistoryItem) {
     setDetailLoading(true);
     setViewMode("detail");
@@ -342,6 +354,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       onRetryJob={(id) => retryJob(id).catch(() => {})}
       onLocalTranscribe={handleLocalTranscription}
       onRemoteSubmit={handleRemoteJobStart}
+      onRealtimeComplete={handleRealtimeComplete}
     />
   );
 }

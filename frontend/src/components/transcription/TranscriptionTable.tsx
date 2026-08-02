@@ -1,4 +1,5 @@
 import type { HistoryItem } from "../../hooks/useTranscriptionHistory";
+import type { TranscriptionJobResponse } from "../../api";
 import { TranscriptionCard } from "../TranscriptionCard";
 import ErrorNotice from "../ErrorNotice";
 import { NewTranscriptionModal } from "../NewTranscriptionModal";
@@ -29,6 +30,7 @@ type Props = {
   onRetryJob: (jobId: string) => void;
   onLocalTranscribe: (file: File, provider?: string) => Promise<void>;
   onRemoteSubmit: (url: string) => Promise<void>;
+  onRealtimeComplete: (job: TranscriptionJobResponse) => void;
 };
 
 export default function TranscriptionTable({
@@ -54,6 +56,7 @@ export default function TranscriptionTable({
   onRetryJob,
   onLocalTranscribe,
   onRemoteSubmit,
+  onRealtimeComplete,
 }: Props) {
   const { t } = useI18n();
 
@@ -223,6 +226,7 @@ export default function TranscriptionTable({
           onClose={onCloseNewModal}
           onLocalTranscribe={onLocalTranscribe}
           onRemoteSubmit={onRemoteSubmit}
+          onRealtimeComplete={onRealtimeComplete}
         />
       )}
     </section>
