@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   API_BASE_URL,
   fetchTranscriptionJob,
+  getTranscriptionJobWords,
   transcribeAudio,
   createTranscriptionJobFromUrl,
   type TranscriptionJobResponse,
@@ -109,6 +110,9 @@ export function TranscriptionPage({ onSendToChat }: Props) {
           setTranscript(nextJob.transcript || "");
           setMemorySaved(Boolean(nextJob.memory_saved));
           setError(null);
+          // Fetch word-level timestamps persisted for the async job so the
+          // detail drawer can export precision-aligned SRT/VTT.
+          void loadJobWords(nextJob.job_id);
         } else if (nextJob.status === "failed") {
           setError(
             new Error(
@@ -152,6 +156,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
         transcript: resp.transcript,
         has_transcript: true,
         memory_saved: resp.memory_saved,
+        provider: resp.provider ?? null,
         source_url: resp.source_url ? (resp.source_url.startsWith("http") ? resp.source_url : `${API_BASE_URL}${resp.source_url}`) : undefined,
         updated_at: new Date().toISOString(),
       };
@@ -176,14 +181,14 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     }
   }
 
-  async function handleRemoteJobStart(url: string) {
+  async function handleRemoteJobStart(url: string, provider?: string) {
     setModalError(null);
     setError(null);
     setInfoMessage("");
     setIsAsyncBusy(true);
 
     try {
-      const newJob = await createTranscriptionJobFromUrl(url);
+      const newJob = await createTranscriptionJobFromUrl(url, provider);
       setJob(newJob);
       setTranscript(newJob.transcript || "");
       setWords([]);
@@ -201,6 +206,31 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     }
   }
 
+  function handleRealtimeComplete(job: TranscriptionJobResponse, words?: WordTimestamp[]) {
+    setJob(job);
+    setTranscript(job.transcript || "");
+    setWords(words || []);
+    setMemorySaved(Boolean(job.memory_saved));
+    setStatusMessage(getJobStatusMessage(job, t));
+    addOrUpdateJob(job);
+    setError(null);
+    setViewMode("detail");
+    setShowNewModal(false);
+  }
+
+  // Load word-level timestamps for a completed job (async local/URL jobs store
+  // them separately). 404 / missing words fall back to an empty list so the
+  // drawer still exports evenly-split SRT for providers without timestamps.
+  async function loadJobWords(jobId?: string | null) {
+    if (!jobId) return;
+    try {
+      const loaded = await getTranscriptionJobWords(jobId);
+      setWords(loaded || []);
+    } catch {
+      setWords([]);
+    }
+  }
+
   async function handleCardClick(item: HistoryItem) {
     setDetailLoading(true);
     setViewMode("detail");
@@ -211,6 +241,9 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       setWords([]);
       setMemorySaved(Boolean(fullJob.memory_saved));
       setStatusMessage(getJobStatusMessage(fullJob, t));
+      if (fullJob.status === "completed") {
+        void loadJobWords(fullJob.job_id);
+      }
     } catch {
       // Fallback to local history item info if server fetch fails
       const fallbackJob: TranscriptionJobResponse = {
@@ -342,6 +375,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       onRetryJob={(id) => retryJob(id).catch(() => {})}
       onLocalTranscribe={handleLocalTranscription}
       onRemoteSubmit={handleRemoteJobStart}
+      onRealtimeComplete={handleRealtimeComplete}
     />
   );
 }

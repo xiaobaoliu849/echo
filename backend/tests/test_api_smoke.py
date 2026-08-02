@@ -871,7 +871,7 @@ class ApiSmokeTests(unittest.TestCase):
                 service.prepare_long_transcription_url_job("https://example.com/audio/meeting.wav")
             )
 
-            async def fake_submit(file_url: str) -> str:
+            async def fake_submit(file_url: str, provider: str | None = None) -> str:
                 self.assertEqual(file_url, "https://example.com/audio/meeting.wav")
                 return "remote-task-001"
 
@@ -1079,7 +1079,7 @@ class ApiSmokeTests(unittest.TestCase):
             original_jobs_dir = transcription_router.transcription_service.jobs_dir
             transcription_router.transcription_service.jobs_dir = jobs_dir
             try:
-                async def fake_submit_remote_job_from_url(file_url: str) -> str:
+                async def fake_submit_remote_job_from_url(file_url: str, provider: str | None = None) -> str:
                     return "remote-url-job-001"
 
                 async def fake_fetch_status(remote_job_id: str) -> dict[str, Any]:
@@ -1178,7 +1178,7 @@ class ApiSmokeTests(unittest.TestCase):
             transcription_router.transcription_service.jobs_dir = jobs_dir
             transcription_router.transcription_service.config = BackendConfig(config_path)
             try:
-                async def fake_submit_remote_job_from_url(file_url: str) -> str:
+                async def fake_submit_remote_job_from_url(file_url: str, provider: str | None = None) -> str:
                     self.assertTrue(file_url.startswith("https://files.example.com/public/transcription/"))
                     return "remote-uploaded-job-001"
 
@@ -1263,7 +1263,7 @@ class ApiSmokeTests(unittest.TestCase):
                     memory_saved=True,
                 )
 
-                async def fake_submit_remote_job_from_url(file_url: str) -> str:
+                async def fake_submit_remote_job_from_url(file_url: str, provider: str | None = None) -> str:
                     self.assertEqual(file_url, "https://example.com/audio/demo.wav")
                     return "remote-new"
 
@@ -1364,7 +1364,7 @@ class ApiSmokeTests(unittest.TestCase):
             original_jobs_dir = transcription_router.transcription_service.jobs_dir
             transcription_router.transcription_service.jobs_dir = jobs_dir
             try:
-                async def fake_submit_remote_job_from_url(file_url: str) -> str:
+                async def fake_submit_remote_job_from_url(file_url: str, provider: str | None = None) -> str:
                     self.assertEqual(file_url, "https://example.com/audio/demo.wav")
                     return "remote-url-job-001"
 

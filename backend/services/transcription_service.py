@@ -22,7 +22,14 @@ from .transcription_publish_adapter import build_transcription_publisher
 from .llm_service import LLMService
 
 QWEN_ASR_SYNC_MODEL = "qwen3-asr-flash-2026-02-10"
+# DashScope async (file-transcription) ASR. "链式" URL jobs are DashScope-only;
+# the selectable engine is which DashScope ASR model the async task runs.
 QWEN_ASR_ASYNC_MODEL = "qwen3-asr-flash-filetrans"
+QWEN_AUDIO_ASR_ASYNC_MODEL = "qwen-audio-3.0-asr-flash-filetrans"
+ASYNC_MODEL_BY_PROVIDER = {
+    "qwen-filetrans": QWEN_ASR_ASYNC_MODEL,
+    "qwen-audio-filetrans": QWEN_AUDIO_ASR_ASYNC_MODEL,
+}
 QWEN_COMPATIBLE_CHAT_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 # Alternate specialized endpoint for direct ASR tasks
 QWEN_ASR_DIRECT_URL = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription"
@@ -78,6 +85,7 @@ class TranscriptionJob:
     source_url: str | None = None
     memory_saved: bool = False
     original_filename: str | None = None
+    provider: str | None = None
 
 
 class TranscriptionService:
@@ -178,6 +186,7 @@ class TranscriptionService:
             "source_url": job.source_url,
             "memory_saved": bool(job.memory_saved),
             "original_filename": job.original_filename,
+            "provider": job.provider,
         }
         self._job_path(job_id_str).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -204,6 +213,7 @@ class TranscriptionService:
                 source_url=payload.get("source_url"),
                 memory_saved=bool(payload.get("memory_saved", False)),
                 original_filename=payload.get("original_filename"),
+                provider=payload.get("provider"),
             )
         except Exception:
             return None
@@ -233,6 +243,7 @@ class TranscriptionService:
                     source_url=payload.get("source_url"),
                     memory_saved=bool(payload.get("memory_saved", False)),
                     original_filename=payload.get("original_filename"),
+                    provider=payload.get("provider"),
                 )
             except Exception:
                 continue
@@ -309,6 +320,7 @@ class TranscriptionService:
         remote_job_id: str | None = None,
         source_url: str | None = None,
         memory_saved: bool | None = None,
+        provider: str | None = None,
     ) -> TranscriptionJob:
         job = self.get_job(job_id)
         if job is None:
@@ -325,6 +337,8 @@ class TranscriptionService:
             job.source_url = source_url
         if memory_saved is not None:
             job.memory_saved = memory_saved
+        if provider is not None:
+            job.provider = provider
         job.updated_at = self._now_iso()
         return self._write_job(job)
 
@@ -347,74 +361,91 @@ class TranscriptionService:
                 api_key = self._deepgram_key()
                 if not api_key:
                     raise ValueError("Deepgram API key not configured.")
-                return await self._transcribe_with_deepgram(path, api_key)
+                result = await self._transcribe_with_deepgram(path, api_key)
             elif provider == "openai" or provider == "whisper":
                 api_key = self._openai_key()
                 if not api_key:
                     raise ValueError("OpenAI API key not configured.")
-                return await self._transcribe_with_openai_whisper(path, api_key)
+                result = await self._transcribe_with_openai_whisper(path, api_key)
+                provider = "openai"
             elif provider in {"dashscope", "qwen", "qwen-audio", "qwen-audio-asr", "funasr", "fun-asr"}:
                 api_key = self._dashscope_key()
                 if not api_key:
                     raise ValueError("DashScope API key not configured.")
-                return await self._transcribe_with_qwen_audio_asr(
+                result = await self._transcribe_with_qwen_audio_asr(
                     path,
                     api_key,
                     language_hints=language_hints,
                     vocabulary=vocabulary,
                 )
+                provider = "dashscope"
             elif provider in {"qwen-legacy", "qwen3-asr"}:
                 api_key = self._dashscope_key()
                 if not api_key:
                     raise ValueError("DashScope API key not configured.")
-                return await self._transcribe_with_openai_asr(
+                result = await self._transcribe_with_openai_asr(
                     path, api_key, QWEN_COMPATIBLE_CHAT_URL, QWEN_ASR_SYNC_MODEL, "Qwen"
                 )
+                provider = "qwen-legacy"
             elif provider == "xiaomi" or provider == "mimo":
                 api_key = self._xiaomi_key()
                 if not api_key:
                     raise ValueError("Xiaomi API key not configured.")
-                return await self._transcribe_with_openai_asr(
+                result = await self._transcribe_with_openai_asr(
                     path, api_key, self._mimo_chat_url(), MIMO_ASR_MODEL, "MiMo"
                 )
+                provider = "xiaomi"
             elif provider == "assemblyai":
                 api_key = self._assemblyai_key()
                 if not api_key:
                     raise ValueError("AssemblyAI API key not configured.")
-                return await self._transcribe_with_assemblyai(path, api_key)
+                result = await self._transcribe_with_assemblyai(path, api_key)
             else:
                 raise ValueError(f"Unsupported ASR provider: {provider}")
+            # Echo the actual engine so the UI can show which model was used.
+            result["provider"] = provider
+            return result
 
         # Auto-select: try providers in priority order
         # Deepgram, OpenAI Whisper, and AssemblyAI support word-level timestamps
         deepgram_key = self._deepgram_key()
         if deepgram_key:
-            return await self._transcribe_with_deepgram(path, deepgram_key)
+            result = await self._transcribe_with_deepgram(path, deepgram_key)
+            result["provider"] = "deepgram"
+            return result
 
         openai_key = self._openai_key()
         if openai_key:
-            return await self._transcribe_with_openai_whisper(path, openai_key)
+            result = await self._transcribe_with_openai_whisper(path, openai_key)
+            result["provider"] = "openai"
+            return result
 
         assemblyai_key = self._assemblyai_key()
         if assemblyai_key:
-            return await self._transcribe_with_assemblyai(path, assemblyai_key)
+            result = await self._transcribe_with_assemblyai(path, assemblyai_key)
+            result["provider"] = "assemblyai"
+            return result
 
         # Qwen-Audio-3.0-ASR-Flash also returns word-level timestamps
         dashscope_key = self._dashscope_key()
         if dashscope_key:
-            return await self._transcribe_with_qwen_audio_asr(
+            result = await self._transcribe_with_qwen_audio_asr(
                 path,
                 dashscope_key,
                 language_hints=language_hints,
                 vocabulary=vocabulary,
             )
+            result["provider"] = "dashscope"
+            return result
 
         # MiMo doesn't support word-level timestamps
         xiaomi_key = self._xiaomi_key()
         if xiaomi_key:
-            return await self._transcribe_with_openai_asr(
+            result = await self._transcribe_with_openai_asr(
                 path, xiaomi_key, self._mimo_chat_url(), MIMO_ASR_MODEL, "MiMo"
             )
+            result["provider"] = "xiaomi"
+            return result
 
         raise ValueError("No ASR API key configured. Set deepgram_api_key, openai_api_key, assemblyai_api_key, dashscope_api_key, or xiaomi_api_key.")
 
@@ -917,7 +948,9 @@ class TranscriptionService:
         )
         return self._write_job(job)
 
-    async def prepare_long_transcription_url_job(self, file_url: str) -> TranscriptionJob:
+    async def prepare_long_transcription_url_job(
+        self, file_url: str, provider: str | None = None
+    ) -> TranscriptionJob:
         normalized_url = self._validate_remote_file_url(file_url)
         timestamp = self._now_iso()
         full_hex = str(uuid.uuid4().hex)
@@ -936,6 +969,7 @@ class TranscriptionService:
             source_url=normalized_url,
             original_filename=original_filename,
         )
+        job.provider = provider or "qwen-filetrans"
         return self._write_job(job)
 
     async def submit_long_transcription_job(self, job_id: str) -> TranscriptionJob:
@@ -946,7 +980,9 @@ class TranscriptionService:
             raise ValueError("Only async transcription jobs can be submitted.")
 
         if job.source_url:
-            remote_job_id = await self._submit_remote_job_from_url(str(job.source_url))
+            remote_job_id = await self._submit_remote_job_from_url(
+                str(job.source_url), provider=job.provider
+            )
         else:
             raise ValueError(
                 "DashScope async transcription requires a public file_url. "
@@ -1089,7 +1125,9 @@ class TranscriptionService:
 
 
 
-    async def _submit_remote_job_from_url(self, file_url: str) -> str:
+    async def _submit_remote_job_from_url(
+        self, file_url: str, provider: str | None = None
+    ) -> str:
         normalized_url = self._validate_remote_file_url(file_url)
         api_key = self._dashscope_key()
         if not api_key:
@@ -1101,7 +1139,7 @@ class TranscriptionService:
             "X-DashScope-Async": "enable",
         }
         payload = {
-            "model": QWEN_ASR_ASYNC_MODEL,
+            "model": ASYNC_MODEL_BY_PROVIDER.get(provider or "", QWEN_ASR_ASYNC_MODEL),
             "input": {"file_url": normalized_url},
             "parameters": {
                 "channel_id": [0],

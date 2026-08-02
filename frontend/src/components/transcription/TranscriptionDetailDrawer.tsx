@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { TranscriptionJobResponse, WordTimestamp } from "../../api";
 import ErrorNotice from "../ErrorNotice";
 import { useI18n } from "../../i18n";
+import { asrProviderLabel } from "../../utils/asrProviders";
 
 type Props = {
   job: TranscriptionJobResponse | null;
@@ -74,6 +75,11 @@ export default function TranscriptionDetailDrawer({
             {job?.mode && (
               <span style={{ marginLeft: 8, opacity: 0.7 }}>
                 ({job.mode === "sync" ? t("同步", "Sync") : t("异步", "Async")})
+              </span>
+            )}
+            {job?.provider && (
+              <span style={{ marginLeft: 8, opacity: 0.7 }}>
+                · {t("引擎", "Engine")}: {asrProviderLabel(job.provider, language)}
               </span>
             )}
           </div>

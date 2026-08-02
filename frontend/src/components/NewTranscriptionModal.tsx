@@ -1,13 +1,17 @@
 import React, { useState } from "react";
 import { AudioDropZone } from "./AudioDropZone";
 import ErrorNotice from "./ErrorNotice";
+import RealtimeTranscriptionPanel from "./transcription/RealtimeTranscriptionPanel";
 import { useI18n } from "../i18n";
+import type { TranscriptionJobResponse, WordTimestamp } from "../api";
+import { ASR_ENGINES, ASYNC_ASR_MODELS } from "../utils/asrProviders";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onLocalTranscribe: (file: File, provider?: string) => void;
-  onRemoteSubmit: (url: string) => void;
+  onRemoteSubmit: (url: string, provider?: string) => void;
+  onRealtimeComplete: (job: TranscriptionJobResponse, words?: WordTimestamp[]) => void;
   isBusy: boolean;
   isSyncBusy: boolean;
   isAsyncBusy: boolean;
@@ -19,16 +23,18 @@ export const NewTranscriptionModal: React.FC<Props> = ({
   onClose,
   onLocalTranscribe,
   onRemoteSubmit,
+  onRealtimeComplete,
   isBusy,
   isSyncBusy,
   isAsyncBusy,
   error,
 }) => {
   const { t } = useI18n();
-  const [inputMode, setInputMode] = useState<"local" | "remote">("local");
+  const [inputMode, setInputMode] = useState<"local" | "remote" | "realtime">("local");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [remoteUrl, setRemoteUrl] = useState("");
   const [asrProvider, setAsrProvider] = useState<string>("auto");
+  const [asyncModel, setAsyncModel] = useState<string>("qwen-filetrans");
 
   if (!open) return null;
 
@@ -45,7 +51,7 @@ export const NewTranscriptionModal: React.FC<Props> = ({
   function handleSubmitRemote() {
     const url = remoteUrl.trim();
     if (!url) return;
-    onRemoteSubmit(url);
+    onRemoteSubmit(url, asyncModel);
   }
 
   return (
@@ -92,10 +98,20 @@ export const NewTranscriptionModal: React.FC<Props> = ({
           >
             {t("链式转写", "Async Pipeline")}
           </button>
+          <button
+            type="button"
+            className={`vsTranscribeFilterTab ${inputMode === "realtime" ? "active" : ""}`}
+            onClick={() => setInputMode("realtime")}
+            style={{ flex: 1, justifyContent: "center" }}
+          >
+            {t("实时转写", "Realtime")}
+          </button>
         </div>
 
         {/* Content */}
-        {inputMode === "local" ? (
+        {inputMode === "realtime" ? (
+          <RealtimeTranscriptionPanel onComplete={onRealtimeComplete} />
+        ) : inputMode === "local" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <AudioDropZone
               onFileDrop={handleFileDrop}
@@ -130,13 +146,21 @@ export const NewTranscriptionModal: React.FC<Props> = ({
                   fontSize: "14px",
                 }}
               >
-                <option value="auto">{t("自动选择 (优先精确时间戳)", "Auto (prefer precise timestamps)")}</option>
-                <option value="deepgram">Deepgram (Nova-3)</option>
-                <option value="openai">OpenAI Whisper</option>
-                <option value="assemblyai">AssemblyAI</option>
-                <option value="dashscope">Qwen-Audio 3.0 ASR Flash ({t("阿里云", "Alibaba Cloud")})</option>
-                <option value="xiaomi">{t("小米 MiMo", "Xiaomi MiMo")}</option>
-                <option value="qwen-legacy">Qwen3 ASR Flash ({t("旧版", "Legacy")})</option>
+                <option value="auto">{t("自动选择", "Auto")}</option>
+                <optgroup label={t("推荐 · 支持精确字幕", "Recommended · precise subtitles")}>
+                  {ASR_ENGINES.filter((e) => e.group === "timestamps").map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {t(e.zh, e.en)}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label={t("仅文本转写", "Text-only transcription")}>
+                  {ASR_ENGINES.filter((e) => e.group === "text-only").map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {t(e.zh, e.en)}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
               <span
                 style={{
@@ -145,10 +169,10 @@ export const NewTranscriptionModal: React.FC<Props> = ({
                   lineHeight: "1.4",
                 }}
               >
-                {t(
-                  "Deepgram、OpenAI Whisper、AssemblyAI 和 Qwen-Audio 3.0 ASR Flash 支持精确单词级时间戳，适合生成字幕。Qwen-Audio 还支持热词定制与多语种混合识别。",
-                  "Deepgram, OpenAI Whisper, AssemblyAI, and Qwen-Audio 3.0 ASR Flash support precise word-level timestamps, ideal for subtitle generation. Qwen-Audio also supports instant hotwords and mixed-language recognition."
-                )}
+                {(() => {
+                  const engine = ASR_ENGINES.find((e) => e.id === asrProvider);
+                  return engine ? t(engine.noteZh, engine.noteEn) : "";
+                })()}
               </span>
             </div>
             <button
@@ -168,7 +192,7 @@ export const NewTranscriptionModal: React.FC<Props> = ({
                   <span className="spinner-mini" /> {t("转写中…", "Transcribing...")}
                 </>
               ) : (
-                t("开始同步转写", "Start sync transcription")
+                t("开始转写", "Start transcription")
               )}
             </button>
           </div>
@@ -205,6 +229,45 @@ export const NewTranscriptionModal: React.FC<Props> = ({
                 {t(
                   "支持直接可下载的公网 http/https/oss 格式音频。大文件推荐走此通道。",
                   "Supports publicly accessible and downloadable http/https/oss links. Best for larger files."
+                )}
+              </span>
+            </div>
+
+            <div className="vsField" style={{ gap: "8px" }}>
+              <label
+                className="vsFieldLabel"
+                style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}
+              >
+                {t("转写模型", "Transcription Model")}
+              </label>
+              <select
+                value={asyncModel}
+                onChange={(e) => setAsyncModel(e.target.value)}
+                disabled={isBusy}
+                className="vsSelect"
+                style={{
+                  width: "100%",
+                  height: "44px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                }}
+              >
+                {ASYNC_ASR_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {t(m.zh, m.en)}
+                  </option>
+                ))}
+              </select>
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "var(--muted)",
+                  lineHeight: "1.4",
+                }}
+              >
+                {t(
+                  "链式转写使用阿里云离线文件转写，可在下方模型间选择。",
+                  "Async pipeline uses Alibaba offline file transcription; pick a model below."
                 )}
               </span>
             </div>
