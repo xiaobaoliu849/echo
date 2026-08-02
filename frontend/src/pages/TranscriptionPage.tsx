@@ -241,6 +241,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
   async function handleCardClick(item: HistoryItem) {
     setDetailLoading(true);
     setViewMode("detail");
+    setAudioDuration(0);
     try {
       const fullJob = await fetchTranscriptionJob(item.job_id);
       setJob(fullJob);
@@ -280,6 +281,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     setJob(null);
     setTranscript("");
     setWords([]);
+    setAudioDuration(0);
     setError(null);
     setInfoMessage("");
   }
@@ -315,7 +317,9 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     const link = document.createElement("a");
     link.href = url;
     link.download = `${baseName}.${extension}`;
+    document.body.appendChild(link);
     link.click();
+    link.remove();
     URL.revokeObjectURL(url);
   }
 

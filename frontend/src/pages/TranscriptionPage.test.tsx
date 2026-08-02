@@ -46,7 +46,7 @@ describe("TranscriptionPage", () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("transcribes a local audio file", async () => {
@@ -127,5 +127,52 @@ describe("TranscriptionPage", () => {
     expect(mockedFetchTranscriptionJob).toHaveBeenCalledWith("tx_url_001");
     expect(screen.getByText("转写完成。")).toBeInTheDocument();
     expect(screen.getByText("已入记忆")).toBeInTheDocument();
+  });
+
+  it("exports SRT subtitle via a DOM-appended download link", async () => {
+    mockedTranscribeAudio.mockResolvedValueOnce({
+      transcript: "你好世界。这是一段测试。",
+      memory_saved: false,
+    });
+
+    render(<TranscriptionPage />);
+
+    // Trigger a local transcription to enter detail view
+    fireEvent.click(screen.getByRole("button", { name: /新建转写/ }));
+    const fileInput = screen.getByLabelText("选择转写音频");
+    const audioFile = new File(["audio"], "test.wav", { type: "audio/wav" });
+    fireEvent.change(fileInput, { target: { files: [audioFile] } });
+    fireEvent.click(screen.getByRole("button", { name: "开始转写" }));
+
+    // Wait for detail view with transcript
+    await waitFor(() => {
+      expect(screen.getByText(/你好世界/)).toBeInTheDocument();
+    });
+
+    // Spy on DOM manipulation for the download link
+    const appendSpy = vi.spyOn(document.body, "appendChild");
+    const revokeURLSpy = vi.spyOn(URL, "revokeObjectURL");
+    const createURLSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:mock-url");
+
+    // Open export menu and click SRT
+    fireEvent.click(screen.getByRole("button", { name: /导出/ }));
+    fireEvent.click(screen.getByText(/导出 SRT 字幕/));
+
+    // Verify the <a> element was appended to the DOM before clicking
+    const appendedLink = appendSpy.mock.calls.find(
+      ([node]) => node instanceof HTMLAnchorElement
+    );
+    expect(appendedLink).toBeDefined();
+
+    const anchor = appendedLink![0] as HTMLAnchorElement;
+    expect(anchor.download).toBe("test.srt");
+    expect(anchor.href).toContain("blob:");
+
+    // Verify the blob URL was revoked after download
+    expect(revokeURLSpy).toHaveBeenCalledWith("blob:mock-url");
+
+    appendSpy.mockRestore();
+    revokeURLSpy.mockRestore();
+    createURLSpy.mockRestore();
   });
 });
