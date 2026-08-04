@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   API_BASE_URL,
   fetchTranscriptionJob,
@@ -14,6 +14,7 @@ import TranscriptionTable from "../components/transcription/TranscriptionTable";
 import { useTranscriptionHistory, type HistoryItem } from "../hooks/useTranscriptionHistory";
 import { useI18n } from "../i18n";
 import { generateSrt, generateVtt } from "../utils/subtitleGenerator";
+import { exportTextFile } from "../utils/desktopFileSave";
 
 type ViewMode = "library" | "detail";
 
@@ -286,20 +287,29 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     setInfoMessage("");
   }
 
+  const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showInfo(message: string) {
+    // Replace any pending auto-clear so a quick second action isn't wiped by
+    // the first action's timer.
+    if (infoTimerRef.current) clearTimeout(infoTimerRef.current);
+    setInfoMessage(message);
+    infoTimerRef.current = setTimeout(() => setInfoMessage(""), 3000);
+  }
+
   function handleCopy() {
     if (!transcript) return;
     navigator.clipboard.writeText(transcript).then(() => {
-      setInfoMessage(t("文稿已复制到剪贴板", "Transcript copied to clipboard."));
-      setTimeout(() => setInfoMessage(""), 3000);
+      showInfo(t("文稿已复制到剪贴板", "Transcript copied to clipboard."));
     });
   }
 
-  function handleExport(format: "txt" | "srt" | "vtt" | "json") {
+  async function handleExport(format: "txt" | "srt" | "vtt" | "json") {
     if (!transcript && words.length === 0) return;
     const baseName = (job?.file_name || "transcript").replace(/\.[^/.]+$/, "");
     let content = "";
     let mimeType = "text/plain";
-    let extension = format;
+    const extension = format;
 
     if (format === "txt") {
       content = transcript;
@@ -307,20 +317,29 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       content = JSON.stringify({ transcript, words, job }, null, 2);
       mimeType = "application/json";
     } else if (format === "srt") {
-      content = generateSrt(transcript, audioDuration, words);
+      // BOM keeps CJK subtitles readable in legacy Windows players (ANSI default).
+      content = "\uFEFF" + generateSrt(transcript, audioDuration, words);
     } else if (format === "vtt") {
       content = generateVtt(transcript, audioDuration, words);
     }
+    if (!content) return;
 
-    const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${baseName}.${extension}`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    // Desktop (pywebview) swallows blob-anchor downloads, so this goes through
+    // the native save dialog there and falls back to an anchor in browsers.
+    const outcome = await exportTextFile(`${baseName}.${extension}`, content, mimeType);
+    if (outcome.kind === "saved-desktop") {
+      showInfo(
+        outcome.path
+          ? t(`文件已导出: ${outcome.path}`, `Exported: ${outcome.path}`)
+          : t("文件已导出。", "File exported.")
+      );
+    } else if (outcome.kind === "failed") {
+      setError(
+        new Error(
+          t(`导出失败: ${outcome.message}`, `Export failed: ${outcome.message}`)
+        )
+      );
+    }
   }
 
   function handleReservedAction(actionId: string) {
@@ -379,21 +398,20 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       const result = await removeJobs(ids);
       setSelectedIds(new Set());
       if (result.failed && result.failed.length > 0) {
-        setInfoMessage(
+        showInfo(
           t(
             `部分记录删除失败（${result.failed.length} 条）`,
             `Some records failed to delete (${result.failed.length}).`
           )
         );
       } else {
-        setInfoMessage(
+        showInfo(
           t(
             `已删除 ${result.deleted.length} 条记录`,
             `Deleted ${result.deleted.length} record(s).`
           )
         );
       }
-      setTimeout(() => setInfoMessage(""), 3000);
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
       setError(e);
@@ -411,8 +429,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       setJob(updated);
       setMemorySaved(true);
       addOrUpdateJob(updated);
-      setInfoMessage(t("已存入长期记忆", "Saved to long-term memory."));
-      setTimeout(() => setInfoMessage(""), 3000);
+      showInfo(t("已存入长期记忆", "Saved to long-term memory."));
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
       setError(e);

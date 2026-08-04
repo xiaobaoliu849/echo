@@ -175,4 +175,90 @@ describe("TranscriptionPage", () => {
     revokeURLSpy.mockRestore();
     createURLSpy.mockRestore();
   });
+
+  it("exports SRT subtitle via the pywebview bridge in desktop mode", async () => {
+    mockedTranscribeAudio.mockResolvedValueOnce({
+      transcript: "你好世界。这是一段测试。",
+      memory_saved: false,
+    });
+    const saveTextFile = vi
+      .fn()
+      .mockResolvedValue({ ok: true, cancelled: false, path: "C:/exports/test.srt" });
+    (window as any).pywebview = { api: { save_text_file: saveTextFile } };
+    const appendSpy = vi.spyOn(document.body, "appendChild");
+
+    try {
+      render(<TranscriptionPage />);
+
+      fireEvent.click(screen.getByRole("button", { name: /新建转写/ }));
+      const fileInput = screen.getByLabelText("选择转写音频");
+      const audioFile = new File(["audio"], "test.wav", { type: "audio/wav" });
+      fireEvent.change(fileInput, { target: { files: [audioFile] } });
+      fireEvent.click(screen.getByRole("button", { name: "开始转写" }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/你好世界/)).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /导出/ }));
+      fireEvent.click(screen.getByText(/导出 SRT 字幕/));
+
+      await waitFor(() => {
+        expect(saveTextFile).toHaveBeenCalledTimes(1);
+      });
+
+      const payload = saveTextFile.mock.calls[0][0];
+      expect(payload.filename).toBe("test.srt");
+      const rawBytes = Uint8Array.from(atob(payload.data_base64), (c) =>
+        c.charCodeAt(0)
+      );
+      // SRT exports carry a BOM so CJK stays readable in legacy Windows players.
+      expect([...rawBytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+      const decoded = new TextDecoder().decode(rawBytes);
+      expect(decoded).toContain("-->");
+      expect(decoded).toContain("你好世界");
+
+      // Desktop bridge path must not fall back to an anchor download.
+      expect(
+        appendSpy.mock.calls.some(([node]) => node instanceof HTMLAnchorElement)
+      ).toBe(false);
+
+      expect(await screen.findByText(/文件已导出/)).toBeInTheDocument();
+    } finally {
+      appendSpy.mockRestore();
+      delete (window as any).pywebview;
+    }
+  });
+
+  it("surfaces an error when the desktop export bridge fails", async () => {
+    mockedTranscribeAudio.mockResolvedValueOnce({
+      transcript: "你好世界。这是一段测试。",
+      memory_saved: false,
+    });
+    const saveTextFile = vi
+      .fn()
+      .mockResolvedValue({ ok: false, cancelled: false, message: "disk full" });
+    (window as any).pywebview = { api: { save_text_file: saveTextFile } };
+
+    try {
+      render(<TranscriptionPage />);
+
+      fireEvent.click(screen.getByRole("button", { name: /新建转写/ }));
+      const fileInput = screen.getByLabelText("选择转写音频");
+      const audioFile = new File(["audio"], "test.wav", { type: "audio/wav" });
+      fireEvent.change(fileInput, { target: { files: [audioFile] } });
+      fireEvent.click(screen.getByRole("button", { name: "开始转写" }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/你好世界/)).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /导出/ }));
+      fireEvent.click(screen.getByText(/导出 VTT 字幕/));
+
+      expect(await screen.findByText(/导出失败/)).toBeInTheDocument();
+    } finally {
+      delete (window as any).pywebview;
+    }
+  });
 });
