@@ -758,36 +758,44 @@ class DesktopJsApi:
     def __init__(self, controller: DesktopController) -> None:
         self._controller = controller
 
-    def save_audio_file(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Save an audio blob sent from the web UI through the native file dialog."""
+    def _save_bytes_via_dialog(
+        self,
+        *,
+        payload: dict[str, Any],
+        default_name: str,
+        extension: str,
+        file_types: tuple[str, ...],
+        empty_message: str,
+    ) -> dict[str, Any]:
+        """Shared save flow: validate payload, open native save dialog, write bytes."""
         if self._controller.window is None or self._controller.webview_module is None:
             return {"ok": False, "cancelled": False, "message": "Desktop window is not ready."}
 
         if not isinstance(payload, dict):
             return {"ok": False, "cancelled": False, "message": "Invalid save payload."}
 
-        raw_name = str(payload.get("filename") or "voicespirit_tts.mp3").strip()
-        suggested_name = Path(raw_name).name or "voicespirit_tts.mp3"
-        if not suggested_name.lower().endswith(".mp3"):
-            suggested_name = f"{suggested_name}.mp3"
+        raw_name = str(payload.get("filename") or default_name).strip()
+        suggested_name = (Path(raw_name).name or default_name).rstrip(".") or default_name
+        if not suggested_name.lower().endswith(extension):
+            suggested_name = f"{suggested_name}{extension}"
 
         data_base64 = str(payload.get("data_base64") or "").strip()
         if not data_base64:
-            return {"ok": False, "cancelled": False, "message": "Audio data is empty."}
+            return {"ok": False, "cancelled": False, "message": empty_message}
 
         try:
-            audio_bytes = base64.b64decode(data_base64, validate=True)
+            data_bytes = base64.b64decode(data_base64, validate=True)
         except (binascii.Error, ValueError) as exc:
-            return {"ok": False, "cancelled": False, "message": f"Invalid audio data: {exc}"}
+            return {"ok": False, "cancelled": False, "message": f"Invalid file data: {exc}"}
 
-        if not audio_bytes:
-            return {"ok": False, "cancelled": False, "message": "Audio data is empty."}
+        if not data_bytes:
+            return {"ok": False, "cancelled": False, "message": empty_message}
 
         try:
             selected = self._controller.window.create_file_dialog(
                 self._controller.webview_module.SAVE_DIALOG,
                 save_filename=suggested_name,
-                file_types=("MP3 Audio (*.mp3)", "All files (*.*)"),
+                file_types=file_types,
             )
         except Exception as exc:
             return {"ok": False, "cancelled": False, "message": f"Save dialog failed: {exc}"}
@@ -802,15 +810,52 @@ class DesktopJsApi:
 
         output_path = Path(str(selected_path))
         if not output_path.suffix:
-            output_path = output_path.with_suffix(".mp3")
+            output_path = output_path.with_suffix(extension)
 
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(audio_bytes)
+            output_path.write_bytes(data_bytes)
         except OSError as exc:
             return {"ok": False, "cancelled": False, "message": f"Failed to write file: {exc}"}
 
         return {"ok": True, "cancelled": False, "path": str(output_path)}
+
+    def save_audio_file(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Save an audio blob sent from the web UI through the native file dialog."""
+        return self._save_bytes_via_dialog(
+            payload=payload,
+            default_name="voicespirit_tts.mp3",
+            extension=".mp3",
+            file_types=("MP3 Audio (*.mp3)", "All files (*.*)"),
+            empty_message="Audio data is empty.",
+        )
+
+    _TEXT_FILE_TYPES: dict[str, str] = {
+        ".srt": "SRT Subtitle (*.srt)",
+        ".vtt": "VTT Subtitle (*.vtt)",
+        ".txt": "Text (*.txt)",
+        ".json": "JSON (*.json)",
+    }
+
+    def save_text_file(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Save a text export (subtitle/transcript) through the native file dialog.
+
+        Blob-anchor downloads are silently swallowed inside pywebview, so text
+        exports (SRT/VTT/TXT/JSON) go through this bridge just like audio.
+        """
+        raw_name = ""
+        if isinstance(payload, dict):
+            raw_name = str(payload.get("filename") or "")
+        extension = Path(raw_name).suffix.lower()
+        if extension not in self._TEXT_FILE_TYPES:
+            extension = ".txt"
+        return self._save_bytes_via_dialog(
+            payload=payload,
+            default_name=f"voicespirit_export{extension}",
+            extension=extension,
+            file_types=(self._TEXT_FILE_TYPES[extension], "All files (*.*)"),
+            empty_message="Export content is empty.",
+        )
 
 
 def build_application_menu(
