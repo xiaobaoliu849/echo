@@ -190,7 +190,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
   const engineOptions = useMemo(
     () => [
       { value: "edge" as TtsEngine, label: "Edge TTS", hint: t("系统级稳定合成，适合基础朗读。", "Stable system-level synthesis for standard narration.") },
-      { value: "qwen_flash" as TtsEngine, label: "Qwen TTS Flash", hint: t("阿里云 Qwen 音色，更适合中文与角色感。", "Alibaba Qwen voices, well suited to Chinese and stylized delivery.") },
+      { value: "qwen_flash" as TtsEngine, label: "Qwen TTS (阿里云)", hint: t("阿里云 Qwen 音色，更适合中文与角色感。", "Alibaba Qwen voices, well suited to Chinese and stylized delivery.") },
       { value: "minimax" as TtsEngine, label: "MiniMax TTS", hint: t("MiniMax 多风格音色，适合配音与角色化朗读。", "MiniMax multi-style voices for dubbing and character reads.") },
       { value: "xiaomi" as TtsEngine, label: "Xiaomi TTS", hint: t("小米精品音色，支持唱歌模式与情感微调。", "Xiaomi high-quality voices, supporting singing mode and emotional nuances.") },
       { value: "openai" as TtsEngine, label: "OpenAI TTS", hint: t("OpenAI 拟真音色，合成效果极其自然逼真。", "OpenAI realistic voices with highly natural synthesis.") },

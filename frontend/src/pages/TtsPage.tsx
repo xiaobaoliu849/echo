@@ -282,14 +282,14 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
               </div>
             )}
 
-            <div className="vsTtsToolbarField">
+            <div className="vsTtsToolbarField" style={{ flex: "1 1 280px", maxWidth: "480px" }}>
               <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>{t("首选音色", "Voice")}:</span>
               <select
                 className="vsSelect"
                 value={tts.voice}
                 onChange={(e) => tts.onVoiceChange(e.target.value)}
                 disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
-                style={{ width: "240px", height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
+                style={{ flex: 1, minWidth: 0, height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
               >
                 <option value="" disabled>{t("-- 请选择音色 --", "-- Select a voice --")}</option>
                 {tts.voiceOptions.map((item) => (
