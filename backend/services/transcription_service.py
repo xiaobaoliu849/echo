@@ -20,6 +20,8 @@ from .config_loader import BackendConfig
 from .evermem_config import EverMemConfig
 from .transcription_publish_adapter import build_transcription_publisher
 from .llm_service import LLMService
+from . import audio_tools
+from .audio_tools import AudioToolsError, MediaProbe
 
 QWEN_ASR_SYNC_MODEL = "qwen3-asr-flash-2026-02-10"
 # DashScope async (file-transcription) ASR. "链式" URL jobs are DashScope-only;
@@ -68,7 +70,30 @@ SUPPORTED_AUDIO_SUFFIXES = {
     ".ogg",
     ".opus",
     ".webm",
+    # Video containers — the audio track is extracted locally via ffmpeg
+    # before transcription (see transcribe_media).
+    ".mkv",
+    ".mov",
+    ".avi",
+    ".flv",
+    ".wmv",
+    ".m4v",
+    ".ts",
+    ".3gp",
+    ".mpg",
+    ".mpeg",
 }
+
+# --- Long-audio / video preprocessing limits --------------------------------
+# Qwen-Audio-3.0-ASR-Flash (and most sync engines) cap a single request at
+# ~5 minutes. Keep chunks comfortably below that; after transcoding to 16kHz
+# mono MP3 each chunk is also well under every provider's size cap.
+CHUNK_TARGET_SECONDS = 240
+# Files at or below this duration skip chunking entirely.
+SYNC_MAX_DURATION_SECONDS = 270
+# Above this raw size we always transcode first, even for short files
+# (10MB is the Qwen base64 limit; OpenAI Whisper caps at 25MB).
+PREPROCESS_SIZE_THRESHOLD_BYTES = 8 * 1024 * 1024
 
 
 @dataclass(slots=True)
@@ -86,6 +111,8 @@ class TranscriptionJob:
     memory_saved: bool = False
     original_filename: str | None = None
     provider: str | None = None
+    # Human-readable progress line for local chunked jobs (e.g. "第 3/12 段转写中").
+    progress: str | None = None
 
 
 class TranscriptionService:
@@ -187,6 +214,7 @@ class TranscriptionService:
             "memory_saved": bool(job.memory_saved),
             "original_filename": job.original_filename,
             "provider": job.provider,
+            "progress": job.progress,
         }
         self._job_path(job_id_str).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -214,6 +242,7 @@ class TranscriptionService:
                 memory_saved=bool(payload.get("memory_saved", False)),
                 original_filename=payload.get("original_filename"),
                 provider=payload.get("provider"),
+                progress=payload.get("progress"),
             )
         except Exception:
             return None
@@ -225,6 +254,10 @@ class TranscriptionService:
         limit: int = 50,
     ) -> list[TranscriptionJob]:
         normalized_statuses = {status.strip().lower() for status in (statuses or set()) if status.strip()}
+        # The UI's "running" filter means "in progress" — expand it to every
+        # transient state a job can be in while work is pending.
+        if "running" in normalized_statuses:
+            normalized_statuses.update({"submitted", "queued", "uploaded"})
         jobs: list[TranscriptionJob] = []
         for path in self.jobs_dir.glob("tx_*.json"):
             try:
@@ -244,6 +277,7 @@ class TranscriptionService:
                     memory_saved=bool(payload.get("memory_saved", False)),
                     original_filename=payload.get("original_filename"),
                     provider=payload.get("provider"),
+                    progress=payload.get("progress"),
                 )
             except Exception:
                 continue
@@ -345,6 +379,7 @@ class TranscriptionService:
         source_url: str | None = None,
         memory_saved: bool | None = None,
         provider: str | None = None,
+        progress: str | None = None,
     ) -> TranscriptionJob:
         job = self.get_job(job_id)
         if job is None:
@@ -363,8 +398,257 @@ class TranscriptionService:
             job.memory_saved = memory_saved
         if provider is not None:
             job.provider = provider
+        if progress is not None:
+            job.progress = progress
         job.updated_at = self._now_iso()
         return self._write_job(job)
+
+    async def transcribe_media(
+        self,
+        file_path: str | Path,
+        provider: str | None = None,
+        *,
+        language_hints: list[str] | None = None,
+        vocabulary: dict[str, int] | None = None,
+        on_progress: Any = None,
+    ) -> dict:
+        """Smart transcription pipeline that lifts the sync API limits.
+
+        Compared to :meth:`transcribe_file` (one API call on the raw upload),
+        this adds a local ffmpeg preprocessing stage when needed:
+
+        - video containers (mp4/mkv/mov/...) have their audio track extracted;
+        - oversized files are transcoded to 16kHz mono MP3 (~10-50x smaller);
+        - audio longer than the per-request cap is split into chunks, each
+          chunk is transcribed separately and the results are merged back
+          with correct global word timestamps.
+
+        Falls back to the plain single-call path when ffmpeg is unavailable,
+        preserving the legacy behavior. Returns the same shape as
+        :meth:`transcribe_file`.
+        """
+        path = Path(file_path).expanduser().resolve()
+        self._validate_file(path)
+        suffix = path.suffix.lower()
+
+        probe: MediaProbe | None = None
+        if audio_tools.ffmpeg_available():
+            try:
+                probe = await audio_tools.probe_media(path)
+            except AudioToolsError as exc:
+                logger.warning("ffprobe failed for %s (%s); using direct path", path.name, exc)
+
+        # Codec-dependent limits: WAV fallback chunks are larger per second,
+        # so their thresholds are tighter (see audio_tools.asr_limits).
+        sync_max_seconds, chunk_seconds = audio_tools.asr_limits(
+            SYNC_MAX_DURATION_SECONDS, CHUNK_TARGET_SECONDS
+        )
+
+        needs_preprocess = suffix in audio_tools.VIDEO_CONTAINER_SUFFIXES
+        if probe is not None:
+            if not probe.has_audio_stream:
+                raise ValueError("This file has no audio track and cannot be transcribed.")
+            if probe.duration_seconds > sync_max_seconds:
+                needs_preprocess = True
+            if probe.size_bytes > PREPROCESS_SIZE_THRESHOLD_BYTES:
+                needs_preprocess = True
+
+        if not needs_preprocess or not audio_tools.ffmpeg_available():
+            return await self.transcribe_file(
+                path,
+                provider=provider,
+                language_hints=language_hints,
+                vocabulary=vocabulary,
+            )
+
+        if callable(on_progress):
+            try:
+                on_progress("正在预处理媒体文件（提取音轨/压缩）…")
+            except Exception:
+                logger.exception("on_progress callback failed")
+
+        import tempfile
+
+        work_dir = Path(tempfile.mkdtemp(prefix="voicespirit_asr_"))
+        temp_artifacts: list[Path] = [work_dir]
+        try:
+            # The chunking decision must come from the ORIGINAL probe, not a
+            # probe of the transcoded intermediate — some encoders write
+            # unreliable duration metadata (e.g. Windows MediaFoundation MP3),
+            # which once caused a 300s file to be misread as 112s and sent
+            # whole, getting rejected by the API.
+            should_chunk = (
+                probe is None
+                or probe.duration_seconds <= 0.0
+                or probe.duration_seconds > sync_max_seconds
+            )
+
+            if should_chunk:
+                # Long or unknown-length media: transcode + split in a single
+                # ffmpeg pass (re-encode, exact boundaries, no intermediate).
+                chunk_paths = await audio_tools.transcode_and_split(
+                    path, chunk_seconds, work_dir / "chunks"
+                )
+            else:
+                # Short media that only needed audio extraction / shrink:
+                # a single normalized file is enough for one API call.
+                normalized_path = (
+                    work_dir
+                    / f"normalized_{path.stem or 'audio'}{audio_tools.normalized_suffix()}"
+                )
+                await audio_tools.transcode_for_asr(path, normalized_path)
+                chunk_paths = [normalized_path]
+
+            temp_artifacts.extend(chunk_paths)
+            chunk_count = len(chunk_paths)
+
+            # Measure each chunk's real duration so merged word timestamps land
+            # at their true global positions even if segment boundaries drift.
+            chunk_offsets: list[float] = []
+            cursor = 0.0
+            for chunk in chunk_paths:
+                chunk_offsets.append(cursor)
+                try:
+                    chunk_probe = await audio_tools.probe_media(chunk)
+                    cursor += chunk_probe.duration_seconds
+                except AudioToolsError:
+                    cursor += float(chunk_seconds)
+
+            chunk_results: list[dict] = []
+            resolved_provider = provider
+            for index, chunk in enumerate(chunk_paths, start=1):
+                if chunk_count > 1 and callable(on_progress):
+                    try:
+                        on_progress(f"正在转写第 {index}/{chunk_count} 段…")
+                    except Exception:
+                        logger.exception("on_progress callback failed")
+                result = await self.transcribe_file(
+                    chunk,
+                    provider=resolved_provider,
+                    language_hints=language_hints,
+                    vocabulary=vocabulary,
+                )
+                # Pin the auto-selected provider after the first chunk so all
+                # chunks run on the same engine (consistent accuracy/latency).
+                if resolved_provider is None and result.get("provider"):
+                    resolved_provider = str(result.get("provider"))
+                chunk_results.append(result)
+
+            if chunk_count == 1:
+                # Single-chunk path: return the result as-is (no offsetting).
+                return chunk_results[0]
+
+            merged = self._merge_chunk_results(chunk_results, chunk_offsets)
+            if resolved_provider:
+                merged["provider"] = resolved_provider
+            return merged
+        finally:
+            for artifact in temp_artifacts:
+                if artifact.is_dir():
+                    import shutil as _shutil
+
+                    try:
+                        _shutil.rmtree(artifact, ignore_errors=True)
+                    except Exception:
+                        logger.debug("Could not remove work dir: %s", artifact)
+                else:
+                    audio_tools.cleanup_paths([artifact])
+
+    @staticmethod
+    def _merge_chunk_results(
+        chunk_results: list[dict], chunk_offsets: list[float]
+    ) -> dict:
+        """Merge per-chunk ASR results into one transcript.
+
+        Word timestamps are shifted by each chunk's start offset so subtitles
+        stay aligned with the original (pre-split) media timeline.
+        """
+        texts: list[str] = []
+        words: list[dict[str, Any]] = []
+        total_duration = 0.0
+        any_words = False
+        for result, offset in zip(chunk_results, chunk_offsets):
+            text = str(result.get("text", "") or "").strip()
+            if text:
+                texts.append(text)
+            chunk_words = result.get("words")
+            if chunk_words:
+                any_words = True
+                for w in chunk_words:
+                    if not isinstance(w, dict):
+                        continue
+                    word_text = str(w.get("text", "")).strip()
+                    start = w.get("start")
+                    end = w.get("end")
+                    if not word_text or start is None or end is None:
+                        continue
+                    words.append(
+                        {
+                            "text": word_text,
+                            "start": float(start) + offset,
+                            "end": float(end) + offset,
+                        }
+                    )
+            duration = result.get("duration_seconds")
+            if isinstance(duration, (int, float)) and duration > 0:
+                total_duration += float(duration)
+        return {
+            "text": "\n".join(texts),
+            "duration_seconds": total_duration if total_duration > 0 else None,
+            "words": words if any_words else None,
+        }
+
+    async def process_local_chunked_job(
+        self, job_id: str, provider: str | None = None
+    ) -> TranscriptionJob:
+        """Run the smart pipeline in the background for a locally uploaded job.
+
+        This is the fallback for async jobs when no public publisher is
+        configured: instead of staging the file forever, the upload is
+        preprocessed and chunked locally, then fed through the sync ASR APIs.
+        """
+        job = self.get_job(job_id)
+        if job is None:
+            raise FileNotFoundError(f"Transcription job not found: {job_id}")
+
+        def _progress(message: str) -> None:
+            try:
+                self.update_job(job_id, progress=message)
+            except Exception:
+                logger.exception("Failed to persist progress for job %s", job_id)
+
+        try:
+            self.update_job(
+                job_id, status="running", progress="正在预处理媒体文件…", error=""
+            )
+            result = await self.transcribe_media(
+                job.file_path,
+                provider=provider,
+                on_progress=_progress,
+            )
+            transcript = str(result.get("text", "") or "").strip()
+            if not transcript:
+                raise ValueError("Transcription finished but no speech was recognized.")
+            transcript_path = self._persist_transcript(job_id, transcript)
+            words = result.get("words")
+            if words:
+                self._persist_words(job_id, words)
+            update_fields: dict[str, Any] = {
+                "status": "completed",
+                "transcript_path": transcript_path,
+                "error": "",
+                "progress": "转写完成",
+            }
+            final_provider = str(result.get("provider") or provider or "").strip()
+            if final_provider:
+                update_fields["provider"] = final_provider
+            return self.update_job(job_id, **update_fields)
+        except Exception as exc:
+            logger.exception("Local chunked transcription job %s failed", job_id)
+            message = str(exc)[:1000]
+            return self.update_job(
+                job_id, status="failed", error=message, progress=""
+            )
 
     async def transcribe_file(
         self,

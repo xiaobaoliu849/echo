@@ -1204,9 +1204,15 @@ export async function transcribeAudio(file: File, provider?: string): Promise<Tr
   return response.json();
 }
 
-export async function createTranscriptionJob(file: File): Promise<TranscriptionJobResponse> {
+export async function createTranscriptionJob(
+  file: File,
+  provider?: string
+): Promise<TranscriptionJobResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  if (provider) {
+    formData.append("provider", provider);
+  }
 
   const response = await apiFetch(`${API_BASE_URL}/api/transcription/jobs`, {
     method: "POST",

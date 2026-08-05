@@ -484,7 +484,7 @@ describe("App interactions", () => {
     // Open the new transcription modal
     fireEvent.click(await screen.findByRole("button", { name: /新建转写/ }));
 
-    const fileInput = screen.getByLabelText("选择转写音频");
+    const fileInput = screen.getByLabelText("选择转写音频或视频");
     const audioFile = new File(["audio"], "note.wav", { type: "audio/wav" });
     fireEvent.change(fileInput, { target: { files: [audioFile] } });
     fireEvent.click(screen.getByRole("button", { name: "开始转写" }));

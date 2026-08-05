@@ -117,14 +117,14 @@ export const NewTranscriptionModal: React.FC<Props> = ({
               onFileDrop={handleFileDrop}
               selectedFile={selectedFile}
               isProcessing={isBusy}
-              inputLabel={t("选择转写音频", "Choose transcription audio")}
+              inputLabel={t("选择转写音频或视频", "Choose audio or video to transcribe")}
               readyText={t(
-                "已选中，可开始同步转写",
-                "Selected. Ready for synchronous transcription"
+                "已选中，可开始转写",
+                "Selected. Ready for transcription"
               )}
               subText={t(
-                "支持 MP3, WAV, M4A, FLAC, AAC, OGG 格式 (最大 25MB)",
-                "Supports MP3, WAV, M4A, FLAC, AAC, OGG formats (max 25MB)"
+                "支持音频（MP3/WAV/M4A/FLAC/AAC/OGG）与视频（MP4/MKV/MOV/AVI 等，自动提取音轨）。长音频与大文件自动分段后台转写，无 5 分钟限制。",
+                "Supports audio (MP3/WAV/M4A/FLAC/AAC/OGG) and video (MP4/MKV/MOV/AVI etc., audio track extracted automatically). Long or large files are chunked and transcribed in the background — no 5-minute limit."
               )}
             />
             <div className="vsField" style={{ gap: "8px" }}>
@@ -175,6 +175,20 @@ export const NewTranscriptionModal: React.FC<Props> = ({
                 })()}
               </span>
             </div>
+            {selectedFile && selectedFile.size > 25 * 1024 * 1024 && (
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "var(--muted)",
+                  lineHeight: "1.4",
+                }}
+              >
+                {t(
+                  "该文件较大，将自动转入后台分段转写，可在转写记录中查看进度。",
+                  "This file is large; it will run as a background chunked job. Track progress in the transcription list."
+                )}
+              </span>
+            )}
             <button
               onClick={handleSubmitLocal}
               disabled={!selectedFile || isBusy}
@@ -187,7 +201,7 @@ export const NewTranscriptionModal: React.FC<Props> = ({
                 fontWeight: 600,
               }}
             >
-              {isSyncBusy ? (
+              {isSyncBusy || isAsyncBusy ? (
                 <>
                   <span className="spinner-mini" /> {t("转写中…", "Transcribing...")}
                 </>

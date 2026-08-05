@@ -570,6 +570,8 @@ export type TranscriptionJobResponse = {
   error?: string | null;
   memory_saved?: boolean;
   provider?: string | null;
+  /** Progress line for local chunked jobs, e.g. "正在转写第 3/12 段…". */
+  progress?: string | null;
 };
 
 export type TranscriptionJobListResponse = {

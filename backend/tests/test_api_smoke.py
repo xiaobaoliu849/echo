@@ -1144,21 +1144,36 @@ class ApiSmokeTests(unittest.TestCase):
             original_jobs_dir = transcription_router.transcription_service.jobs_dir
             transcription_router.transcription_service.jobs_dir = jobs_dir
             try:
-                created = self._request(
-                    "POST",
-                    "/api/transcription/jobs",
-                    files={"file": ("meeting.wav", b"RIFFdemo", "audio/wav")},
-                )
+                spawned: list[str] = []
+
+                def fake_spawn(coro) -> None:
+                    # Record that the local chunked pipeline was requested;
+                    # close the coroutine so the test never runs ffmpeg.
+                    spawned.append(coro.__qualname__)
+                    coro.close()
+
+                with patch.object(
+                    transcription_router, "_spawn_background_task", new=fake_spawn
+                ):
+                    created = self._request(
+                        "POST",
+                        "/api/transcription/jobs",
+                        files={"file": ("meeting.wav", b"RIFFdemo", "audio/wav")},
+                    )
                 self.assertEqual(created.status_code, 200)
                 payload = created.json()
-                self.assertEqual(payload["status"], "uploaded")
+                # Without a public publisher the upload no longer stalls as
+                # "uploaded" — it is handed to the local chunked pipeline.
+                self.assertEqual(payload["status"], "running")
                 job_id = payload["job_id"]
-                self.assertIn("public_base_url", payload["error"])
+                self.assertIsNone(payload["provider"])
+                self.assertEqual(len(spawned), 1)
+                self.assertIn("process_local_chunked_job", spawned[0])
 
                 loaded = self._request("GET", f"/api/transcription/jobs/{job_id}")
                 self.assertEqual(loaded.status_code, 200)
                 loaded_payload = loaded.json()
-                self.assertEqual(loaded_payload["status"], "uploaded")
+                self.assertEqual(loaded_payload["status"], "running")
                 self.assertIsNone(loaded_payload["transcript"])
             finally:
                 transcription_router.transcription_service.jobs_dir = original_jobs_dir
