@@ -44,11 +44,20 @@ export const AudioDropZone: React.FC<AudioDropZoneProps> = ({
             e.preventDefault();
             setIsDragging(false);
             const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('audio/')) {
+            // Accept audio and video containers — the backend extracts the
+            // audio track from video files via ffmpeg before transcription.
+            if (
+                file &&
+                (file.type.startsWith('audio/') ||
+                    file.type.startsWith('video/') ||
+                    // Some OS/browser combos report an empty type for known
+                    // containers (e.g. .mkv); fall back to the extension.
+                    /\.(mp3|wav|flac|m4a|aac|mp4|ogg|opus|webm|mkv|mov|avi|flv|wmv|m4v|ts|3gp|mpg|mpeg)$/i.test(file.name))
+            ) {
                 setSelectedFile(file);
                 onFileDrop(file);
             } else {
-                alert(t("不支持的文件格式，请上传音频文件。", "Unsupported file type. Please upload an audio file."));
+                alert(t("不支持的文件格式，请上传音频或视频文件。", "Unsupported file type. Please upload an audio or video file."));
             }
         },
         [onFileDrop, t]
@@ -90,7 +99,7 @@ export const AudioDropZone: React.FC<AudioDropZoneProps> = ({
         >
             <input
                 type="file"
-                accept="audio/*"
+                accept="audio/*,video/*,.mkv,.mov,.avi,.flv,.wmv,.m4v,.ts,.3gp,.mpg,.mpeg,.opus,.flac,.m4a,.aac"
                 onChange={handleFileChange}
                 style={{
                     position: "absolute",

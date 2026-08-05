@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import shutil
 import tempfile
 import uuid
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Any, cast
 
 # Ensure robust imports for both runtime and IDE
 try:
-    from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect # type: ignore
+    from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect # type: ignore
     from fastapi.responses import Response # type: ignore
     from pydantic import BaseModel, Field # type: ignore
 except ImportError:
@@ -61,9 +62,10 @@ except ImportError:
     class UploadFile:
         filename: str | None = None
         async def read(self) -> bytes: return b""
-    
+
     def Query(*args, **kwargs) -> Any: return Any
     def File(*args, **kwargs) -> Any: return Any
+    def Form(*args, **kwargs) -> Any: return Any
 
 try:
     # Prefer relative import for runtime stability
@@ -90,6 +92,17 @@ except ImportError:  # pragma: no cover - IDE fallback
 logger = logging.getLogger(__name__)
 router = APIRouter()
 transcription_service = TranscriptionService()
+
+# Strong references for in-flight local chunked transcription tasks. asyncio
+# only keeps weak references to tasks, so without this set a background job
+# could be garbage-collected mid-run.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn_background_task(coro) -> None:
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 
 class StructuredErrorDetail(BaseModel):
@@ -132,6 +145,7 @@ class TranscriptionJobResponse(BaseModel):
     error: str | None = None
     memory_saved: bool = False
     provider: str | None = None
+    progress: str | None = None
 
 
 class TranscriptionJobListResponse(BaseModel):
@@ -219,17 +233,31 @@ def _job_to_response(job: TranscriptionJob) -> TranscriptionJobResponse:
         "error": job.error,
         "memory_saved": bool(job.memory_saved),
         "provider": job.provider,
+        "progress": job.progress,
     }
     return TranscriptionJobResponse(**data)
 
 
 async def _persist_upload(file: UploadFile, target_dir: Path, suffix: str) -> Path:
+    """Persist an upload to disk.
+
+    Streams through the spooled temp file when available so large uploads
+    (video files can be gigabytes) never sit fully in process memory.
+    """
     target_dir.mkdir(parents=True, exist_ok=True)
     raw_uuid = str(uuid.uuid4().hex)
     uuid_part = "".join([raw_uuid[i] for i in range(12)])
     target_path = target_dir / f"upload_{uuid_part}{suffix}"
-    content = await file.read()
-    target_path.write_bytes(content)
+    spool = getattr(file, "file", None)
+    if spool is not None and hasattr(spool, "read"):
+        def _copy() -> None:
+            with target_path.open("wb") as out:
+                shutil.copyfileobj(spool, out)
+
+        await asyncio.to_thread(_copy)
+    else:
+        content = await file.read()
+        target_path.write_bytes(content)
     return target_path
 
 
@@ -282,7 +310,10 @@ async def transcribe_audio(
             }
 
         upload_path = await _persist_upload(file, transcription_service.jobs_dir / "uploads", suffix)
-        result = await transcription_service.transcribe_file(
+        # transcribe_media transparently extracts video audio tracks,
+        # transcodes oversized files and chunks long recordings before
+        # calling the sync ASR APIs.
+        result = await transcription_service.transcribe_media(
             upload_path,
             provider=provider,
             language_hints=parsed_language_hints,
@@ -348,24 +379,35 @@ async def transcribe_audio(
         500: {"description": "Failed to create transcription job.", "model": StructuredErrorResponse},
     },
 )
-async def create_transcription_job(file: UploadFile = File(...)) -> TranscriptionJobResponse:
+async def create_transcription_job(
+    file: UploadFile = File(...),
+    provider: str | None = Form(default=None),
+) -> TranscriptionJobResponse:
     suffix = _validate_upload(file)
 
     try:
         upload_path = await _persist_upload(file, transcription_service.jobs_dir / "uploads", suffix)
         job = await transcription_service.prepare_long_transcription_job(upload_path, file.filename)
+        if provider:
+            job = transcription_service.update_job(job.job_id or "", provider=provider.strip())
         if transcription_service.can_publish_local_async():
             job = transcription_service.publish_local_job_for_async(job.job_id or "")
             job = await transcription_service.submit_long_transcription_job(job.job_id or "")
         else:
+            # No public publisher configured — instead of staging the file
+            # forever, run the local chunked pipeline: ffmpeg preprocessing +
+            # per-chunk sync ASR in the background. The client polls this job
+            # exactly like a DashScope async job.
             job = transcription_service.update_job(
                 job.job_id or "",
-                status="uploaded",
-                error=(
-                    "Local async uploads are staged only. "
-                    "Configure transcription_settings.public_base_url or use "
-                    "/api/transcription/jobs/from-url for true DashScope async transcription."
-                ),
+                status="running",
+                progress="任务已创建，正在排队…",
+                error="",
+            )
+            _spawn_background_task(
+                transcription_service.process_local_chunked_job(
+                    job.job_id or "", provider=(provider or None)
+                )
             )
         return _job_to_response(job)
     except ValueError as exc:
@@ -512,6 +554,28 @@ async def get_transcription_job(
 )
 async def retry_transcription_job(job_id: str) -> TranscriptionJobResponse:
     try:
+        existing = transcription_service.get_job(job_id)
+        if existing is None:
+            raise FileNotFoundError(f"Transcription job not found: {job_id}")
+        if existing.mode == "async" and not existing.source_url:
+            # Local chunked job — re-run the local pipeline on the stored upload.
+            if not existing.file_path or not Path(existing.file_path).is_file():
+                raise FileNotFoundError(
+                    f"Source file no longer exists for job: {job_id}"
+                )
+            job = transcription_service.update_job(
+                job_id,
+                status="running",
+                transcript_path="",
+                error="",
+                progress="正在重新排队…",
+            )
+            _spawn_background_task(
+                transcription_service.process_local_chunked_job(
+                    job_id, provider=job.provider
+                )
+            )
+            return _job_to_response(job)
         job = await transcription_service.retry_long_transcription_job(job_id)
         return _job_to_response(job)
     except FileNotFoundError as exc:

@@ -20,7 +20,7 @@ describe('TtsPage', () => {
         expect(screen.getByText('TTS 引擎:')).toBeInTheDocument();
         expect(screen.getByText('完成输入后，点击右下角“生成音频”开始试听')).toBeInTheDocument();
         expect(screen.getByText('生成音频')).toBeInTheDocument();
-        expect(screen.getByText('Qwen TTS Flash')).toBeInTheDocument();
+        expect(screen.getByText('Qwen TTS (阿里云)')).toBeInTheDocument();
     });
 
     it('renders voice selector', () => {

@@ -56,7 +56,7 @@ describe("TranscriptionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /新建转写/ }));
 
     // Default mode is local — find the file input inside the modal
-    const fileInput = screen.getByLabelText("选择转写音频");
+    const fileInput = screen.getByLabelText("选择转写音频或视频");
     const audioFile = new File(["audio"], "note.wav", { type: "audio/wav" });
     fireEvent.change(fileInput, { target: { files: [audioFile] } });
     fireEvent.click(screen.getByRole("button", { name: "开始转写" }));
@@ -80,7 +80,7 @@ describe("TranscriptionPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /新建转写/ }));
 
-    const fileInput = screen.getByLabelText("选择转写音频");
+    const fileInput = screen.getByLabelText("选择转写音频或视频");
     const audioFile = new File(["audio"], "note.wav", { type: "audio/wav" });
     fireEvent.change(fileInput, { target: { files: [audioFile] } });
     fireEvent.click(screen.getByRole("button", { name: "开始转写" }));
@@ -139,7 +139,7 @@ describe("TranscriptionPage", () => {
 
     // Trigger a local transcription to enter detail view
     fireEvent.click(screen.getByRole("button", { name: /新建转写/ }));
-    const fileInput = screen.getByLabelText("选择转写音频");
+    const fileInput = screen.getByLabelText("选择转写音频或视频");
     const audioFile = new File(["audio"], "test.wav", { type: "audio/wav" });
     fireEvent.change(fileInput, { target: { files: [audioFile] } });
     fireEvent.click(screen.getByRole("button", { name: "开始转写" }));
@@ -191,7 +191,7 @@ describe("TranscriptionPage", () => {
       render(<TranscriptionPage />);
 
       fireEvent.click(screen.getByRole("button", { name: /新建转写/ }));
-      const fileInput = screen.getByLabelText("选择转写音频");
+      const fileInput = screen.getByLabelText("选择转写音频或视频");
       const audioFile = new File(["audio"], "test.wav", { type: "audio/wav" });
       fireEvent.change(fileInput, { target: { files: [audioFile] } });
       fireEvent.click(screen.getByRole("button", { name: "开始转写" }));
@@ -244,7 +244,7 @@ describe("TranscriptionPage", () => {
       render(<TranscriptionPage />);
 
       fireEvent.click(screen.getByRole("button", { name: /新建转写/ }));
-      const fileInput = screen.getByLabelText("选择转写音频");
+      const fileInput = screen.getByLabelText("选择转写音频或视频");
       const audioFile = new File(["audio"], "test.wav", { type: "audio/wav" });
       fireEvent.change(fileInput, { target: { files: [audioFile] } });
       fireEvent.click(screen.getByRole("button", { name: "开始转写" }));

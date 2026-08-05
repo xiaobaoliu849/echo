@@ -79,7 +79,7 @@ export function createTtsController(
     ttsInfo: "",
     engineOptions: [
       { value: "edge", label: "Edge TTS", hint: "系统级稳定合成，适合基础朗读。" },
-      { value: "qwen_flash", label: "Qwen TTS Flash", hint: "阿里云 Qwen 音色，更适合中文与角色感。" },
+      { value: "qwen_flash", label: "Qwen TTS (阿里云)", hint: "阿里云 Qwen 音色，更适合中文与角色感。" },
       { value: "minimax", label: "MiniMax TTS", hint: "MiniMax 多风格音色，适合配音与角色化朗读。" }
     ],
     voiceOptions: [{ value: "zh-CN-XiaoxiaoNeural", label: "Xiaoxiao (zh-CN)" }],

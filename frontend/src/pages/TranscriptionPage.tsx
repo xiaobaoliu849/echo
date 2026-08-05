@@ -4,6 +4,7 @@ import {
   fetchTranscriptionJob,
   getTranscriptionJobWords,
   transcribeAudio,
+  createTranscriptionJob,
   createTranscriptionJobFromUrl,
   saveTranscriptionJobMemory,
   type TranscriptionJobResponse,
@@ -23,8 +24,13 @@ type Props = {
 };
 
 function isPollingStatus(status?: string): boolean {
-  return status === "submitted" || status === "running";
+  return status === "submitted" || status === "running" || status === "queued";
 }
+
+/** Local uploads above this size skip the blocking sync request and run as a
+ * background chunked job instead (the backend splits long audio / extracts
+ * video audio tracks with ffmpeg, then transcribes chunk by chunk). */
+const LOCAL_ASYNC_THRESHOLD_BYTES = 25 * 1024 * 1024;
 
 function getJobStatusMessage(
   job: TranscriptionJobResponse,
@@ -33,8 +39,11 @@ function getJobStatusMessage(
   switch (job.status) {
     case "submitted":
       return t("任务已提交，排队中…", "Job submitted, queued...");
+    case "queued":
+      return t("任务排队中…", "Job queued...");
     case "running":
-      return t("正在使用 Whisper 转写中…", "Transcribing with Whisper...");
+      // Local chunked jobs report fine-grained progress ("第 3/12 段…").
+      return job.progress || t("正在转写中…", "Transcribing...");
     case "completed":
       return t("转写完成。", "Transcription completed.");
     case "failed":
@@ -152,6 +161,32 @@ export function TranscriptionPage({ onSendToChat }: Props) {
     setModalError(null);
     setError(null);
     setInfoMessage("");
+
+    // Large files (typically long recordings or video files) would block the
+    // sync request for many minutes; route them to the background chunked
+    // pipeline and follow progress through job polling instead.
+    if (file.size > LOCAL_ASYNC_THRESHOLD_BYTES) {
+      setIsAsyncBusy(true);
+      try {
+        const newJob = await createTranscriptionJob(file, provider);
+        setJob(newJob);
+        setTranscript("");
+        setWords([]);
+        setMemorySaved(Boolean(newJob.memory_saved));
+        setStatusMessage(getJobStatusMessage(newJob, t));
+        addOrUpdateJob(newJob);
+        setViewMode("detail");
+        setShowNewModal(false);
+      } catch (err) {
+        const e = err instanceof Error ? err : new Error(String(err));
+        setModalError(e);
+        setError(e);
+      } finally {
+        setIsAsyncBusy(false);
+      }
+      return;
+    }
+
     setIsSyncBusy(true);
 
     try {

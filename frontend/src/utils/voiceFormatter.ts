@@ -41,6 +41,13 @@ export function formatVoiceLabel(
     name = name.slice(0, -6);
   }
 
+  // Drop parenthesized ids/pinyin to keep labels short,
+  // e.g. "龙安风悦 (longanfengyue)" → "龙安风悦"
+  const stripped = name.replace(/\s*\([^)]*\)/g, "").trim();
+  if (stripped) {
+    name = stripped;
+  }
+
   // Format gender
   let genderStr = "";
   const genderLower = (item.gender || "").toLowerCase();
