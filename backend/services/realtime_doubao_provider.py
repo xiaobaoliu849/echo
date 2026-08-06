@@ -44,10 +44,13 @@ class DoubaoRealtimeMixin:
         if not api_key:
             raise RuntimeError("Doubao / Volcengine API Key 未配置，无法启动实时语音会话。")
 
-        endpoint = (
-            provider_settings.get("realtime_base_url", "").strip()
-            or DEFAULT_DOUBAO_REALTIME_ENDPOINT
-        )
+        custom_endpoint = provider_settings.get("realtime_base_url", "").strip()
+        if custom_endpoint:
+            endpoint = custom_endpoint
+        elif api_key.startswith("x-") or api_key.startswith("x_"):
+            endpoint = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
+        else:
+            endpoint = DEFAULT_DOUBAO_REALTIME_ENDPOINT
         resolved_voice = voice.strip() if (voice and voice.strip()) else DEFAULT_DOUBAO_REALTIME_VOICE
 
         return {
