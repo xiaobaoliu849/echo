@@ -238,7 +238,17 @@ class DoubaoRealtimeMixin:
 
         url = f"{endpoint}?model={model_name}"
 
-        async with websockets.connect(url, extra_headers=headers) as doubao_ws:
+        ws_kwargs = {
+            "max_size": 2**24,
+            "ping_interval": 30,
+            "ping_timeout": 30,
+        }
+        try:
+            ws_context = websockets.connect(url, additional_headers=headers, **ws_kwargs)
+        except TypeError:
+            ws_context = websockets.connect(url, extra_headers=headers, **ws_kwargs)
+
+        async with ws_context as doubao_ws:
             # Configure initial session
             session_config = {
                 "type": "session.update",
