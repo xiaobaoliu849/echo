@@ -32,8 +32,9 @@ class DoubaoRealtimeMixin:
     def _resolve_doubao_settings(
         self, model: str | None, voice: str | None = None
     ) -> dict[str, str]:
+        passed_model = model.strip() if (model and model.strip()) else ""
         provider_settings = self.config.get_provider_settings("Doubao", model)
-        resolved_model = provider_settings["model"].strip() or DEFAULT_DOUBAO_REALTIME_MODEL
+        resolved_model = passed_model or provider_settings["model"].strip() or DEFAULT_DOUBAO_REALTIME_MODEL
         api_key = provider_settings["api_key"].strip()
         if not api_key:
             # Fallback to Volcengine key if configured
@@ -232,11 +233,20 @@ class DoubaoRealtimeMixin:
         model_name = settings["model"]
         voice_name = settings["voice"]
 
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-        }
-
-        url = f"{endpoint}?model={model_name}"
+        if "openspeech.bytedance.com" in endpoint or "dialogue" in endpoint:
+            app_id = self.config.get_setting("doubao_app_id", "").strip() or "2372542429"
+            headers = {
+                "X-Api-App-ID": app_id,
+                "X-Api-Access-Key": api_key,
+                "X-Api-Resource-Id": "volc.speech.dialog",
+                "X-Api-App-Key": "PlgvMymc7f3tQnJ6",
+            }
+            url = endpoint
+        else:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+            }
+            url = f"{endpoint}?model={model_name}"
 
         ws_kwargs = {
             "max_size": 2**24,

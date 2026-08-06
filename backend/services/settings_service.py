@@ -45,6 +45,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "deepgram_api_key": "",
         "gpt_sovits_api_key": "",
         "doubao_api_key": "",
+        "doubao_app_id": "2372542429",
     },
     "api_urls": {
         "Google": "",
