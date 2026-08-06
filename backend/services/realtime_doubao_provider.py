@@ -57,7 +57,7 @@ class DoubaoRealtimeMixin:
         custom_endpoint = provider_settings.get("realtime_base_url", "").strip()
         if custom_endpoint:
             endpoint = custom_endpoint
-        elif api_key.startswith("x-") or api_key.startswith("x_"):
+        elif api_key.lower().startswith("x-") or api_key.lower().startswith("x_"):
             endpoint = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
         else:
             endpoint = DEFAULT_DOUBAO_REALTIME_ENDPOINT
