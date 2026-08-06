@@ -112,6 +112,15 @@ class BackendConfig:
     def get_all(self) -> dict[str, Any]:
         return copy.deepcopy(self._config)
 
+    def get_setting(self, key: str, default: Any = "") -> Any:
+        cfg = self.get_all()
+        if key in cfg:
+            return cfg[key]
+        api_keys = cfg.get("api_keys", {})
+        if isinstance(api_keys, dict) and key in api_keys:
+            return api_keys[key]
+        return default
+
     @staticmethod
     def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
         for key, value in source.items():
