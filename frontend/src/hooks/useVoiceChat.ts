@@ -22,6 +22,9 @@ import { createMessageId, ensureMessageIds } from "../utils/messageId";
 import {
   DASHSCOPE_PROVIDER,
   DEFAULT_DASHSCOPE_MODEL,
+  DOUBAO_PROVIDER,
+  VOLCENGINE_PROVIDER,
+  DOUBAO_REALTIME_VOICES,
   EMPTY_VOICE_CHAT_METRICS,
   GOOGLE_PROVIDER,
   GOOGLE_REALTIME_VOICES,
@@ -64,7 +67,7 @@ export default function useVoiceChat({
 }: Options) {
   const t = createInlineTranslator(language);
   const resolvedProviders = useMemo(
-    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER].filter(p => providerOptions.includes(p)),
+    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, VOLCENGINE_PROVIDER].filter(p => providerOptions.includes(p)),
     [providerOptions],
   );
 
@@ -76,6 +79,7 @@ export default function useVoiceChat({
     initialProvider === DASHSCOPE_PROVIDER
       ? (isQwenAudioModel(initialModel) ? "longanqian" : "Tina")
       : initialProvider === OPENAI_PROVIDER ? "alloy"
+      : (initialProvider === DOUBAO_PROVIDER || initialProvider === VOLCENGINE_PROVIDER) ? "zh_female_shuangkuailiangli"
       : "Puck"
   );
   const [voiceChatTranslationMode, setVoiceChatTranslationMode] = useState<TranslationMode>("bidirectional");
@@ -253,6 +257,10 @@ export default function useVoiceChat({
     } else if (voiceChatProvider === OPENAI_PROVIDER) {
       if (!OPENAI_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice("alloy");
+      }
+    } else if (voiceChatProvider === DOUBAO_PROVIDER || voiceChatProvider === VOLCENGINE_PROVIDER) {
+      if (!DOUBAO_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
+        setVoiceChatVoice("zh_female_shuangkuailiangli");
       }
     } else if (voiceChatProvider === GOOGLE_PROVIDER) {
       if (!GOOGLE_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {

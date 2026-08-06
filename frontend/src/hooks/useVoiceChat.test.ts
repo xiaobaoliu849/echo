@@ -1750,4 +1750,30 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatReply).toBe("");
     expect(result.current.voiceChatTranscript).toBe("");
   });
+
+  it("correctly resolves Doubao provider and defaults to doubao-realtime model and voice", () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        providerOptions: ["DashScope", "Doubao"],
+        preferredProvider: "Doubao",
+        preferredModel: "doubao-realtime",
+        providerModelCatalog: {
+          Doubao: {
+            defaultModel: "doubao-realtime",
+            availableModels: ["doubao-realtime"],
+          },
+          DashScope: {
+            defaultModel: "qwen3.5-omni-plus-realtime",
+            availableModels: ["qwen3.5-omni-plus-realtime"],
+          },
+        },
+      })
+    );
+
+    expect(result.current.voiceChatProvider).toBe("Doubao");
+    expect(result.current.voiceChatModel).toBe("doubao-realtime");
+    expect(result.current.voiceChatVoice).toBe("zh_female_shuangkuailiangli");
+  });
 });

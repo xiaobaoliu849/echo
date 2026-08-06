@@ -499,6 +499,9 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   if (provider === OPENAI_PROVIDER) {
     return DEFAULT_OPENAI_MODEL;
   }
+  if (provider === DOUBAO_PROVIDER || provider === VOLCENGINE_PROVIDER) {
+    return DEFAULT_DOUBAO_MODEL;
+  }
   return "";
 }
 
@@ -536,7 +539,10 @@ export function resolveRealtimeModelOptions(
         "qwen-audio-3.0-realtime-flash",
       ]
     : [];
-  const allBuiltIns = [...googleBuiltIns, ...openaiBuiltIns, ...dashscopeBuiltIns];
+  const doubaoBuiltIns = (provider === DOUBAO_PROVIDER || provider === VOLCENGINE_PROVIDER)
+    ? [DEFAULT_DOUBAO_MODEL]
+    : [];
+  const allBuiltIns = [...googleBuiltIns, ...openaiBuiltIns, ...dashscopeBuiltIns, ...doubaoBuiltIns];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];
   return [...new Set(ordered.filter(Boolean))];
 }
