@@ -79,6 +79,8 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     DEFAULT_GOOGLE_REALTIME_VOICE,
     DEFAULT_OPENAI_REALTIME_MODEL,
     DEFAULT_OPENAI_REALTIME_VOICE,
+    DEFAULT_DOUBAO_REALTIME_MODEL,
+    DEFAULT_DOUBAO_REALTIME_VOICE,
     DEFAULT_QWEN_AUDIO_REALTIME_VOICE,
     DEFAULT_QWEN_OMNI_REALTIME_VOICE,
     DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE,
@@ -102,6 +104,7 @@ from .realtime_google_provider import GoogleRealtimeMixin
 from .realtime_dashscope_provider import DashScopeRealtimeMixin
 from .realtime_openai_provider import OpenAIRealtimeMixin
 from .realtime_qwen_audio_provider import QwenAudioRealtimeMixin
+from .realtime_doubao_provider import DoubaoRealtimeMixin
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +118,7 @@ class RealtimeVoiceService(
     DashScopeRealtimeMixin,
     OpenAIRealtimeMixin,
     QwenAudioRealtimeMixin,
+    DoubaoRealtimeMixin,
 ):
     """Orchestrates realtime voice sessions across multiple providers.
 
@@ -643,6 +647,30 @@ class RealtimeVoiceService(
             )
         return memory_result, completed_turn_id
 
+    async def stream_doubao_session(
+        self,
+        websocket: WebSocket,
+        model: str | None = None,
+        voice: str | None = None,
+        instructions: str | None = None,
+    ) -> None:
+        recorder = await self._create_voice_session_recorder(
+            provider="Doubao",
+            model=model or DEFAULT_DOUBAO_REALTIME_MODEL,
+            voice=voice or DEFAULT_DOUBAO_REALTIME_VOICE,
+        )
+        try:
+            await self._run_doubao_session(
+                websocket,
+                model=model,
+                voice=voice,
+                instructions=instructions,
+                recorder=recorder,
+            )
+        finally:
+            if recorder is not None:
+                await recorder.finish()
+
 
 # ---------------------------------------------------------------------------
 # Backward-compatible re-exports
@@ -657,6 +685,7 @@ __all__ = [
     "DEFAULT_GOOGLE_REALTIME_VOICE",
     "DEFAULT_OPENAI_REALTIME_VOICE",
     "DEFAULT_QWEN_AUDIO_REALTIME_VOICE",
+    "DEFAULT_DOUBAO_REALTIME_VOICE",
     # re-exported from sibling modules (used by tests)
     "RealtimeMemorySession",
     "VoiceAgentSessionRecorder",

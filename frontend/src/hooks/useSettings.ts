@@ -26,7 +26,9 @@ const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   Deepgram: "deepgram_api_key",
   OpenAI: "openai_api_key",
   ElevenLabs: "elevenlabs_api_key",
-  "GPT-SoVITS": "gpt_sovits_api_key"
+  "GPT-SoVITS": "gpt_sovits_api_key",
+  Doubao: "doubao_api_key",
+  Volcengine: "doubao_api_key"
 };
 
 const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_API_KEY_FIELD);
@@ -505,9 +507,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
       }
     } else {
       const keyField = PROVIDER_API_KEY_FIELD[settingsProvider];
-      const apiKey = keyField ? settingsData.api_keys[keyField] || "" : "";
-      const apiUrl = settingsData.api_urls[settingsProvider] || "";
-      const modelValue = settingsData.default_models[settingsProvider];
+      const apiKey = (keyField && settingsData?.api_keys) ? settingsData.api_keys[keyField] || "" : "";
+      const apiUrl = settingsData?.api_urls?.[settingsProvider] || "";
+      const modelValue = settingsData?.default_models?.[settingsProvider];
       const { defaultModel, availableModels, enabledModels, ttsDefaultModel, ttsAvailableModels, ttsEnabledModels } = parseModelValue(modelValue);
 
       setSettingsApiKey(apiKey);
@@ -760,9 +762,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
         patch.api_urls = {
           [settingsProvider]: settingsApiUrl.trim()
         };
-        if (settingsProvider === "DashScope") {
+        if (settingsProvider === "DashScope" || settingsProvider === "Doubao") {
           patch.realtime_api_urls = {
-            DashScope: settingsRealtimeApiUrl.trim()
+            [settingsProvider]: settingsRealtimeApiUrl.trim()
           };
         }
         patch.default_models = {

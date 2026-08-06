@@ -58,6 +58,17 @@ QWEN_AUDIO_BENIGN_ERROR_PATTERNS = (
 DEFAULT_OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 DEFAULT_OPENAI_REALTIME_VOICE = "alloy"
 
+DEFAULT_DOUBAO_REALTIME_MODEL = "doubao-realtime"
+DEFAULT_DOUBAO_REALTIME_VOICE = "zh_female_shuangkuailiangli"
+DEFAULT_DOUBAO_REALTIME_ENDPOINT = "wss://ai-gateway.vei.volces.com/v1/realtime"
+DOUBAO_REALTIME_VOICES = (
+    "zh_female_shuangkuailiangli",
+    "zh_female_huopokeai",
+    "zh_male_qingchong",
+    "zh_female_yuanqi",
+    "zh_male_ziyou",
+)
+
 # ---------------------------------------------------------------------------
 # Prompt / instruction templates
 # ---------------------------------------------------------------------------

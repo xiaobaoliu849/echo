@@ -55,6 +55,8 @@ type AudioContextWindow = Window & {
 export const GOOGLE_PROVIDER = "Google";
 export const DASHSCOPE_PROVIDER = "DashScope";
 export const OPENAI_PROVIDER = "OpenAI";
+export const DOUBAO_PROVIDER = "Doubao";
+export const VOLCENGINE_PROVIDER = "Volcengine";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 // The legacy gemini-2.5-flash-native-audio-preview-12-2025 model has been retired;
@@ -62,6 +64,7 @@ export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 export const DEFAULT_GOOGLE_MODEL = GOOGLE_FLASH_LIVE_MODEL;
 export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
+export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
   "native-audio",
   "live",
@@ -270,6 +273,14 @@ export const OPENAI_REALTIME_VOICES = [
   { value: "verse", label: "Verse (Male)" },
 ];
 
+export const DOUBAO_REALTIME_VOICES = [
+  { value: "zh_female_shuangkuailiangli", label: "爽快靓丽 · Shuangkuai (Female)", description: "爽快靓丽女声" },
+  { value: "zh_female_huopokeai", label: "活泼可爱 · Huopo (Female)", description: "活泼可爱女声" },
+  { value: "zh_male_qingchong", label: "青葱男声 · Qingchong (Male)", description: "青葱活力男声" },
+  { value: "zh_female_yuanqi", label: "元气女声 · Yuanqi (Female)", description: "元气满满女声" },
+  { value: "zh_male_ziyou", label: "自由男声 · Ziyou (Male)", description: "自然沉稳男声" },
+];
+
 // Voices for qwen3.5-omni-*-realtime models (default: Tina), per the official
 // omni voice list (docs/全模态.txt). The older Cherry-era voices belong to
 // qwen3-omni / qwen-omni-turbo and are rejected by qwen3.5-omni models.
@@ -354,7 +365,9 @@ export function formatRealtimeVoiceOptions(
   model?: string,
 ): Array<{ value: string; label: string; description?: string }> {
   let options: Array<{ value: string; label: string; description?: string }>;
-  if (provider === DASHSCOPE_PROVIDER) {
+  if (provider === DOUBAO_PROVIDER || provider === VOLCENGINE_PROVIDER) {
+    options = DOUBAO_REALTIME_VOICES;
+  } else if (provider === DASHSCOPE_PROVIDER) {
     if (isQwenAudioModel(model)) {
       options = QWEN_AUDIO_VOICES;
     } else if (isLiveTranslateModel(provider, model ?? "")) {
@@ -413,9 +426,12 @@ export function formatLiveTranslateLanguageOptions(language: UiLanguage): Array<
 }
 
 export function resolveRealtimeProvider(preferredProvider: string | undefined, providerOptions: string[]): string {
-  const realtimeProviders = [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER];
+  const realtimeProviders = [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, VOLCENGINE_PROVIDER];
   if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
     return preferredProvider;
+  }
+  if (providerOptions.includes(DOUBAO_PROVIDER)) {
+    return DOUBAO_PROVIDER;
   }
   if (providerOptions.includes(DASHSCOPE_PROVIDER)) {
     return DASHSCOPE_PROVIDER;
@@ -438,6 +454,9 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   const normalizedModel = (model || "").trim().toLowerCase();
   if (!normalizedModel) {
     return false;
+  }
+  if (normalizedProvider === DOUBAO_PROVIDER.toLowerCase() || normalizedProvider === VOLCENGINE_PROVIDER.toLowerCase()) {
+    return true;
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
     return /^qwen3\.5-omni-(plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel) ||

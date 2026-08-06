@@ -10,6 +10,7 @@ from services.realtime_voice_service import (
     DEFAULT_GOOGLE_REALTIME_VOICE,
     DEFAULT_OPENAI_REALTIME_VOICE,
     DEFAULT_QWEN_AUDIO_REALTIME_VOICE,
+    DEFAULT_DOUBAO_REALTIME_VOICE,
     RealtimeVoiceService,
 )
 from services.voice_agent_session_repository import VoiceAgentSessionRepository
@@ -17,6 +18,7 @@ from services.voice_agent_session_repository import VoiceAgentSessionRepository
 router = APIRouter()
 voice_chat_service = RealtimeVoiceService()
 voice_agent_session_repository = VoiceAgentSessionRepository()
+
 
 
 class VoiceAgentSessionResponse(BaseModel):
@@ -183,7 +185,7 @@ async def voice_chat_ws(
     await websocket.accept()
 
     selected_provider = (provider or "Google").strip()
-    if selected_provider not in {"Google", "DashScope", "OpenAI"}:
+    if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "Volcengine"}:
         await websocket.send_json(
             {
                 "type": "error",
@@ -195,7 +197,13 @@ async def voice_chat_ws(
         return
 
     try:
-        if selected_provider == "DashScope":
+        if selected_provider in {"Doubao", "Volcengine"}:
+            await voice_chat_service.stream_doubao_session(
+                websocket,
+                model=model,
+                voice=(voice or DEFAULT_DOUBAO_REALTIME_VOICE).strip(),
+            )
+        elif selected_provider == "DashScope":
             if voice_chat_service.is_qwen_audio_model(model):
                 await voice_chat_service.stream_dashscope_audio_session(
                     websocket,

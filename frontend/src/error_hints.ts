@@ -42,6 +42,22 @@ const EXACT_HINTS: Record<string, string[]> = {
   AUDIO_OVERVIEW_AUDIO_FILE_NOT_FOUND: [
     "Audio path is stale or file was removed.",
     "Re-run synthesis to regenerate output."
+  ],
+  INVALID_API_KEY_ENCODING: [
+    "Ensure API Key only contains ASCII characters (letters, numbers, hyphen, underscore).",
+    "Remove Chinese characters or placeholder text pasted into the API key field."
+  ],
+  INVALID_BASE_URL_ENCODING: [
+    "Ensure Base URL only contains valid URL characters.",
+    "Remove non-ASCII or Chinese text from the Base URL field."
+  ],
+  INVALID_HEADER_ENCODING: [
+    "API Key or Base URL contains non-ASCII characters.",
+    "Check for Chinese characters or full-width punctuation in Settings."
+  ],
+  FETCH_MODELS_FAILED: [
+    "Check if API Key or Base URL field contains invalid Chinese characters or instructions.",
+    "Verify provider endpoint URL and network connectivity."
   ]
 };
 
