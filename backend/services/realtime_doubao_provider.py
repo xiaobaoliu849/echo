@@ -26,6 +26,16 @@ from .voice_agent_tools import VoiceAgentToolSession
 logger = logging.getLogger(__name__)
 
 
+from .openspeech_dialogue_protocol import (
+    MSG_TYPE_AUDIO_CLIENT_REQ,
+    MSG_TYPE_AUDIO_SERVER_RESP,
+    MSG_TYPE_FULL_CLIENT_REQ,
+    MSG_TYPE_FULL_SERVER_RESP,
+    decode_openspeech_frame,
+    encode_openspeech_frame,
+)
+
+
 class DoubaoRealtimeMixin:
     """Doubao Realtime provider methods for RealtimeVoiceService."""
 
@@ -68,6 +78,7 @@ class DoubaoRealtimeMixin:
         tool_session: VoiceAgentToolSession,
         recorder: VoiceAgentSessionRecorder | None = None,
         interruption: InterruptionDecisionCoordinator | None = None,
+        is_openspeech: bool = False,
     ) -> None:
         interruption = interruption or InterruptionDecisionCoordinator()
         while True:
@@ -87,15 +98,23 @@ class DoubaoRealtimeMixin:
                 if command_type == "text_input":
                     content = str(payload.get("text", "")).strip()
                     if content:
-                        await doubao_ws.send(json.dumps({
-                            "type": "conversation.item.create",
-                            "item": {
-                                "type": "message",
-                                "role": "user",
-                                "content": [{"type": "input_text", "text": content}],
-                            },
-                        }))
-                        await doubao_ws.send(json.dumps({"type": "response.create"}))
+                        if is_openspeech:
+                            msg_bytes = encode_openspeech_frame(
+                                msg_type=MSG_TYPE_FULL_CLIENT_REQ,
+                                payload={"type": "UserText", "text": content},
+                                event=200,
+                            )
+                            await doubao_ws.send(msg_bytes)
+                        else:
+                            await doubao_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": [{"type": "input_text", "text": content}],
+                                },
+                            }))
+                            await doubao_ws.send(json.dumps({"type": "response.create"}))
                     continue
 
                 result = await self._handle_common_client_command(
@@ -110,10 +129,17 @@ class DoubaoRealtimeMixin:
 
             audio_bytes = message.get("bytes")
             if audio_bytes:
-                await doubao_ws.send(json.dumps({
-                    "type": "input_audio_buffer.append",
-                    "audio": base64.b64encode(audio_bytes).decode("ascii"),
-                }))
+                if is_openspeech:
+                    msg_bytes = encode_openspeech_frame(
+                        msg_type=MSG_TYPE_AUDIO_CLIENT_REQ,
+                        payload=audio_bytes,
+                    )
+                    await doubao_ws.send(msg_bytes)
+                else:
+                    await doubao_ws.send(json.dumps({
+                        "type": "input_audio_buffer.append",
+                        "audio": base64.b64encode(audio_bytes).decode("ascii"),
+                    }))
 
     async def _doubao_to_client_loop(
         self,
@@ -123,6 +149,7 @@ class DoubaoRealtimeMixin:
         tool_session: VoiceAgentToolSession,
         recorder: VoiceAgentSessionRecorder | None = None,
         interruption: InterruptionDecisionCoordinator | None = None,
+        is_openspeech: bool = False,
     ) -> None:
         interruption = interruption or InterruptionDecisionCoordinator()
         active_turn_id: str | None = None
@@ -137,6 +164,47 @@ class DoubaoRealtimeMixin:
                 break
             except Exception:
                 break
+
+            if is_openspeech:
+                if isinstance(raw_msg, str):
+                    raw_msg = raw_msg.encode("utf-8")
+                try:
+                    frame = decode_openspeech_frame(raw_msg)
+                except Exception:
+                    continue
+
+                if frame.msg_type == MSG_TYPE_AUDIO_SERVER_RESP and frame.payload:
+                    audio_b64 = base64.b64encode(frame.payload).decode("ascii")
+                    await self._emit_assistant_output(
+                        websocket,
+                        interruption,
+                        {
+                            "type": "assistant_audio",
+                            "audio": audio_b64,
+                            "encoding": "pcm_s16le",
+                            "sample_rate": 24000,
+                        },
+                        memory_session=memory_session,
+                        recorder=recorder,
+                    )
+                elif frame.msg_type == MSG_TYPE_FULL_SERVER_RESP and frame.payload:
+                    try:
+                        text_str = frame.payload.decode("utf-8")
+                        payload_json = json.loads(text_str)
+                        if isinstance(payload_json, dict):
+                            txt = payload_json.get("text") or payload_json.get("content") or ""
+                            if txt:
+                                ai_transcript_acc += str(txt)
+                                await self._emit_assistant_output(
+                                    websocket,
+                                    interruption,
+                                    {"type": "assistant_text", "text": str(txt)},
+                                    memory_session=memory_session,
+                                    recorder=recorder,
+                                )
+                    except Exception:
+                        pass
+                continue
 
             if isinstance(raw_msg, bytes):
                 raw_msg = raw_msg.decode("utf-8", errors="replace")
@@ -236,8 +304,9 @@ class DoubaoRealtimeMixin:
         model_name = settings["model"]
         voice_name = settings["voice"]
 
-        if "openspeech.bytedance.com" in endpoint or "dialogue" in endpoint:
-            app_id = self.config.get_setting("doubao_app_id", "").strip() or "2372542429"
+        is_openspeech = "openspeech.bytedance.com" in endpoint or "dialogue" in endpoint
+        if is_openspeech:
+            app_id = str(self.config.get_setting("doubao_app_id", "") or "").strip() or "2372542429"
             headers = {
                 "X-Api-App-ID": app_id,
                 "X-Api-Access-Key": api_key,
@@ -267,27 +336,40 @@ class DoubaoRealtimeMixin:
 
         try:
             async with ws_context as doubao_ws:
-                # Configure initial session
-                session_config = {
-                    "type": "session.update",
-                    "session": {
-                        "modalities": ["text", "audio"],
-                        "voice": voice_name,
-                        "input_audio_format": "pcm16",
-                        "output_audio_format": "pcm16",
-                        "instructions": instructions or "You are Doubao Realtime AI voice assistant.",
-                    },
-                }
-                await doubao_ws.send(json.dumps(session_config))
+                if is_openspeech:
+                    start_payload = {
+                        "type": "StartSession",
+                        "session": {
+                            "voice": voice_name,
+                        }
+                    }
+                    frame_bytes = encode_openspeech_frame(
+                        msg_type=MSG_TYPE_FULL_CLIENT_REQ,
+                        payload=start_payload,
+                        event=1,
+                    )
+                    await doubao_ws.send(frame_bytes)
+                else:
+                    session_config = {
+                        "type": "session.update",
+                        "session": {
+                            "modalities": ["text", "audio"],
+                            "voice": voice_name,
+                            "input_audio_format": "pcm16",
+                            "output_audio_format": "pcm16",
+                            "instructions": instructions or "You are Doubao Realtime AI voice assistant.",
+                        },
+                    }
+                    await doubao_ws.send(json.dumps(session_config))
 
                 client_task = asyncio.create_task(
                     self._client_to_doubao_loop(
-                        websocket, doubao_ws, memory_session, tool_session, recorder, interruption
+                        websocket, doubao_ws, memory_session, tool_session, recorder, interruption, is_openspeech=is_openspeech
                     )
                 )
                 doubao_task = asyncio.create_task(
                     self._doubao_to_client_loop(
-                        websocket, doubao_ws, memory_session, tool_session, recorder, interruption
+                        websocket, doubao_ws, memory_session, tool_session, recorder, interruption, is_openspeech=is_openspeech
                     )
                 )
 
