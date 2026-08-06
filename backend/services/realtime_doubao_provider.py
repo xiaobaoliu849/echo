@@ -248,33 +248,50 @@ class DoubaoRealtimeMixin:
         except TypeError:
             ws_context = websockets.connect(url, extra_headers=headers, **ws_kwargs)
 
-        async with ws_context as doubao_ws:
-            # Configure initial session
-            session_config = {
-                "type": "session.update",
-                "session": {
-                    "modalities": ["text", "audio"],
-                    "voice": voice_name,
-                    "input_audio_format": "pcm16",
-                    "output_audio_format": "pcm16",
-                    "instructions": instructions or "You are Doubao Realtime AI voice assistant.",
-                },
-            }
-            await doubao_ws.send(json.dumps(session_config))
+        interruption = InterruptionDecisionCoordinator()
+        memory_session = memory_session or RealtimeMemorySession()
+        tool_session = tool_session or VoiceAgentToolSession()
 
-            interruption = InterruptionDecisionCoordinator()
-            memory_session = memory_session or RealtimeMemorySession()
-            tool_session = tool_session or VoiceAgentToolSession()
+        try:
+            async with ws_context as doubao_ws:
+                # Configure initial session
+                session_config = {
+                    "type": "session.update",
+                    "session": {
+                        "modalities": ["text", "audio"],
+                        "voice": voice_name,
+                        "input_audio_format": "pcm16",
+                        "output_audio_format": "pcm16",
+                        "instructions": instructions or "You are Doubao Realtime AI voice assistant.",
+                    },
+                }
+                await doubao_ws.send(json.dumps(session_config))
 
-            client_task = asyncio.create_task(
-                self._client_to_doubao_loop(
-                    websocket, doubao_ws, memory_session, tool_session, recorder, interruption
+                client_task = asyncio.create_task(
+                    self._client_to_doubao_loop(
+                        websocket, doubao_ws, memory_session, tool_session, recorder, interruption
+                    )
                 )
-            )
-            doubao_task = asyncio.create_task(
-                self._doubao_to_client_loop(
-                    websocket, doubao_ws, memory_session, tool_session, recorder, interruption
+                doubao_task = asyncio.create_task(
+                    self._doubao_to_client_loop(
+                        websocket, doubao_ws, memory_session, tool_session, recorder, interruption
+                    )
                 )
-            )
 
-            await self._run_duplex_tasks(client_task, doubao_task)
+                await self._run_duplex_tasks(client_task, doubao_task)
+        except WebSocketDisconnect:
+            return
+        except websockets.exceptions.InvalidStatusCode as exc:
+            status_code = getattr(exc, "status_code", None)
+            if status_code == 401 or "401" in str(exc):
+                err_msg = (
+                    "火山引擎 / 豆包 WebSocket 鉴权失败 (HTTP 401)。"
+                    "请检查设置中填写的 API Key 是否正确（需使用火山引擎方舟控制台 https://console.volcengine.com/ark 获取的 API Key）。"
+                )
+            else:
+                err_msg = f"豆包 WebSocket 连接被拒绝 (HTTP {status_code or exc})。"
+            logger.error("doubao_ws_connect_failed: %s", exc)
+            await self._send_event(websocket, "error", message=err_msg)
+        except Exception as exc:
+            logger.exception("doubao_session_failed")
+            await self._send_event(websocket, "error", message=f"豆包实时语音连接失败: {exc}")
