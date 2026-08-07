@@ -12,10 +12,42 @@ type Props = {
   errorRuntimeContext?: ErrorRuntimeContext;
 };
 
+type DesktopWindowApi = {
+  minimize_window?: () => Promise<unknown>;
+  toggle_maximize_window?: () => Promise<unknown>;
+};
+
+type DesktopBridgeWindow = Window & {
+  pywebview?: {
+    api?: DesktopWindowApi;
+  };
+};
+
 export default function SettingsModal({ open, onClose, settings, errorRuntimeContext }: Props) {
   const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
+
+  // Minimize/maximize only make sense inside the native desktop shell; in a
+  // browser tab these controls cannot touch the OS window.
+  const isDesktop =
+    typeof window !== "undefined" &&
+    Object.prototype.hasOwnProperty.call(window, "pywebview");
+
+  const runDesktopControl = useCallback((method: keyof DesktopWindowApi) => {
+    const call = (window as DesktopBridgeWindow).pywebview?.api?.[method];
+    if (!call) return;
+    Promise.resolve(call()).catch(() => {
+      // Best-effort window control; a bridge failure must not surface in the UI.
+    });
+  }, []);
+
+  const handleMinimize = useCallback(() => runDesktopControl("minimize_window"), [runDesktopControl]);
+
+  const handleToggleMaximize = useCallback(
+    () => runDesktopControl("toggle_maximize_window"),
+    [runDesktopControl]
+  );
 
   // Drag state stored in a ref — never triggers React re-render
   const dragState = useRef({
@@ -156,22 +188,28 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
             <h2>{t("偏好设置", "Preferences")}</h2>
           </div>
           <div className="vsSettingsModalWindowControls">
-            <button
-              type="button"
-              className="vsWindowControlBtn minimize"
-              title={t("最小化", "Minimize")}
-              aria-label={t("最小化", "Minimize")}
-            >
-              —
-            </button>
-            <button
-              type="button"
-              className="vsWindowControlBtn maximize"
-              title={t("最大化", "Maximize")}
-              aria-label={t("最大化", "Maximize")}
-            >
-              ▢
-            </button>
+            {isDesktop ? (
+              <>
+                <button
+                  type="button"
+                  className="vsWindowControlBtn minimize"
+                  onClick={handleMinimize}
+                  title={t("最小化", "Minimize")}
+                  aria-label={t("最小化", "Minimize")}
+                >
+                  —
+                </button>
+                <button
+                  type="button"
+                  className="vsWindowControlBtn maximize"
+                  onClick={handleToggleMaximize}
+                  title={t("最大化", "Maximize")}
+                  aria-label={t("最大化", "Maximize")}
+                >
+                  ▢
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
               className="vsWindowControlBtn close"

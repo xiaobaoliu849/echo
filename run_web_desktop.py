@@ -438,7 +438,11 @@ def write_launch_error_snapshot(err: Exception) -> Path:
     return LATEST_ERROR_PATH
 
 
-def attach_window_state_tracking(window: Any, state: dict[str, Any]) -> None:
+def attach_window_state_tracking(
+    window: Any,
+    state: dict[str, Any],
+    controller: Optional[DesktopController] = None,
+) -> None:
     def on_closed() -> None:
         # Avoid live move/resize callbacks; on Windows WebView they can make dragging
         # feel frozen because every mouse move crosses into Python.
@@ -451,9 +455,14 @@ def attach_window_state_tracking(window: Any, state: dict[str, Any]) -> None:
                     state[key] = max(value, MIN_WINDOW_HEIGHT)
                 else:
                     state[key] = value
-        maximized = getattr(window, "maximized", None)
-        if isinstance(maximized, bool):
-            state["maximized"] = maximized
+        if controller is not None:
+            # Prefer the live tracked state: pywebview's window.maximized holds
+            # the launch-time value and never reflects runtime changes.
+            state["maximized"] = controller.is_window_maximized()
+        else:
+            maximized = getattr(window, "maximized", None)
+            if isinstance(maximized, bool):
+                state["maximized"] = maximized
         save_window_state(state)
 
     window.events.closed += on_closed
@@ -646,10 +655,62 @@ class DesktopController:
         self.app_url = build_app_url()
         self.restart_requested = False
         self.clear_webview_requested = False
+        # Tracked live maximize state. pywebview's Window exposes no readable
+        # "maximized" property (only the launch-time __init__ value), so this
+        # flag is kept in sync with OS-level changes through window events.
+        self._maximized = bool(window_state.get("maximized", False))
 
     def attach_window(self, window: Any, webview_module: Any) -> None:
         self.window = window
         self.webview_module = webview_module
+        self._wire_window_state_events()
+
+    def _wire_window_state_events(self) -> None:
+        """Keep the tracked maximize state in sync with OS-level window changes.
+
+        Without this, a toggle driven from the title bar / keyboard shortcuts
+        (Win+Up, double-click, snap) would silently desync the button state.
+        """
+        if self.window is None or getattr(self.window, "events", None) is None:
+            return
+        events = self.window.events
+        if getattr(events, "maximized", None) is not None:
+            events.maximized += self._on_window_maximized
+        if getattr(events, "restored", None) is not None:
+            events.restored += self._on_window_restored
+
+    def _on_window_maximized(self) -> None:
+        self._maximized = True
+
+    def _on_window_restored(self) -> None:
+        self._maximized = False
+
+    def is_window_maximized(self) -> bool:
+        return self._maximized
+
+    def minimize_window(self) -> dict[str, Any]:
+        """Minimize the native window (desktop mode only)."""
+        if self.window is None:
+            return {"ok": False, "message": "Desktop window is not ready."}
+        try:
+            self.window.minimize()
+        except Exception as exc:
+            return {"ok": False, "message": f"Minimize failed: {exc}"}
+        return {"ok": True}
+
+    def toggle_maximize_window(self) -> dict[str, Any]:
+        """Toggle maximize/restore on the native window (desktop mode only)."""
+        if self.window is None:
+            return {"ok": False, "message": "Desktop window is not ready."}
+        try:
+            if self._maximized:
+                self.window.restore()
+            else:
+                self.window.maximize()
+            self._maximized = not self._maximized
+        except Exception as exc:
+            return {"ok": False, "message": f"Maximize toggle failed: {exc}"}
+        return {"ok": True, "maximized": self._maximized}
 
     def reload_app(self) -> None:
         if self.window is None:
@@ -666,6 +727,7 @@ class DesktopController:
             return
 
         self.window.restore()
+        self._maximized = False
         self.window.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
         if self.webview_module is not None:
             screens = self.webview_module.screens
@@ -857,6 +919,14 @@ class DesktopJsApi:
             empty_message="Export content is empty.",
         )
 
+    def minimize_window(self) -> dict[str, Any]:
+        """Minimize the native window from the web UI."""
+        return self._controller.minimize_window()
+
+    def toggle_maximize_window(self) -> dict[str, Any]:
+        """Toggle maximize/restore on the native window from the web UI."""
+        return self._controller.toggle_maximize_window()
+
 
 def build_application_menu(
     controller: DesktopController,
@@ -973,7 +1043,7 @@ def main() -> int:
         js_api=DesktopJsApi(controller),
     )
     controller.attach_window(window, webview)
-    attach_window_state_tracking(window, window_state)
+    attach_window_state_tracking(window, window_state, controller)
     try:
         webview.start(
             debug=False,
