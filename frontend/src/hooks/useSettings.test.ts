@@ -188,6 +188,7 @@ describe('useSettings', () => {
 
         act(() => {
             result.current.onApiKeyChange('volc_test_key_123');
+            result.current.onDoubaoAccessTokenChange('x-access-token-abc');
             result.current.onDoubaoAppIdChange('123456789');
             result.current.onRealtimeApiUrlChange('wss://openspeech.bytedance.com/api/v3/realtime/dialogue');
         });
@@ -201,6 +202,7 @@ describe('useSettings', () => {
             expect.objectContaining({
                 api_keys: {
                     doubao_api_key: 'volc_test_key_123',
+                    doubao_access_token: 'x-access-token-abc',
                     doubao_app_id: '123456789',
                     doubao_websearch_api_key: ''
                 },

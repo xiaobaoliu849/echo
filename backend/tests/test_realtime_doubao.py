@@ -93,7 +93,35 @@ class TestRealtimeDoubaoProvider(unittest.TestCase):
 
         with self.assertRaises(RuntimeError) as ctx:
             self.service._resolve_doubao_settings(None, None)
-        self.assertIn("Doubao / Volcengine API Key 未配置", str(ctx.exception))
+        self.assertIn("Access Token 未配置", str(ctx.exception))
+
+    def test_resolve_doubao_settings_access_token_preferred(self) -> None:
+        """独立的 doubao_access_token 字段优先于 ark 体系的 doubao_api_key。"""
+        fake_config = MagicMock()
+        fake_config.get_provider_settings.return_value = {
+            "api_key": "ark-style-key", "model": "", "realtime_base_url": "",
+        }
+        fake_config.get_setting.side_effect = lambda key, default="": {
+            "doubao_access_token": "x-access-token",
+            "doubao_app_id": "123456789",
+        }.get(key, default)
+        self.service.config = fake_config
+
+        settings = self.service._resolve_doubao_settings(None, None)
+        self.assertEqual(settings["api_key"], "x-access-token")
+        self.assertEqual(settings["app_id"], "123456789")
+
+    def test_resolve_doubao_settings_falls_back_to_api_key(self) -> None:
+        """旧配置把 Access Token 存在 doubao_api_key 里时仍然可用。"""
+        fake_config = MagicMock()
+        fake_config.get_provider_settings.return_value = {
+            "api_key": "x-legacy-token", "model": "", "realtime_base_url": "",
+        }
+        fake_config.get_setting.return_value = ""
+        self.service.config = fake_config
+
+        settings = self.service._resolve_doubao_settings(None, None)
+        self.assertEqual(settings["api_key"], "x-legacy-token")
 
     def test_client_to_doubao_text_input(self) -> None:
         async def run_test():

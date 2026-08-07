@@ -104,9 +104,6 @@ class DoubaoRealtimeMixin:
             volc_settings = self.config.get_provider_settings("Volcengine", model)
             api_key = volc_settings["api_key"].strip()
 
-        if not api_key:
-            raise RuntimeError("Doubao / Volcengine API Key 未配置，无法启动实时语音会话。")
-
         custom_endpoint = provider_settings.get("realtime_base_url", "").strip()
         endpoint = custom_endpoint or DEFAULT_DOUBAO_REALTIME_ENDPOINT
 
@@ -125,6 +122,7 @@ class DoubaoRealtimeMixin:
 
         raw_app_id = ""
         websearch_key = ""
+        access_token = ""
         get_setting = getattr(self.config, "get_setting", None)
         if callable(get_setting):
             candidate = get_setting("doubao_app_id", "")
@@ -133,9 +131,23 @@ class DoubaoRealtimeMixin:
             ws_candidate = get_setting("doubao_websearch_api_key", "")
             if isinstance(ws_candidate, str):
                 websearch_key = ws_candidate.strip()
+            token_candidate = get_setting("doubao_access_token", "")
+            if isinstance(token_candidate, str):
+                access_token = token_candidate.strip()
+
+        # 实时语音走豆包语音 OpenSpeech,凭证是 Access Token(+ APP ID),
+        # 与文字聊天的火山方舟 API Key 是两套体系;优先读独立字段,
+        # 为空时回退 doubao_api_key 以兼容旧配置。
+        realtime_credential = access_token or api_key
+        if not realtime_credential:
+            raise RuntimeError(
+                "豆包实时语音的 Access Token 未配置：请在 设置 → Doubao 的"
+                "「Access Token（实时语音）」栏填写豆包语音控制台"
+                "「服务接口认证信息」中的 Access Token。"
+            )
 
         return {
-            "api_key": api_key,
+            "api_key": realtime_credential,
             "model": resolved_model,
             "dialog_model": dialog_model,
             "voice": resolved_voice,

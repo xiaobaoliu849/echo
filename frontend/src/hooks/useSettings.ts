@@ -99,6 +99,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
   const [settingsApiUrl, setSettingsApiUrl] = useState("");
   const [settingsRealtimeApiUrl, setSettingsRealtimeApiUrl] = useState("");
   const [settingsDoubaoAppId, setSettingsDoubaoAppId] = useState("");
+  const [settingsDoubaoAccessToken, setSettingsDoubaoAccessToken] = useState("");
   const [settingsDoubaoWebsearchKey, setSettingsDoubaoWebsearchKey] = useState("");
   const [settingsDefaultModel, setSettingsDefaultModel] = useState("");
   const [settingsAvailableModels, setSettingsAvailableModels] = useState<string[]>([]);
@@ -518,6 +519,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
       setSettingsApiUrl(apiUrl);
       setSettingsRealtimeApiUrl(settingsData.realtime_api_urls?.[settingsProvider] || "");
       setSettingsDoubaoAppId(settingsData.api_keys?.doubao_app_id || "");
+      setSettingsDoubaoAccessToken(settingsData.api_keys?.doubao_access_token || "");
       setSettingsDoubaoWebsearchKey(settingsData.api_keys?.doubao_websearch_api_key || "");
       setSettingsDefaultModel(defaultModel);
       setSettingsAvailableModels(availableModels);
@@ -766,6 +768,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
         if (settingsProvider === "Doubao") {
           patch.api_keys = {
             ...(patch.api_keys || {}),
+            doubao_access_token: settingsDoubaoAccessToken.trim(),
             doubao_app_id: settingsDoubaoAppId.trim(),
             doubao_websearch_api_key: settingsDoubaoWebsearchKey.trim()
           };
@@ -883,6 +886,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
     settingsApiUrl,
     settingsRealtimeApiUrl,
     settingsDoubaoAppId,
+    settingsDoubaoAccessToken,
     settingsDoubaoWebsearchKey,
     settingsDefaultModel,
     settingsAvailableModelsText,
@@ -938,6 +942,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
     onApiUrlChange: setSettingsApiUrl,
     onRealtimeApiUrlChange: setSettingsRealtimeApiUrl,
     onDoubaoAppIdChange: setSettingsDoubaoAppId,
+    onDoubaoAccessTokenChange: setSettingsDoubaoAccessToken,
     onDoubaoWebsearchKeyChange: setSettingsDoubaoWebsearchKey,
     onXiaomiApiKeyChange: setXiaomiApiKey,
     onXiaomiApiUrlChange: setXiaomiApiUrl,
