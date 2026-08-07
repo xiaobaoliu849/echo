@@ -188,7 +188,10 @@ class DoubaoRealtimeMixin:
             raise RuntimeError(f"豆包实时语音握手异常: 未收到 ConnectionStarted (event={frame.event})。")
 
         session_id = str(uuid.uuid4())
-        dialog_extra: dict[str, Any] = {"model": dialog_model}
+        dialog_extra: dict[str, Any] = {
+            "model": dialog_model,
+            "enable_loudness_norm": True,
+        }
         if websearch_key:
             # 内置联网(融合信息搜索):没开的话模型会凭空编造天气/新闻等实时信息
             dialog_extra["enable_volc_websearch"] = True

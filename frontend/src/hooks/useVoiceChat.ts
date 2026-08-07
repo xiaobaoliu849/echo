@@ -857,6 +857,7 @@ export default function useVoiceChat({
         setVoiceChatAgentRunMeta("");
         setVoiceChatInterruptionState({ phase: "idle" });
         setVoiceChatAssistantInterrupted(false);
+        setAssistantPlaybackGain(1);
         currentAssistantInterruptedRef.current = false;
         currentUserTurnRef.current = event.text;
         currentTurnIdRef.current = event.turn_id || currentTurnIdRef.current;
@@ -931,6 +932,7 @@ export default function useVoiceChat({
         currentTurnIdRef.current = event.turn_id || currentTurnIdRef.current;
         if (!currentAssistantTurnRef.current && !currentAssistantInterruptedRef.current) {
           setVoiceChatAssistantInterrupted(false);
+          setAssistantPlaybackGain(1);
         }
         currentAssistantTurnRef.current = mergeAssistantText(currentAssistantTurnRef.current, event.text);
         setVoiceChatReply(currentAssistantTurnRef.current);
@@ -950,6 +952,7 @@ export default function useVoiceChat({
         currentTurnIdRef.current = event.turn_id || currentTurnIdRef.current;
         if (!currentAssistantTurnRef.current && !currentAssistantInterruptedRef.current) {
           setVoiceChatAssistantInterrupted(false);
+          setAssistantPlaybackGain(1);
         }
         if (typeof event.first_audio_ms === "number") {
           setVoiceChatMetrics((previous) => ({ ...previous, firstAudioMs: event.first_audio_ms ?? null }));
