@@ -167,4 +167,47 @@ describe('useSettings', () => {
             })
         );
     });
+
+    it('persists Doubao provider settings without key mapping error', async () => {
+        const updateSettingsMock = vi.mocked(updateSettings);
+        updateSettingsMock.mockClear();
+        updateSettingsMock.mockResolvedValue({
+            config_path: '/tmp/config.json',
+            providers: ['DashScope', 'Doubao'],
+            settings: {} as any
+        });
+        const { result } = renderHook(() =>
+            useSettings({ formatErrorMessage: createFormatErrorMessageStub() })
+        );
+
+        await waitFor(() => expect(result.current.settingsBusy).toBe(false));
+
+        act(() => {
+            result.current.onProviderChange('Doubao');
+        });
+
+        act(() => {
+            result.current.onApiKeyChange('volc_test_key_123');
+            result.current.onDoubaoAppIdChange('123456789');
+            result.current.onRealtimeApiUrlChange('wss://openspeech.bytedance.com/api/v3/realtime/dialogue');
+        });
+
+        await act(async () => {
+            await result.current.onSubmit({ preventDefault: vi.fn() } as never);
+        });
+
+        expect(result.current.settingsError).toBe('');
+        expect(updateSettingsMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                api_keys: {
+                    doubao_api_key: 'volc_test_key_123',
+                    doubao_app_id: '123456789',
+                    doubao_websearch_api_key: ''
+                },
+                realtime_api_urls: {
+                    Doubao: 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue'
+                }
+            })
+        );
+    });
 });

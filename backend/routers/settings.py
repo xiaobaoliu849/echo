@@ -181,6 +181,13 @@ DASHSCOPE_MODEL_LIST_SUPPLEMENTS = [
     # Live translation (DashScope Realtime WebSocket — integrated)
     "qwen3.5-livetranslate-flash-realtime",
 ]
+DOUBAO_MODEL_LIST_SUPPLEMENTS = [
+    "doubao-realtime",
+    "doubao-1.5-pro-32k",
+    "doubao-1.5-lite-32k",
+    "doubao-pro-32k",
+    "doubao-lite-32k",
+]
 GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
 
 
@@ -438,6 +445,26 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             },
         )
 
+    if api_key and not api_key.isascii():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_API_KEY_ENCODING",
+                "message": f"API Key for provider '{provider}' contains non-ASCII characters (e.g., Chinese text or full-width symbols). Please enter a valid ASCII API Key.",
+                "meta": {},
+            },
+        )
+
+    if base_url and not base_url.isascii():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_BASE_URL_ENCODING",
+                "message": f"Base URL for provider '{provider}' contains non-ASCII characters. Please enter a valid URL.",
+                "meta": {},
+            },
+        )
+
     if provider == "Ollama":
         base = base_url
         if base.endswith("/v1"):
@@ -465,12 +492,29 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             response = await client.get(url, headers=headers)
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
+        if provider == "Doubao":
+            # Doubao/Volcengine Ark may not expose standard /models endpoint for all API keys.
+            # Fall back gracefully to curated DOUBAO_MODEL_LIST_SUPPLEMENTS.
+            return FetchModelsResponse(
+                provider=provider,
+                models=[m for m in DOUBAO_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in DOUBAO_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
         detail = exc.response.text[:500] if exc.response is not None else str(exc)
         raise HTTPException(
             status_code=500,
             detail={
                 "code": "FETCH_MODELS_HTTP_ERROR",
                 "message": f"Provider returned status {exc.response.status_code}: {detail}",
+                "meta": {},
+            },
+        ) from exc
+    except UnicodeEncodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_HEADER_ENCODING",
+                "message": f"Failed to connect to provider '{provider}': input contains non-ASCII characters. Please check your API Key and Base URL.",
                 "meta": {},
             },
         ) from exc
@@ -523,6 +567,8 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             # survive even though the filter drops all date-suffixed names.
             model_ids = _filter_dashscope_models(model_ids)
             model_ids.extend(DASHSCOPE_MODEL_LIST_SUPPLEMENTS)
+        elif provider == "Doubao":
+            model_ids.extend(DOUBAO_MODEL_LIST_SUPPLEMENTS)
 
         model_ids = sorted(list(set(model_ids)))
         tts_ids = [m for m in model_ids if _is_tts_model_id(m)]

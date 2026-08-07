@@ -250,6 +250,60 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </label>
           )}
 
+          {settings.settingsProvider === "Doubao" && (
+            <>
+              <label className="vsField">
+                <span className="vsFieldLabel">{t("豆包语音 APP ID（实时语音必填）", "Doubao Voice APP ID (required for realtime)")}</span>
+                <input
+                  className="vsInput"
+                  value={settings.settingsDoubaoAppId || ""}
+                  onChange={(e) => settings.onDoubaoAppIdChange(e.target.value)}
+                  placeholder={t("火山引擎「豆包语音」控制台概览页的 APP ID", "APP ID from the Volcengine Doubao Voice console overview page")}
+                />
+                <span className="vsFieldHint">
+                  {t(
+                    "实时语音使用「豆包语音」控制台的 Access Token（上面的 API Key 栏）+ APP ID 鉴权；火山方舟(Ark)的 API Key 不能用于实时语音。",
+                    "Realtime voice authenticates with the Access Token from the Doubao Voice console (API Key field above) plus its APP ID; Ark API keys do not work for realtime voice."
+                  )}{" "}
+                  <a
+                    href="https://console.volcengine.com/speech/overview"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("打开豆包语音控制台", "Open the Doubao Voice console")}
+                  </a>
+                </span>
+              </label>
+              <label className="vsField">
+                <span className="vsFieldLabel">{t("融合信息搜索 API Key（可选，开启联网）", "Web Search API Key (optional, enables online search)")}</span>
+                <input
+                  className="vsInput"
+                  value={settings.settingsDoubaoWebsearchKey || ""}
+                  onChange={(e) => settings.onDoubaoWebsearchKeyChange(e.target.value)}
+                  placeholder={t("火山引擎「融合信息搜索」服务的 API Key", "API Key of the Volcengine fused web search service")}
+                />
+                <span className="vsFieldHint">
+                  {t(
+                    "不填则模型无法联网，天气/新闻等实时问题会凭空编造；填写后自动开启内置联网搜索。",
+                    "Without it the model cannot go online and will fabricate answers for weather/news; once filled, built-in web search is enabled automatically."
+                  )}
+                </span>
+              </label>
+              <label className="vsField">
+                <span className="vsFieldLabel">{t("实时语音 WebSocket URL（可选）", "Realtime WebSocket URL (optional)")}</span>
+                <input
+                  className="vsInput"
+                  value={settings.settingsRealtimeApiUrl || ""}
+                  onChange={(e) => settings.onRealtimeApiUrlChange(e.target.value)}
+                  placeholder="wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
+                />
+                <span className="vsFieldHint">
+                  {t("留空则使用豆包端到端实时语音官方地址。", "Leave empty to use the official Doubao end-to-end realtime dialogue endpoint.")}
+                </span>
+              </label>
+            </>
+          )}
+
           {settings.isCustomProvider && (
             <>
               <label className="vsField">

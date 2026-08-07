@@ -54,6 +54,8 @@ PROVIDER_KEY_MAP = {
     "Deepgram": "deepgram_api_key",
     "AssemblyAI": "assemblyai_api_key",
     "GPT-SoVITS": "gpt_sovits_api_key",
+    "Doubao": "doubao_api_key",
+    "Volcengine": "doubao_api_key",
 }
 
 GOOGLE_INTERACTIONS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -72,6 +74,8 @@ DEFAULT_BASE_URLS = {
     "Deepgram": "https://api.deepgram.com/v1",
     "AssemblyAI": "https://api.assemblyai.com",
     "GPT-SoVITS": "http://127.0.0.1:9880",
+    "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
+    "Volcengine": "https://ark.cn-beijing.volces.com/api/v3",
 }
 
 
@@ -107,6 +111,15 @@ class BackendConfig:
 
     def get_all(self) -> dict[str, Any]:
         return copy.deepcopy(self._config)
+
+    def get_setting(self, key: str, default: Any = "") -> Any:
+        cfg = self.get_all()
+        if key in cfg:
+            return cfg[key]
+        api_keys = cfg.get("api_keys", {})
+        if isinstance(api_keys, dict) and key in api_keys:
+            return api_keys[key]
+        return default
 
     @staticmethod
     def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:

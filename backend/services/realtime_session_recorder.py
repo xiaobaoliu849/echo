@@ -249,3 +249,16 @@ class VoiceAgentSessionRecorder:
 
     async def finish(self, *, status: str = "closed") -> None:
         await self._call_repository("finish_session", self.session_id, status=status)
+
+    async def complete_session(self, *, status: str = "closed") -> None:
+        await self.finish(status=status)
+
+    async def record_turn_completed(
+        self,
+        turn_id: str = "",
+        user_text: str = "",
+        ai_text: str = "",
+        elapsed_ms: int = 0,
+        memory_payload: dict[str, Any] | None = None,
+    ) -> str:
+        return await self.complete_turn(memory_payload=memory_payload)

@@ -26,7 +26,9 @@ const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   Deepgram: "deepgram_api_key",
   OpenAI: "openai_api_key",
   ElevenLabs: "elevenlabs_api_key",
-  "GPT-SoVITS": "gpt_sovits_api_key"
+  "GPT-SoVITS": "gpt_sovits_api_key",
+  Doubao: "doubao_api_key",
+  Volcengine: "doubao_api_key"
 };
 
 const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_API_KEY_FIELD);
@@ -96,6 +98,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
   const [settingsApiKey, setSettingsApiKey] = useState("");
   const [settingsApiUrl, setSettingsApiUrl] = useState("");
   const [settingsRealtimeApiUrl, setSettingsRealtimeApiUrl] = useState("");
+  const [settingsDoubaoAppId, setSettingsDoubaoAppId] = useState("");
+  const [settingsDoubaoWebsearchKey, setSettingsDoubaoWebsearchKey] = useState("");
   const [settingsDefaultModel, setSettingsDefaultModel] = useState("");
   const [settingsAvailableModels, setSettingsAvailableModels] = useState<string[]>([]);
   const [settingsEnabledModels, setSettingsEnabledModels] = useState<string[]>([]);
@@ -505,14 +509,16 @@ export default function useSettings({ formatErrorMessage }: Options) {
       }
     } else {
       const keyField = PROVIDER_API_KEY_FIELD[settingsProvider];
-      const apiKey = keyField ? settingsData.api_keys[keyField] || "" : "";
-      const apiUrl = settingsData.api_urls[settingsProvider] || "";
-      const modelValue = settingsData.default_models[settingsProvider];
+      const apiKey = (keyField && settingsData?.api_keys) ? settingsData.api_keys[keyField] || "" : "";
+      const apiUrl = settingsData?.api_urls?.[settingsProvider] || "";
+      const modelValue = settingsData?.default_models?.[settingsProvider];
       const { defaultModel, availableModels, enabledModels, ttsDefaultModel, ttsAvailableModels, ttsEnabledModels } = parseModelValue(modelValue);
 
       setSettingsApiKey(apiKey);
       setSettingsApiUrl(apiUrl);
       setSettingsRealtimeApiUrl(settingsData.realtime_api_urls?.[settingsProvider] || "");
+      setSettingsDoubaoAppId(settingsData.api_keys?.doubao_app_id || "");
+      setSettingsDoubaoWebsearchKey(settingsData.api_keys?.doubao_websearch_api_key || "");
       setSettingsDefaultModel(defaultModel);
       setSettingsAvailableModels(availableModels);
       setSettingsEnabledModels(enabledModels);
@@ -757,12 +763,19 @@ export default function useSettings({ formatErrorMessage }: Options) {
             [keyField]: settingsApiKey.trim()
           };
         }
+        if (settingsProvider === "Doubao") {
+          patch.api_keys = {
+            ...(patch.api_keys || {}),
+            doubao_app_id: settingsDoubaoAppId.trim(),
+            doubao_websearch_api_key: settingsDoubaoWebsearchKey.trim()
+          };
+        }
         patch.api_urls = {
           [settingsProvider]: settingsApiUrl.trim()
         };
-        if (settingsProvider === "DashScope") {
+        if (settingsProvider === "DashScope" || settingsProvider === "Doubao") {
           patch.realtime_api_urls = {
-            DashScope: settingsRealtimeApiUrl.trim()
+            [settingsProvider]: settingsRealtimeApiUrl.trim()
           };
         }
         patch.default_models = {
@@ -869,6 +882,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
     settingsApiKey,
     settingsApiUrl,
     settingsRealtimeApiUrl,
+    settingsDoubaoAppId,
+    settingsDoubaoWebsearchKey,
     settingsDefaultModel,
     settingsAvailableModelsText,
     settingsAvailableModels,
@@ -922,6 +937,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
     onApiKeyChange: setSettingsApiKey,
     onApiUrlChange: setSettingsApiUrl,
     onRealtimeApiUrlChange: setSettingsRealtimeApiUrl,
+    onDoubaoAppIdChange: setSettingsDoubaoAppId,
+    onDoubaoWebsearchKeyChange: setSettingsDoubaoWebsearchKey,
     onXiaomiApiKeyChange: setXiaomiApiKey,
     onXiaomiApiUrlChange: setXiaomiApiUrl,
     settingsTtsDefaultModel,

@@ -1855,6 +1855,32 @@ class ApiSmokeTests(unittest.TestCase):
                 headers={"Accept": "application/json"}
             )
 
+    def test_fetch_models_rejects_non_ascii_api_key(self) -> None:
+        response = self._request(
+            "POST",
+            "/api/settings/providers/Doubao/fetch-models",
+            json={"api_key": "火山引擎APIKey测试说明文本", "base_url": "https://ark.cn-beijing.volces.com/api/v3"}
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data["detail"]["code"], "INVALID_API_KEY_ENCODING")
+
+    def test_fetch_models_doubao_fallback_on_http_error(self) -> None:
+        import httpx
+        request = httpx.Request("GET", "https://ark.cn-beijing.volces.com/api/v3/models")
+        mock_response = httpx.Response(404, request=request)
+        exc = httpx.HTTPStatusError("Not Found", request=request, response=mock_response)
+        with patch("httpx.AsyncClient.get", side_effect=exc):
+            response = self._request(
+                "POST",
+                "/api/settings/providers/Doubao/fetch-models",
+                json={"api_key": "valid_volcengine_key_123", "base_url": "https://ark.cn-beijing.volces.com/api/v3"}
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["provider"], "Doubao")
+            self.assertIn("doubao-realtime", data["models"])
+
     def test_desktop_status_endpoint_returns_preflight_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             runtime_dir = Path(tmp_dir) / "VoiceSpirit"

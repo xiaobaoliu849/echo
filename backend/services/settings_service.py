@@ -44,6 +44,9 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "ollama_api_key": "",
         "deepgram_api_key": "",
         "gpt_sovits_api_key": "",
+        "doubao_api_key": "",
+        "doubao_app_id": "",
+        "doubao_websearch_api_key": "",
     },
     "api_urls": {
         "Google": "",
@@ -59,9 +62,11 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Ollama": "",
         "Deepgram": "",
         "GPT-SoVITS": "",
+        "Doubao": "",
     },
     "realtime_api_urls": {
         "DashScope": "",
+        "Doubao": "",
     },
     "default_models": {
         "DeepSeek": {"default": "", "available": [], "enabled": []},
@@ -77,6 +82,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Ollama": {"default": "", "available": [], "enabled": []},
         "Deepgram": {"default": "", "available": [], "enabled": []},
         "GPT-SoVITS": {"default": "", "available": [], "enabled": []},
+        "Doubao": {"default": "doubao-realtime", "available": ["doubao-realtime"], "enabled": ["doubao-realtime"]},
     },
     "general_settings": {
         "display_language": "English",

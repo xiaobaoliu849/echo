@@ -27,6 +27,7 @@ type TranslatePair = (zh: string, en: string) => string;
 export const PROVIDERS = [
   "Google",
   "DashScope",
+  "Doubao",
   "DeepSeek",
   "OpenRouter",
   "SiliconFlow",

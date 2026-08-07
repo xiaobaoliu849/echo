@@ -79,10 +79,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       }
     }
 
-    return Array.from(map.entries()).map(([provider, modelMap]) => ({
-      provider,
-      models: Array.from(modelMap.values()),
-    }));
+    return Array.from(map.entries())
+      .map(([provider, modelMap]) => ({
+        provider,
+        models: Array.from(modelMap.values()),
+      }))
+      .filter((group) => group.models.length > 0);
   }, [chat?.chatModelChoices, voiceChat.voiceChatRealtimeChoicesByProvider]);
 
   const currentProviderName = activeProvider || (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
