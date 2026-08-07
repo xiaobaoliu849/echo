@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatModelHint, type UseChatResult } from "../../hooks/useChat";
+import { useProviderFlyoutTop } from "../../hooks/useProviderFlyoutTop";
 
 type Translator = (zh: string, en: string) => string;
 
@@ -23,6 +24,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
   const [activeProvider, setActiveProvider] = useState<string>("");
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const { panelRef, onRowRef, flyoutTop } = useProviderFlyoutTop(open, activeProvider);
 
   const groups = useMemo<ModelGroup[]>(() => {
     const byProvider = new Map<string, ModelGroup>();
@@ -109,6 +111,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
         <div
           className={`vsVoiceSettingsPanel${openUpward ? "" : " below"}`}
           style={{ maxHeight: `${panelMaxHeight}px` }}
+          ref={panelRef}
           role="dialog"
           aria-label={t("切换模型", "Switch model")}
         >
@@ -122,6 +125,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
                   key={group.provider}
                   type="button"
                   className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isCurrentProvider ? " selected" : ""}`}
+                  ref={(el) => onRowRef(group.provider, el)}
                   onMouseEnter={() => setActiveProvider(group.provider)}
                   onClick={() => setActiveProvider(group.provider)}
                 >
@@ -166,7 +170,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
           {activeGroup ? (
             <div
               className={`vsModelFlyout${flyoutToLeft ? " flyLeft" : ""}`}
-              style={{ maxHeight: `${panelMaxHeight}px` }}
+              style={{ top: flyoutTop, maxHeight: `${panelMaxHeight}px` }}
             >
               {activeGroup.choices.map((choice) => {
                 const isCurrentModel =

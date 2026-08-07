@@ -128,6 +128,24 @@ describe("ChatModelSelect", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("aligns the model flyout with the hovered provider row, not the panel top", () => {
+    // jsdom has no layout engine; simulate row offsets so the alignment can be asserted.
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      const text = this.textContent || "";
+      if (text.includes("Google")) return 48;
+      if (text.includes("DashScope")) return 6;
+      return 0;
+    });
+    renderSelect();
+    openPanel();
+
+    fireEvent.mouseEnter(screen.getByText("DashScope"));
+    expect(screen.getByText("qwen3.5-plus").closest(".vsModelFlyout")).toHaveStyle("top: 6px");
+
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    expect(screen.getByText("gemini-3.5-flash").closest(".vsModelFlyout")).toHaveStyle("top: 48px");
+  });
+
   it("resets hover state when reopened so only Level 1 shows", () => {
     renderSelect();
     openPanel();

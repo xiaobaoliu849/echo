@@ -6,6 +6,7 @@ import {
   formatVoiceChatSecondaryLabel,
   isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
+import { useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
 
 type Translator = (zh: string, en: string) => string;
 
@@ -89,6 +90,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   const currentProviderName = activeProvider || (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
   const currentProviderGroup = providerGroups.find((g) => g.provider === currentProviderName) || providerGroups[0];
+
+  // The Level-2 flyout aligns with the row of the browsed provider (falling back
+  // to the current provider when nothing is hovered).
+  const { panelRef, onRowRef, flyoutTop } = useProviderFlyoutTop(open, activeProvider || currentProviderName);
 
   // Model being browsed for the browsed provider: the hovered model, else the
   // committed model only when it belongs to that provider (no mixed pairs).
@@ -253,6 +258,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
         <div
           className={`vsVoiceSettingsPanel${openUpward ? "" : " below"}`}
           style={{ maxHeight: `${panelMaxHeight}px` }}
+          ref={panelRef}
           role="dialog"
           aria-label={t("通话设置", "Call settings")}
         >
@@ -266,6 +272,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                   key={group.provider}
                   type="button"
                   className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isSelectedProvider ? " selected" : ""}`}
+                  ref={(el) => onRowRef(group.provider, el)}
                   onMouseEnter={() => {
                     setActiveProvider(group.provider);
                     setActiveCategory("");
@@ -318,7 +325,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           {currentProviderGroup ? (
             <div
               className={`vsModelFlyout${flyoutToLeft ? " flyLeft" : ""}`}
-              style={{ maxHeight: `${panelMaxHeight}px` }}
+              style={{ top: flyoutTop, maxHeight: `${panelMaxHeight}px` }}
             >
               {/* List of Specific Models under Active Provider */}
               <div className="vsVoiceSettingsList">

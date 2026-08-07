@@ -103,6 +103,24 @@ describe("VoiceCallSettingsPopover", () => {
     expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-3.1-flash-live-preview");
   });
 
+  it("aligns the Level-2 model flyout with the hovered provider row", () => {
+    // jsdom has no layout engine; simulate row offsets so the alignment can be asserted.
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      const text = this.textContent || "";
+      if (text.includes("Google")) return 48;
+      if (text.includes("DashScope")) return 6;
+      return 0;
+    });
+    renderPopover();
+    openPanel();
+
+    // The default Level-2 flyout (current provider) aligns with the DashScope row
+    expect(screen.getByText("qwen3.5-omni-plus-realtime").closest(".vsModelFlyout")).toHaveStyle("top: 6px");
+
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    expect(screen.getByText("gemini-3.1-flash-live-preview").closest(".vsModelFlyout")).toHaveStyle("top: 48px");
+  });
+
   it("always shows a Done button in the footer that closes the panel", () => {
     renderPopover();
     openPanel();
