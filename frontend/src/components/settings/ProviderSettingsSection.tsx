@@ -79,6 +79,9 @@ export default function ProviderSettingsSection({ settings }: Props) {
   const [showRawModels, setShowRawModels] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showDoubaoAccessToken, setShowDoubaoAccessToken] = useState(false);
+  const [showDoubaoAppId, setShowDoubaoAppId] = useState(false);
+  const [showDoubaoWebsearchKey, setShowDoubaoWebsearchKey] = useState(false);
 
   const [showAddCustomModal, setShowAddCustomModal] = useState(false);
   const [customName, setCustomName] = useState("");
@@ -260,12 +263,23 @@ export default function ProviderSettingsSection({ settings }: Props) {
             <>
               <label className="vsField">
                 <span className="vsFieldLabel">{t("Access Token（豆包语音 · 实时语音）", "Access Token (Doubao Voice · realtime)")}</span>
-                <input
-                  className="vsInput"
-                  value={settings.settingsDoubaoAccessToken || ""}
-                  onChange={(e) => settings.onDoubaoAccessTokenChange(e.target.value)}
-                  placeholder={t("豆包语音控制台「服务接口认证信息」的 Access Token", "Access Token from the Doubao Voice console auth info")}
-                />
+                <div className="vsPasswordFieldWrap">
+                  <input
+                    className="vsInput"
+                    type={showDoubaoAccessToken ? "text" : "password"}
+                    value={settings.settingsDoubaoAccessToken || ""}
+                    onChange={(e) => settings.onDoubaoAccessTokenChange(e.target.value)}
+                    placeholder={t("豆包语音控制台「服务接口认证信息」的 Access Token", "Access Token from the Doubao Voice console auth info")}
+                  />
+                  <button
+                    type="button"
+                    className="vsPasswordToggleBtn"
+                    onClick={() => setShowDoubaoAccessToken((v) => !v)}
+                    title={showDoubaoAccessToken ? t("隐藏", "Hide") : t("显示", "Show")}
+                  >
+                    {showDoubaoAccessToken ? "🙈" : "👁"}
+                  </button>
+                </div>
                 <span className="vsFieldHint">
                   {t(
                     "实时语音通话专用凭证，与上面的方舟 API Key 是两套体系；通常是一串以 x- 开头的字符。",
@@ -275,12 +289,23 @@ export default function ProviderSettingsSection({ settings }: Props) {
               </label>
               <label className="vsField">
                 <span className="vsFieldLabel">{t("豆包语音 APP ID（实时语音必填）", "Doubao Voice APP ID (required for realtime)")}</span>
-                <input
-                  className="vsInput"
-                  value={settings.settingsDoubaoAppId || ""}
-                  onChange={(e) => settings.onDoubaoAppIdChange(e.target.value)}
-                  placeholder={t("火山引擎「豆包语音」控制台概览页的 APP ID", "APP ID from the Volcengine Doubao Voice console overview page")}
-                />
+                <div className="vsPasswordFieldWrap">
+                  <input
+                    className="vsInput"
+                    type={showDoubaoAppId ? "text" : "password"}
+                    value={settings.settingsDoubaoAppId || ""}
+                    onChange={(e) => settings.onDoubaoAppIdChange(e.target.value)}
+                    placeholder={t("火山引擎「豆包语音」控制台概览页的 APP ID", "APP ID from the Volcengine Doubao Voice console overview page")}
+                  />
+                  <button
+                    type="button"
+                    className="vsPasswordToggleBtn"
+                    onClick={() => setShowDoubaoAppId((v) => !v)}
+                    title={showDoubaoAppId ? t("隐藏", "Hide") : t("显示", "Show")}
+                  >
+                    {showDoubaoAppId ? "🙈" : "👁"}
+                  </button>
+                </div>
                 <span className="vsFieldHint">
                   {t(
                     "实时语音使用「豆包语音」控制台的 Access Token + APP ID 鉴权（两者在「服务接口认证信息」里成对出现）。",
@@ -297,12 +322,23 @@ export default function ProviderSettingsSection({ settings }: Props) {
               </label>
               <label className="vsField">
                 <span className="vsFieldLabel">{t("融合信息搜索 API Key（可选，开启联网）", "Web Search API Key (optional, enables online search)")}</span>
-                <input
-                  className="vsInput"
-                  value={settings.settingsDoubaoWebsearchKey || ""}
-                  onChange={(e) => settings.onDoubaoWebsearchKeyChange(e.target.value)}
-                  placeholder={t("火山引擎「融合信息搜索」服务的 API Key", "API Key of the Volcengine fused web search service")}
-                />
+                <div className="vsPasswordFieldWrap">
+                  <input
+                    className="vsInput"
+                    type={showDoubaoWebsearchKey ? "text" : "password"}
+                    value={settings.settingsDoubaoWebsearchKey || ""}
+                    onChange={(e) => settings.onDoubaoWebsearchKeyChange(e.target.value)}
+                    placeholder={t("火山引擎「融合信息搜索」服务的 API Key", "API Key of the Volcengine fused web search service")}
+                  />
+                  <button
+                    type="button"
+                    className="vsPasswordToggleBtn"
+                    onClick={() => setShowDoubaoWebsearchKey((v) => !v)}
+                    title={showDoubaoWebsearchKey ? t("隐藏", "Hide") : t("显示", "Show")}
+                  >
+                    {showDoubaoWebsearchKey ? "🙈" : "👁"}
+                  </button>
+                </div>
                 <span className="vsFieldHint">
                   {t(
                     "不填则模型无法联网，天气/新闻等实时问题会凭空编造；填写后自动开启内置联网搜索。",
