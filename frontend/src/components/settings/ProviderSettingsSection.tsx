@@ -1,5 +1,5 @@
 import { useState, useMemo, ReactNode } from "react";
-import { Terminal, Brain } from "lucide-react";
+import { Terminal, Brain, Eye, EyeOff } from "lucide-react";
 import type { UseSettingsResult } from "../../hooks/useSettings";
 import { useI18n } from "../../i18n";
 
@@ -215,10 +215,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
               <button
                 type="button"
                 className="vsPasswordToggleBtn"
-                onClick={() => setShowApiKey(v => !v)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowApiKey((v) => !v);
+                }}
                 title={showApiKey ? t("隐藏", "Hide") : t("显示", "Show")}
               >
-                {showApiKey ? "🙈" : "👁"}
+                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </label>
@@ -274,10 +279,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
                   <button
                     type="button"
                     className="vsPasswordToggleBtn"
-                    onClick={() => setShowDoubaoAccessToken((v) => !v)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowDoubaoAccessToken((v) => !v);
+                    }}
                     title={showDoubaoAccessToken ? t("隐藏", "Hide") : t("显示", "Show")}
                   >
-                    {showDoubaoAccessToken ? "🙈" : "👁"}
+                    {showDoubaoAccessToken ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 <span className="vsFieldHint">
@@ -300,10 +310,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
                   <button
                     type="button"
                     className="vsPasswordToggleBtn"
-                    onClick={() => setShowDoubaoAppId((v) => !v)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowDoubaoAppId((v) => !v);
+                    }}
                     title={showDoubaoAppId ? t("隐藏", "Hide") : t("显示", "Show")}
                   >
-                    {showDoubaoAppId ? "🙈" : "👁"}
+                    {showDoubaoAppId ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 <span className="vsFieldHint">
@@ -333,10 +348,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
                   <button
                     type="button"
                     className="vsPasswordToggleBtn"
-                    onClick={() => setShowDoubaoWebsearchKey((v) => !v)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowDoubaoWebsearchKey((v) => !v);
+                    }}
                     title={showDoubaoWebsearchKey ? t("隐藏", "Hide") : t("显示", "Show")}
                   >
-                    {showDoubaoWebsearchKey ? "🙈" : "👁"}
+                    {showDoubaoWebsearchKey ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 <span className="vsFieldHint">

@@ -6170,34 +6170,49 @@ button.danger:focus-visible {
 /* Password field with toggle */
 .vsPasswordFieldWrap {
   position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 
 .vsPasswordFieldWrap .vsInput {
   padding-right: 42px;
+  font-family: inherit;
+  box-sizing: border-box;
 }
 
 .vsPasswordToggleBtn {
   position: absolute;
-  right: 8px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
   border: none;
   background: transparent;
-  color: var(--muted);
+  color: var(--muted, #64748b);
   cursor: pointer;
-  font-size: 16px;
   width: 28px;
   height: 28px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  transition: all 0.15s;
+  border-radius: 6px;
+  padding: 0;
+  transition: color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+  user-select: none;
 }
 
 .vsPasswordToggleBtn:hover {
-  color: var(--text);
-  background: #f1f5f9;
+  color: var(--text, #1e293b);
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.vsPasswordToggleBtn:active {
+  transform: translateY(-50%) scale(0.92);
+}
+
+.vsPasswordToggleBtn:focus-visible {
+  outline: 2px solid var(--brand, #3b82f6);
+  outline-offset: 1px;
 }
 
 /* ── Model section separator ── */
