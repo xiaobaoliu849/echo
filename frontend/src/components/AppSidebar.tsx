@@ -142,6 +142,23 @@ function AppSidebar({
     }
   }, [editingId]);
 
+  // Global keyboard shortcut: Ctrl+B or Cmd+B to toggle sidebar collapse state
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        const target = e.target as HTMLElement | null;
+        if (target && target.isContentEditable) return;
+        e.preventDefault();
+        setIsCollapsed((prev) => !prev);
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, []);
+
   const handleMenuToggle = useCallback((e: React.MouseEvent<HTMLButtonElement>, id: string) => {
     e.stopPropagation();
     e.preventDefault();
@@ -210,6 +227,12 @@ function AppSidebar({
     ? chatHistoryItems.find((item) => item.id === openMenuId) ?? null
     : null;
 
+  const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const shortcutLabel = isMac ? "⌘B" : "Ctrl+B";
+  const toggleLabel = isCollapsed
+    ? `${t("展开侧边栏", "Expand sidebar")} (${shortcutLabel})`
+    : `${t("收起侧边栏", "Collapse sidebar")} (${shortcutLabel})`;
+
   return (
     <div className={`vsSidebarShell ${isCollapsed ? "collapsed" : ""}`}>
       <aside className={`vsSidebar ${isCollapsed ? "collapsed" : ""}`}>
@@ -224,9 +247,9 @@ function AppSidebar({
             type="button"
             className="vsSidebarToggleBtn"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            aria-label={isCollapsed ? t("展开侧边栏", "Expand sidebar") : t("收起侧边栏", "Collapse sidebar")}
+            aria-label={toggleLabel}
             aria-expanded={!isCollapsed}
-            title={isCollapsed ? t("展开侧边栏", "Expand sidebar") : t("收起侧边栏", "Collapse sidebar")}
+            title={toggleLabel}
           >
             {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           </button>

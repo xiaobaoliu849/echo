@@ -140,14 +140,35 @@ describe('AppSidebar', () => {
             />
         );
 
-        const toggleBtn = screen.getByRole('button', { name: '收起侧边栏' });
+        const toggleBtn = screen.getByRole('button', { name: /收起侧边栏/ });
         expect(toggleBtn).toBeInTheDocument();
         expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
 
         fireEvent.click(toggleBtn);
 
-        const expandBtn = screen.getByRole('button', { name: '展开侧边栏' });
+        const expandBtn = screen.getByRole('button', { name: /展开侧边栏/ });
         expect(expandBtn).toBeInTheDocument();
         expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('toggles sidebar collapse state via Ctrl+B shortcut', () => {
+        render(
+            <AppSidebar
+                {...baseProps}
+                chatHistoryItems={[]}
+            />
+        );
+
+        const toggleBtn = screen.getByRole('button', { name: /收起侧边栏/ });
+        expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+
+        fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
+
+        const expandBtn = screen.getByRole('button', { name: /展开侧边栏/ });
+        expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
+
+        expect(screen.getByRole('button', { name: /收起侧边栏/ })).toHaveAttribute('aria-expanded', 'true');
     });
 });
