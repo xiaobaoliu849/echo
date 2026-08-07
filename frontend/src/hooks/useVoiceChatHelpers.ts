@@ -273,12 +273,17 @@ export const OPENAI_REALTIME_VOICES = [
   { value: "verse", label: "Verse (Male)" },
 ];
 
+// Voices for the Doubao OpenSpeech end-to-end realtime dialogue API
+// (volc.speech.dialog, O2.0 model 1.2.1.1), per the official RealtimeAPI docs
+// (docs/豆包时时语音.txt).
 export const DOUBAO_REALTIME_VOICES = [
-  { value: "zh_female_shuangkuailiangli", label: "爽快靓丽 · Shuangkuai (Female)", description: "爽快靓丽女声" },
-  { value: "zh_female_huopokeai", label: "活泼可爱 · Huopo (Female)", description: "活泼可爱女声" },
-  { value: "zh_male_qingchong", label: "青葱男声 · Qingchong (Male)", description: "青葱活力男声" },
-  { value: "zh_female_yuanqi", label: "元气女声 · Yuanqi (Female)", description: "元气满满女声" },
-  { value: "zh_male_ziyou", label: "自由男声 · Ziyou (Male)", description: "自然沉稳男声" },
+  { value: "zh_female_vv_jupiter_bigtts", label: "vv · 活泼灵动 (Female)", description: "活泼灵动的女声，有很强的分享欲" },
+  { value: "zh_female_xiaohe_jupiter_bigtts", label: "xiaohe · 甜美台腔 (Female)", description: "甜美活泼的女声，有明显的台湾口音" },
+  { value: "zh_male_yunzhou_jupiter_bigtts", label: "yunzhou · 清爽沉稳 (Male)", description: "清爽沉稳的男声" },
+  { value: "zh_male_xiaotian_jupiter_bigtts", label: "xiaotian · 清爽磁性 (Male)", description: "清爽磁性的男声" },
+  { value: "en_male_tim_uranus_bigtts", label: "Tim · American English (Male)", description: "美式英语男声（仅 O2.0）" },
+  { value: "en_female_dacey_uranus_bigtts", label: "Dacey · American English (Female)", description: "美式英语女声（仅 O2.0）" },
+  { value: "en_female_stokie_uranus_bigtts", label: "Stokie · American English (Female)", description: "美式英语女声（仅 O2.0）" },
 ];
 
 // Voices for qwen3.5-omni-*-realtime models (default: Tina), per the official

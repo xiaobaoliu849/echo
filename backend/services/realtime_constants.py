@@ -59,15 +59,21 @@ DEFAULT_OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 DEFAULT_OPENAI_REALTIME_VOICE = "alloy"
 
 DEFAULT_DOUBAO_REALTIME_MODEL = "doubao-realtime"
-DEFAULT_DOUBAO_REALTIME_VOICE = "zh_female_shuangkuailiangli"
-DEFAULT_DOUBAO_REALTIME_ENDPOINT = "wss://ai-gateway.vei.volces.com/v1/realtime"
+# OpenSpeech dialogue (端到端实时语音大模型) O2.0 voices — the default endpoint
+# is the documented volc.speech.dialog WebSocket API.
+DEFAULT_DOUBAO_REALTIME_VOICE = "zh_female_vv_jupiter_bigtts"
+DEFAULT_DOUBAO_REALTIME_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
 DOUBAO_REALTIME_VOICES = (
-    "zh_female_shuangkuailiangli",
-    "zh_female_huopokeai",
-    "zh_male_qingchong",
-    "zh_female_yuanqi",
-    "zh_male_ziyou",
+    "zh_female_vv_jupiter_bigtts",       # vv · 活泼灵动女声 (default)
+    "zh_female_xiaohe_jupiter_bigtts",   # xiaohe · 甜美台腔女声
+    "zh_male_yunzhou_jupiter_bigtts",    # yunzhou · 清爽沉稳男声
+    "zh_male_xiaotian_jupiter_bigtts",   # xiaotian · 清爽磁性男声
+    "en_male_tim_uranus_bigtts",         # Tim · 美式英语 (O2.0 only)
+    "en_female_dacey_uranus_bigtts",     # Dacey · 美式英语 (O2.0 only)
+    "en_female_stokie_uranus_bigtts",    # Stokie · 美式英语 (O2.0 only)
 )
+# dialog.extra.model — required by StartSession. 1.2.1.1 = O2.0, 2.2.0.0 = SC2.0.
+DEFAULT_DOUBAO_DIALOG_MODEL = "1.2.1.1"
 
 # ---------------------------------------------------------------------------
 # Prompt / instruction templates

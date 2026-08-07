@@ -79,7 +79,7 @@ export default function useVoiceChat({
     initialProvider === DASHSCOPE_PROVIDER
       ? (isQwenAudioModel(initialModel) ? "longanqian" : "Tina")
       : initialProvider === OPENAI_PROVIDER ? "alloy"
-      : (initialProvider === DOUBAO_PROVIDER || initialProvider === VOLCENGINE_PROVIDER) ? "zh_female_shuangkuailiangli"
+      : (initialProvider === DOUBAO_PROVIDER || initialProvider === VOLCENGINE_PROVIDER) ? "zh_female_vv_jupiter_bigtts"
       : "Puck"
   );
   const [voiceChatTranslationMode, setVoiceChatTranslationMode] = useState<TranslationMode>("bidirectional");
@@ -260,7 +260,7 @@ export default function useVoiceChat({
       }
     } else if (voiceChatProvider === DOUBAO_PROVIDER || voiceChatProvider === VOLCENGINE_PROVIDER) {
       if (!DOUBAO_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
-        setVoiceChatVoice("zh_female_shuangkuailiangli");
+        setVoiceChatVoice("zh_female_vv_jupiter_bigtts");
       }
     } else if (voiceChatProvider === GOOGLE_PROVIDER) {
       if (!GOOGLE_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {

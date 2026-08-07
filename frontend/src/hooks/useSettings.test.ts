@@ -188,7 +188,8 @@ describe('useSettings', () => {
 
         act(() => {
             result.current.onApiKeyChange('volc_test_key_123');
-            result.current.onRealtimeApiUrlChange('wss://ai-gateway.vei.volces.com/v1/realtime');
+            result.current.onDoubaoAppIdChange('123456789');
+            result.current.onRealtimeApiUrlChange('wss://openspeech.bytedance.com/api/v3/realtime/dialogue');
         });
 
         await act(async () => {
@@ -199,10 +200,12 @@ describe('useSettings', () => {
         expect(updateSettingsMock).toHaveBeenCalledWith(
             expect.objectContaining({
                 api_keys: {
-                    doubao_api_key: 'volc_test_key_123'
+                    doubao_api_key: 'volc_test_key_123',
+                    doubao_app_id: '123456789',
+                    doubao_websearch_api_key: ''
                 },
                 realtime_api_urls: {
-                    Doubao: 'wss://ai-gateway.vei.volces.com/v1/realtime'
+                    Doubao: 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue'
                 }
             })
         );

@@ -1774,6 +1774,6 @@ describe("useVoiceChat", () => {
 
     expect(result.current.voiceChatProvider).toBe("Doubao");
     expect(result.current.voiceChatModel).toBe("doubao-realtime");
-    expect(result.current.voiceChatVoice).toBe("zh_female_shuangkuailiangli");
+    expect(result.current.voiceChatVoice).toBe("zh_female_vv_jupiter_bigtts");
   });
 });

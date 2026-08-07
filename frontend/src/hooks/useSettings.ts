@@ -98,6 +98,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
   const [settingsApiKey, setSettingsApiKey] = useState("");
   const [settingsApiUrl, setSettingsApiUrl] = useState("");
   const [settingsRealtimeApiUrl, setSettingsRealtimeApiUrl] = useState("");
+  const [settingsDoubaoAppId, setSettingsDoubaoAppId] = useState("");
+  const [settingsDoubaoWebsearchKey, setSettingsDoubaoWebsearchKey] = useState("");
   const [settingsDefaultModel, setSettingsDefaultModel] = useState("");
   const [settingsAvailableModels, setSettingsAvailableModels] = useState<string[]>([]);
   const [settingsEnabledModels, setSettingsEnabledModels] = useState<string[]>([]);
@@ -515,6 +517,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
       setSettingsApiKey(apiKey);
       setSettingsApiUrl(apiUrl);
       setSettingsRealtimeApiUrl(settingsData.realtime_api_urls?.[settingsProvider] || "");
+      setSettingsDoubaoAppId(settingsData.api_keys?.doubao_app_id || "");
+      setSettingsDoubaoWebsearchKey(settingsData.api_keys?.doubao_websearch_api_key || "");
       setSettingsDefaultModel(defaultModel);
       setSettingsAvailableModels(availableModels);
       setSettingsEnabledModels(enabledModels);
@@ -759,6 +763,13 @@ export default function useSettings({ formatErrorMessage }: Options) {
             [keyField]: settingsApiKey.trim()
           };
         }
+        if (settingsProvider === "Doubao") {
+          patch.api_keys = {
+            ...(patch.api_keys || {}),
+            doubao_app_id: settingsDoubaoAppId.trim(),
+            doubao_websearch_api_key: settingsDoubaoWebsearchKey.trim()
+          };
+        }
         patch.api_urls = {
           [settingsProvider]: settingsApiUrl.trim()
         };
@@ -871,6 +882,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
     settingsApiKey,
     settingsApiUrl,
     settingsRealtimeApiUrl,
+    settingsDoubaoAppId,
+    settingsDoubaoWebsearchKey,
     settingsDefaultModel,
     settingsAvailableModelsText,
     settingsAvailableModels,
@@ -924,6 +937,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
     onApiKeyChange: setSettingsApiKey,
     onApiUrlChange: setSettingsApiUrl,
     onRealtimeApiUrlChange: setSettingsRealtimeApiUrl,
+    onDoubaoAppIdChange: setSettingsDoubaoAppId,
+    onDoubaoWebsearchKeyChange: setSettingsDoubaoWebsearchKey,
     onXiaomiApiKeyChange: setXiaomiApiKey,
     onXiaomiApiUrlChange: setXiaomiApiUrl,
     settingsTtsDefaultModel,
