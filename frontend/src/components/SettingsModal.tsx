@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { UseSettingsResult } from "../hooks/useSettings";
 const SettingsPage = lazy(() => import("../pages/SettingsPage"));
@@ -12,42 +12,30 @@ type Props = {
   errorRuntimeContext?: ErrorRuntimeContext;
 };
 
-type DesktopWindowApi = {
-  minimize_window?: () => Promise<unknown>;
-  toggle_maximize_window?: () => Promise<unknown>;
-};
-
-type DesktopBridgeWindow = Window & {
-  pywebview?: {
-    api?: DesktopWindowApi;
-  };
-};
-
 export default function SettingsModal({ open, onClose, settings, errorRuntimeContext }: Props) {
   const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
-  // Minimize/maximize only make sense inside the native desktop shell; in a
-  // browser tab these controls cannot touch the OS window.
-  const isDesktop =
-    typeof window !== "undefined" &&
-    Object.prototype.hasOwnProperty.call(window, "pywebview");
+  // The minimize/maximize controls only affect the settings panel itself:
+  // minimize hides the panel (the app stays open) and maximize expands it to
+  // fill the app window. They never touch the native OS window.
+  const [maximized, setMaximized] = useState(false);
 
-  const runDesktopControl = useCallback((method: keyof DesktopWindowApi) => {
-    const call = (window as DesktopBridgeWindow).pywebview?.api?.[method];
-    if (!call) return;
-    Promise.resolve(call()).catch(() => {
-      // Best-effort window control; a bridge failure must not surface in the UI.
-    });
+  const handleMinimize = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const handleToggleMaximize = useCallback(() => {
+    setMaximized((prev) => !prev);
+    // Drop any drag offset so the panel returns to its centered position.
+    const ds = dragState.current;
+    ds.offsetX = 0;
+    ds.offsetY = 0;
+    if (dialogRef.current) {
+      dialogRef.current.style.transform = "translate(0, 0)";
+    }
   }, []);
-
-  const handleMinimize = useCallback(() => runDesktopControl("minimize_window"), [runDesktopControl]);
-
-  const handleToggleMaximize = useCallback(
-    () => runDesktopControl("toggle_maximize_window"),
-    [runDesktopControl]
-  );
 
   // Drag state stored in a ref — never triggers React re-render
   const dragState = useRef({
@@ -58,16 +46,19 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
     offsetY: 0,
   });
 
-  // Reset position when modal opens
+  // Reset position and maximized state when modal opens
   useEffect(() => {
     if (open && dialogRef.current) {
       dragState.current = { isDragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 };
       dialogRef.current.style.transform = "translate(0, 0)";
+      setMaximized(false);
     }
   }, [open]);
 
   // High-performance drag using direct DOM manipulation
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // A maximized panel fills the window and cannot be dragged
+    if (maximized) return;
     // Only drag from the header bar, skip clicks on buttons
     const target = e.target as HTMLElement;
     if (target.closest("button")) return;
@@ -80,7 +71,7 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
     // Capture pointer for smooth drag even outside the element
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     e.preventDefault();
-  }, []);
+  }, [maximized]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const ds = dragState.current;
@@ -162,7 +153,7 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
 
   return createPortal(
     <div
-      className="vsSettingsModalShell"
+      className={maximized ? "vsSettingsModalShell maximized" : "vsSettingsModalShell"}
       role="dialog"
       aria-modal="true"
       aria-label="Settings"
@@ -172,7 +163,7 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
     >
       <div
         ref={dialogRef}
-        className="vsSettingsModalStage"
+        className={maximized ? "vsSettingsModalStage maximized" : "vsSettingsModalStage"}
         tabIndex={-1}
       >
         <div
@@ -188,28 +179,24 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
             <h2>{t("偏好设置", "Preferences")}</h2>
           </div>
           <div className="vsSettingsModalWindowControls">
-            {isDesktop ? (
-              <>
-                <button
-                  type="button"
-                  className="vsWindowControlBtn minimize"
-                  onClick={handleMinimize}
-                  title={t("最小化", "Minimize")}
-                  aria-label={t("最小化", "Minimize")}
-                >
-                  —
-                </button>
-                <button
-                  type="button"
-                  className="vsWindowControlBtn maximize"
-                  onClick={handleToggleMaximize}
-                  title={t("最大化", "Maximize")}
-                  aria-label={t("最大化", "Maximize")}
-                >
-                  ▢
-                </button>
-              </>
-            ) : null}
+            <button
+              type="button"
+              className="vsWindowControlBtn minimize"
+              onClick={handleMinimize}
+              title={t("最小化", "Minimize")}
+              aria-label={t("最小化", "Minimize")}
+            >
+              —
+            </button>
+            <button
+              type="button"
+              className="vsWindowControlBtn maximize"
+              onClick={handleToggleMaximize}
+              title={maximized ? t("还原", "Restore") : t("最大化", "Maximize")}
+              aria-label={maximized ? t("还原", "Restore") : t("最大化", "Maximize")}
+            >
+              {maximized ? "❐" : "▢"}
+            </button>
             <button
               type="button"
               className="vsWindowControlBtn close"

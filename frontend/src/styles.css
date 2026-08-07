@@ -6254,6 +6254,18 @@ button.danger:focus-visible {
   box-shadow: none;
 }
 
+/* Maximized settings panel: fill the app window instead of the centered card */
+.vsSettingsModalShell.maximized {
+  padding: 0;
+}
+
+.vsSettingsModalStage.maximized {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  transform: translate(0, 0);
+}
+
 .vsSettingsModalHeader {
   display: flex;
   align-items: center;

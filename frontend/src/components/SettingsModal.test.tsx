@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import SettingsModal from "./SettingsModal";
 import { createSettingsController } from "../test/factories";
 
@@ -15,66 +15,50 @@ vi.mock("../pages/SettingsPage", async () => {
 const settings = createSettingsController();
 
 describe("SettingsModal window controls", () => {
-  afterEach(() => {
-    delete (window as unknown as Record<string, unknown>).pywebview;
-  });
-
-  it("hides minimize/maximize buttons outside the desktop shell", () => {
+  it("renders minimize, maximize, and close controls", () => {
     render(<SettingsModal open onClose={() => {}} settings={settings} />);
 
-    expect(screen.queryByRole("button", { name: "最小化" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "最大化" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "最小化" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "最大化" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "关闭" })).toBeInTheDocument();
   });
 
-  it("wires minimize/maximize to the desktop bridge in desktop mode", () => {
-    const minimizeWindow = vi.fn().mockResolvedValue({ ok: true });
-    const toggleMaximizeWindow = vi.fn().mockResolvedValue({ ok: true });
-    Object.defineProperty(window, "pywebview", {
-      configurable: true,
-      value: { api: { minimize_window: minimizeWindow, toggle_maximize_window: toggleMaximizeWindow } },
-    });
-
+  it("minimize hides the panel without touching the app window", () => {
     const onClose = vi.fn();
     render(<SettingsModal open onClose={onClose} settings={settings} />);
 
     fireEvent.click(screen.getByRole("button", { name: "最小化" }));
-    expect(minimizeWindow).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "最大化" }));
-    expect(toggleMaximizeWindow).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps close working in desktop mode", () => {
-    Object.defineProperty(window, "pywebview", {
-      configurable: true,
-      value: { api: {} },
-    });
-
+  it("maximize expands the panel to fill the window and restores on a second click", () => {
     const onClose = vi.fn();
     render(<SettingsModal open onClose={onClose} settings={settings} />);
 
-    expect(screen.getByRole("button", { name: "最小化" })).toBeInTheDocument();
+    const stage = document.querySelector(".vsSettingsModalStage");
+    const shell = document.querySelector(".vsSettingsModalShell");
+    expect(stage).not.toHaveClass("maximized");
+    expect(shell).not.toHaveClass("maximized");
+
+    fireEvent.click(screen.getByRole("button", { name: "最大化" }));
+
+    expect(stage).toHaveClass("maximized");
+    expect(shell).toHaveClass("maximized");
+    expect(screen.getByRole("button", { name: "还原" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "还原" }));
+
+    expect(stage).not.toHaveClass("maximized");
+    expect(shell).not.toHaveClass("maximized");
     expect(screen.getByRole("button", { name: "最大化" })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("close still dismisses the modal", () => {
+    const onClose = vi.fn();
+    render(<SettingsModal open onClose={onClose} settings={settings} />);
 
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("is a no-op when the desktop bridge is missing a method", () => {
-    Object.defineProperty(window, "pywebview", {
-      configurable: true,
-      value: { api: {} },
-    });
-
-    render(<SettingsModal open onClose={() => {}} settings={settings} />);
-
-    expect(() => {
-      fireEvent.click(screen.getByRole("button", { name: "最小化" }));
-      fireEvent.click(screen.getByRole("button", { name: "最大化" }));
-    }).not.toThrow();
   });
 });
