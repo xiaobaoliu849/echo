@@ -6181,7 +6181,9 @@ button.danger:focus-visible {
   box-sizing: border-box;
 }
 
-.vsPasswordToggleBtn {
+button.vsPasswordToggleBtn,
+button.vsPasswordToggleBtn:hover:not(:disabled),
+button.vsPasswordToggleBtn:focus:not(:disabled) {
   position: absolute;
   right: 6px;
   top: 50%;
@@ -6199,18 +6201,22 @@ button.danger:focus-visible {
   padding: 0;
   transition: color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
   user-select: none;
+  filter: none;
 }
 
-.vsPasswordToggleBtn:hover {
+button.vsPasswordToggleBtn:hover:not(:disabled) {
   color: var(--text, #1e293b);
-  background: rgba(148, 163, 184, 0.15);
+  background: rgba(148, 163, 184, 0.18);
+  transform: translateY(-50%);
+  filter: none;
 }
 
-.vsPasswordToggleBtn:active {
+button.vsPasswordToggleBtn:active:not(:disabled) {
   transform: translateY(-50%) scale(0.92);
+  filter: none;
 }
 
-.vsPasswordToggleBtn:focus-visible {
+button.vsPasswordToggleBtn:focus-visible {
   outline: 2px solid var(--brand, #3b82f6);
   outline-offset: 1px;
 }
