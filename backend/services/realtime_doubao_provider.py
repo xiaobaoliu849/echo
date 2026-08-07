@@ -260,6 +260,12 @@ class DoubaoRealtimeMixin:
                     content = str(payload.get("text", "")).strip()
                     if content:
                         if is_openspeech:
+                            if memory_session is not None:
+                                memory_session.note_user_transcript(content)
+                            if recorder is not None:
+                                voice_turn_id = await recorder.note_user_transcript(content)
+                                if voice_turn_id:
+                                    openspeech_state["active_turn_id"] = voice_turn_id
                             msg_bytes = encode_openspeech_frame(
                                 msg_type=MSG_TYPE_FULL_CLIENT_REQ,
                                 payload={"content": content},
@@ -346,6 +352,7 @@ class DoubaoRealtimeMixin:
                     "audio": audio_b64,
                     "encoding": "pcm_s16le",
                     "sample_rate": 24000,
+                    "turn_id": state.get("active_turn_id"),
                 },
                 memory_session=memory_session,
                 recorder=recorder,
@@ -356,12 +363,13 @@ class DoubaoRealtimeMixin:
             data = _payload_json()
             reply_id = str(data.get("reply_id") or data.get("question_id") or "")
             if reply_id and reply_id != state.get("active_turn_id"):
-                state["active_turn_id"] = reply_id
+                if not state.get("active_turn_id"):
+                    state["active_turn_id"] = reply_id
                 state["ai_acc"] = ""
                 state["t0"] = time.perf_counter()
                 state["text_source"] = None
                 state["websearch_notified"] = False
-                interruption.active_response_id = reply_id
+                interruption.active_response_id = state.get("active_turn_id")
             state["tts_active"] = True
             # tts_type=network 表示本轮回答使用了内置联网搜索 —— 这是服务端
             # 给出的唯一联网信号(不返回 query/来源列表),映射为前端的进度提示。
@@ -385,7 +393,7 @@ class DoubaoRealtimeMixin:
                 await self._emit_assistant_output(
                     websocket,
                     interruption,
-                    {"type": "assistant_text", "text": text},
+                    {"type": "assistant_text", "text": text, "turn_id": state.get("active_turn_id")},
                     memory_session=memory_session,
                     recorder=recorder,
                 )
@@ -397,11 +405,12 @@ class DoubaoRealtimeMixin:
             data = _payload_json()
             reply_id = str(data.get("reply_id") or data.get("question_id") or "")
             if reply_id and reply_id != state.get("active_turn_id"):
-                state["active_turn_id"] = reply_id
+                if not state.get("active_turn_id"):
+                    state["active_turn_id"] = reply_id
                 state["ai_acc"] = ""
                 state["t0"] = time.perf_counter()
                 state["text_source"] = None
-                interruption.active_response_id = reply_id
+                interruption.active_response_id = state.get("active_turn_id")
             content = str(data.get("content") or "")
             if content and state.get("text_source") in (None, "chat"):
                 state["text_source"] = "chat"
@@ -409,7 +418,7 @@ class DoubaoRealtimeMixin:
                 await self._emit_assistant_output(
                     websocket,
                     interruption,
-                    {"type": "assistant_text", "text": content},
+                    {"type": "assistant_text", "text": content, "turn_id": state.get("active_turn_id")},
                     memory_session=memory_session,
                     recorder=recorder,
                 )
@@ -429,11 +438,20 @@ class DoubaoRealtimeMixin:
                     websocket, "ai_transcript",
                     text=ai_acc, is_final=True, turn_id=active_turn_id,
                 )
-            if recorder and active_turn_id:
-                try:
-                    await recorder.complete_turn()
-                except Exception:
-                    logger.exception("doubao_complete_turn_failed")
+            try:
+                await self._finalize_realtime_turn(
+                    websocket,
+                    memory_session,
+                    recorder,
+                    gated=False,
+                )
+            except Exception:
+                logger.exception("doubao_finalize_turn_failed")
+                if recorder and active_turn_id:
+                    try:
+                        await recorder.complete_turn()
+                    except Exception:
+                        pass
             state["ai_acc"] = ""
             state["user_acc"] = ""
             state["active_turn_id"] = None
@@ -475,13 +493,20 @@ class DoubaoRealtimeMixin:
                         # 前端约定: interim=True 原位更新预览,否则视为 final 提交
                         await self._send_event(
                             websocket, "user_transcript",
-                            text=text, interim=True,
+                            text=text, interim=True, turn_id=state.get("active_turn_id"),
                         )
                     else:
                         state["user_final_sent"] = True
+                        if memory_session is not None:
+                            memory_session.note_user_transcript(text)
+                        voice_turn_id = ""
+                        if recorder is not None:
+                            voice_turn_id = await recorder.note_user_transcript(text)
+                            if voice_turn_id:
+                                state["active_turn_id"] = voice_turn_id
                         await self._send_event(
                             websocket, "user_transcript",
-                            text=text, turn_id=None,
+                            text=text, turn_id=state.get("active_turn_id"),
                         )
             return True
 
@@ -489,9 +514,16 @@ class DoubaoRealtimeMixin:
             user_acc = state.get("user_acc") or ""
             if user_acc and not state.get("user_final_sent"):
                 state["user_final_sent"] = True
+                if memory_session is not None:
+                    memory_session.note_user_transcript(user_acc)
+                voice_turn_id = ""
+                if recorder is not None:
+                    voice_turn_id = await recorder.note_user_transcript(user_acc)
+                    if voice_turn_id:
+                        state["active_turn_id"] = voice_turn_id
                 await self._send_event(
                     websocket, "user_transcript",
-                    text=user_acc, turn_id=None,
+                    text=user_acc, turn_id=state.get("active_turn_id"),
                 )
             return True
 

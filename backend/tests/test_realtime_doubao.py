@@ -437,6 +437,66 @@ class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    def test_openspeech_emits_turn_complete_and_notes_user_transcript(self) -> None:
+        """验证 Doubao 收到 ASR 后正常记录 user_transcript,在 EVENT_TTS_ENDED 时正确发送 turn_complete 并且 turn_id 保持一致。"""
+        async def run_test():
+            from services.openspeech_dialogue_protocol import (
+                EVENT_ASR_INFO,
+                EVENT_ASR_RESPONSE,
+                EVENT_ASR_ENDED,
+                EVENT_TTS_SENTENCE_START,
+                EVENT_TTS_RESPONSE,
+                EVENT_TTS_ENDED,
+                MSG_TYPE_AUDIO_SERVER_RESP,
+                MSG_TYPE_FULL_SERVER_RESP,
+                encode_openspeech_frame,
+            )
+            frames = [
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"question_id": "q1"}, event=EVENT_ASR_INFO, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"results": [{"text": "你可以唱一段吗", "is_interim": False}]}, event=EVENT_ASR_RESPONSE, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {}, event=EVENT_ASR_ENDED, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "抱歉，我不会唱歌", "reply_id": "r1"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_AUDIO_SERVER_RESP, b"\x00\x01" * 10, event=EVENT_TTS_RESPONSE, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"reply_id": "r1"}, event=EVENT_TTS_ENDED, session_id="sid-1"),
+            ]
+            client_ws = CollectingWebSocket()
+            doubao_ws = FakeOpenSpeechWs(frames=frames)
+
+            fake_recorder = MagicMock()
+            fake_recorder.note_user_transcript = AsyncMock(return_value="voice-turn-1")
+            fake_recorder.note_assistant_text = AsyncMock(return_value="voice-turn-1")
+            fake_recorder.note_assistant_audio = AsyncMock(return_value=("voice-turn-1", 120))
+            fake_recorder.complete_turn = AsyncMock(return_value="voice-turn-1")
+
+            fake_mem_session = MagicMock()
+            fake_mem_session.flush_turn = AsyncMock(return_value={"attempted_count": 0, "saved_count": 0, "failed_count": 0})
+
+            loop_task = asyncio.create_task(
+                self.service._doubao_to_client_loop(
+                    client_ws, doubao_ws, fake_mem_session, MagicMock(),
+                    recorder=fake_recorder, is_openspeech=True, session_id="sid-1",
+                )
+            )
+            await asyncio.sleep(0.1)
+            loop_task.cancel()
+
+            types = [e["type"] for e in client_ws.events]
+            self.assertIn("user_transcript", types)
+            self.assertIn("assistant_text", types)
+            self.assertIn("assistant_audio", types)
+            self.assertIn("turn_complete", types)
+
+            user_transcripts = [e for e in client_ws.events if e["type"] == "user_transcript"]
+            self.assertEqual(user_transcripts[0]["turn_id"], "voice-turn-1")
+            self.assertEqual(user_transcripts[0]["text"], "你可以唱一段吗")
+
+            turn_completes = [e for e in client_ws.events if e["type"] == "turn_complete"]
+            self.assertEqual(len(turn_completes), 1)
+            self.assertEqual(turn_completes[0]["turn_id"], "voice-turn-1")
+
+        asyncio.run(run_test())
+
 
 if __name__ == "__main__":
     unittest.main()
+
