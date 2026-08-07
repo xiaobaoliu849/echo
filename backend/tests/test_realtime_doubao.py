@@ -62,7 +62,6 @@ class TestRealtimeDoubaoProvider(unittest.TestCase):
         fake_config = MagicMock()
         fake_config.get_provider_settings.side_effect = lambda provider, model: {
             "Doubao": {"api_key": "volc-secret-key", "model": "doubao-realtime", "realtime_base_url": ""},
-            "Volcengine": {"api_key": "", "model": "", "realtime_base_url": ""},
         }[provider]
         fake_config.get_setting.return_value = ""
         self.service.config = fake_config

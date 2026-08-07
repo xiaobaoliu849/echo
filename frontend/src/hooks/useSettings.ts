@@ -27,8 +27,7 @@ const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   OpenAI: "openai_api_key",
   ElevenLabs: "elevenlabs_api_key",
   "GPT-SoVITS": "gpt_sovits_api_key",
-  Doubao: "doubao_api_key",
-  Volcengine: "doubao_api_key"
+  Doubao: "doubao_api_key"
 };
 
 const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_API_KEY_FIELD);

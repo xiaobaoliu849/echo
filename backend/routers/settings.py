@@ -493,7 +493,7 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         if provider == "Doubao":
-            # Doubao/Volcengine Ark may not expose standard /models endpoint for all API keys.
+            # Doubao Ark may not expose a standard /models endpoint for all API keys.
             # Fall back gracefully to curated DOUBAO_MODEL_LIST_SUPPLEMENTS.
             return FetchModelsResponse(
                 provider=provider,

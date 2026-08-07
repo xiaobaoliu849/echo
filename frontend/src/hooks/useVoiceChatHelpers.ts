@@ -56,7 +56,6 @@ export const GOOGLE_PROVIDER = "Google";
 export const DASHSCOPE_PROVIDER = "DashScope";
 export const OPENAI_PROVIDER = "OpenAI";
 export const DOUBAO_PROVIDER = "Doubao";
-export const VOLCENGINE_PROVIDER = "Volcengine";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 // The legacy gemini-2.5-flash-native-audio-preview-12-2025 model has been retired;
@@ -370,7 +369,7 @@ export function formatRealtimeVoiceOptions(
   model?: string,
 ): Array<{ value: string; label: string; description?: string }> {
   let options: Array<{ value: string; label: string; description?: string }>;
-  if (provider === DOUBAO_PROVIDER || provider === VOLCENGINE_PROVIDER) {
+  if (provider === DOUBAO_PROVIDER) {
     options = DOUBAO_REALTIME_VOICES;
   } else if (provider === DASHSCOPE_PROVIDER) {
     if (isQwenAudioModel(model)) {
@@ -431,7 +430,7 @@ export function formatLiveTranslateLanguageOptions(language: UiLanguage): Array<
 }
 
 export function resolveRealtimeProvider(preferredProvider: string | undefined, providerOptions: string[]): string {
-  const realtimeProviders = [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, VOLCENGINE_PROVIDER];
+  const realtimeProviders = [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER];
   if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
     return preferredProvider;
   }
@@ -460,7 +459,7 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   if (!normalizedModel) {
     return false;
   }
-  if (normalizedProvider === DOUBAO_PROVIDER.toLowerCase() || normalizedProvider === VOLCENGINE_PROVIDER.toLowerCase()) {
+  if (normalizedProvider === DOUBAO_PROVIDER.toLowerCase()) {
     return true;
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
@@ -504,7 +503,7 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   if (provider === OPENAI_PROVIDER) {
     return DEFAULT_OPENAI_MODEL;
   }
-  if (provider === DOUBAO_PROVIDER || provider === VOLCENGINE_PROVIDER) {
+  if (provider === DOUBAO_PROVIDER) {
     return DEFAULT_DOUBAO_MODEL;
   }
   return "";
@@ -544,7 +543,7 @@ export function resolveRealtimeModelOptions(
         "qwen-audio-3.0-realtime-flash",
       ]
     : [];
-  const doubaoBuiltIns = (provider === DOUBAO_PROVIDER || provider === VOLCENGINE_PROVIDER)
+  const doubaoBuiltIns = provider === DOUBAO_PROVIDER
     ? [DEFAULT_DOUBAO_MODEL]
     : [];
   const allBuiltIns = [...googleBuiltIns, ...openaiBuiltIns, ...dashscopeBuiltIns, ...doubaoBuiltIns];

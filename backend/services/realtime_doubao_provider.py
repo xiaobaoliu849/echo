@@ -99,10 +99,6 @@ class DoubaoRealtimeMixin:
         provider_settings = self.config.get_provider_settings("Doubao", model)
         resolved_model = passed_model or provider_settings["model"].strip() or DEFAULT_DOUBAO_REALTIME_MODEL
         api_key = provider_settings["api_key"].strip()
-        if not api_key:
-            # Fallback to Volcengine key if configured
-            volc_settings = self.config.get_provider_settings("Volcengine", model)
-            api_key = volc_settings["api_key"].strip()
 
         custom_endpoint = provider_settings.get("realtime_base_url", "").strip()
         endpoint = custom_endpoint or DEFAULT_DOUBAO_REALTIME_ENDPOINT

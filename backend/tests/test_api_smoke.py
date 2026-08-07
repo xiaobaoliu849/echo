@@ -1874,7 +1874,7 @@ class ApiSmokeTests(unittest.TestCase):
             response = self._request(
                 "POST",
                 "/api/settings/providers/Doubao/fetch-models",
-                json={"api_key": "valid_volcengine_key_123", "base_url": "https://ark.cn-beijing.volces.com/api/v3"}
+                json={"api_key": "valid_doubao_key_123", "base_url": "https://ark.cn-beijing.volces.com/api/v3"}
             )
             self.assertEqual(response.status_code, 200)
             data = response.json()
