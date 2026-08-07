@@ -93,7 +93,35 @@ class TestRealtimeDoubaoProvider(unittest.TestCase):
 
         with self.assertRaises(RuntimeError) as ctx:
             self.service._resolve_doubao_settings(None, None)
-        self.assertIn("Doubao / Volcengine API Key 未配置", str(ctx.exception))
+        self.assertIn("Access Token 未配置", str(ctx.exception))
+
+    def test_resolve_doubao_settings_access_token_preferred(self) -> None:
+        """独立的 doubao_access_token 字段优先于 ark 体系的 doubao_api_key。"""
+        fake_config = MagicMock()
+        fake_config.get_provider_settings.return_value = {
+            "api_key": "ark-style-key", "model": "", "realtime_base_url": "",
+        }
+        fake_config.get_setting.side_effect = lambda key, default="": {
+            "doubao_access_token": "x-access-token",
+            "doubao_app_id": "123456789",
+        }.get(key, default)
+        self.service.config = fake_config
+
+        settings = self.service._resolve_doubao_settings(None, None)
+        self.assertEqual(settings["api_key"], "x-access-token")
+        self.assertEqual(settings["app_id"], "123456789")
+
+    def test_resolve_doubao_settings_falls_back_to_api_key(self) -> None:
+        """旧配置把 Access Token 存在 doubao_api_key 里时仍然可用。"""
+        fake_config = MagicMock()
+        fake_config.get_provider_settings.return_value = {
+            "api_key": "x-legacy-token", "model": "", "realtime_base_url": "",
+        }
+        fake_config.get_setting.return_value = ""
+        self.service.config = fake_config
+
+        settings = self.service._resolve_doubao_settings(None, None)
+        self.assertEqual(settings["api_key"], "x-legacy-token")
 
     def test_client_to_doubao_text_input(self) -> None:
         async def run_test():
@@ -262,11 +290,13 @@ class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
         asyncio.run(run_test())
 
     def test_openspeech_empty_sentence_text_falls_back_to_chat_response(self) -> None:
-        """实测真实流量: 550 增量文本先到,350 的 text 为空 — 文本必须来自 550。"""
+        """实测真实流量: 550 增量文本先到,350 的 text 为空 — 文本必须来自 550;
+        559(ChatEnded)在音频之前到达,finalize 必须等 359(TTSEnded)。"""
         async def run_test():
             from services.openspeech_dialogue_protocol import (
                 EVENT_CHAT_ENDED,
                 EVENT_CHAT_RESPONSE,
+                EVENT_TTS_ENDED,
                 EVENT_TTS_SENTENCE_START,
                 MSG_TYPE_FULL_SERVER_RESP,
                 encode_openspeech_frame,
@@ -274,8 +304,9 @@ class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
             frames = [
                 encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"content": "我是", "reply_id": "r1"}, event=EVENT_CHAT_RESPONSE, session_id="sid-1"),
                 encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"content": "豆包。", "reply_id": "r1"}, event=EVENT_CHAT_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "", "reply_id": "r1"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
                 encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"reply_id": "r1"}, event=EVENT_CHAT_ENDED, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "", "reply_id": "r1"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"reply_id": "r1"}, event=EVENT_TTS_ENDED, session_id="sid-1"),
             ]
             client_ws = CollectingWebSocket()
             doubao_ws = FakeOpenSpeechWs(frames=frames)

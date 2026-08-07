@@ -194,14 +194,20 @@ export default function ProviderSettingsSection({ settings }: Props) {
 
         <div className="vsProviderConfigFields">
           <label className="vsField">
-            <span className="vsFieldLabel">API Key</span>
+            <span className="vsFieldLabel">
+              {settings.settingsProvider === "Doubao"
+                ? t("API Key（火山方舟 · 文字聊天模型）", "API Key (Ark · text chat models)")
+                : "API Key"}
+            </span>
             <div className="vsPasswordFieldWrap">
               <input
                 className="vsInput"
                 type={showApiKey ? "text" : "password"}
                 value={settings.settingsApiKey || ""}
                 onChange={(e) => settings.onApiKeyChange(e.target.value)}
-                placeholder={t("输入供应商 API Key", "Enter your API key")}
+                placeholder={settings.settingsProvider === "Doubao"
+                  ? t("ark- 开头，仅用于文字聊天；实时语音用下面的 Access Token", "ark- key, text chat only; realtime voice uses the Access Token below")
+                  : t("输入供应商 API Key", "Enter your API key")}
               />
               <button
                 type="button"
@@ -253,6 +259,21 @@ export default function ProviderSettingsSection({ settings }: Props) {
           {settings.settingsProvider === "Doubao" && (
             <>
               <label className="vsField">
+                <span className="vsFieldLabel">{t("Access Token（豆包语音 · 实时语音）", "Access Token (Doubao Voice · realtime)")}</span>
+                <input
+                  className="vsInput"
+                  value={settings.settingsDoubaoAccessToken || ""}
+                  onChange={(e) => settings.onDoubaoAccessTokenChange(e.target.value)}
+                  placeholder={t("豆包语音控制台「服务接口认证信息」的 Access Token", "Access Token from the Doubao Voice console auth info")}
+                />
+                <span className="vsFieldHint">
+                  {t(
+                    "实时语音通话专用凭证，与上面的方舟 API Key 是两套体系；通常是一串以 x- 开头的字符。",
+                    "Dedicated credential for realtime voice calls, separate from the Ark API key above; usually starts with x-."
+                  )}
+                </span>
+              </label>
+              <label className="vsField">
                 <span className="vsFieldLabel">{t("豆包语音 APP ID（实时语音必填）", "Doubao Voice APP ID (required for realtime)")}</span>
                 <input
                   className="vsInput"
@@ -262,8 +283,8 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 />
                 <span className="vsFieldHint">
                   {t(
-                    "实时语音使用「豆包语音」控制台的 Access Token（上面的 API Key 栏）+ APP ID 鉴权；火山方舟(Ark)的 API Key 不能用于实时语音。",
-                    "Realtime voice authenticates with the Access Token from the Doubao Voice console (API Key field above) plus its APP ID; Ark API keys do not work for realtime voice."
+                    "实时语音使用「豆包语音」控制台的 Access Token + APP ID 鉴权（两者在「服务接口认证信息」里成对出现）。",
+                    "Realtime voice authenticates with the Access Token + APP ID pair from the Doubao Voice console auth info."
                   )}{" "}
                   <a
                     href="https://console.volcengine.com/speech/overview"
