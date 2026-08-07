@@ -419,7 +419,13 @@ class DoubaoRealtimeMixin:
                 )
             return True
 
-        if event in (EVENT_TTS_ENDED, EVENT_CHAT_ENDED):
+        if event == EVENT_CHAT_ENDED:
+            # 559 只表示文本生成结束;实测它在 350/352 音频之前到达,
+            # 不能在这里 finalize(否则会重复 complete_turn,且 559 之后
+            # 到达的 350 口播文本会被当成新一轮再发一遍)。等 359 收尾。
+            return True
+
+        if event == EVENT_TTS_ENDED:
             ai_acc = state.get("ai_acc") or ""
             active_turn_id = state.get("active_turn_id")
             if ai_acc:

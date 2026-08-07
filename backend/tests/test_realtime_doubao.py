@@ -290,11 +290,13 @@ class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
         asyncio.run(run_test())
 
     def test_openspeech_empty_sentence_text_falls_back_to_chat_response(self) -> None:
-        """实测真实流量: 550 增量文本先到,350 的 text 为空 — 文本必须来自 550。"""
+        """实测真实流量: 550 增量文本先到,350 的 text 为空 — 文本必须来自 550;
+        559(ChatEnded)在音频之前到达,finalize 必须等 359(TTSEnded)。"""
         async def run_test():
             from services.openspeech_dialogue_protocol import (
                 EVENT_CHAT_ENDED,
                 EVENT_CHAT_RESPONSE,
+                EVENT_TTS_ENDED,
                 EVENT_TTS_SENTENCE_START,
                 MSG_TYPE_FULL_SERVER_RESP,
                 encode_openspeech_frame,
@@ -302,8 +304,9 @@ class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
             frames = [
                 encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"content": "我是", "reply_id": "r1"}, event=EVENT_CHAT_RESPONSE, session_id="sid-1"),
                 encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"content": "豆包。", "reply_id": "r1"}, event=EVENT_CHAT_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "", "reply_id": "r1"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
                 encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"reply_id": "r1"}, event=EVENT_CHAT_ENDED, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "", "reply_id": "r1"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
+                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"reply_id": "r1"}, event=EVENT_TTS_ENDED, session_id="sid-1"),
             ]
             client_ws = CollectingWebSocket()
             doubao_ws = FakeOpenSpeechWs(frames=frames)
