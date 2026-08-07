@@ -154,9 +154,9 @@ textarea {
   height: 76px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 0;
-  padding: 0 16px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 14px 0 16px;
   background:
     linear-gradient(180deg, color-mix(in oklab, var(--bg-card) 85%, var(--accent-soft)) 0%, var(--bg-secondary) 100%);
   border-bottom: 1px solid var(--border-color);
@@ -165,8 +165,8 @@ textarea {
 
 .vsSidebar.collapsed .vsSidebarHeader {
   height: 76px;
-  justify-content: flex-start;
-  padding: 0 20px;
+  justify-content: center;
+  padding: 0 12px;
 }
 
 .vsBrand {
@@ -180,10 +180,7 @@ textarea {
 }
 
 .vsSidebar.collapsed .vsBrand {
-  gap: 0;
-  justify-content: flex-start;
-  flex: 1;
-  width: 100%;
+  display: none;
 }
 
 .vsBrandIcon {
@@ -240,37 +237,34 @@ textarea {
   transform: translateX(-4px);
 }
 
-.vsCollapseBtn {
-  position: absolute;
-  top: 15px;
-  right: -13px;
-  width: 26px;
-  height: 46px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--bg-card) 96%, white);
-  color: var(--brand-dark);
+.vsSidebarToggleBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sidebar-text);
   display: grid;
   place-items: center;
   cursor: pointer;
-  line-height: 1;
+  border: 1px solid transparent;
+  flex-shrink: 0;
   transition:
     background 0.2s ease,
     color 0.2s ease,
-    border-color 0.2s ease;
-  z-index: 3;
-  border: 1px solid color-mix(in oklab, var(--brand) 20%, var(--line));
-  box-shadow:
-    0 4px 10px color-mix(in oklab, var(--brand-dark) 10%, transparent),
-    inset 0 1px 0 color-mix(in oklab, white 82%, transparent);
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
 }
 
-.vsCollapseBtn:hover {
-  background: var(--bg-card);
-  color: var(--brand-dark);
-  border-color: color-mix(in oklab, var(--brand) 36%, var(--line));
-  box-shadow:
-    0 6px 12px color-mix(in oklab, var(--brand-dark) 12%, transparent),
-    inset 0 1px 0 color-mix(in oklab, white 82%, transparent);
+.vsSidebarToggleBtn:hover {
+  background: var(--vs-sidebar-hover-bg);
+  color: var(--sidebar-text-strong);
+  border-color: var(--vs-sidebar-hover-border);
+  box-shadow: var(--vs-sidebar-hover-shadow);
+}
+
+.vsSidebarToggleBtn:active {
+  transform: scale(0.95);
 }
 
 .vsSidebarAction {
@@ -1038,7 +1032,7 @@ textarea {
 .vsNavItem:focus-visible,
 .vsHistoryItem:focus-visible,
 .vsNewChatBtn:focus-visible,
-.vsCollapseBtn:focus-visible,
+.vsSidebarToggleBtn:focus-visible,
 button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-soft) 92%, transparent);

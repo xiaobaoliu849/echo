@@ -131,4 +131,23 @@ describe('AppSidebar', () => {
         expect(screen.queryByRole('menuitem', { name: '重命名' })).not.toBeInTheDocument();
         expect(screen.getByRole('menuitem', { name: /删除历史 测试标题/ })).toBeInTheDocument();
     });
+
+    it('toggles sidebar collapse state cleanly when clicking the header toggle button', () => {
+        render(
+            <AppSidebar
+                {...baseProps}
+                chatHistoryItems={[]}
+            />
+        );
+
+        const toggleBtn = screen.getByRole('button', { name: '收起侧边栏' });
+        expect(toggleBtn).toBeInTheDocument();
+        expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+
+        fireEvent.click(toggleBtn);
+
+        const expandBtn = screen.getByRole('button', { name: '展开侧边栏' });
+        expect(expandBtn).toBeInTheDocument();
+        expect(expandBtn).toHaveAttribute('aria-expanded', 'false');
+    });
 });

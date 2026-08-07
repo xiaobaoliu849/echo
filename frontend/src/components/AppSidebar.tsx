@@ -15,8 +15,8 @@ import {
   Mic2,
   FileAudio,
   Settings,
-  ChevronLeft,
-  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   MessageSquarePlus,
   MoreHorizontal,
   Pencil,
@@ -220,6 +220,16 @@ function AppSidebar({
               <h1>VoiceSpirit</h1>
             </div>
           </div>
+          <button
+            type="button"
+            className="vsSidebarToggleBtn"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            aria-label={isCollapsed ? t("展开侧边栏", "Expand sidebar") : t("收起侧边栏", "Collapse sidebar")}
+            aria-expanded={!isCollapsed}
+            title={isCollapsed ? t("展开侧边栏", "Expand sidebar") : t("收起侧边栏", "Collapse sidebar")}
+          >
+            {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
         </div>
 
         <div className="vsSidebarTop">
@@ -410,17 +420,6 @@ function AppSidebar({
           </div>
         </div>
       </aside>
-
-      <button
-        type="button"
-        className="vsCollapseBtn"
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        aria-label={isCollapsed ? t("展开侧边栏", "Expand sidebar") : t("收起侧边栏", "Collapse sidebar")}
-        aria-expanded={!isCollapsed}
-        title={isCollapsed ? t("展开侧边栏", "Expand sidebar") : t("收起侧边栏", "Collapse sidebar")}
-      >
-        {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-      </button>
     </div>
   );
 }
