@@ -1181,5 +1181,145 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(canonical[1], canonical[2])
 
 
+class DashScopeOmniTextDedupTests(unittest.IsolatedAsyncioTestCase):
+    """Regression tests for qwen3.5-omni-*-realtime duplicated reply text.
+
+    The DashScope omni loop forwards BOTH the incremental
+    response.audio_transcript.delta deltas AND the full-text
+    response.audio_transcript.done / response.text.done. When the final
+    transcript differs from the accumulated deltas even slightly (trailing
+    punctuation, spacing, re-transcribed words), the frontend merge cannot dedup
+    it and the whole reply appears twice. The final full-text event must be
+    suppressed once deltas were already streamed for that response.
+    """
+
+    async def asyncSetUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.repository = VoiceAgentSessionRepository(Path(self.temp_dir.name) / "voice.db")
+        self.service = RealtimeVoiceService(voice_session_repository=self.repository)
+
+    async def asyncTearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    async def _run_loop(self, raw_events: list[dict]) -> CollectingWebSocket:
+        websocket = CollectingWebSocket()
+        memory = FakeMemorySession()
+        tools = RecordingToolSession(active=False)
+        recorder = await self._recorder(active_turn=False)
+        queue: asyncio.Queue[dict] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        for event in raw_events:
+            callback.on_event(event)
+        # The callback pushes via loop.call_soon_threadsafe; yield once so those
+        # scheduled puts land in the queue BEFORE the "closed" sentinel.
+        await asyncio.sleep(0)
+        queue.put_nowait({"type": "closed"})
+        conversation = MagicMock()
+        await self.service._dashscope_to_client_loop(
+            websocket,
+            queue,
+            memory,
+            conversation,
+            "test-voice",
+            tools,
+            recorder,
+        )
+        await recorder.finish()
+        return websocket
+
+    async def _recorder(self, *, active_turn: bool) -> VoiceAgentSessionRecorder:
+        session = self.repository.create_session(
+            provider="DashScope",
+            model="qwen3.5-omni-plus-realtime-replay",
+            voice="Tina",
+            meta={"transport": "websocket"},
+        )
+        recorder = VoiceAgentSessionRecorder(self.repository, session["id"])
+        await recorder.start(
+            {
+                "provider": "DashScope",
+                "model": "qwen3.5-omni-plus-realtime-replay",
+                "voice": "Tina",
+                "status": "open",
+                "meta": {"transport": "websocket"},
+            }
+        )
+        if active_turn:
+            await recorder.note_user_transcript("请解释实时语音")
+            await recorder.note_assistant_text("这是还没有说完的回答")
+        return recorder
+
+    async def test_final_done_does_not_duplicate_streamed_delta(self) -> None:
+        # The streaming delta and the final done transcript differ only in
+        # punctuation (the model re-transcribes the completed output). Forwarding
+        # both makes the frontend render the whole sentence twice.
+        websocket = await self._run_loop(
+            [
+                {"type": "response.created", "response": {"id": "resp-1"}},
+                {
+                    "type": "response.audio_transcript.delta",
+                    "response_id": "resp-1",
+                    "delta": "Hello there how are you doing today?",
+                },
+                {
+                    "type": "response.audio_transcript.done",
+                    "response_id": "resp-1",
+                    "transcript": "Hello there, how are you doing today?",
+                },
+                {"type": "response.done", "response": {"id": "resp-1", "status": "completed"}},
+            ]
+        )
+        texts = [event["text"] for event in websocket.events if event["type"] == "assistant_text"]
+        self.assertEqual(texts, ["Hello there how are you doing today?"])
+
+    async def test_final_done_fallback_when_no_delta_streamed(self) -> None:
+        # Ultra-fast single-shot reply where response.audio_transcript.done
+        # arrives before any delta: the final text must be emitted once so the
+        # user still sees the reply.
+        websocket = await self._run_loop(
+            [
+                {"type": "response.created", "response": {"id": "resp-1"}},
+                {
+                    "type": "response.audio_transcript.done",
+                    "response_id": "resp-1",
+                    "transcript": "Hello world",
+                },
+                {"type": "response.done", "response": {"id": "resp-1", "status": "completed"}},
+            ]
+        )
+        texts = [event["text"] for event in websocket.events if event["type"] == "assistant_text"]
+        self.assertEqual(texts, ["Hello world"])
+
+    async def test_second_response_standalone_final_still_emits(self) -> None:
+        # Per-response tracking: suppressing response-1's done transcript (which
+        # streamed deltas) must NOT suppress response-2's standalone final text,
+        # even though the recorder's accumulated assistant text is still set.
+        websocket = await self._run_loop(
+            [
+                {"type": "response.created", "response": {"id": "resp-1"}},
+                {
+                    "type": "response.audio_transcript.delta",
+                    "response_id": "resp-1",
+                    "delta": "One",
+                },
+                {
+                    "type": "response.audio_transcript.done",
+                    "response_id": "resp-1",
+                    "transcript": "One",
+                },
+                {"type": "response.done", "response": {"id": "resp-1", "status": "completed"}},
+                {"type": "response.created", "response": {"id": "resp-2"}},
+                {
+                    "type": "response.audio_transcript.done",
+                    "response_id": "resp-2",
+                    "transcript": "Two",
+                },
+                {"type": "response.done", "response": {"id": "resp-2", "status": "completed"}},
+            ]
+        )
+        texts = [event["text"] for event in websocket.events if event["type"] == "assistant_text"]
+        self.assertEqual(texts, ["One", "Two"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -285,6 +285,11 @@ class DashScopeRealtimeMixin:
         interruption = interruption or InterruptionDecisionCoordinator()
         suppressed_response_ids: set[str] = set()
         tool_phase_response_ids: set[str] = set()
+        # response_ids for which at least one non-final assistant_text delta has
+        # been forwarded. The final (response.audio_transcript.done / response
+        # .text.done) event for such a response must be suppressed — it carries
+        # the FULL transcript, which would duplicate the already-streamed deltas.
+        streamed_text_response_ids: set[str] = set()
         cannot_create_response_retries = 0
         gated_tool_turn_id = ""
         while True:
@@ -438,6 +443,7 @@ class DashScopeRealtimeMixin:
             if event_type == "tool_phase_complete":
                 response_id = str(event.get("response_id", "")).strip()
                 tool_phase_response_ids.discard(response_id)
+                streamed_text_response_ids.discard(response_id)
                 if response_id == interruption.active_response_id:
                     interruption.active_response_id = ""
                 continue
@@ -550,6 +556,25 @@ class DashScopeRealtimeMixin:
                 if response_id in suppressed_response_ids:
                     continue
                 if not gated_tool_turn_id:
+                    if event.get("final"):
+                        # response.audio_transcript.done / response.text.done
+                        # deliver the FULL transcript. The streaming deltas
+                        # (response.audio_transcript.delta / response.text.delta)
+                        # already delivered it incrementally, and re-emitting the
+                        # whole final text duplicates the reply whenever the final
+                        # transcript differs from the accumulated deltas even
+                        # slightly (trailing punctuation, spacing, re-transcribed
+                        # words) — the frontend merge cannot dedup it. Only emit
+                        # the final text as a fallback when no delta was streamed
+                        # for this response (ultra-fast single-shot replies where
+                        # done arrives before any delta).
+                        if response_id:
+                            if response_id in streamed_text_response_ids:
+                                continue
+                        elif recorder is not None and bool(recorder.current_assistant_text):
+                            continue
+                    else:
+                        streamed_text_response_ids.add(response_id)
                     await self._emit_assistant_output(
                         websocket,
                         interruption,
@@ -575,6 +600,7 @@ class DashScopeRealtimeMixin:
                 response_id = str(event.get("response_id", ""))
                 if response_id in tool_phase_response_ids:
                     tool_phase_response_ids.discard(response_id)
+                    streamed_text_response_ids.discard(response_id)
                     if response_id == interruption.active_response_id:
                         interruption.active_response_id = ""
                     continue
@@ -585,6 +611,7 @@ class DashScopeRealtimeMixin:
                     continue
                 if interruption.defer_terminal(dict(event)):
                     continue
+                streamed_text_response_ids.discard(response_id)
                 if not response_id or response_id == interruption.active_response_id:
                     interruption.active_response_id = ""
                 if str(event.get("status", "completed")) in {"cancelled", "canceled", "failed"}:
