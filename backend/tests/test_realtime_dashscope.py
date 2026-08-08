@@ -545,5 +545,85 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(terminal_event["type"], "tool_phase_complete")
 
 
+class _StubOmniConversation:
+    """Minimal stand-in for the SDK OmniRealtimeConversation."""
+
+    def __init__(self) -> None:
+        self.update_session_calls: list[dict[str, object]] = []
+        self.raw_payloads: list[dict[str, object]] = []
+
+    def update_session(self, **kwargs) -> None:
+        self.update_session_calls.append(kwargs)
+
+    def send_raw(self, payload: str) -> None:
+        self.raw_payloads.append(json.loads(payload))
+
+
+class TestDashScopeOmniSessionConfig(unittest.TestCase):
+    """Regression tests for the qwen3.5-omni "listening forever" fix.
+
+    Verified against the live API (2026-08-08):
+    - create_response=False in turn_detection makes the server never
+      auto-respond after VAD speech_stopped.
+    - Re-sending the FULL session.update (voice/turn_detection) mid-session
+      leaves the session deaf for later audio; follow-ups must be
+      instructions-only.
+    """
+
+    def test_first_config_allows_server_auto_response(self) -> None:
+        service = RealtimeVoiceService.__new__(RealtimeVoiceService)
+        conversation = _StubOmniConversation()
+
+        service._configure_dashscope_conversation(conversation, voice="Tina", instructions="hello")
+
+        self.assertEqual(len(conversation.update_session_calls), 1)
+        kwargs = conversation.update_session_calls[0]
+        turn_param = kwargs.get("turn_detection_param") or {}
+        self.assertNotEqual(turn_param.get("create_response"), False)
+        self.assertIs(turn_param.get("interrupt_response"), False)
+        self.assertTrue(conversation._vs_omni_session_configured)
+
+    def test_followup_config_sends_instructions_only(self) -> None:
+        service = RealtimeVoiceService.__new__(RealtimeVoiceService)
+        conversation = _StubOmniConversation()
+
+        service._configure_dashscope_conversation(conversation, voice="Tina", instructions="first")
+        service._configure_dashscope_conversation(conversation, voice="Tina", instructions="second")
+
+        # No second full update_session...
+        self.assertEqual(len(conversation.update_session_calls), 1)
+        # ...instead an instructions-only session.update via send_raw.
+        self.assertEqual(len(conversation.raw_payloads), 1)
+        event = conversation.raw_payloads[0]
+        self.assertEqual(event["type"], "session.update")
+        self.assertEqual(event["session"], {"instructions": "second"})
+
+    def test_qwen_audio_raw_client_keeps_full_then_lite_pattern(self) -> None:
+        service = RealtimeVoiceService.__new__(RealtimeVoiceService)
+        # Real instance (exact-type routing) with mocked transport methods.
+        conversation = DashScopeAudioRealtimeConversation(
+            model="qwen-audio-3.0-realtime-plus",
+            api_key="test-key",
+            url="wss://example.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime",
+            callback=None,  # type: ignore[arg-type]
+        )
+        conversation.update_session = MagicMock()  # type: ignore[method-assign]
+        conversation.send_raw = MagicMock()  # type: ignore[method-assign]
+
+        service._configure_dashscope_conversation(conversation, voice="longanqian", instructions="hi")
+
+        conversation.update_session.assert_called_once()
+        kwargs = conversation.update_session.call_args.kwargs
+        # Must go through the raw-client branch (voice/instructions/tools only);
+        # if the isinstance routing were deleted, the SDK branch would pass
+        # SDK-only kwargs instead and these assertions would fail.
+        self.assertEqual(set(kwargs), {"voice", "instructions", "tools"})
+        self.assertEqual(kwargs["voice"], "longanqian")
+        self.assertEqual(kwargs["instructions"], "hi")
+        # The raw client manages its own first-full/later-lite counter; the
+        # mixin must not short-circuit it via send_raw.
+        conversation.send_raw.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

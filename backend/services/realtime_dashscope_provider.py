@@ -24,6 +24,7 @@ from .realtime_constants import (
     DEFAULT_DASHSCOPE_REALTIME_MODEL,
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE,
+    DEFAULT_QWEN_OMNI_REALTIME_VOICE,
     QWEN_OMNI_REALTIME_VOICES,
     _is_dashscope_audio_realtime_model,
     _is_dashscope_live_translate_model,
@@ -162,6 +163,37 @@ class DashScopeRealtimeMixin:
         return normalized
     @staticmethod
     def _configure_dashscope_conversation(conversation: Any, *, voice: str, instructions: str) -> None:
+        if type(conversation) is DashScopeAudioRealtimeConversation:
+            # Qwen-Audio raw client: its update_session() already sends the full
+            # config on the first call and instructions+tools on later calls.
+            # (Exact-type check: the DashScopeLiveTranslateConversation subclass
+            # has a different update_session signature and is never configured
+            # through this method.)
+            conversation.update_session(
+                voice=voice,
+                instructions=instructions,
+                tools=dashscope_tool_declarations(),
+            )
+            return
+        if getattr(conversation, "_vs_omni_session_configured", False):
+            # qwen3.5-omni-*-realtime (SDK path): voice / turn_detection /
+            # input_audio_transcription are only honored on the FIRST
+            # session.update. Re-sending the full config mid-session is
+            # accepted (session.updated) but leaves the session deaf — the
+            # server stops emitting speech_started for later audio (verified
+            # against the live API). Follow-up updates carry instructions
+            # only, mirroring the qwen-audio raw client's pattern.
+            conversation.send_raw(
+                json.dumps(
+                    {
+                        "event_id": f"event_{uuid.uuid4().hex}",
+                        "type": "session.update",
+                        "session": {"instructions": instructions},
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            return
         conversation.update_session(
             output_modalities=[MultiModality.AUDIO, MultiModality.TEXT],  # type: ignore[union-attr]
             voice=voice,
@@ -169,11 +201,17 @@ class DashScopeRealtimeMixin:
             output_audio_format=AudioFormat.PCM_24000HZ_MONO_16BIT,  # type: ignore[union-attr]
             enable_input_audio_transcription=True,
             enable_turn_detection=True,
-            turn_detection_param={"create_response": False, "interrupt_response": False},
-            turn_detection_silence_duration_ms=5000,
+            # Do NOT pass create_response=False: qwen3.5-omni-realtime honors it
+            # and then never auto-responds after VAD speech_stopped, leaving the
+            # UI stuck at "listening" forever (verified against the live API).
+            # interrupt_response=False stays so barge-in arbitration remains
+            # under the backend's interruption classifier.
+            turn_detection_param={"interrupt_response": False},
+            turn_detection_silence_duration_ms=2000,
             instructions=instructions,
             tools=dashscope_tool_declarations(),
         )
+        conversation._vs_omni_session_configured = True
 
     @staticmethod
     def _configure_dashscope_live_translate(
