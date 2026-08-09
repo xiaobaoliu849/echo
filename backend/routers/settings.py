@@ -427,6 +427,12 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
     base_url = base_url.rstrip("/")
 
     if not api_key:
+        if provider == "Doubao":
+            return FetchModelsResponse(
+                provider=provider,
+                models=[m for m in DOUBAO_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in DOUBAO_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
         raise HTTPException(
             status_code=400,
             detail={

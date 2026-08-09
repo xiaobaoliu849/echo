@@ -22,6 +22,7 @@ from .transcription_publish_adapter import build_transcription_publisher
 from .llm_service import LLMService
 from . import audio_tools
 from .audio_tools import AudioToolsError, MediaProbe
+from .doubao_asr_provider import doubao_asr_transcribe_file, DOUBAO_ASR_2_RESOURCE
 
 QWEN_ASR_SYNC_MODEL = "qwen3-asr-flash-2026-02-10"
 # DashScope async (file-transcription) ASR. "链式" URL jobs are DashScope-only;
@@ -154,6 +155,18 @@ class TranscriptionService:
         self.config.reload()
         api_keys = self.config.get_all().get("api_keys", {})
         return str(api_keys.get("assemblyai_api_key", "")).strip()
+
+    def _doubao_key(self) -> str:
+        self.config.reload()
+        token = str(self.config.get_setting("doubao_access_token", "")).strip()
+        if not token:
+            # Fallback to doubao_api_key for backward compatibility
+            token = str(self.config.get_setting("doubao_api_key", "")).strip()
+        return token
+
+    def _doubao_app_id(self) -> str:
+        self.config.reload()
+        return str(self.config.get_setting("doubao_app_id", "")).strip()
 
     def _mimo_chat_url(self) -> str:
         base_url = self.config.get_provider_settings("Xiaomi").get("base_url", "").strip()
@@ -708,6 +721,11 @@ class TranscriptionService:
                 if not api_key:
                     raise ValueError("AssemblyAI API key not configured.")
                 result = await self._transcribe_with_assemblyai(path, api_key)
+            elif provider == "doubao":
+                api_key = self._doubao_key()
+                if not api_key:
+                    raise ValueError("Doubao access token not configured. Set doubao_access_token or doubao_api_key.")
+                result = await self._transcribe_with_doubao(path, api_key)
             else:
                 raise ValueError(f"Unsupported ASR provider: {provider}")
             # Echo the actual engine so the UI can show which model was used.
@@ -732,6 +750,12 @@ class TranscriptionService:
         if assemblyai_key:
             result = await self._transcribe_with_assemblyai(path, assemblyai_key)
             result["provider"] = "assemblyai"
+            return result
+
+        doubao_key = self._doubao_key()
+        if doubao_key:
+            result = await self._transcribe_with_doubao(path, doubao_key)
+            result["provider"] = "doubao"
             return result
 
         # Qwen-Audio-3.0-ASR-Flash also returns word-level timestamps
@@ -1205,6 +1229,22 @@ class TranscriptionService:
             "duration_seconds": duration_seconds,
             "words": words if words else None,
         }
+
+    async def _transcribe_with_doubao(
+        self,
+        path: Path,
+        api_key: str,
+    ) -> dict:
+        """Transcribe using Doubao (ByteDance Volcengine) ASR.
+
+        Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}.
+        """
+        result = await doubao_asr_transcribe_file(
+            file_path=path,
+            api_key=api_key,
+            resource_id=DOUBAO_ASR_2_RESOURCE,
+        )
+        return result
 
     async def create_completed_sync_job(self, file_path: str, original_filename: str, transcript: str) -> TranscriptionJob:
         """

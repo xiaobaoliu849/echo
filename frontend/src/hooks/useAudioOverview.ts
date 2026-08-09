@@ -125,7 +125,7 @@ export default function useAudioOverview(options: Options) {
     let disposed = false;
     async function loadAllVoices() {
       try {
-        const engines = ["edge", "qwen_flash", "minimax", "xiaomi"] as const;
+        const engines = ["edge", "qwen_flash", "minimax", "xiaomi", "doubao"] as const;
         // Fetch engine voice lists in parallel
         const engineResults = await Promise.all(
           engines.map(engine => fetchVoices(undefined, engine).catch(() => ({ voices: [] })))

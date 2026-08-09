@@ -93,8 +93,8 @@ const PREFIX_HINTS: Array<{ prefix: string; hints: string[] }> = [
   {
     prefix: "TTS_SPEAK_DEPENDENCY_ERROR",
     hints: [
-      "Install/repair speech dependency (edge-tts).",
-      "Check backend runtime environment and retry."
+      "Check engine credentials (API Key / Access Token) in Settings.",
+      "Verify engine status, network access, or backend runtime logs."
     ]
   },
   {

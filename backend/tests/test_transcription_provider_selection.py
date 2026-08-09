@@ -34,7 +34,7 @@ def _make_service() -> TranscriptionService:
 
 def _service_with_keys(keys: dict[str, str]) -> TranscriptionService:
     service = _make_service()
-    for name in ("deepgram", "openai", "assemblyai", "xiaomi", "dashscope"):
+    for name in ("deepgram", "openai", "assemblyai", "doubao", "xiaomi", "dashscope"):
         key = keys.get(name, "")
         setattr(service, f"_{name}_key", lambda k=key: k)
     return service

@@ -18,6 +18,13 @@ import httpx
 
 from .config_loader import BackendConfig, get_data_dir
 from .script_parser import parse_script_with_fallback
+from .doubao_tts_provider import (
+    DOUBAO_VOICES,
+    DEFAULT_DOUBAO_TTS_VOICE,
+    DEFAULT_DOUBAO_TTS_CLUSTER,
+    doubao_tts_synthesize,
+    is_doubao_voice,
+)
 
 try:
     import edge_tts
@@ -39,6 +46,7 @@ TTS_ENGINE_ELEVENLABS = "elevenlabs"
 TTS_ENGINE_CHATTTS = "chattts"
 TTS_ENGINE_GPT_SOVITS = "gpt_sovits"
 TTS_ENGINE_AZURE = "azure"
+TTS_ENGINE_DOUBAO = "doubao"
 
 SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_EDGE,
@@ -50,6 +58,7 @@ SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_CHATTTS,
     TTS_ENGINE_GPT_SOVITS,
     TTS_ENGINE_AZURE,
+    TTS_ENGINE_DOUBAO,
 }
 
 OPENAI_VOICES = [
@@ -547,6 +556,18 @@ class TTSService:
             base_url = f"http://{base_url}"
         return api_key, base_url
 
+    def _doubao_settings(self) -> tuple[str, str, str]:
+        """Return (access_token, app_id, cluster) for Doubao OpenSpeech TTS."""
+        self.config.reload()
+        access_token = str(self.config.get_setting("doubao_access_token", "")).strip()
+        if not access_token:
+            # Fallback to doubao_api_key for backward compatibility
+            access_token = str(self.config.get_setting("doubao_api_key", "")).strip()
+        app_id = str(self.config.get_setting("doubao_app_id", "")).strip()
+        cfg = self.config.get_all()
+        cluster = str(cfg.get("doubao", {}).get("tts_cluster", "")).strip() or DEFAULT_DOUBAO_TTS_CLUSTER
+        return access_token, app_id, cluster
+
     def _chattts_runtime_settings(self) -> tuple[Path, str, str]:
         self.config.reload()
         tts_settings = self.config.get_all().get("tts_settings", {})
@@ -708,6 +729,36 @@ class TTSService:
             raise RuntimeError(f"GPT-SoVITS API error: {response.status_code} - {response.text}")
 
         self._atomic_write_bytes(path, response.content)
+
+    async def _generate_doubao_audio(self, text: str, voice: str, rate: str, path: Path) -> None:
+        access_token, app_id, cluster = self._doubao_settings()
+        if not access_token:
+            raise ValueError("豆包 Access Token 未配置。请在 设置 → Doubao 中填写 doubao_access_token。")
+        if not app_id:
+            raise ValueError("豆包 App ID 未配置。请在 设置 → Doubao 中填写 doubao_app_id。")
+
+        speed_ratio = 1.0
+        if rate:
+            import re as _re
+            match = _re.match(r"^([+-]?)(\d+)%$", rate.strip())
+            if match:
+                sign = match.group(1)
+                percent = float(match.group(2)) / 100.0
+                if sign == "-":
+                    speed_ratio = max(0.1, 1.0 - percent)
+                else:
+                    speed_ratio = min(2.0, 1.0 + percent)
+
+        audio_bytes = await doubao_tts_synthesize(
+            text=text,
+            voice_type=voice,
+            access_token=access_token,
+            appid=app_id,
+            cluster=cluster,
+            encoding="mp3",
+            speed_ratio=speed_ratio,
+        )
+        self._atomic_write_bytes(path, audio_bytes)
 
     async def _generate_edge_audio(self, text: str, voice: str, rate: str, path: Path) -> None:
         if edge_tts is None:
@@ -1024,6 +1075,9 @@ class TTSService:
             return TTS_ENGINE_QWEN_FLASH
         if any(v["name"] == voice for v in QWEN_AUDIO_TTS_VOICES):
             return TTS_ENGINE_QWEN_FLASH
+        # Check Doubao voices
+        if is_doubao_voice(voice):
+            return TTS_ENGINE_DOUBAO
         # 2. Check MiniMax voices
         if any(v["name"] == voice for v in MINIMAX_VOICES):
             return TTS_ENGINE_MINIMAX
@@ -1075,6 +1129,8 @@ class TTSService:
             selected_voice = voice or CHATTTS_VOICES[0]["name"]
         elif normalized_engine == TTS_ENGINE_GPT_SOVITS:
             selected_voice = voice or GPT_SOVITS_VOICES[0]["name"]
+        elif normalized_engine == TTS_ENGINE_DOUBAO:
+            selected_voice = voice or DEFAULT_DOUBAO_TTS_VOICE
         else:
             selected_voice = voice or XIAOMI_VOICES[0]["name"]
 
@@ -1106,6 +1162,8 @@ class TTSService:
             await self._generate_chattts_audio(cleaned, selected_voice, path)
         elif normalized_engine == TTS_ENGINE_GPT_SOVITS:
             await self._generate_gpt_sovits_audio(cleaned, selected_voice, path)
+        elif normalized_engine == TTS_ENGINE_DOUBAO:
+            await self._generate_doubao_audio(cleaned, selected_voice, rate, path)
         else:
             await self._generate_xiaomi_audio(cleaned, selected_voice, path, model=model)
 
@@ -1215,6 +1273,8 @@ class TTSService:
         if normalized_engine == TTS_ENGINE_GPT_SOVITS:
             local_clones = self._get_local_gpt_sovits_voices()
             return self._filter_by_locale(GPT_SOVITS_VOICES + local_clones, locale)
+        if normalized_engine == TTS_ENGINE_DOUBAO:
+            return self._filter_by_locale(DOUBAO_VOICES, locale)
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
             # The two Qwen TTS families use incompatible voice sets; when the
             # caller tells us the model, return only voices that work with it.

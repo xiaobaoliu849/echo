@@ -275,7 +275,7 @@ async def transcribe_audio(
     provider: str | None = Query(
         default=None,
         description=(
-            "ASR provider to use: deepgram, openai/whisper, assemblyai, "
+            "ASR provider to use: deepgram, openai/whisper, assemblyai, doubao, "
             "dashscope/qwen (Qwen-Audio-3.0-ASR-Flash), xiaomi/mimo, "
             "qwen-legacy (qwen3-asr-flash). Auto-selects if not specified."
         ),

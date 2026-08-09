@@ -267,7 +267,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
           {settings.settingsProvider === "Doubao" && (
             <>
               <label className="vsField">
-                <span className="vsFieldLabel">{t("Access Token（豆包语音 · 实时语音）", "Access Token (Doubao Voice · realtime)")}</span>
+                <span className="vsFieldLabel">{t("Access Token（豆包语音 · TTS合成 / ASR识别 / 实时语音）", "Access Token (Doubao Voice · TTS / ASR / Realtime)")}</span>
                 <div className="vsPasswordFieldWrap">
                   <input
                     className="vsInput"
@@ -292,13 +292,13 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 </div>
                 <span className="vsFieldHint">
                   {t(
-                    "实时语音通话专用凭证，与上面的方舟 API Key 是两套体系；通常是一串以 x- 开头的字符。",
-                    "Dedicated credential for realtime voice calls, separate from the Ark API key above; usually starts with x-."
+                    "语音合成（TTS）、语音识别（ASR）与实时语音通用凭证，与上面的文本 API Key 是两套体系；填入并保存后，语音中心与转写页面将直接启用豆包。通常为以 x- 开头的字符串。",
+                    "Universal credential for TTS, ASR, and Realtime voice, separate from the text API key above; after saving, Doubao TTS and ASR are ready to use. Usually starts with x-."
                   )}
                 </span>
               </label>
               <label className="vsField">
-                <span className="vsFieldLabel">{t("豆包语音 APP ID（实时语音必填）", "Doubao Voice APP ID (required for realtime)")}</span>
+                <span className="vsFieldLabel">{t("豆包语音 APP ID（TTS/ASR/实时语音必填）", "Doubao Voice APP ID (required for TTS / ASR / Realtime)")}</span>
                 <div className="vsPasswordFieldWrap">
                   <input
                     className="vsInput"
@@ -323,8 +323,8 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 </div>
                 <span className="vsFieldHint">
                   {t(
-                    "实时语音使用「豆包语音」控制台的 Access Token + APP ID 鉴权（两者在「服务接口认证信息」里成对出现）。",
-                    "Realtime voice authenticates with the Access Token + APP ID pair from the Doubao Voice console auth info."
+                    "豆包语音（TTS/ASR/实时语音）使用「豆包语音」控制台的 Access Token + APP ID 鉴权（两者在「服务接口认证信息」里成对出现）。",
+                    "Doubao voice services (TTS/ASR/Realtime) authenticate with the Access Token + APP ID pair from the Doubao Voice console."
                   )}{" "}
                   <a
                     href="https://console.volcengine.com/speech/overview"

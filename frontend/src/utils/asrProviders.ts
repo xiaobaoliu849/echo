@@ -25,8 +25,8 @@ export const ASR_ENGINES: AsrEngine[] = [
     group: "auto",
     zh: "自动选择",
     en: "Auto",
-    noteZh: "按你已配置的密钥依次尝试（Deepgram → OpenAI → AssemblyAI → Qwen → MiMo），选第一个可用的。",
-    noteEn: "Tries your configured keys in order (Deepgram → OpenAI → AssemblyAI → Qwen → MiMo) and uses the first available.",
+    noteZh: "按你已配置的密钥依次尝试（Deepgram → OpenAI → AssemblyAI → 豆包 → Qwen → MiMo），选第一个可用的。",
+    noteEn: "Tries your configured keys in order (Deepgram → OpenAI → AssemblyAI → Doubao → Qwen → MiMo) and uses the first available.",
   },
   {
     id: "dashscope",
@@ -59,6 +59,14 @@ export const ASR_ENGINES: AsrEngine[] = [
     en: "AssemblyAI",
     noteZh: "字级时间戳，可导出精确字幕；独有说话人分离与自动高亮，适合会议纪要。",
     noteEn: "Word-level timestamps plus speaker diarization and highlights — ideal for meeting notes.",
+  },
+  {
+    id: "doubao",
+    group: "timestamps",
+    zh: "豆包 ASR 2.0（火山引擎）",
+    en: "Doubao ASR 2.0 (Volcengine)",
+    noteZh: "字级时间戳，可导出精确字幕；支持 25+ 语种识别、说话人分离与情绪检测。中英混合识别表现优异。",
+    noteEn: "Word-level timestamps for precise subtitles; 25+ languages, speaker diarization and emotion detection. Excellent for Chinese-English mix.",
   },
   {
     id: "xiaomi",

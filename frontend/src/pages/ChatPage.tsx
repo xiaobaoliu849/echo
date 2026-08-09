@@ -47,6 +47,7 @@ function mapProviderToEngine(provider?: string): TtsEngine {
   if (p.includes("elevenlabs")) return "elevenlabs";
   if (p.includes("chattts")) return "chattts";
   if (p.includes("gpt_sovits")) return "gpt_sovits";
+  if (p.includes("doubao")) return "doubao";
   return "edge";
 }
 
