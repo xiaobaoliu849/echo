@@ -42,7 +42,7 @@ export default function TranscriptionSubtitlePlayer({
   const userScrollingRef = useRef(false);
   const userScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [currentTime, setCurrentTime] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const cues = useMemo<SubtitleCue[]>(
@@ -50,14 +50,15 @@ export default function TranscriptionSubtitlePlayer({
     [transcript, audioDuration, words]
   );
 
-  const activeIndex = useMemo(() => {
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    const time = (e.target as HTMLAudioElement).currentTime;
     let idx = -1;
     for (let i = 0; i < cues.length; i++) {
-      if (currentTime >= cues[i].start) idx = i;
+      if (time >= cues[i].start) idx = i;
       else break;
     }
-    return idx;
-  }, [cues, currentTime]);
+    setActiveIndex((prev) => (prev !== idx ? idx : prev));
+  };
 
   // Auto-scroll the active cue into view while playing only when it moves out of view.
   // Suppressed briefly after the user scrolls manually so we don't fight their scroll position.
@@ -108,6 +109,7 @@ export default function TranscriptionSubtitlePlayer({
           <audio
             ref={audioRef}
             controls
+            preload="metadata"
             src={audioSourceUrl}
             aria-label={t("转写音频播放器", "Transcription audio player")}
             controlsList="nodownload"
@@ -117,7 +119,7 @@ export default function TranscriptionSubtitlePlayer({
                 onAudioDurationChange(d);
               }
             }}
-            onTimeUpdate={(e) => setCurrentTime((e.target as HTMLAudioElement).currentTime)}
+            onTimeUpdate={handleTimeUpdate}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onEnded={() => setIsPlaying(false)}

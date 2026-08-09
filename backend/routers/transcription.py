@@ -765,8 +765,8 @@ async def download_transcription_job_transcript(job_id: str) -> Response:
         404: {"description": "Audio file not found.", "model": StructuredErrorResponse},
     },
 )
-async def download_transcription_job_audio(job_id: str):
-    from fastapi.responses import FileResponse # type: ignore
+async def download_transcription_job_audio(request: Request, job_id: str):
+    from fastapi.responses import FileResponse, StreamingResponse # type: ignore
     job = transcription_service.get_job(job_id)
     if job is None:
         raise HTTPException(
@@ -788,10 +788,62 @@ async def download_transcription_job_audio(job_id: str):
         )
 
     filename = job.original_filename or audio_path.name
+    media_type = TranscriptionService._guess_mime_type(audio_path)
+    file_size = audio_path.stat().st_size
+    range_header = request.headers.get("range")
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Type": media_type,
+        "Content-Disposition": f'inline; filename="{filename}"',
+    }
+
+    if range_header and range_header.startswith("bytes="):
+        try:
+            range_val = range_header.replace("bytes=", "").strip()
+            parts = range_val.split("-")
+            start = int(parts[0]) if parts[0] else 0
+            end = int(parts[1]) if len(parts) > 1 and parts[1] else file_size - 1
+            end = min(end, file_size - 1)
+
+            if start > end or start >= file_size:
+                return Response(
+                    status_code=416,
+                    headers={"Content-Range": f"bytes */{file_size}"},
+                )
+
+            content_length = end - start + 1
+            headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            headers["Content-Length"] = str(content_length)
+
+            def iter_file():
+                with open(audio_path, "rb") as f:
+                    f.seek(start)
+                    remaining = content_length
+                    chunk_size = 64 * 1024
+                    while remaining > 0:
+                        read_size = min(chunk_size, remaining)
+                        data = f.read(read_size)
+                        if not data:
+                            break
+                        remaining -= len(data)
+                        yield data
+
+            return StreamingResponse(
+                iter_file(),
+                status_code=206,
+                headers=headers,
+                media_type=media_type,
+            )
+        except Exception:
+            pass
+
+    headers["Content-Length"] = str(file_size)
     return FileResponse(
         path=str(audio_path),
         filename=filename,
-        media_type=TranscriptionService._guess_mime_type(audio_path),
+        media_type=media_type,
+        headers=headers,
     )
 
 

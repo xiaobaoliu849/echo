@@ -11,6 +11,7 @@ vi.mock("../api", async () => {
     transcribeAudio: vi.fn(),
     createTranscriptionJobFromUrl: vi.fn(),
     fetchTranscriptionJob: vi.fn(),
+    getTranscriptionJobWords: vi.fn().mockResolvedValue([]),
     listTranscriptionJobs: vi.fn().mockResolvedValue({ jobs: [] })
   };
 });
