@@ -162,11 +162,24 @@ class TranscriptionService:
         if not token:
             # Fallback to doubao_api_key for backward compatibility
             token = str(self.config.get_setting("doubao_api_key", "")).strip()
+        if not token:
+            try:
+                provider_settings = self.config.get_provider_settings("Doubao")
+                token = str(provider_settings.get("api_key", "")).strip()
+            except Exception:
+                pass
         return token
 
     def _doubao_app_id(self) -> str:
         self.config.reload()
         return str(self.config.get_setting("doubao_app_id", "")).strip()
+
+    def _doubao_resource_id(self) -> str:
+        self.config.reload()
+        res_id = str(self.config.get_setting("doubao_asr_resource_id", "")).strip()
+        if not res_id:
+            res_id = str(self.config.get_setting("doubao_resource_id", "")).strip()
+        return res_id if res_id else DOUBAO_ASR_2_RESOURCE
 
     def _mimo_chat_url(self) -> str:
         base_url = self.config.get_provider_settings("Xiaomi").get("base_url", "").strip()
@@ -724,8 +737,9 @@ class TranscriptionService:
             elif provider == "doubao":
                 api_key = self._doubao_key()
                 if not api_key:
-                    raise ValueError("Doubao access token not configured. Set doubao_access_token or doubao_api_key.")
-                result = await self._transcribe_with_doubao(path, api_key)
+                    raise ValueError("Doubao access token or API Key not configured. Set Doubao API Key or Access Token in Settings.")
+                app_id = self._doubao_app_id()
+                result = await self._transcribe_with_doubao(path, api_key, app_id=app_id)
             else:
                 raise ValueError(f"Unsupported ASR provider: {provider}")
             # Echo the actual engine so the UI can show which model was used.
@@ -754,7 +768,8 @@ class TranscriptionService:
 
         doubao_key = self._doubao_key()
         if doubao_key:
-            result = await self._transcribe_with_doubao(path, doubao_key)
+            app_id = self._doubao_app_id()
+            result = await self._transcribe_with_doubao(path, doubao_key, app_id=app_id)
             result["provider"] = "doubao"
             return result
 
@@ -1234,15 +1249,20 @@ class TranscriptionService:
         self,
         path: Path,
         api_key: str,
+        app_id: str | None = None,
+        resource_id: str | None = None,
     ) -> dict:
         """Transcribe using Doubao (ByteDance Volcengine) ASR.
 
         Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}.
         """
+        res_id = resource_id or self._doubao_resource_id()
+        app_id_val = app_id or self._doubao_app_id()
         result = await doubao_asr_transcribe_file(
             file_path=path,
             api_key=api_key,
-            resource_id=DOUBAO_ASR_2_RESOURCE,
+            resource_id=res_id,
+            app_id=app_id_val,
         )
         return result
 

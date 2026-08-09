@@ -7388,17 +7388,19 @@ button.vsPasswordToggleBtn:focus-visible {
   gap: 12px;
   text-align: left;
   width: 100%;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 10px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  border-radius: 8px;
   background: transparent;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   font-family: inherit;
 }
 
 .vsSubtitleCue:hover {
-  background: rgba(98, 76, 54, 0.05);
+  background: rgba(98, 76, 54, 0.04);
+  border-color: rgba(98, 76, 54, 0.08);
 }
 
 .vsSubtitleCue:disabled {
@@ -7407,23 +7409,26 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsSubtitleCueTime {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  min-width: 40px;
+  min-width: 44px;
 }
 
 .vsSubtitleCueText {
   flex: 1;
   font-size: 15px;
-  line-height: 1.7;
+  line-height: 1.6;
   color: var(--text);
   word-break: break-word;
 }
 
 .vsSubtitleCue.active {
-  background: rgba(107, 76, 246, 0.1);
+  background: rgba(107, 76, 246, 0.07);
+  border-color: rgba(107, 76, 246, 0.15);
+  border-left-color: var(--brand);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
 
 .vsSubtitleCue.active .vsSubtitleCueText {
@@ -7433,6 +7438,7 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsSubtitleCue.active .vsSubtitleCueTime {
   color: var(--brand);
+  font-weight: 700;
 }
 
 .vsTranscribeDetailFooter {

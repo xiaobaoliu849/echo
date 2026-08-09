@@ -13,6 +13,25 @@ try:
 except ImportError:
     websockets = None
 
+def _get_websockets_header_kwargs(headers: dict) -> dict:
+    if websockets is None:
+        return {}
+    ws_version = getattr(websockets, "__version__", "")
+    try:
+        major = int(ws_version.split(".")[0])
+        if major >= 11:
+            return {"additional_headers": headers}
+    except Exception:
+        pass
+    try:
+        import inspect
+        sig = inspect.signature(websockets.connect)
+        if "additional_headers" in sig.parameters:
+            return {"additional_headers": headers}
+    except Exception:
+        pass
+    return {"extra_headers": headers}
+
 logger = logging.getLogger(__name__)
 
 DOUBAO_ASR_BIGMODEL_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
@@ -132,6 +151,7 @@ async def doubao_asr_transcribe_file(
     file_path: Path | str,
     api_key: str,
     resource_id: str = DOUBAO_ASR_2_RESOURCE,
+    app_id: str | None = None,
 ) -> dict:
     """
     Transcribe a local audio file using ByteDance Volcengine Doubao ASR.
@@ -140,6 +160,7 @@ async def doubao_asr_transcribe_file(
         file_path: Path to the audio file
         api_key: The authentication API key
         resource_id: Resource ID for the Doubao ASR model
+        app_id: Optional App ID for old console authentication
         
     Returns:
         dict: A dictionary containing transcribed text, duration, and word timestamps.
@@ -156,13 +177,27 @@ async def doubao_asr_transcribe_file(
     if ext in ["wav", "pcm", "ogg", "mp3"]:
         fmt = ext
         
-    headers = {
-        "X-Api-Key": api_key,
-        "X-Api-Resource-Id": resource_id,
-        "X-Api-Request-Id": str(uuid.uuid4()),
-        "X-Api-Sequence": "-1",
-        "X-Api-Connect-Id": str(uuid.uuid4()),
-    }
+    clean_token = api_key.replace("Bearer;", "").replace("Bearer ", "").strip()
+    
+    if app_id and app_id.strip():
+        # Old Version Console: APP ID + Access Token
+        headers = {
+            "X-Api-App-Key": app_id.strip(),
+            "X-Api-Access-Key": clean_token,
+            "X-Api-Resource-Id": resource_id,
+            "X-Api-Request-Id": str(uuid.uuid4()),
+            "X-Api-Sequence": "-1",
+            "X-Api-Connect-Id": str(uuid.uuid4()),
+        }
+    else:
+        # New Version Console: API Key
+        headers = {
+            "X-Api-Key": clean_token,
+            "X-Api-Resource-Id": resource_id,
+            "X-Api-Request-Id": str(uuid.uuid4()),
+            "X-Api-Sequence": "-1",
+            "X-Api-Connect-Id": str(uuid.uuid4()),
+        }
     
     payload = {
         "user": {"uid": "voicespirit_user"},
@@ -187,36 +222,51 @@ async def doubao_asr_transcribe_file(
     words = []
     duration = None
     
-    async with websockets.connect(DOUBAO_ASR_NOSTREAM_URL, extra_headers=headers) as ws:
-        # 1. Send full client request
-        req_bytes = _build_full_client_request(payload)
-        await ws.send(req_bytes)
-        
-        # 2. Read file and send audio chunks
-        chunk_size = 3200
-        sent_last = False
-        with open(file_path, "rb") as f:
-            while True:
-                data = f.read(chunk_size)
-                if not data:
-                    # EOF reached — send an empty last-packet marker if we
-                    # haven't already (happens when file size is an exact
-                    # multiple of chunk_size).
-                    if not sent_last:
-                        await ws.send(_build_audio_request(b"", is_last=True))
-                        sent_last = True
-                    break
-                is_last = len(data) < chunk_size
-                await ws.send(_build_audio_request(data, is_last=is_last))
-                if is_last:
-                    sent_last = True
-                    break
-                
-        # 3. Receive server responses
-        try:
-            async with asyncio.timeout(120):
+    ws_header_kwargs = _get_websockets_header_kwargs(headers)
+    ws_header_kwargs.update({
+        "ping_interval": None,
+        "ping_timeout": None,
+        "max_size": 2**24,
+    })
+
+    try:
+        connection_closed_type = getattr(websockets.exceptions, "ConnectionClosed", Exception)
+    except AttributeError:
+        connection_closed_type = Exception
+
+    try:
+        async with websockets.connect(DOUBAO_ASR_NOSTREAM_URL, **ws_header_kwargs) as ws:
+            # 1. Send full client request
+            req_bytes = _build_full_client_request(payload)
+            await ws.send(req_bytes)
+            
+            # 2. Read file and send audio chunks
+            chunk_size = 3200
+            sent_last = False
+            with open(file_path, "rb") as f:
                 while True:
-                    msg = await ws.recv()
+                    data = f.read(chunk_size)
+                    if not data:
+                        # EOF reached — send an empty last-packet marker if we
+                        # haven't already (happens when file size is an exact
+                        # multiple of chunk_size).
+                        if not sent_last:
+                            await ws.send(_build_audio_request(b"", is_last=True))
+                            sent_last = True
+                        break
+                    is_last = len(data) < chunk_size
+                    await ws.send(_build_audio_request(data, is_last=is_last))
+                    if is_last:
+                        sent_last = True
+                        break
+                    
+            # 3. Receive server responses
+            try:
+                while True:
+                    try:
+                        msg = await asyncio.wait_for(ws.recv(), timeout=120)
+                    except connection_closed_type:
+                        break
                     
                     if isinstance(msg, bytes):
                         byte1 = msg[1]
@@ -230,27 +280,50 @@ async def doubao_asr_transcribe_file(
                         elif msg_type == 9: # Server response
                             resp_json = _parse_server_response(msg)
                             
-                            if "utterances" in resp_json:
-                                for utt in resp_json["utterances"]:
-                                    if "words" in utt:
+                            # OpenSpeech ASR payload wraps results inside "result" dictionary:
+                            # {"result": {"text": "...", "utterances": [...]}, "audio_info": {"duration": ...}}
+                            res_obj = resp_json.get("result", {})
+                            if isinstance(res_obj, list) and len(res_obj) > 0:
+                                res_obj = res_obj[0]
+                            if not isinstance(res_obj, dict):
+                                res_obj = {}
+
+                            text_val = res_obj.get("text") or resp_json.get("text")
+                            if text_val:
+                                final_text = text_val
+
+                            utterances = res_obj.get("utterances") or resp_json.get("utterances") or []
+                            if utterances and isinstance(utterances, list):
+                                for utt in utterances:
+                                    if isinstance(utt, dict) and "words" in utt:
                                         for w in utt["words"]:
-                                            words.append({
-                                                "text": w["text"],
-                                                "start": w.get("start_time", 0) / 1000.0,
-                                                "end": w.get("end_time", 0) / 1000.0,
-                                            })
-                            if "text" in resp_json:
-                                final_text = resp_json["text"]
-                                
-                            if "duration" in resp_json:
-                                duration = resp_json["duration"] / 1000.0
+                                            if isinstance(w, dict) and "text" in w:
+                                                words.append({
+                                                    "text": w["text"],
+                                                    "start": w.get("start_time", 0) / 1000.0,
+                                                    "end": w.get("end_time", 0) / 1000.0,
+                                                })
+
+                            dur_val = None
+                            if "audio_info" in resp_json and isinstance(resp_json["audio_info"], dict):
+                                dur_val = resp_json["audio_info"].get("duration")
+                            if dur_val is None:
+                                dur_val = res_obj.get("duration") or resp_json.get("duration")
+                            if dur_val is not None:
+                                duration = float(dur_val) / 1000.0
                                 
                             flags = byte1 & 0x0F
                             if flags in (2, 3): # Last packet
                                 break
                                 
-        except asyncio.TimeoutError:
-            raise TimeoutError("Timeout waiting for Doubao ASR response")
+            except asyncio.TimeoutError:
+                raise TimeoutError("Timeout waiting for Doubao ASR response")
+    except connection_closed_type:
+        # Server closed socket without sending WS Close frame after finishing
+        pass
+            
+    if not final_text and words:
+        final_text = "".join(w["text"] for w in words)
             
     return {
         "text": final_text,

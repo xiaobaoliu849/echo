@@ -181,7 +181,7 @@ def default_window_state() -> dict[str, Any]:
         "height": DEFAULT_WINDOW_HEIGHT,
         "x": None,
         "y": None,
-        "maximized": sys.platform.startswith("linux"),
+        "maximized": False,
     }
 
 
@@ -221,6 +221,9 @@ def normalize_window_state_for_launch(window_state: dict[str, Any]) -> dict[str,
         normalized["width"] = DEFAULT_WINDOW_WIDTH
     if normalized["height"] > DEFAULT_WINDOW_HEIGHT:
         normalized["height"] = DEFAULT_WINDOW_HEIGHT
+
+    # Always launch in normal restored (non-maximized) window mode
+    normalized["maximized"] = False
 
     return normalized
 

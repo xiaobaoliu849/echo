@@ -63,6 +63,13 @@ const EXACT_HINTS: Record<string, string[]> = {
 
 const PREFIX_HINTS: Array<{ prefix: string; hints: string[] }> = [
   {
+    prefix: "TRANSCRIPTION_",
+    hints: [
+      "Check ASR provider API Key / Access Token / App ID in Settings → Doubao.",
+      "For Doubao ASR (Volcengine), ensure your API Key or Access Token is valid and has Doubao ASR service activated."
+    ]
+  },
+  {
     prefix: "CHAT_PROVIDER_ERROR",
     hints: [
       "Check provider API key / endpoint / model.",

@@ -93,29 +93,48 @@ function joinWordTokens(words: WordTimestamp[]): string {
  * mirroring the SRT/VTT export so on-screen cues match exported files.
  */
 export function buildCuesFromWords(words: WordTimestamp[]): SubtitleCue[] {
+  if (!words || words.length === 0) return [];
+
   const segments: SubtitleCue[] = [];
   let currentSegment: WordTimestamp[] = [];
-  let segmentStart = words[0]?.start ?? 0;
 
-  for (const word of words) {
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+
+    if (currentSegment.length === 0) {
+      currentSegment.push(word);
+      continue;
+    }
+
+    const segStart = currentSegment[0].start;
+    const segDuration = word.end - segStart;
+    const isSentenceEnd = /[。！？!?\n]$/.test(word.text);
+    const hasPunctuation = /[，,;；]$/.test(word.text);
+    const hasSpeechPause = i < words.length - 1 && (words[i + 1].start - word.end > 0.6);
+
+    // Group into complete, readable subtitle lines:
+    // Close cue on sentence end, or on comma/pause after 3.5s, or once segment reaches 18 words / 6.5s
+    const shouldFlush =
+      isSentenceEnd ||
+      (segDuration >= 3.5 && (hasPunctuation || hasSpeechPause)) ||
+      currentSegment.length >= 18 ||
+      segDuration >= 6.5;
+
     currentSegment.push(word);
 
-    const segmentDuration = word.end - segmentStart;
-    const isSentenceEnd = /[。！？!?\n]$/.test(word.text);
-    if (currentSegment.length >= 10 || segmentDuration >= 5 || isSentenceEnd) {
+    if (shouldFlush) {
       segments.push({
-        start: segmentStart,
+        start: currentSegment[0].start,
         end: word.end,
         text: joinWordTokens(currentSegment),
       });
       currentSegment = [];
-      segmentStart = word.end;
     }
   }
 
   if (currentSegment.length > 0) {
     segments.push({
-      start: segmentStart,
+      start: currentSegment[0].start,
       end: currentSegment[currentSegment.length - 1].end,
       text: joinWordTokens(currentSegment),
     });

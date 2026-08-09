@@ -33,6 +33,7 @@ from .interruption_classifier import InterruptionDecisionCoordinator
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_session_recorder import VoiceAgentSessionRecorder
 from .voice_agent_tools import VoiceAgentToolSession
+from .doubao_asr_provider import _get_websockets_header_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -738,10 +739,8 @@ class DoubaoRealtimeMixin:
             "ping_interval": 30,
             "ping_timeout": 30,
         }
-        try:
-            ws_context = websockets.connect(url, additional_headers=headers, **ws_kwargs)
-        except TypeError:
-            ws_context = websockets.connect(url, extra_headers=headers, **ws_kwargs)
+        ws_kwargs.update(_get_websockets_header_kwargs(headers))
+        ws_context = websockets.connect(url, **ws_kwargs)
 
         interruption = InterruptionDecisionCoordinator()
         memory_session = memory_session or RealtimeMemorySession()

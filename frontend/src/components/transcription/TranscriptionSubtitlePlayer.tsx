@@ -59,13 +59,19 @@ export default function TranscriptionSubtitlePlayer({
     return idx;
   }, [cues, currentTime]);
 
-  // Auto-scroll the active cue into view while playing. Suppressed briefly
-  // after the user scrolls manually so we don't fight their scroll position.
+  // Auto-scroll the active cue into view while playing only when it moves out of view.
+  // Suppressed briefly after the user scrolls manually so we don't fight their scroll position.
   useEffect(() => {
     if (!isPlaying || activeIndex < 0 || userScrollingRef.current) return;
     const el = cueRefs.current[activeIndex];
-    if (el) {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    const container = listRef.current;
+    if (el && container) {
+      const cRect = container.getBoundingClientRect();
+      const eRect = el.getBoundingClientRect();
+      // Only trigger smooth scroll if the active cue is outside the visible container area
+      if (eRect.top < cRect.top + 30 || eRect.bottom > cRect.bottom - 30) {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
     }
   }, [activeIndex, isPlaying]);
 

@@ -70,10 +70,37 @@ class TestDoubaoASR(unittest.IsolatedAsyncioTestCase):
         service = TranscriptionService()
         service._doubao_key = lambda: "fake_access_token"
         
-        with patch("pathlib.Path.is_file", return_value=True), patch("pathlib.Path.stat", return_value=type("Stat", (), {"st_size": 1000})()):
+        with patch("pathlib.Path.is_file", return_value=True), patch("pathlib.Path.stat", return_value=type("Stat", (), {"st_size": 1000, "st_mtime": 100.0})()):
             result = await service.transcribe_file("fake_audio.mp3", provider="doubao")
             self.assertEqual(result["text"], "转写结果")
             self.assertEqual(result["provider"], "doubao")
+
+    @patch("services.doubao_asr_provider.websockets.connect")
+    async def test_doubao_asr_transcribe_file_connect(self, mock_connect):
+        import json
+        import struct
+        from services.doubao_asr_provider import doubao_asr_transcribe_file
+        
+        mock_ws = AsyncMock()
+        hdr = _build_header(msg_type=9, flags=2, serialization=1, compression=0)
+        resp_json = json.dumps({"result": {"text": "测试结果"}, "audio_info": {"duration": 1500}}).encode("utf-8")
+        payload_size = struct.pack("!I", len(resp_json))
+        server_frame = hdr + payload_size + resp_json
+        
+        mock_ws.recv.return_value = server_frame
+        mock_connect.return_value.__aenter__.return_value = mock_ws
+        
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("builtins.open", unittest.mock.mock_open(read_data=b"fake_audio")):
+            res = await doubao_asr_transcribe_file("dummy.mp3", api_key="test_key")
+            
+        self.assertEqual(res["text"], "测试结果")
+        mock_connect.assert_called_once()
+        _, kwargs = mock_connect.call_args
+        self.assertIn("additional_headers", kwargs)
+        self.assertNotIn("extra_headers", kwargs)
+        self.assertEqual(kwargs["additional_headers"]["X-Api-Key"], "test_key")
+        self.assertNotIn("Authorization", kwargs["additional_headers"])
 
 
 if __name__ == "__main__":
