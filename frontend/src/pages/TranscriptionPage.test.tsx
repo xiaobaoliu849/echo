@@ -96,6 +96,50 @@ describe("TranscriptionPage", () => {
     });
   });
 
+  it("resolves relative audio URLs when a job is opened from history", async () => {
+    // The server-fetch path (not just the fresh-upload path) has to prefix the
+    // API origin too: under `npm run dev` there is no proxy on :5173, so a
+    // root-relative src would 404 and kill the player.
+    vi.mocked(api.listTranscriptionJobs).mockResolvedValue({
+      jobs: [
+        {
+          job_id: "tx_hist_001",
+          mode: "sync",
+          status: "completed",
+          file_name: "历史录音.m4a",
+          has_transcript: true,
+          memory_saved: false,
+          source_url: "/api/transcription/jobs/tx_hist_001/audio",
+          updated_at: "2026-08-09T10:00:00Z",
+        },
+      ],
+    } as unknown as Awaited<ReturnType<typeof api.listTranscriptionJobs>>);
+    mockedFetchTranscriptionJob.mockResolvedValue({
+      job_id: "tx_hist_001",
+      mode: "sync",
+      status: "completed",
+      file_name: "历史录音.m4a",
+      transcript: "历史转写内容",
+      has_transcript: true,
+      memory_saved: false,
+      source_url: "/api/transcription/jobs/tx_hist_001/audio",
+    } as unknown as Awaited<ReturnType<typeof api.fetchTranscriptionJob>>);
+
+    render(<TranscriptionPage />);
+
+    const card = await screen.findByText("历史录音.m4a");
+    fireEvent.click(card);
+
+    await waitFor(() => {
+      const audio = document.querySelector("audio");
+      expect(audio).not.toBeNull();
+      expect(audio).toHaveAttribute(
+        "src",
+        `${API_BASE_URL}/api/transcription/jobs/tx_hist_001/audio`
+      );
+    });
+  });
+
   it("polls a remote async transcription job until completion", async () => {
     vi.spyOn(window, "setTimeout").mockImplementation(((handler: TimerHandler) => {
       if (typeof handler === "function") {

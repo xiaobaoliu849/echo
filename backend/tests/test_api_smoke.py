@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 from starlette.requests import Request
@@ -1369,6 +1369,51 @@ class ApiSmokeTests(unittest.TestCase):
                 audio = self._request("GET", f"/api/transcription/jobs/{job.job_id}/audio")
                 self.assertEqual(audio.status_code, 200)
                 self.assertIn("audio/mp4", audio.headers.get("content-type", ""))
+                # Default is inline so <audio>/<video> can stream it.
+                self.assertTrue(
+                    audio.headers.get("content-disposition", "").startswith("inline;")
+                )
+
+                # ?download=1 flips it to attachment for the download button.
+                attachment = self._request(
+                    "GET", f"/api/transcription/jobs/{job.job_id}/audio?download=1"
+                )
+                self.assertEqual(attachment.status_code, 200)
+                disposition = attachment.headers.get("content-disposition", "")
+                self.assertTrue(disposition.startswith("attachment;"))
+                self.assertIn("meeting.m4a", disposition)
+            finally:
+                transcription_router.transcription_service.jobs_dir = original_jobs_dir
+
+    def test_transcription_job_audio_download_handles_non_ascii_filename(self) -> None:
+        """A Chinese filename must survive as filename*, and the latin-1 fallback
+        must still be a usable name rather than a bare ".m4a" dotfile."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            jobs_dir = Path(tmp_dir) / "jobs"
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+            audio_path = Path(tmp_dir) / "meeting.m4a"
+            audio_path.write_bytes(b"m4a-demo")
+            original_jobs_dir = transcription_router.transcription_service.jobs_dir
+            transcription_router.transcription_service.jobs_dir = jobs_dir
+            try:
+                job = asyncio.run(
+                    transcription_router.transcription_service.prepare_long_transcription_job(
+                        audio_path,
+                        "会议录音.m4a",
+                    )
+                )
+
+                attachment = self._request(
+                    "GET", f"/api/transcription/jobs/{job.job_id}/audio?download=1"
+                )
+                self.assertEqual(attachment.status_code, 200)
+                disposition = attachment.headers.get("content-disposition", "")
+                self.assertTrue(disposition.startswith("attachment;"))
+                # Real name carried percent-encoded via RFC 5987.
+                self.assertIn("filename*=UTF-8''", disposition)
+                self.assertIn(quote("会议录音.m4a"), disposition)
+                # ASCII fallback keeps a stem instead of collapsing to ".m4a".
+                self.assertIn('filename="audio.m4a"', disposition)
             finally:
                 transcription_router.transcription_service.jobs_dir = original_jobs_dir
 

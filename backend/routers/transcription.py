@@ -767,7 +767,7 @@ async def download_transcription_job_transcript(job_id: str) -> Response:
         404: {"description": "Audio file not found.", "model": StructuredErrorResponse},
     },
 )
-async def download_transcription_job_audio(request: Request, job_id: str):
+async def download_transcription_job_audio(request: Request, job_id: str, download: bool = False):
     import anyio # type: ignore
     from fastapi.responses import FileResponse, StreamingResponse # type: ignore
     job = transcription_service.get_job(job_id)
@@ -799,8 +799,18 @@ async def download_transcription_job_audio(request: Request, job_id: str):
     # raw would raise on encode and kill the response. Fall back to an ASCII
     # name and carry the real one via RFC 5987 filename*.
     ascii_name = unicodedata.normalize("NFKD", filename).encode("ascii", "ignore").decode("ascii")
-    ascii_name = ascii_name.replace('"', "").replace("\\", "").strip() or f"audio{audio_path.suffix}"
-    disposition = f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(filename)}'
+    ascii_name = ascii_name.replace('"', "").replace("\\", "").strip()
+    # An all-CJK name strips down to just the extension (".m4a"), which reads as a
+    # dotfile to clients that ignore filename*. Note pathlib is no help here:
+    # Path(".m4a").stem is ".m4a", not "" — so test the leading dot directly.
+    if not ascii_name or ascii_name.startswith("."):
+        ascii_name = f"audio{audio_path.suffix}"
+    # Default is inline so <audio>/<video> can stream it; ?download=1 flips it to
+    # attachment for the transport bar's download button.
+    disposition_type = "attachment" if download else "inline"
+    disposition = (
+        f'{disposition_type}; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(filename)}'
+    )
 
     headers = {
         "Accept-Ranges": "bytes",

@@ -7681,11 +7681,32 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-shrink: 0;
 }
 
-.vsSeek::-webkit-slider-runnable-track,
+.vsSeek::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  /* WebKit has no ::-moz-range-progress equivalent, so the played portion is
+   * painted as a hard-stop gradient driven by the --vs-fill custom property. */
+  background: linear-gradient(
+    to right,
+    var(--brand) 0 var(--vs-fill, 0%),
+    color-mix(in oklab, var(--brand) 16%, var(--line-strong)) var(--vs-fill, 0%) 100%
+  );
+}
+
 .vsVolume::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--brand) 16%, var(--line-strong));
+  background: linear-gradient(
+    to right,
+    var(--brand) 0 var(--vs-fill, 0%),
+    color-mix(in oklab, var(--brand) 16%, var(--line-strong)) var(--vs-fill, 0%) 100%
+  );
+}
+
+.vsSeek:disabled,
+.vsSeek:disabled::-webkit-slider-thumb {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .vsSeek::-moz-range-track,
@@ -7779,17 +7800,43 @@ button.vsPasswordToggleBtn:focus-visible {
   min-height: 46px;
 }
 
+/*
+ * Search lives on its own row under the toolbar. Sharing the toolbar line with
+ * the five 34px tool buttons squeezed the input to near-zero width inside the
+ * narrow (minmax(340px, 1fr)) subtitle panel, which is what made it unusable.
+ */
+.vsSubtitleSearchRow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(98, 76, 54, 0.08);
+  background: rgba(255, 251, 245, 0.5);
+}
+
 .vsSubtitleSearch {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid color-mix(in oklab, var(--brand) 30%, var(--line));
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--line);
   color: var(--muted);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vsSubtitleSearch:focus-within {
+  border-color: color-mix(in oklab, var(--brand) 45%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 14%, transparent);
+}
+
+.vsSubtitleSearchIcon {
+  flex-shrink: 0;
 }
 
 .vsSubtitleSearch input {
@@ -7803,12 +7850,44 @@ button.vsPasswordToggleBtn:focus-visible {
   font-family: inherit;
 }
 
+.vsSubtitleSearch input::placeholder {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
 .vsSubtitleSearchCount {
   font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.vsSubtitleSearchCount.empty {
+  color: #b45309;
+}
+
+.vsSearchNavBtn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-card, #fff);
+  color: var(--muted);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.vsSearchNavBtn:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--brand-soft) 70%, transparent);
+  border-color: color-mix(in oklab, var(--brand) 24%, transparent);
+  color: var(--brand-dark);
+}
+
+.vsSearchNavBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .vsSubtitleTools {
@@ -7817,6 +7896,63 @@ button.vsPasswordToggleBtn:focus-visible {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+/* Download / seek failure notice under the transport bar. */
+.vsPlayerAlert {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+}
+
+.vsPlayerAlert > span {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.vsPlayerAlertClose {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+.vsPlayerAlertClose:hover {
+  background: rgba(146, 64, 14, 0.12);
+}
+
+/* Same notice pinned inside the subtitle panel when playback is unavailable. */
+.vsPlayerAlert.vsPlayerAlertTop {
+  border-radius: 0;
+  border-width: 0 0 1px 0;
+}
+
+.vsSpin {
+  animation: vsSpin 0.9s linear infinite;
+}
+
+@keyframes vsSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vsSpin {
+    animation: none;
+  }
 }
 
 /*

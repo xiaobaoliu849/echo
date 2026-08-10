@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Download,
   FileText,
+  Loader2,
   LocateFixed,
   Maximize,
   Pause,
@@ -13,12 +14,14 @@ import {
   RotateCcw,
   RotateCw,
   Search,
+  TriangleAlert,
   Volume2,
   VolumeX,
   X,
 } from "lucide-react";
 import type { WordTimestamp } from "../../api";
 import { useI18n } from "../../i18n";
+import { downloadBinaryFile } from "../../utils/desktopFileSave";
 import { buildCues, normalizeWords, type SubtitleCue } from "../../utils/subtitleGenerator";
 
 type Props = {
@@ -151,7 +154,12 @@ const CueRow = memo(function CueRow({
       className={`vsSubtitleCue ${active ? "active" : ""} ${
         matchState === 2 ? "match-current" : matchState === 1 ? "match" : ""
       }`}
-      onClick={() => onSeek(cue.start)}
+      onClick={(e) => {
+        onSeek(cue.start);
+        // Drop focus so the global Space/arrow shortcuts are not swallowed by
+        // this button re-activating on the next keypress.
+        e.currentTarget.blur();
+      }}
       disabled={!seekable}
     >
       {showTime && (
@@ -171,13 +179,22 @@ type TransportBarProps = {
   rate: number;
   muted: boolean;
   volume: number;
-  sourceUrl: string;
+  downloading: boolean;
+  onDownload: () => void;
   onTogglePlay: () => void;
   onSkip: (delta: number) => void;
   onCycleRate: () => void;
   onToggleMute: () => void;
   onVolumeChange: (v: number) => void;
 };
+
+/** `--vs-fill` drives the played-portion gradient on the range tracks; WebKit
+ * (and therefore the WebView2 desktop shell) has no `::-moz-range-progress`
+ * equivalent, so without this the seek bar shows no progress at all. */
+function fillStyle(value: number, max: number): React.CSSProperties {
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  return { ["--vs-fill" as string]: `${pct}%` };
+}
 
 /** Custom transport: play/pause, ±10s skip, seek slider, speed, volume,
  * download. Keeps its own clock so the 20 Hz slider updates stay local. */
@@ -188,7 +205,8 @@ function TransportBar({
   rate,
   muted,
   volume,
-  sourceUrl,
+  downloading,
+  onDownload,
   onTogglePlay,
   onSkip,
   onCycleRate,
@@ -197,6 +215,12 @@ function TransportBar({
 }: TransportBarProps) {
   const { t } = useI18n();
   const time = useMediaClock(mediaEl);
+  // While dragging, show the thumb where the pointer is rather than where the
+  // media clock is: seeking a range-request stream lags, and snapping the thumb
+  // back to the stale currentTime on every render makes the bar fight the drag.
+  const [scrub, setScrub] = useState<number | null>(null);
+  const shownTime = scrub ?? Math.min(time, duration || time);
+  const effectiveVolume = muted ? 0 : volume;
 
   return (
     <div className="vsTransport">
@@ -232,17 +256,24 @@ function TransportBar({
 
       <span className="vsTransportDivider" aria-hidden />
 
-      <span className="vsTimeLabel current">{formatClock(time)}</span>
+      <span className="vsTimeLabel current">{formatClock(shownTime)}</span>
       <input
         type="range"
         className="vsSeek"
         min={0}
         max={duration > 0 ? duration : 0}
         step={0.1}
-        value={Math.min(time, duration || time)}
+        value={shownTime}
+        style={fillStyle(shownTime, duration)}
+        disabled={duration <= 0}
         onChange={(e) => {
-          if (mediaEl) mediaEl.currentTime = Number(e.target.value);
+          const next = Number(e.target.value);
+          setScrub(next);
+          if (mediaEl) mediaEl.currentTime = next;
         }}
+        onPointerUp={() => setScrub(null)}
+        onBlur={() => setScrub(null)}
+        onKeyUp={() => setScrub(null)}
         aria-label={t("播放进度", "Seek")}
       />
       <span className="vsTimeLabel">{formatClock(duration)}</span>
@@ -273,20 +304,26 @@ function TransportBar({
         min={0}
         max={1}
         step={0.05}
-        value={muted ? 0 : volume}
+        value={effectiveVolume}
+        style={fillStyle(effectiveVolume, 1)}
         onChange={(e) => onVolumeChange(Number(e.target.value))}
         aria-label={t("音量", "Volume")}
       />
 
-      <a
+      <button
+        type="button"
         className="vsIconBtn vsTransportBtn"
-        href={sourceUrl}
-        download
+        onClick={onDownload}
+        disabled={downloading}
         title={t("下载源文件", "Download source file")}
         aria-label={t("下载源文件", "Download source file")}
       >
-        <Download size={18} />
-      </a>
+        {downloading ? (
+          <Loader2 size={18} className="vsSpin" />
+        ) : (
+          <Download size={18} />
+        )}
+      </button>
     </div>
   );
 }
@@ -366,6 +403,10 @@ export default function TranscriptionSubtitlePlayer({
   const programmaticScrollAtRef = useRef(0);
   const userScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Bumped to re-run the match-scroll effect even when the target row index is
+  // unchanged (single-match queries, or re-pressing Enter after scrolling away).
+  const [scrollTick, setScrollTick] = useState(0);
+
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [mediaDuration, setMediaDuration] = useState(audioDuration);
@@ -373,6 +414,8 @@ export default function TranscriptionSubtitlePlayer({
   const [rate, setRate] = useState(1);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
 
   const [follow, setFollow] = useState(true);
   const [mode, setMode] = useState<"cues" | "paragraph">("cues");
@@ -384,6 +427,10 @@ export default function TranscriptionSubtitlePlayer({
 
   const video = isVideoFile(fileName);
   const hasMedia = Boolean(audioSourceUrl) && !mediaError;
+  // A job that has a source URL but whose media failed to load: distinguish it
+  // from a job with no media at all (realtime mic) so the panel can say why the
+  // player disappeared instead of silently collapsing to a transcript column.
+  const mediaFailed = Boolean(audioSourceUrl) && mediaError;
   const fontSize = FONT_SIZES[fontSizeIdx];
 
   // Normalize once here too: the karaoke lookup below binary-searches this
@@ -448,6 +495,43 @@ export default function TranscriptionSubtitlePlayer({
     []
   );
 
+  // Reset per-media state when the drawer swaps in another job. Without this a
+  // job whose audio 404s latches mediaError for every job opened afterwards,
+  // and the previous job's duration / play state / active cue bleed through.
+  // Deliberately does NOT clear rowEls: effects run after refs are attached, so
+  // wiping it here would discard the refs the new rows just registered. React
+  // calls each ref with null on unmount, which already clears stale entries.
+  useEffect(() => {
+    setMediaError(false);
+    setIsPlaying(false);
+    setActiveIndex(-1);
+    setDownloadError("");
+    // Seed from the parent (sync jobs know the duration up front); the media
+    // element overwrites this on loadedmetadata.
+    setMediaDuration(audioDuration > 0 ? audioDuration : 0);
+    userScrollingRef.current = false;
+    // audioDuration is intentionally not a dependency — this is a reset keyed
+    // on the media source, and the effect below tracks later duration updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioSourceUrl]);
+
+  // Adopt a duration that arrives after mount, until the media element reports
+  // its own (which is authoritative and set via loadedmetadata).
+  useEffect(() => {
+    if (audioDuration > 0) {
+      setMediaDuration((prev) => (prev > 0 ? prev : audioDuration));
+    }
+  }, [audioDuration]);
+
+  // Re-apply transport settings to a freshly mounted media element: <audio>/
+  // <video> are remounted on job change and reset to rate 1 / volume 1.
+  useEffect(() => {
+    if (!mediaEl) return;
+    mediaEl.playbackRate = rate;
+    mediaEl.volume = volume;
+    mediaEl.muted = muted;
+  }, [mediaEl, rate, volume, muted]);
+
   // Track the active cue via timeupdate/seeked events (no rAF loop).
   // timeupdate fires ~4 Hz which is more than sufficient since cue changes
   // happen every 3–7 seconds.  setState bails out when the index is unchanged,
@@ -467,6 +551,20 @@ export default function TranscriptionSubtitlePlayer({
     };
   }, [cues, mediaEl]);
 
+  /** Scroll a cue row to the middle of the list. Assigns scrollTop rather than
+   * calling scrollTo: the jump is instant either way, and scrollTo would also
+   * scroll ancestors (below 1080px the player grid itself scrolls). */
+  const scrollRowToCenter = useCallback((index: number) => {
+    const el = rowEls.current[index];
+    const container = listRef.current;
+    if (!el || !container) return;
+    // Stamp the upcoming scroll event as ours so handleListScroll does not
+    // mistake it for a manual scroll and suspend follow mode.
+    programmaticScrollAtRef.current = performance.now();
+    container.scrollTop =
+      el.offsetTop - container.clientHeight / 2 + el.offsetHeight / 2;
+  }, []);
+
   // Keep the active cue in view while playing: one scroll per cue change
   // (not per timeupdate), suppressed briefly after manual scrolling.
   // Use behavior: "auto" instead of "smooth" to prevent Chromium layout
@@ -474,21 +572,27 @@ export default function TranscriptionSubtitlePlayer({
   useEffect(() => {
     if (!follow || !isPlaying || activeIndex < 0 || userScrollingRef.current)
       return;
+    // An active search owns the viewport: yanking the list back to the playhead
+    // would fight the user reading through matches.
+    if (currentMatchIndex >= 0) return;
     const el = rowEls.current[activeIndex];
     const container = listRef.current;
     if (!el || !container) return;
     const cRect = container.getBoundingClientRect();
     const eRect = el.getBoundingClientRect();
     if (eRect.top < cRect.top + 48 || eRect.bottom > cRect.bottom - 48) {
-      // Stamp the upcoming scroll event as ours so handleListScroll does not
-      // mistake it for a manual scroll and suspend follow mode.
       programmaticScrollAtRef.current = performance.now();
-      container.scrollTo({
-        top: el.offsetTop - container.clientHeight * 0.3,
-        behavior: "auto",
-      });
+      container.scrollTop = el.offsetTop - container.clientHeight * 0.3;
     }
-  }, [activeIndex, follow, isPlaying]);
+  }, [activeIndex, follow, isPlaying, currentMatchIndex]);
+
+  // Reveal the current search match. An effect (rather than a call inside
+  // jumpMatch) so that it also fires for the very first match as the user
+  // types, and so row refs exist after a paragraph -> cues switch.
+  useEffect(() => {
+    if (mode !== "cues" || currentMatchIndex < 0) return;
+    scrollRowToCenter(currentMatchIndex);
+  }, [currentMatchIndex, mode, scrollTick, cues, scrollRowToCenter]);
 
   useEffect(() => {
     return () => {
@@ -508,6 +612,11 @@ export default function TranscriptionSubtitlePlayer({
           target.isContentEditable)
       )
         return;
+      // A focused control owns Space/arrows: preventDefault here would otherwise
+      // swallow the activation of whichever toolbar button the user just
+      // tabbed to. Cue rows blur themselves on pointer click so that clicking a
+      // line and then pressing Space still toggles playback.
+      if (target?.closest("button, a, [role='button']")) return;
       if (e.code === "Space") {
         e.preventDefault();
         if (mediaEl.paused) void mediaEl.play().catch(() => {});
@@ -550,10 +659,9 @@ export default function TranscriptionSubtitlePlayer({
   function locateActive() {
     userScrollingRef.current = false;
     setFollow(true);
+    setMode("cues");
     const idx = activeIndex >= 0 ? activeIndex : findCueIndex(cues, mediaEl?.currentTime ?? 0);
-    const el = rowEls.current[Math.max(0, idx)];
-    programmaticScrollAtRef.current = performance.now();
-    el?.scrollIntoView({ block: "center", behavior: "auto" });
+    scrollRowToCenter(Math.max(0, idx));
   }
 
   function jumpMatch(direction: 1 | -1) {
@@ -563,8 +671,35 @@ export default function TranscriptionSubtitlePlayer({
       matches.length;
     setMatchCursor(next);
     setMode("cues");
-    const el = rowEls.current[matches[next]];
-    el?.scrollIntoView({ block: "center", behavior: "auto" });
+    // The scroll itself is handled by the match effect; bump the tick so it
+    // re-runs even when `next` lands on the row it is already showing.
+    setScrollTick((n) => n + 1);
+    userScrollingRef.current = false;
+  }
+
+  async function handleDownloadSource() {
+    if (!audioSourceUrl || downloading) return;
+    setDownloading(true);
+    setDownloadError("");
+    // Force an attachment disposition so browsers save rather than navigate,
+    // and give the file the job's original name instead of the job id.
+    // No auth header needed: the endpoint has to stay reachable without one
+    // because the <audio>/<video> element cannot send headers either.
+    const url = `${audioSourceUrl}${audioSourceUrl.includes("?") ? "&" : "?"}download=1`;
+    const outcome = await downloadBinaryFile(url, fileName || "audio");
+    setDownloading(false);
+    if (outcome.kind === "failed") {
+      setDownloadError(
+        t(`下载失败: ${outcome.message}`, `Download failed: ${outcome.message}`)
+      );
+    }
+  }
+
+  function enterFullscreen() {
+    // requestFullscreen rejects rather than throwing synchronously; an
+    // unhandled rejection here shows up as a console error in Chromium and
+    // pywebview when the gesture is not recognised as user-activated.
+    void stageRef.current?.requestFullscreen?.().catch(() => {});
   }
 
   const handleMediaLoaded = (e: React.SyntheticEvent<HTMLMediaElement>) => {
@@ -606,7 +741,7 @@ export default function TranscriptionSubtitlePlayer({
               <button
                 type="button"
                 className="vsIconBtn vsFullscreenBtn"
-                onClick={() => stageRef.current?.requestFullscreen?.()}
+                onClick={enterFullscreen}
                 title={t("全屏", "Fullscreen")}
                 aria-label={t("全屏", "Fullscreen")}
               >
@@ -647,7 +782,8 @@ export default function TranscriptionSubtitlePlayer({
             rate={rate}
             muted={muted}
             volume={volume}
-            sourceUrl={audioSourceUrl!}
+            downloading={downloading}
+            onDownload={handleDownloadSource}
             onTogglePlay={() => {
               if (!mediaEl) return;
               if (mediaEl.paused) {
@@ -684,66 +820,51 @@ export default function TranscriptionSubtitlePlayer({
               }
             }}
           />
+
+          {downloadError && (
+            <div className="vsPlayerAlert" role="alert">
+              <TriangleAlert size={14} />
+              <span>{downloadError}</span>
+              <button
+                type="button"
+                className="vsIconBtn vsPlayerAlertClose"
+                onClick={() => setDownloadError("")}
+                aria-label={t("关闭", "Dismiss")}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       <div className="vsSubtitlePanel">
-        <div className="vsSubtitleToolbar">
-          {searchOpen && (
-            <div className="vsSubtitleSearch">
-              <Search size={15} />
-              <input
-                autoFocus
-                value={query}
-                placeholder={t("搜索字幕…", "Search subtitles…")}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setMatchCursor(0);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") jumpMatch(e.shiftKey ? -1 : 1);
-                  if (e.key === "Escape") {
-                    setQuery("");
-                    setSearchOpen(false);
-                  }
-                }}
-              />
-              {query && (
-                <span className="vsSubtitleSearchCount">
-                  {matches.length > 0
-                    ? `${Math.min(matchCursor + 1, matches.length)}/${matches.length}`
-                    : "0/0"}
-                </span>
+        {mediaFailed && (
+          <div className="vsPlayerAlert vsPlayerAlertTop" role="alert">
+            <TriangleAlert size={14} />
+            <span>
+              {t(
+                "源音频无法播放（文件可能已被移动或删除），以下仍可阅读文稿。",
+                "The source audio could not be played (the file may have been moved or deleted). The transcript is still available below."
               )}
-              <button
-                type="button"
-                className="vsIconBtn vsToolBtn"
-                onClick={() => jumpMatch(-1)}
-                disabled={matches.length === 0}
-                title={t("上一个匹配", "Previous match")}
-              >
-                <ChevronUp size={16} />
-              </button>
-              <button
-                type="button"
-                className="vsIconBtn vsToolBtn"
-                onClick={() => jumpMatch(1)}
-                disabled={matches.length === 0}
-                title={t("下一个匹配", "Next match")}
-              >
-                <ChevronDown size={16} />
-              </button>
-            </div>
-          )}
+            </span>
+          </div>
+        )}
+        <div className="vsSubtitleToolbar">
           <div className="vsSubtitleTools">
             <button
               type="button"
               className={`vsIconBtn vsToolBtn ${searchOpen ? "active" : ""}`}
               onClick={() => {
                 setSearchOpen((v) => !v);
-                if (searchOpen) setQuery("");
+                if (searchOpen) {
+                  setQuery("");
+                  setMatchCursor(0);
+                }
               }}
               title={t("搜索字幕", "Search subtitles")}
+              aria-label={t("搜索字幕", "Search subtitles")}
+              aria-expanded={searchOpen}
             >
               {searchOpen ? <X size={18} /> : <Search size={18} />}
             </button>
@@ -757,6 +878,7 @@ export default function TranscriptionSubtitlePlayer({
                     userScrollingRef.current = false;
                   }}
                   title={t("跟随播放自动滚动", "Auto-scroll with playback")}
+                  aria-pressed={follow}
                 >
                   <Captions size={18} />
                 </button>
@@ -765,6 +887,7 @@ export default function TranscriptionSubtitlePlayer({
                   className="vsIconBtn vsToolBtn"
                   onClick={locateActive}
                   title={t("回到当前字幕", "Jump to current cue")}
+                  aria-label={t("回到当前字幕", "Jump to current cue")}
                 >
                   <LocateFixed size={18} />
                 </button>
@@ -781,6 +904,7 @@ export default function TranscriptionSubtitlePlayer({
                   ? t("切换为段落阅读", "Switch to paragraph view")
                   : t("切换为字幕列表", "Switch to subtitle list")
               }
+              aria-pressed={mode === "paragraph"}
             >
               {mode === "cues" ? <FileText size={18} /> : <Captions size={18} />}
             </button>
@@ -789,6 +913,8 @@ export default function TranscriptionSubtitlePlayer({
               className={`vsIconBtn vsToolBtn ${showTime ? "active" : ""}`}
               onClick={() => setShowTime((v) => !v)}
               title={t("显示/隐藏时间戳", "Toggle timestamps")}
+              aria-label={t("显示/隐藏时间戳", "Toggle timestamps")}
+              aria-pressed={showTime}
             >
               <span className="vsToolBtnClock">00:00</span>
             </button>
@@ -797,15 +923,81 @@ export default function TranscriptionSubtitlePlayer({
               className="vsIconBtn vsToolBtn"
               onClick={() => setFontSizeIdx((i) => (i + 1) % FONT_SIZES.length)}
               title={t("调整字号", "Cycle font size")}
+              aria-label={t("调整字号", "Cycle font size")}
             >
               <ALargeSmall size={18} />
             </button>
           </div>
         </div>
 
+        {/* Own row rather than sharing the toolbar line: at the panel's
+         * minmax(340px, 1fr) width the input was squeezed to a few pixels
+         * between the five tool buttons and became untypeable. */}
+        {searchOpen && (
+          <div className="vsSubtitleSearchRow">
+            <div className="vsSubtitleSearch">
+              <Search size={15} className="vsSubtitleSearchIcon" />
+              <input
+                autoFocus
+                value={query}
+                placeholder={t("搜索字幕…", "Search subtitles…")}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setMatchCursor(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    // Match 1 is already revealed by the match effect as the
+                    // user types, so Enter advances — same as find-in-page.
+                    e.preventDefault();
+                    jumpMatch(e.shiftKey ? -1 : 1);
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setQuery("");
+                    setMatchCursor(0);
+                    setSearchOpen(false);
+                  }
+                }}
+              />
+              {query && (
+                <span
+                  className={`vsSubtitleSearchCount ${
+                    matches.length === 0 ? "empty" : ""
+                  }`}
+                >
+                  {matches.length > 0
+                    ? `${Math.min(matchCursor + 1, matches.length)}/${matches.length}`
+                    : t("无结果", "No results")}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="vsIconBtn vsSearchNavBtn"
+              onClick={() => jumpMatch(-1)}
+              disabled={matches.length === 0}
+              title={t("上一个匹配", "Previous match")}
+              aria-label={t("上一个匹配", "Previous match")}
+            >
+              <ChevronUp size={16} />
+            </button>
+            <button
+              type="button"
+              className="vsIconBtn vsSearchNavBtn"
+              onClick={() => jumpMatch(1)}
+              disabled={matches.length === 0}
+              title={t("下一个匹配", "Next match")}
+              aria-label={t("下一个匹配", "Next match")}
+            >
+              <ChevronDown size={16} />
+            </button>
+          </div>
+        )}
+
         {mode === "paragraph" ? (
           <div className="vsTranscriptParagraph custom-scrollbar" style={{ fontSize }}>
-            {transcript}
+            {highlightText(transcript, query.trim())}
           </div>
         ) : (
           <div

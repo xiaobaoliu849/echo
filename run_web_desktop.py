@@ -823,13 +823,39 @@ class DesktopJsApi:
 
         return {"ok": True, "cancelled": False, "path": str(output_path)}
 
+    _MEDIA_FILE_TYPES: dict[str, str] = {
+        ".mp3": "MP3 Audio (*.mp3)",
+        ".wav": "WAV Audio (*.wav)",
+        ".m4a": "M4A Audio (*.m4a)",
+        ".aac": "AAC Audio (*.aac)",
+        ".flac": "FLAC Audio (*.flac)",
+        ".ogg": "OGG Audio (*.ogg)",
+        ".opus": "Opus Audio (*.opus)",
+        ".webm": "WebM Media (*.webm)",
+        ".mp4": "MP4 Video (*.mp4)",
+        ".mov": "QuickTime Video (*.mov)",
+        ".mkv": "Matroska Video (*.mkv)",
+    }
+
     def save_audio_file(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Save an audio blob sent from the web UI through the native file dialog."""
+        """Save an audio/video blob sent from the web UI through the native dialog.
+
+        The extension follows the payload filename so that downloading a job's
+        source media (which may be .wav/.m4a/.mp4/...) does not get renamed to
+        .mp3 and handed to a player that then refuses to open it. TTS exports
+        omit a known extension and still default to .mp3.
+        """
+        raw_name = ""
+        if isinstance(payload, dict):
+            raw_name = str(payload.get("filename") or "")
+        extension = Path(raw_name).suffix.lower()
+        if extension not in self._MEDIA_FILE_TYPES:
+            extension = ".mp3"
         return self._save_bytes_via_dialog(
             payload=payload,
-            default_name="voicespirit_tts.mp3",
-            extension=".mp3",
-            file_types=("MP3 Audio (*.mp3)", "All files (*.*)"),
+            default_name=f"voicespirit_audio{extension}",
+            extension=extension,
+            file_types=(self._MEDIA_FILE_TYPES[extension], "All files (*.*)"),
             empty_message="Audio data is empty.",
         )
 

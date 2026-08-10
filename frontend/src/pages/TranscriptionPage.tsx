@@ -27,6 +27,21 @@ function isPollingStatus(status?: string): boolean {
   return status === "submitted" || status === "running" || status === "queued";
 }
 
+/** The backend hands back a root-relative `/api/transcription/jobs/{id}/audio`
+ * whenever the source file still exists locally. That resolves against the SPA
+ * origin, which is only the API origin in packaged/desktop mode — under
+ * `npm run dev` the app is on :5173 with no proxy, so the player would request
+ * the audio from Vite and get an HTML 404 back. Absolute URLs (remote sources)
+ * are passed through untouched.
+ *
+ * Applied where the URL is consumed, not where the job is built: history is
+ * persisted to localStorage, and storing an absolute URL there would pin saved
+ * jobs to whichever origin happened to be in use when they were transcribed. */
+function resolveSourceUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  return /^https?:\/\//i.test(url) ? url : `${API_BASE_URL}${url}`;
+}
+
 /** Local uploads above this size skip the blocking sync request and run as a
  * background chunked job instead (the backend splits long audio / extracts
  * video audio tracks with ffmpeg, then transcribes chunk by chunk). */
@@ -200,7 +215,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
         has_transcript: true,
         memory_saved: resp.memory_saved,
         provider: resp.provider ?? null,
-        source_url: resp.source_url ? (resp.source_url.startsWith("http") ? resp.source_url : `${API_BASE_URL}${resp.source_url}`) : undefined,
+        source_url: resp.source_url,
         updated_at: new Date().toISOString(),
       };
 
@@ -486,7 +501,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
         isBusy={isBusy}
         detailLoading={detailLoading}
         audioDuration={audioDuration}
-        audioSourceUrl={job?.source_url ? job.source_url : undefined}
+        audioSourceUrl={resolveSourceUrl(job?.source_url)}
         error={error}
         infoMessage={infoMessage}
         language={language}
