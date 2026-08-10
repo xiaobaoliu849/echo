@@ -1,12 +1,14 @@
 """Realtime voice service — facade composing per-provider mixins.
 
 This module is the single public entry-point for realtime voice sessions.
-Provider-specific logic lives in four mixin modules:
+Provider-specific logic lives in the mixin modules:
 
 - ``realtime_google_provider``    — Google Gemini Live
 - ``realtime_dashscope_provider`` — DashScope Qwen-Omni (SDK)
 - ``realtime_openai_provider``    — OpenAI Realtime
 - ``realtime_qwen_audio_provider``— Qwen-Audio (raw WebSocket)
+- ``realtime_doubao_provider``    — Doubao OpenSpeech dialogue
+- ``realtime_personaplex_provider``— PersonaPlex (local moshi server)
 
 Shared infrastructure (interruption arbitration, output delivery, turn
 finalization, event emission) stays here.  All names that external code
@@ -81,6 +83,12 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     DEFAULT_OPENAI_REALTIME_VOICE,
     DEFAULT_DOUBAO_REALTIME_MODEL,
     DEFAULT_DOUBAO_REALTIME_VOICE,
+    DEFAULT_PERSONAPLEX_REALTIME_MODEL,
+    DEFAULT_PERSONAPLEX_REALTIME_VOICE,
+    DEFAULT_PERSONAPLEX_SERVER_URL,
+    PERSONAPLEX_REALTIME_INSTRUCTIONS,
+    PERSONAPLEX_REALTIME_VOICES,
+    PERSONAPLEX_SAMPLE_RATE,
     DEFAULT_QWEN_AUDIO_REALTIME_VOICE,
     DEFAULT_QWEN_OMNI_REALTIME_VOICE,
     DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE,
@@ -105,6 +113,7 @@ from .realtime_dashscope_provider import DashScopeRealtimeMixin
 from .realtime_openai_provider import OpenAIRealtimeMixin
 from .realtime_qwen_audio_provider import QwenAudioRealtimeMixin
 from .realtime_doubao_provider import DoubaoRealtimeMixin
+from .realtime_personaplex_provider import PersonaPlexRealtimeMixin
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +128,11 @@ class RealtimeVoiceService(
     OpenAIRealtimeMixin,
     QwenAudioRealtimeMixin,
     DoubaoRealtimeMixin,
+    PersonaPlexRealtimeMixin,
 ):
     """Orchestrates realtime voice sessions across multiple providers.
 
-    Provider-specific streaming logic is inherited from the four mixins.
+    Provider-specific streaming logic is inherited from the mixins.
     This class provides the shared infrastructure: interruption arbitration,
     output delivery, turn/memory finalization, settings resolution, and the
     WebSocket event emitter.

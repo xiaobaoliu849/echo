@@ -56,6 +56,7 @@ export const GOOGLE_PROVIDER = "Google";
 export const DASHSCOPE_PROVIDER = "DashScope";
 export const OPENAI_PROVIDER = "OpenAI";
 export const DOUBAO_PROVIDER = "Doubao";
+export const PERSONAPLEX_PROVIDER = "PersonaPlex";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 // The legacy gemini-2.5-flash-native-audio-preview-12-2025 model has been retired;
@@ -64,6 +65,7 @@ export const DEFAULT_GOOGLE_MODEL = GOOGLE_FLASH_LIVE_MODEL;
 export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
+export const DEFAULT_PERSONAPLEX_MODEL = "personaplex-7b-v1-bnb-4bit";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
   "native-audio",
   "live",
@@ -354,6 +356,34 @@ export function isQwenAudioModel(model: string | undefined): boolean {
   return !!(model && model.toLowerCase().includes("qwen-audio"));
 }
 
+// Voice prompts shipped in the PersonaPlex voices.tgz bundle. NAT* are
+// natural-sounding reads, VAR* are more expressive. The model is English-only,
+// so these are all English voices and the labels stay untranslated.
+export const PERSONAPLEX_REALTIME_VOICES = [
+  { value: "NATF2.pt", label: "NATF2 · Natural (Female)", description: "自然平实的女声，默认口语陪练音色" },
+  { value: "NATF0.pt", label: "NATF0 · Natural (Female)", description: "自然平实的女声" },
+  { value: "NATF1.pt", label: "NATF1 · Natural (Female)", description: "自然平实的女声" },
+  { value: "NATF3.pt", label: "NATF3 · Natural (Female)", description: "自然平实的女声" },
+  { value: "NATM0.pt", label: "NATM0 · Natural (Male)", description: "自然平实的男声" },
+  { value: "NATM1.pt", label: "NATM1 · Natural (Male)", description: "自然平实的男声" },
+  { value: "NATM2.pt", label: "NATM2 · Natural (Male)", description: "自然平实的男声" },
+  { value: "NATM3.pt", label: "NATM3 · Natural (Male)", description: "自然平实的男声" },
+  { value: "VARF0.pt", label: "VARF0 · Expressive (Female)", description: "表现力更强的女声" },
+  { value: "VARF1.pt", label: "VARF1 · Expressive (Female)", description: "表现力更强的女声" },
+  { value: "VARF2.pt", label: "VARF2 · Expressive (Female)", description: "表现力更强的女声" },
+  { value: "VARF3.pt", label: "VARF3 · Expressive (Female)", description: "表现力更强的女声" },
+  { value: "VARF4.pt", label: "VARF4 · Expressive (Female)", description: "表现力更强的女声" },
+  { value: "VARM0.pt", label: "VARM0 · Expressive (Male)", description: "表现力更强的男声" },
+  { value: "VARM1.pt", label: "VARM1 · Expressive (Male)", description: "表现力更强的男声" },
+  { value: "VARM2.pt", label: "VARM2 · Expressive (Male)", description: "表现力更强的男声" },
+  { value: "VARM3.pt", label: "VARM3 · Expressive (Male)", description: "表现力更强的男声" },
+  { value: "VARM4.pt", label: "VARM4 · Expressive (Male)", description: "表现力更强的男声" },
+];
+
+// Must stay in sync with DEFAULT_PERSONAPLEX_REALTIME_VOICE in the backend's
+// realtime_constants.py — the backend falls back to it for unknown voices.
+export const DEFAULT_PERSONAPLEX_VOICE = "NATF2.pt";
+
 export function formatVoiceOptionLabel(label: string, language: UiLanguage): string {
   if (language === "en-US") {
     return label;
@@ -371,6 +401,8 @@ export function formatRealtimeVoiceOptions(
   let options: Array<{ value: string; label: string; description?: string }>;
   if (provider === DOUBAO_PROVIDER) {
     options = DOUBAO_REALTIME_VOICES;
+  } else if (provider === PERSONAPLEX_PROVIDER) {
+    options = PERSONAPLEX_REALTIME_VOICES;
   } else if (provider === DASHSCOPE_PROVIDER) {
     if (isQwenAudioModel(model)) {
       options = QWEN_AUDIO_VOICES;
@@ -430,7 +462,13 @@ export function formatLiveTranslateLanguageOptions(language: UiLanguage): Array<
 }
 
 export function resolveRealtimeProvider(preferredProvider: string | undefined, providerOptions: string[]): string {
-  const realtimeProviders = [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER];
+  const realtimeProviders = [
+    GOOGLE_PROVIDER,
+    DASHSCOPE_PROVIDER,
+    OPENAI_PROVIDER,
+    DOUBAO_PROVIDER,
+    PERSONAPLEX_PROVIDER,
+  ];
   if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
     return preferredProvider;
   }
@@ -460,6 +498,11 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
     return false;
   }
   if (normalizedProvider === DOUBAO_PROVIDER.toLowerCase()) {
+    return true;
+  }
+  if (normalizedProvider === PERSONAPLEX_PROVIDER.toLowerCase()) {
+    // PersonaPlex only ships realtime speech-to-speech weights, so any model
+    // configured under this provider is a realtime voice model.
     return true;
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
@@ -506,6 +549,9 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   if (provider === DOUBAO_PROVIDER) {
     return DEFAULT_DOUBAO_MODEL;
   }
+  if (provider === PERSONAPLEX_PROVIDER) {
+    return DEFAULT_PERSONAPLEX_MODEL;
+  }
   return "";
 }
 
@@ -546,7 +592,16 @@ export function resolveRealtimeModelOptions(
   const doubaoBuiltIns = provider === DOUBAO_PROVIDER
     ? [DEFAULT_DOUBAO_MODEL]
     : [];
-  const allBuiltIns = [...googleBuiltIns, ...openaiBuiltIns, ...dashscopeBuiltIns, ...doubaoBuiltIns];
+  const personaplexBuiltIns = provider === PERSONAPLEX_PROVIDER
+    ? [DEFAULT_PERSONAPLEX_MODEL]
+    : [];
+  const allBuiltIns = [
+    ...googleBuiltIns,
+    ...openaiBuiltIns,
+    ...dashscopeBuiltIns,
+    ...doubaoBuiltIns,
+    ...personaplexBuiltIns,
+  ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];
   return [...new Set(ordered.filter(Boolean))];
 }
