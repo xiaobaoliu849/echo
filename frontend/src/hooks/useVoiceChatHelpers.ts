@@ -380,6 +380,10 @@ export const PERSONAPLEX_REALTIME_VOICES = [
   { value: "VARM4.pt", label: "VARM4 · Expressive (Male)", description: "表现力更强的男声" },
 ];
 
+// Must stay in sync with DEFAULT_PERSONAPLEX_REALTIME_VOICE in the backend's
+// realtime_constants.py — the backend falls back to it for unknown voices.
+export const DEFAULT_PERSONAPLEX_VOICE = "NATF2.pt";
+
 export function formatVoiceOptionLabel(label: string, language: UiLanguage): string {
   if (language === "en-US") {
     return label;
@@ -458,7 +462,13 @@ export function formatLiveTranslateLanguageOptions(language: UiLanguage): Array<
 }
 
 export function resolveRealtimeProvider(preferredProvider: string | undefined, providerOptions: string[]): string {
-  const realtimeProviders = [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER];
+  const realtimeProviders = [
+    GOOGLE_PROVIDER,
+    DASHSCOPE_PROVIDER,
+    OPENAI_PROVIDER,
+    DOUBAO_PROVIDER,
+    PERSONAPLEX_PROVIDER,
+  ];
   if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
     return preferredProvider;
   }

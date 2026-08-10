@@ -22,6 +22,7 @@ import { createMessageId, ensureMessageIds } from "../utils/messageId";
 import {
   DASHSCOPE_PROVIDER,
   DEFAULT_DASHSCOPE_MODEL,
+  DEFAULT_PERSONAPLEX_VOICE,
   DOUBAO_PROVIDER,
   DOUBAO_REALTIME_VOICES,
   EMPTY_VOICE_CHAT_METRICS,
@@ -29,6 +30,8 @@ import {
   GOOGLE_REALTIME_VOICES,
   OPENAI_PROVIDER,
   OPENAI_REALTIME_VOICES,
+  PERSONAPLEX_PROVIDER,
+  PERSONAPLEX_REALTIME_VOICES,
   QWEN_AUDIO_VOICES,
   QWEN_LIVETRANSLATE_VOICES,
   QWEN_OMNI_REALTIME_VOICES,
@@ -66,7 +69,8 @@ export default function useVoiceChat({
 }: Options) {
   const t = createInlineTranslator(language);
   const resolvedProviders = useMemo(
-    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER].filter(p => providerOptions.includes(p)),
+    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, PERSONAPLEX_PROVIDER]
+      .filter(p => providerOptions.includes(p)),
     [providerOptions],
   );
 
@@ -260,6 +264,10 @@ export default function useVoiceChat({
     } else if (voiceChatProvider === DOUBAO_PROVIDER) {
       if (!DOUBAO_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice("zh_female_vv_jupiter_bigtts");
+      }
+    } else if (voiceChatProvider === PERSONAPLEX_PROVIDER) {
+      if (!PERSONAPLEX_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
+        setVoiceChatVoice(DEFAULT_PERSONAPLEX_VOICE);
       }
     } else if (voiceChatProvider === GOOGLE_PROVIDER) {
       if (!GOOGLE_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
