@@ -20,9 +20,10 @@ if not exist "%PYTHON_EXE%" (
 )
 
 "%PYTHON_EXE%" -m moshi.server ^
+    --host 127.0.0.1 ^
+    --port 8998 ^
     --moshi-weight "C:\pp-eval\model_bnb_4bit.pt" ^
     --quantize-4bit ^
-    --voice-prompt-dir "C:\pp-eval\voices\voices" ^
-    --port 8998
+    --voice-prompt-dir "C:\pp-eval\voices\voices"
 
 pause
