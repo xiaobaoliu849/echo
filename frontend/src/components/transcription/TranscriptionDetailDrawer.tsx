@@ -211,6 +211,7 @@ export default function TranscriptionDetailDrawer({
           words={words || []}
           audioSourceUrl={audioSourceUrl}
           audioDuration={audioDuration}
+          fileName={job?.file_name}
           onAudioDurationChange={onAudioDurationChange}
         />
       ) : isBusy ? (

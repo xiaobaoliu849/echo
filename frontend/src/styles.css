@@ -7317,69 +7317,403 @@ button.vsPasswordToggleBtn:focus-visible {
   gap: 16px;
 }
 
-/* ── Synced subtitle player ── */
-.vsSubtitlePlayer {
+/* ── Synced subtitle player (memo-style split layout) ── */
+.vsPlayerGrid {
   flex: 1;
   min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr);
+  gap: 16px;
+  padding: 16px 24px 12px;
+  overflow: hidden;
+}
+
+.vsPlayerGrid.no-media {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.vsPlayerGrid.no-media .vsSubtitlePanel {
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Media panel (left) ── */
+.vsMediaPanel {
   display: flex;
   flex-direction: column;
-  padding: 16px 24px 8px;
+  min-height: 0;
+  min-width: 0;
+  gap: 12px;
 }
 
-.vsSubtitlePlayerTransport {
-  display: flex;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-bottom: 12px;
-}
-
-.vsSubtitlePlayerTransport audio {
-  width: 100%;
-  max-width: 720px;
-  height: 40px;
-  border-radius: 8px;
-  outline: none;
-}
-
-.vsSubtitleNow {
-  flex-shrink: 0;
-  max-width: 720px;
-  width: 100%;
-  margin: 0 auto 12px;
-  min-height: 52px;
+.vsMediaStage {
+  position: relative;
+  background: #0d0b16;
+  border-radius: 14px;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  padding: 8px 16px;
-  border-radius: 12px;
-  background: rgba(107, 76, 246, 0.06);
-  border: 1px solid rgba(107, 76, 246, 0.12);
+  aspect-ratio: 16 / 9;
+  max-height: 100%;
+  box-shadow: 0 8px 28px rgba(20, 12, 40, 0.18);
 }
 
-.vsSubtitleNowText {
-  font-size: 16px;
+.vsMediaStage video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  outline: none;
+}
+
+.vsFullscreenBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(10, 8, 20, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.vsMediaStage:hover .vsFullscreenBtn {
+  opacity: 1;
+}
+
+.vsFullscreenBtn:hover {
+  background: rgba(10, 8, 20, 0.8);
+}
+
+/* Audio card: brand-tinted stage with equalizer + karaoke line */
+.vsAudioCard {
+  flex: 1;
+  min-height: 200px;
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 140% at 15% 0%, rgba(107, 76, 246, 0.16), transparent 55%),
+    linear-gradient(160deg, rgba(107, 76, 246, 0.1), rgba(255, 251, 245, 0.9) 70%);
+  border: 1px solid rgba(107, 76, 246, 0.14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 28px 24px;
+}
+
+.vsAudioCardName {
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.6;
-  color: var(--brand-dark);
+  color: var(--muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.vsSubtitleNowPlaceholder {
+.vsEq {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 34px;
+}
+
+.vsEqBar {
+  width: 5px;
+  height: 30%;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--brand), var(--brand-dark));
+  animation: vsEqBounce 1.1s ease-in-out infinite;
+  animation-play-state: paused;
+  opacity: 0.85;
+}
+
+.vsEq.playing .vsEqBar {
+  animation-play-state: running;
+}
+
+@keyframes vsEqBounce {
+  0%, 100% { height: 22%; }
+  35% { height: 95%; }
+  70% { height: 45%; }
+}
+
+/* Karaoke "now" line — card variant sits inside the audio card,
+ * overlay variant floats over the video. */
+.vsNowLine {
+  max-width: 100%;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.vsNowLine.card {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+}
+
+.vsNowLine.card .vsNowLineText {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.vsNowLine.card .vsNowWord.spoken {
+  color: var(--brand);
+}
+
+.vsNowLine.overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: 86%;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: rgba(8, 6, 16, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.vsNowLine.overlay .vsNowLineText {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.vsNowLine.overlay .vsNowWord.spoken {
+  color: #ffd166;
+}
+
+.vsNowLinePlaceholder {
   font-size: 13px;
   color: var(--muted);
+}
+
+.vsNowWord {
+  transition: color 0.15s ease;
+}
+
+/* ── Custom transport bar ── */
+.vsTransport {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(98, 76, 54, 0.1);
+  box-shadow: 0 2px 10px rgba(98, 76, 54, 0.05);
+}
+
+.vsTransportBtn {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-decoration: none;
+}
+
+.vsTransportBtn:hover {
+  background: rgba(107, 76, 246, 0.1);
+  color: var(--brand);
+}
+
+.vsTransportSkipLabel {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.vsTransportPlay {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(107, 76, 246, 0.35);
+  transition: transform 0.12s, box-shadow 0.15s, background 0.15s;
+}
+
+.vsTransportPlay:hover {
+  background: var(--brand-dark);
+  transform: scale(1.05);
+}
+
+.vsTransportPlay:active {
+  transform: scale(0.96);
+}
+
+.vsSeek {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--brand);
+  cursor: pointer;
+  height: 4px;
+}
+
+.vsVolume {
+  width: 64px;
+  flex-shrink: 0;
+  accent-color: var(--brand);
+  cursor: pointer;
+  height: 4px;
+}
+
+.vsTimeLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.vsRateBtn {
+  width: auto;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Subtitle panel (right) ── */
+.vsSubtitlePanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(98, 76, 54, 0.09);
+  overflow: hidden;
+}
+
+.vsSubtitleToolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(98, 76, 54, 0.08);
+  background: rgba(255, 251, 245, 0.7);
+  min-height: 46px;
+}
+
+.vsSubtitleSearch {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid rgba(107, 76, 246, 0.25);
+  color: var(--muted);
+}
+
+.vsSubtitleSearch input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.vsSubtitleSearchCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.vsSubtitleTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.vsToolBtn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.vsToolBtn:hover:not(:disabled) {
+  background: rgba(107, 76, 246, 0.1);
+  color: var(--brand);
+}
+
+.vsToolBtn.active {
+  background: rgba(107, 76, 246, 0.14);
+  color: var(--brand);
+}
+
+.vsToolBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.vsToolBtnClock {
+  font-size: 9px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .vsSubtitleList {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-width: 720px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 4px 4px 24px;
+  position: relative;
+  padding: 8px 8px 24px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .vsSubtitleCue {
@@ -7388,8 +7722,8 @@ button.vsPasswordToggleBtn:focus-visible {
   gap: 12px;
   text-align: left;
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid transparent;
+  padding: 8px 12px;
+  border: none;
   border-left: 3px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -7399,8 +7733,7 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsSubtitleCue:hover {
-  background: rgba(98, 76, 54, 0.04);
-  border-color: rgba(98, 76, 54, 0.08);
+  background: rgba(98, 76, 54, 0.05);
 }
 
 .vsSubtitleCue:disabled {
@@ -7409,26 +7742,31 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsSubtitleCueTime {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  min-width: 44px;
+  min-width: 42px;
+  padding-top: 2px;
 }
 
 .vsSubtitleCueText {
   flex: 1;
-  font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--text);
   word-break: break-word;
 }
 
+.vsSubtitleCueText mark {
+  background: rgba(255, 209, 102, 0.55);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
 .vsSubtitleCue.active {
-  background: rgba(107, 76, 246, 0.07);
-  border-color: rgba(107, 76, 246, 0.15);
+  background: rgba(107, 76, 246, 0.08);
   border-left-color: var(--brand);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
 
 .vsSubtitleCue.active .vsSubtitleCueText {
@@ -7439,6 +7777,42 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsSubtitleCue.active .vsSubtitleCueTime {
   color: var(--brand);
   font-weight: 700;
+}
+
+.vsSubtitleCue.match-current {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 180, 0, 0.65);
+}
+
+.vsTranscriptParagraph {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px 28px;
+  line-height: 1.95;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+/* Narrow windows: stack media above subtitles */
+@media (max-width: 1080px) {
+  .vsPlayerGrid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .vsMediaPanel {
+    flex-shrink: 0;
+  }
+
+  .vsAudioCard {
+    min-height: 160px;
+    flex: none;
+  }
 }
 
 .vsTranscribeDetailFooter {
