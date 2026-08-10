@@ -15,12 +15,13 @@ if exist backend\.venv\Scripts\python.exe (
 ) else if exist backend\venv\Scripts\python.exe (
   set "PYEXE=backend\venv\Scripts\python.exe"
 ) else (
-  where py >nul 2>nul
+  py -3 -c "import sys" >nul 2>nul
   if not errorlevel 1 (
     set "PYEXE=py"
     set "PYARGS=-3"
   ) else (
     set "PYEXE=python"
+    set "PYARGS="
   )
 )
 
