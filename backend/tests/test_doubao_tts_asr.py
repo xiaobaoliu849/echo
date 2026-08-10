@@ -102,6 +102,52 @@ class TestDoubaoASR(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["additional_headers"]["X-Api-Key"], "test_key")
         self.assertNotIn("Authorization", kwargs["additional_headers"])
 
+    @patch("services.doubao_asr_provider.websockets.connect")
+    async def test_doubao_asr_words_not_duplicated_across_responses(self, mock_connect):
+        """OpenSpeech resends the whole cumulative result on every response.
+
+        Appending each one grew the word list as a triangular number: a 3.7 MB
+        upload produced 892k words for 870 real ones, which buried the subtitle
+        renderer in tens of thousands of cues and froze the UI on play.
+        """
+        import json
+        import struct
+        from services.doubao_asr_provider import doubao_asr_transcribe_file
+
+        def frame(words, *, last):
+            body = json.dumps({
+                "result": {"text": "".join(w["text"] for w in words), "utterances": [{"words": words}]},
+                "audio_info": {"duration": 3000},
+            }).encode("utf-8")
+            # flags 0 = intermediate (no sequence number), 2 = last packet.
+            hdr = _build_header(msg_type=9, flags=2 if last else 0, serialization=1, compression=0)
+            return hdr + struct.pack("!I", len(body)) + body
+
+        w1 = {"text": "hello", "start_time": 80, "end_time": 600}
+        # Separator tokens carry -1 timestamps and are not spoken words.
+        sep = {"text": " ", "start_time": -1, "end_time": -1}
+        w2 = {"text": "world", "start_time": 600, "end_time": 900}
+
+        mock_ws = AsyncMock()
+        # Three responses, each repeating everything seen so far.
+        mock_ws.recv.side_effect = [
+            frame([w1], last=False),
+            frame([w1, sep, w2], last=False),
+            frame([w1, sep, w2], last=True),
+        ]
+        mock_connect.return_value.__aenter__.return_value = mock_ws
+
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("builtins.open", unittest.mock.mock_open(read_data=b"fake_audio")):
+            res = await doubao_asr_transcribe_file("dummy.mp3", api_key="test_key")
+
+        self.assertEqual(
+            [(w["text"], w["start"], w["end"]) for w in res["words"]],
+            [("hello", 0.08, 0.6), ("world", 0.6, 0.9)],
+        )
+        starts = [w["start"] for w in res["words"]]
+        self.assertEqual(starts, sorted(starts), "word starts must stay ascending")
+
 
 if __name__ == "__main__":
     unittest.main()

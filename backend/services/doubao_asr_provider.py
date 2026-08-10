@@ -7,6 +7,7 @@ import logging
 import struct
 import uuid
 from pathlib import Path
+from typing import Any
 
 try:
     import websockets
@@ -219,7 +220,7 @@ async def doubao_asr_transcribe_file(
     }
     
     final_text = ""
-    words = []
+    words: list[dict[str, Any]] = []
     duration = None
     
     ws_header_kwargs = _get_websockets_header_kwargs(headers)
@@ -294,15 +295,43 @@ async def doubao_asr_transcribe_file(
 
                             utterances = res_obj.get("utterances") or resp_json.get("utterances") or []
                             if utterances and isinstance(utterances, list):
+                                # OpenSpeech resends the whole cumulative result on
+                                # every response, exactly like "text" above, so this
+                                # replaces the word list instead of appending to it.
+                                # Appending grew it as a triangular number over the
+                                # ~1 response-per-audio-packet stream: a 3.7 MB file
+                                # yielded 892k words for 870 real ones (1024x), which
+                                # buried the subtitle renderer in tens of thousands
+                                # of cues and froze the UI on play.
+                                parsed: list[dict[str, Any]] = []
                                 for utt in utterances:
-                                    if isinstance(utt, dict) and "words" in utt:
-                                        for w in utt["words"]:
-                                            if isinstance(w, dict) and "text" in w:
-                                                words.append({
-                                                    "text": w["text"],
-                                                    "start": w.get("start_time", 0) / 1000.0,
-                                                    "end": w.get("end_time", 0) / 1000.0,
-                                                })
+                                    if not isinstance(utt, dict):
+                                        continue
+                                    for w in utt.get("words") or []:
+                                        if not isinstance(w, dict) or "text" not in w:
+                                            continue
+                                        # Doubao emits whitespace separator tokens
+                                        # carrying start_time/end_time = -1. They are
+                                        # not spoken words, and mixing them in breaks
+                                        # the ascending-start ordering that cue
+                                        # building and karaoke lookup rely on.
+                                        if not str(w["text"]).strip():
+                                            continue
+                                        start_ms = w.get("start_time")
+                                        end_ms = w.get("end_time")
+                                        if not isinstance(start_ms, (int, float)):
+                                            continue
+                                        if not isinstance(end_ms, (int, float)):
+                                            continue
+                                        if start_ms < 0 or end_ms < 0:
+                                            continue
+                                        parsed.append({
+                                            "text": w["text"],
+                                            "start": start_ms / 1000.0,
+                                            "end": end_ms / 1000.0,
+                                        })
+                                if parsed:
+                                    words = parsed
 
                             dur_val = None
                             if "audio_info" in resp_json and isinstance(resp_json["audio_info"], dict):
