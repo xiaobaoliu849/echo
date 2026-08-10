@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
 
 echo =========================================================
 echo   Starting PersonaPlex (NVIDIA 7B 4-bit) Local Server
@@ -13,7 +13,7 @@ echo.
 set "NO_TORCH_COMPILE=1"
 set "PYTHON_EXE=C:\pp-eval\venv\Scripts\python.exe"
 
-if not exist "!PYTHON_EXE!" (
+if not exist "%PYTHON_EXE%" (
     echo [ERROR] Python environment not found at C:\pp-eval\venv\Scripts\python.exe
     pause
     exit /b 1
@@ -25,11 +25,6 @@ if not errorlevel 1 (
     echo.
 )
 
-"!PYTHON_EXE!" -m moshi.server ^
-    --host 127.0.0.1 ^
-    --port 8998 ^
-    --moshi-weight "C:\pp-eval\model_bnb_4bit.pt" ^
-    --quantize-4bit ^
-    --voice-prompt-dir "C:\pp-eval\voices\voices"
+"%PYTHON_EXE%" -m moshi.server --host 127.0.0.1 --port 8998 --moshi-weight "C:\pp-eval\model_bnb_4bit.pt" --quantize-4bit --voice-prompt-dir "C:\pp-eval\voices\voices"
 
 pause
