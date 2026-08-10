@@ -324,12 +324,19 @@ class PersonaPlexRealtimeMixin:
             import numpy  # noqa: F401 - presence check; used lazily via _numpy()
             import sphn
         except ImportError as exc:  # pragma: no cover - depends on local install
+            # Name the running interpreter explicitly.  A machine can easily have
+            # several (conda, a project venv, the desktop launcher's pick), and
+            # "install it in the backend environment" sends people to the wrong
+            # one -- the install succeeds and the error stays.
+            import sys
+
             await self._send_event(
                 websocket,
                 "error",
                 message=(
                     f"PersonaPlex 依赖未安装：{exc}。"
-                    "请在后端环境执行 pip install -r backend/requirements-personaplex.txt"
+                    f'请对当前后端解释器执行：\n"{sys.executable}" '
+                    "-m pip install -r backend/requirements-personaplex.txt"
                 ),
             )
             return

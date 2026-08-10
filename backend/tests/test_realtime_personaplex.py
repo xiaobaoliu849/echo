@@ -526,7 +526,12 @@ class PersonaPlexOptionalDependencyTest(unittest.TestCase):
             )
 
         self.assertEqual([e["type"] for e in websocket.events], ["error"])
-        self.assertIn("requirements-personaplex.txt", websocket.events[0]["message"])
+        message = websocket.events[0]["message"]
+        self.assertIn("requirements-personaplex.txt", message)
+        # The interpreter path must be named: with several Pythons on one box,
+        # a generic "install it in the backend environment" leads to installing
+        # into the wrong one and the error persisting.
+        self.assertIn(sys.executable, message)
 
 
 if __name__ == "__main__":
