@@ -367,6 +367,15 @@ class PersonaPlexRealtimeMixin:
             timeout = aiohttp.ClientTimeout(total=None, sock_connect=10)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.ws_connect(ws_url, max_msg_size=2**24) as upstream:
+                    # Wait for moshi.server's b"\x00" handshake confirming system prompt stepping is done
+                    handshake_msg = await upstream.receive()
+                    if handshake_msg.type in (
+                        aiohttp.WSMsgType.CLOSED,
+                        aiohttp.WSMsgType.CLOSE,
+                        aiohttp.WSMsgType.ERROR,
+                    ):
+                        raise RuntimeError("moshi.server 在初始化握手前关闭了连接。")
+
                     await self._send_event(
                         websocket,
                         "session_open",
