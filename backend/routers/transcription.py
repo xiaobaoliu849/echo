@@ -3,9 +3,11 @@ import json
 import logging
 import shutil
 import tempfile
+import unicodedata
 import uuid
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import quote
 
 # Ensure robust imports for both runtime and IDE
 try:
@@ -766,6 +768,7 @@ async def download_transcription_job_transcript(job_id: str) -> Response:
     },
 )
 async def download_transcription_job_audio(request: Request, job_id: str):
+    import anyio # type: ignore
     from fastapi.responses import FileResponse, StreamingResponse # type: ignore
     job = transcription_service.get_job(job_id)
     if job is None:
@@ -792,10 +795,17 @@ async def download_transcription_job_audio(request: Request, job_id: str):
     file_size = audio_path.stat().st_size
     range_header = request.headers.get("range")
 
+    # HTTP headers are latin-1; a non-ASCII (e.g. Chinese) filename interpolated
+    # raw would raise on encode and kill the response. Fall back to an ASCII
+    # name and carry the real one via RFC 5987 filename*.
+    ascii_name = unicodedata.normalize("NFKD", filename).encode("ascii", "ignore").decode("ascii")
+    ascii_name = ascii_name.replace('"', "").replace("\\", "").strip() or f"audio{audio_path.suffix}"
+    disposition = f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(filename)}'
+
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Type": media_type,
-        "Content-Disposition": f'inline; filename="{filename}"',
+        "Content-Disposition": disposition,
     }
 
     if range_header and range_header.startswith("bytes="):
@@ -813,17 +823,22 @@ async def download_transcription_job_audio(request: Request, job_id: str):
                 )
 
             content_length = end - start + 1
-            headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-            headers["Content-Length"] = str(content_length)
+            range_headers = dict(headers)
+            range_headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            range_headers["Content-Length"] = str(content_length)
 
-            def iter_file():
-                with open(audio_path, "rb") as f:
-                    f.seek(start)
+            # Async generator: streams off the event loop without occupying an
+            # anyio worker thread.  A synchronous generator here is run via
+            # iterate_in_threadpool, so a handful of concurrent media range
+            # requests (browsers open several per play/seek) can exhaust the
+            # default 40-thread pool and stall every other endpoint.
+            async def iter_file():
+                chunk_size = 256 * 1024
+                async with await anyio.open_file(audio_path, "rb") as f:
+                    await f.seek(start)
                     remaining = content_length
-                    chunk_size = 64 * 1024
                     while remaining > 0:
-                        read_size = min(chunk_size, remaining)
-                        data = f.read(read_size)
+                        data = await f.read(min(chunk_size, remaining))
                         if not data:
                             break
                         remaining -= len(data)
@@ -832,16 +847,17 @@ async def download_transcription_job_audio(request: Request, job_id: str):
             return StreamingResponse(
                 iter_file(),
                 status_code=206,
-                headers=headers,
+                headers=range_headers,
                 media_type=media_type,
             )
         except Exception:
             pass
 
     headers["Content-Length"] = str(file_size)
+    # No filename= here: FileResponse would append a second, conflicting
+    # Content-Disposition (attachment) on top of the inline one above.
     return FileResponse(
         path=str(audio_path),
-        filename=filename,
         media_type=media_type,
         headers=headers,
     )
