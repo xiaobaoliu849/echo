@@ -5578,6 +5578,36 @@ button.danger:focus-visible {
   flex: 1;
 }
 
+/* When a voice-center / transcription page is active, the page manages its
+   own scrolling internally. Letting the outer scroll area scroll breaks the
+   fixed-height split layouts (transcription player, TTS editor, etc.).
+
+   The flag is set on the ancestors by App.tsx rather than matched with
+   `:has(.is-transcription)`. A `:has()` on the app-wide scroll container has
+   to be re-evaluated against its whole subtree on every DOM mutation, so once
+   the transcription cue list held thousands of rows, each playback tick
+   (~4/s) triggered a full re-match plus an !important height/overflow
+   reflow — enough to lock up the main thread. */
+.vsMainScrollArea.is-self-scrolling {
+  overflow: hidden !important;
+  height: 100% !important;
+}
+
+.vsContentMaxContainer.is-self-scrolling {
+  max-width: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 !important;
+}
+
+/* Ensure child viewport containers resolve percentage height */
+.vsContentMaxContainer.is-self-scrolling > .vsWorkspaceViewport,
+.vsWorkspaceViewportInner.is-transcription,
+.vsWorkspaceViewportInner.is-voice-center {
+  height: 100% !important;
+  flex: 1 !important;
+}
+
 .vsWorkspaceHeader {
   display: flex;
   align-items: end;
@@ -7318,6 +7348,44 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 /* ── Synced subtitle player (memo-style split layout) ── */
+
+/*
+ * Shared base for every square icon button in the player.
+ *
+ * The global bare `button` rule further up sets `padding: 10px 18px` and a
+ * large drop shadow for pill-shaped text buttons.  A 34px icon button that
+ * only declares width/height still inherits that padding, and with
+ * `box-sizing: border-box` the 36px of horizontal padding collapses the
+ * content box to zero — Chrome measured the icons at 0x18, i.e. invisible,
+ * while the inherited shadow left a floating white blob behind.  Resetting
+ * both here (rather than per button) keeps new icon buttons from
+ * reintroducing it.
+ */
+.vsIconBtn {
+  padding: 0;
+  box-shadow: none;
+  border: 1px solid transparent;
+  background: transparent;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Icons must never be squeezed by a flex parent. */
+.vsIconBtn > svg {
+  flex: none;
+}
+
+.vsIconBtn:hover:not(:disabled) {
+  transform: none;
+  filter: none;
+}
+
 .vsPlayerGrid {
   flex: 1;
   min-height: 0;
@@ -7393,15 +7461,16 @@ button.vsPasswordToggleBtn:focus-visible {
   background: rgba(10, 8, 20, 0.8);
 }
 
-/* Audio card: brand-tinted stage with equalizer + karaoke line */
+/* Audio card: warm paper stage with a soft brand halo, equalizer + karaoke */
 .vsAudioCard {
   flex: 1;
   min-height: 200px;
-  border-radius: 14px;
+  border-radius: 16px;
   background:
-    radial-gradient(120% 140% at 15% 0%, rgba(107, 76, 246, 0.16), transparent 55%),
-    linear-gradient(160deg, rgba(107, 76, 246, 0.1), rgba(255, 251, 245, 0.9) 70%);
-  border: 1px solid rgba(107, 76, 246, 0.14);
+    radial-gradient(120% 130% at 18% 0%, color-mix(in oklab, var(--brand-soft) 78%, transparent), transparent 58%),
+    linear-gradient(168deg, color-mix(in oklab, var(--accent-soft) 40%, var(--bg-card)), var(--bg-card) 72%);
+  border: 1px solid color-mix(in oklab, var(--brand) 14%, var(--line));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -7429,7 +7498,8 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsEqBar {
   width: 5px;
-  height: 30%;
+  height: 100%;
+  transform-origin: bottom;
   border-radius: 3px;
   background: linear-gradient(180deg, var(--brand), var(--brand-dark));
   animation: vsEqBounce 1.1s ease-in-out infinite;
@@ -7442,9 +7512,9 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 @keyframes vsEqBounce {
-  0%, 100% { height: 22%; }
-  35% { height: 95%; }
-  70% { height: 45%; }
+  0%, 100% { transform: scaleY(0.22); }
+  35% { transform: scaleY(0.95); }
+  70% { transform: scaleY(0.45); }
 }
 
 /* Karaoke "now" line — card variant sits inside the audio card,
@@ -7502,7 +7572,8 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsNowWord {
-  transition: color 0.15s ease;
+  /* No transition — the old 0.15s color transition caused compositor overhead
+   * when hundreds of word <span> elements changed state at high frequency. */
 }
 
 /* ── Custom transport bar ── */
@@ -7510,100 +7581,179 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(98, 76, 54, 0.1);
-  box-shadow: 0 2px 10px rgba(98, 76, 54, 0.05);
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--bg-card) 92%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Thin divider between transport clusters (skip/play, seek, options). */
+.vsTransportDivider {
+  width: 1px;
+  height: 20px;
+  flex-shrink: 0;
+  margin: 0 4px;
+  background: var(--line);
 }
 
 .vsTransportBtn {
   position: relative;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  text-decoration: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--muted);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.vsTransportBtn:hover {
-  background: rgba(107, 76, 246, 0.1);
-  color: var(--brand);
+.vsTransportBtn:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--brand-soft) 70%, transparent);
+  border-color: color-mix(in oklab, var(--brand) 22%, transparent);
+  color: var(--brand-dark);
 }
 
+.vsTransportBtn:active:not(:disabled) {
+  background: color-mix(in oklab, var(--brand-soft) 92%, transparent);
+}
+
+/* "10" badge on the ±10s skip buttons: sits under the arrow glyph, tucked
+ * into the corner so it reads as a unit with the icon rather than as text. */
 .vsTransportSkipLabel {
   position: absolute;
-  bottom: 2px;
+  bottom: 3px;
   right: 3px;
   font-size: 8px;
   font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--bg-card) 88%, transparent);
   pointer-events: none;
 }
 
 .vsTransportPlay {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border: none;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  background: var(--brand);
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--brand), var(--brand-dark));
   color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 3px 10px rgba(107, 76, 246, 0.35);
-  transition: transform 0.12s, box-shadow 0.15s, background 0.15s;
+  box-shadow:
+    0 4px 12px color-mix(in oklab, var(--brand-dark) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
-.vsTransportPlay:hover {
-  background: var(--brand-dark);
+.vsTransportPlay:hover:not(:disabled) {
+  filter: brightness(1.06);
   transform: scale(1.05);
+  box-shadow:
+    0 6px 18px color-mix(in oklab, var(--brand-dark) 38%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
-.vsTransportPlay:active {
-  transform: scale(0.96);
+.vsTransportPlay:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/*
+ * Range inputs: `accent-color` alone leaves the browser default track height
+ * and a chunky thumb, which read as unfinished next to the rest of the bar.
+ */
+.vsSeek,
+.vsVolume {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
 }
 
 .vsSeek {
   flex: 1;
   min-width: 60px;
-  accent-color: var(--brand);
-  cursor: pointer;
-  height: 4px;
 }
 
 .vsVolume {
-  width: 64px;
+  width: 68px;
   flex-shrink: 0;
-  accent-color: var(--brand);
-  cursor: pointer;
+}
+
+.vsSeek::-webkit-slider-runnable-track,
+.vsVolume::-webkit-slider-runnable-track {
   height: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--brand) 16%, var(--line-strong));
+}
+
+.vsSeek::-moz-range-track,
+.vsVolume::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--brand) 16%, var(--line-strong));
+}
+
+.vsSeek::-moz-range-progress,
+.vsVolume::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+
+.vsSeek::-webkit-slider-thumb,
+.vsVolume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--brand);
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 1px 4px color-mix(in oklab, var(--brand-dark) 34%, transparent);
+  transition: transform 0.12s ease;
+}
+
+.vsSeek::-moz-range-thumb,
+.vsVolume::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--brand);
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 1px 4px color-mix(in oklab, var(--brand-dark) 34%, transparent);
+}
+
+.vsSeek:hover::-webkit-slider-thumb,
+.vsVolume:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
 }
 
 .vsTimeLabel {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  letter-spacing: 0.01em;
+}
+
+/* Elapsed time is the value users track; keep it darker than total. */
+.vsTimeLabel.current {
+  color: var(--text);
 }
 
 .vsRateBtn {
   width: auto;
+  min-width: 38px;
   padding: 0 8px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
+  border-color: var(--line);
+  color: var(--text);
 }
 
 /* ── Subtitle panel (right) ── */
@@ -7638,7 +7788,7 @@ button.vsPasswordToggleBtn:focus-visible {
   padding: 4px 8px;
   border-radius: 8px;
   background: #fff;
-  border: 1px solid rgba(107, 76, 246, 0.25);
+  border: 1px solid color-mix(in oklab, var(--brand) 30%, var(--line));
   color: var(--muted);
 }
 
@@ -7669,32 +7819,32 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-shrink: 0;
 }
 
+/*
+ * Ghost tool buttons: no chrome at rest so the toolbar reads as a quiet strip,
+ * with the surface appearing only on hover or when a mode is engaged.
+ */
 .vsToolBtn {
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   color: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .vsToolBtn:hover:not(:disabled) {
-  background: rgba(107, 76, 246, 0.1);
-  color: var(--brand);
+  background: color-mix(in oklab, var(--brand-soft) 70%, transparent);
+  border-color: color-mix(in oklab, var(--brand) 20%, transparent);
+  color: var(--brand-dark);
 }
 
 .vsToolBtn.active {
-  background: rgba(107, 76, 246, 0.14);
-  color: var(--brand);
+  background: color-mix(in oklab, var(--brand-soft) 92%, transparent);
+  border-color: color-mix(in oklab, var(--brand) 32%, transparent);
+  color: var(--brand-dark);
 }
 
 .vsToolBtn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: default;
 }
 
@@ -7728,7 +7878,6 @@ button.vsPasswordToggleBtn:focus-visible {
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   font-family: inherit;
 }
 
@@ -7765,7 +7914,7 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsSubtitleCue.active {
-  background: rgba(107, 76, 246, 0.08);
+  background: color-mix(in oklab, var(--brand-soft) 62%, transparent);
   border-left-color: var(--brand);
 }
 

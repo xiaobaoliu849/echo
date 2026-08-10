@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import type { WordTimestamp } from "../../api";
 import { useI18n } from "../../i18n";
-import { buildCues, type SubtitleCue } from "../../utils/subtitleGenerator";
+import { buildCues, normalizeWords, type SubtitleCue } from "../../utils/subtitleGenerator";
 
 type Props = {
   transcript: string;
@@ -71,39 +71,28 @@ function findCueIndex(cues: SubtitleCue[], time: number): number {
 }
 
 /**
- * Component-local media clock: follows the element via timeupdate/seeked while
- * paused and a rAF loop while playing, so only the small component using the
- * clock re-renders — never the whole cue list.
+ * Component-local media clock: follows the media element via timeupdate/seeked
+ * events.  The browser fires timeupdate ~4 Hz which is plenty for slider
+ * position and word-level karaoke — no rAF loop needed.
  */
-function useMediaClock(
-  mediaRef: React.RefObject<HTMLMediaElement | null>,
-  isPlaying: boolean
-): number {
+function useMediaClock(mediaEl: HTMLMediaElement | null): number {
   const [time, setTime] = useState(0);
   useEffect(() => {
-    const m = mediaRef.current;
-    if (!m) return;
+    if (!mediaEl) return;
     const sync = () =>
       setTime((prev) =>
-        Math.abs(m.currentTime - prev) > 0.04 ? m.currentTime : prev
+        Math.abs(mediaEl.currentTime - prev) > 0.04 ? mediaEl.currentTime : prev
       );
     sync();
-    m.addEventListener("timeupdate", sync);
-    m.addEventListener("seeked", sync);
-    m.addEventListener("loadedmetadata", sync);
-    let raf = 0;
-    const loop = () => {
-      sync();
-      raf = requestAnimationFrame(loop);
-    };
-    if (isPlaying) raf = requestAnimationFrame(loop);
+    mediaEl.addEventListener("timeupdate", sync);
+    mediaEl.addEventListener("seeked", sync);
+    mediaEl.addEventListener("loadedmetadata", sync);
     return () => {
-      m.removeEventListener("timeupdate", sync);
-      m.removeEventListener("seeked", sync);
-      m.removeEventListener("loadedmetadata", sync);
-      cancelAnimationFrame(raf);
+      mediaEl.removeEventListener("timeupdate", sync);
+      mediaEl.removeEventListener("seeked", sync);
+      mediaEl.removeEventListener("loadedmetadata", sync);
     };
-  }, [mediaRef, isPlaying]);
+  }, [mediaEl]);
   return time;
 }
 
@@ -176,7 +165,7 @@ const CueRow = memo(function CueRow({
 });
 
 type TransportBarProps = {
-  mediaRef: React.RefObject<HTMLMediaElement | null>;
+  mediaEl: HTMLMediaElement | null;
   duration: number;
   isPlaying: boolean;
   rate: number;
@@ -193,7 +182,7 @@ type TransportBarProps = {
 /** Custom transport: play/pause, ±10s skip, seek slider, speed, volume,
  * download. Keeps its own clock so the 20 Hz slider updates stay local. */
 function TransportBar({
-  mediaRef,
+  mediaEl,
   duration,
   isPlaying,
   rate,
@@ -207,23 +196,23 @@ function TransportBar({
   onVolumeChange,
 }: TransportBarProps) {
   const { t } = useI18n();
-  const time = useMediaClock(mediaRef, isPlaying);
+  const time = useMediaClock(mediaEl);
 
   return (
     <div className="vsTransport">
       <button
         type="button"
-        className="vsTransportBtn"
+        className="vsIconBtn vsTransportBtn"
         onClick={() => onSkip(-10)}
         title={t("快退 10 秒", "Back 10s")}
         aria-label={t("快退 10 秒", "Back 10 seconds")}
       >
-        <RotateCcw size={16} />
+        <RotateCcw size={18} />
         <span className="vsTransportSkipLabel">10</span>
       </button>
       <button
         type="button"
-        className="vsTransportPlay"
+        className="vsIconBtn vsTransportPlay"
         onClick={onTogglePlay}
         title={isPlaying ? t("暂停", "Pause") : t("播放", "Play")}
         aria-label={isPlaying ? t("暂停", "Pause") : t("播放", "Play")}
@@ -232,16 +221,18 @@ function TransportBar({
       </button>
       <button
         type="button"
-        className="vsTransportBtn"
+        className="vsIconBtn vsTransportBtn"
         onClick={() => onSkip(10)}
         title={t("快进 10 秒", "Forward 10s")}
         aria-label={t("快进 10 秒", "Forward 10 seconds")}
       >
-        <RotateCw size={16} />
+        <RotateCw size={18} />
         <span className="vsTransportSkipLabel">10</span>
       </button>
 
-      <span className="vsTimeLabel">{formatClock(time)}</span>
+      <span className="vsTransportDivider" aria-hidden />
+
+      <span className="vsTimeLabel current">{formatClock(time)}</span>
       <input
         type="range"
         className="vsSeek"
@@ -250,16 +241,17 @@ function TransportBar({
         step={0.1}
         value={Math.min(time, duration || time)}
         onChange={(e) => {
-          const m = mediaRef.current;
-          if (m) m.currentTime = Number(e.target.value);
+          if (mediaEl) mediaEl.currentTime = Number(e.target.value);
         }}
         aria-label={t("播放进度", "Seek")}
       />
       <span className="vsTimeLabel">{formatClock(duration)}</span>
 
+      <span className="vsTransportDivider" aria-hidden />
+
       <button
         type="button"
-        className="vsTransportBtn vsRateBtn"
+        className="vsIconBtn vsTransportBtn vsRateBtn"
         onClick={onCycleRate}
         title={t("播放速度", "Playback speed")}
       >
@@ -268,12 +260,12 @@ function TransportBar({
 
       <button
         type="button"
-        className="vsTransportBtn"
+        className="vsIconBtn vsTransportBtn"
         onClick={onToggleMute}
         title={muted ? t("取消静音", "Unmute") : t("静音", "Mute")}
         aria-label={muted ? t("取消静音", "Unmute") : t("静音", "Mute")}
       >
-        {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+        {muted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
       </button>
       <input
         type="range"
@@ -287,21 +279,25 @@ function TransportBar({
       />
 
       <a
-        className="vsTransportBtn"
+        className="vsIconBtn vsTransportBtn"
         href={sourceUrl}
         download
         title={t("下载源文件", "Download source file")}
         aria-label={t("下载源文件", "Download source file")}
       >
-        <Download size={16} />
+        <Download size={18} />
       </a>
     </div>
   );
 }
 
+/** Max words to render with word-level karaoke.  Beyond this we degrade to
+ * plain cue text to avoid flooding the DOM with <span> elements when a
+ * provider returns giant single-token cues. */
+const KARAOKE_WORD_CAP = 80;
+
 type NowLineProps = {
-  mediaRef: React.RefObject<HTMLMediaElement | null>;
-  isPlaying: boolean;
+  mediaEl: HTMLMediaElement | null;
   cue: SubtitleCue | null;
   cueWords: WordTimestamp[];
   variant: "card" | "overlay";
@@ -309,9 +305,9 @@ type NowLineProps = {
 
 /** Karaoke-style current line: highlights words as they are spoken when
  * word-level timestamps exist, otherwise shows the cue text as-is. */
-function NowLine({ mediaRef, isPlaying, cue, cueWords, variant }: NowLineProps) {
+function NowLine({ mediaEl, cue, cueWords, variant }: NowLineProps) {
   const { t } = useI18n();
-  const time = useMediaClock(mediaRef, isPlaying);
+  const time = useMediaClock(mediaEl);
 
   if (!cue) {
     if (variant === "overlay") return null;
@@ -327,7 +323,7 @@ function NowLine({ mediaRef, isPlaying, cue, cueWords, variant }: NowLineProps) 
   return (
     <div className={`vsNowLine ${variant}`}>
       <span className="vsNowLineText">
-        {cueWords.length > 0
+        {cueWords.length > 0 && cueWords.length <= KARAOKE_WORD_CAP
           ? cueWords.map((w, i) => (
               <span
                 key={i}
@@ -359,11 +355,15 @@ export default function TranscriptionSubtitlePlayer({
   onAudioDurationChange,
 }: Props) {
   const { t } = useI18n();
-  const mediaRef = useRef<HTMLMediaElement | null>(null);
+  const [mediaEl, setMediaEl] = useState<HTMLMediaElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const rowEls = useRef<Array<HTMLButtonElement | null>>([]);
   const userScrollingRef = useRef(false);
+  // Timestamp of our last follow-mode scrollTo, not a boolean flag: scrollTo is
+  // a no-op when the target offset already matches, so a flag set before the
+  // call would never be cleared and would swallow the user's next real scroll.
+  const programmaticScrollAtRef = useRef(0);
   const userScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -386,9 +386,19 @@ export default function TranscriptionSubtitlePlayer({
   const hasMedia = Boolean(audioSourceUrl) && !mediaError;
   const fontSize = FONT_SIZES[fontSizeIdx];
 
+  // Normalize once here too: the karaoke lookup below binary-searches this
+  // list, which requires ascending starts.  buildCues() cleans its own copy,
+  // so without this the two would disagree on indices.
+  const safeWords = useMemo(() => normalizeWords(words), [words]);
+
+  // buildCues only consults the duration on the no-word-timestamps fallback
+  // path.  Feeding it 0 when words exist keeps this memo stable across the
+  // loadedmetadata -> onAudioDurationChange update that fires as playback
+  // starts — otherwise every play click rebuilt the whole cue list.
+  const durationForCues = safeWords.length > 0 ? 0 : audioDuration;
   const cues = useMemo<SubtitleCue[]>(
-    () => buildCues(transcript, audioDuration, words),
-    [transcript, audioDuration, words]
+    () => buildCues(transcript, durationForCues, safeWords),
+    [transcript, durationForCues, safeWords]
   );
 
   const matches = useMemo(() => {
@@ -407,14 +417,29 @@ export default function TranscriptionSubtitlePlayer({
 
   const activeCue = activeIndex >= 0 ? cues[activeIndex] : null;
 
+  // Binary-search for the word range within the current cue instead of
+  // scanning the entire words[] array with .filter() on every cue change.
   const activeCueWords = useMemo(() => {
-    if (activeIndex < 0 || !words || words.length === 0) return [];
+    if (activeIndex < 0 || safeWords.length === 0) return [];
     const cue = cues[activeIndex];
     if (!cue) return [];
-    return words.filter(
-      (w) => w.start >= cue.start - 0.1 && w.start <= cue.end + 0.1
-    );
-  }, [activeIndex, cues, words]);
+    const lo = cue.start - 0.1;
+    const hi = cue.end + 0.1;
+    // Binary search for the first word with start >= lo
+    let left = 0;
+    let right = safeWords.length;
+    while (left < right) {
+      const mid = (left + right) >> 1;
+      if (safeWords[mid].start < lo) left = mid + 1;
+      else right = mid;
+    }
+    // Collect words until start > hi
+    const result: WordTimestamp[] = [];
+    for (let i = left; i < safeWords.length && safeWords[i].start <= hi; i++) {
+      result.push(safeWords[i]);
+    }
+    return result;
+  }, [activeIndex, cues, safeWords]);
 
   const registerRow = useCallback(
     (index: number, el: HTMLButtonElement | null) => {
@@ -423,34 +448,29 @@ export default function TranscriptionSubtitlePlayer({
     []
   );
 
-  // Track the active cue. rAF while playing keeps word-level karaoke smooth;
-  // timeupdate/seeked cover the paused case. setState bails out when the index
-  // is unchanged, so this only re-renders on cue boundaries.
+  // Track the active cue via timeupdate/seeked events (no rAF loop).
+  // timeupdate fires ~4 Hz which is more than sufficient since cue changes
+  // happen every 3–7 seconds.  setState bails out when the index is unchanged,
+  // so this only re-renders on cue boundaries.
   useEffect(() => {
-    const m = mediaRef.current;
-    if (!m) return;
+    if (!mediaEl) return;
     const update = () => {
-      const idx = findCueIndex(cues, m.currentTime);
+      const idx = findCueIndex(cues, mediaEl.currentTime);
       setActiveIndex((prev) => (prev === idx ? prev : idx));
     };
     update();
-    m.addEventListener("timeupdate", update);
-    m.addEventListener("seeked", update);
-    let raf = 0;
-    const loop = () => {
-      update();
-      raf = requestAnimationFrame(loop);
-    };
-    if (isPlaying) raf = requestAnimationFrame(loop);
+    mediaEl.addEventListener("timeupdate", update);
+    mediaEl.addEventListener("seeked", update);
     return () => {
-      m.removeEventListener("timeupdate", update);
-      m.removeEventListener("seeked", update);
-      cancelAnimationFrame(raf);
+      mediaEl.removeEventListener("timeupdate", update);
+      mediaEl.removeEventListener("seeked", update);
     };
-  }, [cues, isPlaying]);
+  }, [cues, mediaEl]);
 
-  // Keep the active cue in view while playing: one smooth scroll per cue
-  // change (not per timeupdate), suppressed briefly after manual scrolling.
+  // Keep the active cue in view while playing: one scroll per cue change
+  // (not per timeupdate), suppressed briefly after manual scrolling.
+  // Use behavior: "auto" instead of "smooth" to prevent Chromium layout
+  // thrashing while media timeupdates fire.
   useEffect(() => {
     if (!follow || !isPlaying || activeIndex < 0 || userScrollingRef.current)
       return;
@@ -460,9 +480,12 @@ export default function TranscriptionSubtitlePlayer({
     const cRect = container.getBoundingClientRect();
     const eRect = el.getBoundingClientRect();
     if (eRect.top < cRect.top + 48 || eRect.bottom > cRect.bottom - 48) {
+      // Stamp the upcoming scroll event as ours so handleListScroll does not
+      // mistake it for a manual scroll and suspend follow mode.
+      programmaticScrollAtRef.current = performance.now();
       container.scrollTo({
         top: el.offsetTop - container.clientHeight * 0.3,
-        behavior: "smooth",
+        behavior: "auto",
       });
     }
   }, [activeIndex, follow, isPlaying]);
@@ -475,7 +498,7 @@ export default function TranscriptionSubtitlePlayer({
 
   // Keyboard shortcuts: space = play/pause, ←/→ = ∓5s.
   useEffect(() => {
-    if (!hasMedia) return;
+    if (!hasMedia || !mediaEl) return;
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (
@@ -485,25 +508,27 @@ export default function TranscriptionSubtitlePlayer({
           target.isContentEditable)
       )
         return;
-      const m = mediaRef.current;
-      if (!m) return;
       if (e.code === "Space") {
         e.preventDefault();
-        if (m.paused) void m.play().catch(() => {});
-        else m.pause();
+        if (mediaEl.paused) void mediaEl.play().catch(() => {});
+        else mediaEl.pause();
       } else if (e.code === "ArrowLeft") {
         e.preventDefault();
-        m.currentTime = Math.max(0, m.currentTime - 5);
+        mediaEl.currentTime = Math.max(0, mediaEl.currentTime - 5);
       } else if (e.code === "ArrowRight") {
         e.preventDefault();
-        m.currentTime = Math.min(m.duration || Infinity, m.currentTime + 5);
+        mediaEl.currentTime = Math.min(mediaEl.duration || Infinity, mediaEl.currentTime + 5);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hasMedia]);
+  }, [hasMedia, mediaEl]);
 
   function handleListScroll() {
+    // Ignore the scroll event our own follow-mode scrollTo just produced.
+    // The window self-expires, so a scrollTo that turned out to be a no-op
+    // cannot leave the guard armed against the user's next real scroll.
+    if (performance.now() - programmaticScrollAtRef.current < 150) return;
     userScrollingRef.current = true;
     if (userScrollTimerRef.current) clearTimeout(userScrollTimerRef.current);
     userScrollTimerRef.current = setTimeout(() => {
@@ -511,21 +536,24 @@ export default function TranscriptionSubtitlePlayer({
     }, 2500);
   }
 
-  function seekTo(start: number) {
-    const m = mediaRef.current;
-    if (!m) return;
-    m.currentTime = start;
-    void m.play().catch(() => {
-      /* autoplay may be blocked; the cue still highlights on manual play */
-    });
-  }
+  const seekTo = useCallback(
+    (start: number) => {
+      if (!mediaEl) return;
+      mediaEl.currentTime = start;
+      void mediaEl.play().catch(() => {
+        /* autoplay may be blocked; the cue still highlights on manual play */
+      });
+    },
+    [mediaEl]
+  );
 
   function locateActive() {
     userScrollingRef.current = false;
     setFollow(true);
-    const idx = activeIndex >= 0 ? activeIndex : findCueIndex(cues, mediaRef.current?.currentTime ?? 0);
+    const idx = activeIndex >= 0 ? activeIndex : findCueIndex(cues, mediaEl?.currentTime ?? 0);
     const el = rowEls.current[Math.max(0, idx)];
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    programmaticScrollAtRef.current = performance.now();
+    el?.scrollIntoView({ block: "center", behavior: "auto" });
   }
 
   function jumpMatch(direction: 1 | -1) {
@@ -536,7 +564,7 @@ export default function TranscriptionSubtitlePlayer({
     setMatchCursor(next);
     setMode("cues");
     const el = rowEls.current[matches[next]];
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    el?.scrollIntoView({ block: "center", behavior: "auto" });
   }
 
   const handleMediaLoaded = (e: React.SyntheticEvent<HTMLMediaElement>) => {
@@ -562,9 +590,7 @@ export default function TranscriptionSubtitlePlayer({
           {video ? (
             <div className="vsMediaStage" ref={stageRef}>
               <video
-                ref={(el) => {
-                  mediaRef.current = el;
-                }}
+                ref={setMediaEl}
                 src={audioSourceUrl}
                 preload="metadata"
                 playsInline
@@ -572,20 +598,19 @@ export default function TranscriptionSubtitlePlayer({
                 {...mediaEvents}
               />
               <NowLine
-                mediaRef={mediaRef}
-                isPlaying={isPlaying}
+                mediaEl={mediaEl}
                 cue={activeCue}
                 cueWords={activeCueWords}
                 variant="overlay"
               />
               <button
                 type="button"
-                className="vsFullscreenBtn"
+                className="vsIconBtn vsFullscreenBtn"
                 onClick={() => stageRef.current?.requestFullscreen?.()}
                 title={t("全屏", "Fullscreen")}
                 aria-label={t("全屏", "Fullscreen")}
               >
-                <Maximize size={15} />
+                <Maximize size={18} />
               </button>
             </div>
           ) : (
@@ -599,17 +624,14 @@ export default function TranscriptionSubtitlePlayer({
                 {fileName || t("音频文件", "Audio file")}
               </div>
               <NowLine
-                mediaRef={mediaRef}
-                isPlaying={isPlaying}
+                mediaEl={mediaEl}
                 cue={activeCue}
                 cueWords={activeCueWords}
                 variant="card"
               />
               {/* Hidden media element: all playback goes through the custom transport. */}
               <audio
-                ref={(el) => {
-                  mediaRef.current = el;
-                }}
+                ref={setMediaEl}
                 src={audioSourceUrl}
                 preload="metadata"
                 aria-label={t("转写音频播放器", "Transcription audio player")}
@@ -619,7 +641,7 @@ export default function TranscriptionSubtitlePlayer({
           )}
 
           <TransportBar
-            mediaRef={mediaRef}
+            mediaEl={mediaEl}
             duration={mediaDuration}
             isPlaying={isPlaying}
             rate={rate}
@@ -627,37 +649,38 @@ export default function TranscriptionSubtitlePlayer({
             volume={volume}
             sourceUrl={audioSourceUrl!}
             onTogglePlay={() => {
-              const m = mediaRef.current;
-              if (!m) return;
-              if (m.paused) void m.play().catch(() => {});
-              else m.pause();
+              if (!mediaEl) return;
+              if (mediaEl.paused) {
+                void mediaEl.play().then(() => setIsPlaying(true)).catch(() => {});
+              } else {
+                mediaEl.pause();
+                setIsPlaying(false);
+              }
             }}
             onSkip={(delta) => {
-              const m = mediaRef.current;
-              if (!m) return;
-              m.currentTime = Math.min(
-                Math.max(0, m.currentTime + delta),
-                m.duration || Infinity
+              if (!mediaEl) return;
+              mediaEl.currentTime = Math.min(
+                Math.max(0, mediaEl.currentTime + delta),
+                mediaEl.duration || Infinity
               );
             }}
             onCycleRate={() => {
               const next =
                 PLAYBACK_RATES[(PLAYBACK_RATES.indexOf(rate) + 1) % PLAYBACK_RATES.length];
               setRate(next);
-              if (mediaRef.current) mediaRef.current.playbackRate = next;
+              if (mediaEl) mediaEl.playbackRate = next;
             }}
             onToggleMute={() => {
               const next = !muted;
               setMuted(next);
-              if (mediaRef.current) mediaRef.current.muted = next;
+              if (mediaEl) mediaEl.muted = next;
             }}
             onVolumeChange={(v) => {
               setVolume(v);
               setMuted(v === 0);
-              const m = mediaRef.current;
-              if (m) {
-                m.volume = v;
-                m.muted = v === 0;
+              if (mediaEl) {
+                mediaEl.volume = v;
+                mediaEl.muted = v === 0;
               }
             }}
           />
@@ -668,7 +691,7 @@ export default function TranscriptionSubtitlePlayer({
         <div className="vsSubtitleToolbar">
           {searchOpen && (
             <div className="vsSubtitleSearch">
-              <Search size={13} />
+              <Search size={15} />
               <input
                 autoFocus
                 value={query}
@@ -694,62 +717,62 @@ export default function TranscriptionSubtitlePlayer({
               )}
               <button
                 type="button"
-                className="vsToolBtn"
+                className="vsIconBtn vsToolBtn"
                 onClick={() => jumpMatch(-1)}
                 disabled={matches.length === 0}
                 title={t("上一个匹配", "Previous match")}
               >
-                <ChevronUp size={14} />
+                <ChevronUp size={16} />
               </button>
               <button
                 type="button"
-                className="vsToolBtn"
+                className="vsIconBtn vsToolBtn"
                 onClick={() => jumpMatch(1)}
                 disabled={matches.length === 0}
                 title={t("下一个匹配", "Next match")}
               >
-                <ChevronDown size={14} />
+                <ChevronDown size={16} />
               </button>
             </div>
           )}
           <div className="vsSubtitleTools">
             <button
               type="button"
-              className={`vsToolBtn ${searchOpen ? "active" : ""}`}
+              className={`vsIconBtn vsToolBtn ${searchOpen ? "active" : ""}`}
               onClick={() => {
                 setSearchOpen((v) => !v);
                 if (searchOpen) setQuery("");
               }}
               title={t("搜索字幕", "Search subtitles")}
             >
-              {searchOpen ? <X size={15} /> : <Search size={15} />}
+              {searchOpen ? <X size={18} /> : <Search size={18} />}
             </button>
             {hasMedia && (
               <>
                 <button
                   type="button"
-                  className={`vsToolBtn ${follow ? "active" : ""}`}
+                  className={`vsIconBtn vsToolBtn ${follow ? "active" : ""}`}
                   onClick={() => {
                     setFollow((v) => !v);
                     userScrollingRef.current = false;
                   }}
                   title={t("跟随播放自动滚动", "Auto-scroll with playback")}
                 >
-                  <Captions size={15} />
+                  <Captions size={18} />
                 </button>
                 <button
                   type="button"
-                  className="vsToolBtn"
+                  className="vsIconBtn vsToolBtn"
                   onClick={locateActive}
                   title={t("回到当前字幕", "Jump to current cue")}
                 >
-                  <LocateFixed size={15} />
+                  <LocateFixed size={18} />
                 </button>
               </>
             )}
             <button
               type="button"
-              className={`vsToolBtn ${mode === "paragraph" ? "active" : ""}`}
+              className={`vsIconBtn vsToolBtn ${mode === "paragraph" ? "active" : ""}`}
               onClick={() =>
                 setMode((m) => (m === "cues" ? "paragraph" : "cues"))
               }
@@ -759,11 +782,11 @@ export default function TranscriptionSubtitlePlayer({
                   : t("切换为字幕列表", "Switch to subtitle list")
               }
             >
-              {mode === "cues" ? <FileText size={15} /> : <Captions size={15} />}
+              {mode === "cues" ? <FileText size={18} /> : <Captions size={18} />}
             </button>
             <button
               type="button"
-              className={`vsToolBtn ${showTime ? "active" : ""}`}
+              className={`vsIconBtn vsToolBtn ${showTime ? "active" : ""}`}
               onClick={() => setShowTime((v) => !v)}
               title={t("显示/隐藏时间戳", "Toggle timestamps")}
             >
@@ -771,11 +794,11 @@ export default function TranscriptionSubtitlePlayer({
             </button>
             <button
               type="button"
-              className="vsToolBtn"
+              className="vsIconBtn vsToolBtn"
               onClick={() => setFontSizeIdx((i) => (i + 1) % FONT_SIZES.length)}
               title={t("调整字号", "Cycle font size")}
             >
-              <ALargeSmall size={15} />
+              <ALargeSmall size={18} />
             </button>
           </div>
         </div>

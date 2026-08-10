@@ -231,6 +231,13 @@ export default function App() {
 
   const translate = useTranslate({ formatErrorMessage, language: uiLanguage });
   const workspaceClassName = `vsWorkspaceViewportInner is-${activeTab.replace(/_/g, "-")}`;
+  // Tabs that manage their own internal scrolling and need a fixed-height
+  // split layout.  Flagged on the ancestors directly: expressing this as
+  // `.vsMainScrollArea:has(.is-transcription)` forced the browser to re-match
+  // against every descendant on each DOM mutation, which froze the main
+  // thread once the transcription cue list grew to thousands of rows.
+  const selfScrollingTab =
+    activeTab === "transcription" || activeTab === "voice_center";
   const normalizedConversationHistory = useMemo(
     () => normalizeConversationHistory(conversationHistory),
     [conversationHistory],
@@ -424,8 +431,8 @@ export default function App() {
           isSettingsOpen={isSettingsOpen}
         />
 
-        <section className="vsMainScrollArea">
-          <div className="vsContentMaxContainer">
+        <section className={`vsMainScrollArea${selfScrollingTab ? " is-self-scrolling" : ""}`}>
+          <div className={`vsContentMaxContainer${selfScrollingTab ? " is-self-scrolling" : ""}`}>
             <div className="vsWorkspaceViewport">
               <div className={workspaceClassName}>
                 <Suspense fallback={<div className="vsPageLoading" />}>
