@@ -138,6 +138,7 @@ export default function useVoiceChat({
   const assistantPlaybackGenerationRef = useRef(0);
   const nextPlaybackTimeRef = useRef(0);
   const audioInputReadyRef = useRef(false);
+  const voiceChatConnectedRef = useRef(false);
   const currentUserTurnRef = useRef("");
   const currentUserTurnIsInterimRef = useRef(false);  // streaming ASR preview — replaced in place by the final transcript
   const currentAssistantTurnRef = useRef("");
@@ -384,6 +385,7 @@ export default function useVoiceChat({
       void context.close().catch(() => { });
     }
 
+    voiceChatConnectedRef.current = false;
     setVoiceChatConnected(false);
     setVoiceChatRecording(false);
     setVoiceChatBusy(false);
@@ -732,6 +734,7 @@ export default function useVoiceChat({
   function handleRealtimeEvent(event: VoiceChatServerEvent) {
     switch (event.type) {
       case "session_open":
+        voiceChatConnectedRef.current = true;
         setVoiceChatConnected(true);
         setVoiceChatRecording(true);
         setVoiceChatBusy(false);
@@ -1484,7 +1487,7 @@ export default function useVoiceChat({
         if (sessionEpochRef.current !== sessionEpoch) {
           return;
         }
-        const wasConnected = voiceChatConnected;
+        const wasConnected = voiceChatConnectedRef.current;
         stopSessionResources();
         if (!wasConnected && event.code !== 1000) {
           setVoiceChatError((prev) => prev || t(
