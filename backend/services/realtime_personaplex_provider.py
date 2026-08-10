@@ -28,11 +28,13 @@ import asyncio
 import base64
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
-import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
+
+if TYPE_CHECKING:  # numpy is optional at runtime — see the note below.
+    import numpy as np
 
 from .realtime_constants import (
     DEFAULT_PERSONAPLEX_REALTIME_MODEL,
@@ -65,12 +67,27 @@ _MSG_TEXT = 2
 TURN_IDLE_TIMEOUT_S = 0.8
 
 
+def _numpy():
+    """Import numpy on first use.
+
+    PersonaPlex is an optional local provider, but this module is imported
+    unconditionally by the RealtimeVoiceService facade.  A top-level numpy
+    import would therefore make an optional dependency mandatory for the whole
+    backend to boot; deferring it keeps the failure scoped to this provider,
+    where stream_personaplex_session reports it as a normal error event.
+    """
+    import numpy as np
+
+    return np
+
+
 def _resample_linear(pcm: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
     """Linear resample for float32 mono audio.
 
     Good enough for speech at these rates and dependency-free, which matters
     because this path must not drag extra native wheels into the backend.
     """
+    np = _numpy()
     if src_rate == dst_rate or pcm.size == 0:
         return pcm
     duration = pcm.shape[-1] / float(src_rate)
@@ -82,10 +99,12 @@ def _resample_linear(pcm: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarra
 
 
 def _pcm16_to_float(raw: bytes) -> np.ndarray:
+    np = _numpy()
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
 
 
 def _float_to_pcm16(pcm: np.ndarray) -> bytes:
+    np = _numpy()
     clipped = np.clip(pcm, -1.0, 1.0)
     return (clipped * 32767.0).astype(np.int16).tobytes()
 
@@ -129,6 +148,7 @@ class PersonaPlexRealtimeMixin:
         opus_writer: Any,
     ) -> None:
         """Forward browser PCM16@16k to the moshi server as Opus@24k."""
+        np = _numpy()
         # sphn only accepts exact Opus frame sizes, but browser chunks resample
         # to arbitrary lengths, so carry the remainder across iterations.
         carry = np.zeros(0, dtype=np.float32)
@@ -197,6 +217,8 @@ class PersonaPlexRealtimeMixin:
     ) -> None:
         """Forward moshi Opus@24k + text tokens back to the browser."""
         import aiohttp
+
+        np = _numpy()
 
         pending_text: list[str] = []
         # Full-duplex models emit no explicit end-of-turn marker, but they only
@@ -299,12 +321,16 @@ class PersonaPlexRealtimeMixin:
     ) -> None:
         try:
             import aiohttp
+            import numpy  # noqa: F401 - presence check; used lazily via _numpy()
             import sphn
         except ImportError as exc:  # pragma: no cover - depends on local install
             await self._send_event(
                 websocket,
                 "error",
-                message=f"PersonaPlex 依赖未安装（需要 aiohttp 与 sphn）：{exc}",
+                message=(
+                    f"PersonaPlex 依赖未安装：{exc}。"
+                    "请在后端环境执行 pip install -r backend/requirements-personaplex.txt"
+                ),
             )
             return
 

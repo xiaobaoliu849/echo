@@ -1,0 +1,14 @@
+# Optional dependencies for the PersonaPlex realtime provider (英语口语陪练).
+# Install this in addition to requirements.txt when enabling PersonaPlex.
+#
+# The model itself is NOT installed here — it runs as a separate local
+# moshi.server process. These are only what the backend needs to talk to it:
+# aiohttp for the upstream WebSocket, sphn for Opus stream encode/decode, and
+# numpy for resampling and PCM conversion.
+#
+# sphn is pinned: 0.1.12 is the version whose stream API (append_pcm /
+# read_bytes / append_bytes / read_pcm) and exact-frame-size constraint this
+# provider was verified against.
+aiohttp>=3.9.0
+sphn==0.1.12
+numpy>=1.26.0

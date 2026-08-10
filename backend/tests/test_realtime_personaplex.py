@@ -7,6 +7,8 @@ arbitration — the model is natively full duplex.
 """
 
 import asyncio
+import builtins
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -480,6 +482,51 @@ class PersonaPlexTurnBoundaryTest(unittest.TestCase):
 
         types = [e["type"] for e in websocket.events]
         self.assertEqual(types.count("turn_complete"), 1)
+
+
+class PersonaPlexOptionalDependencyTest(unittest.TestCase):
+    """PersonaPlex is optional, so its deps must not gate the whole backend."""
+
+    def test_provider_module_imports_without_numpy(self):
+        # The facade imports this mixin unconditionally, so a top-level numpy
+        # import would make an optional provider's dependency mandatory for the
+        # backend to boot at all.
+        import importlib
+
+        real_import = builtins.__import__
+
+        def blocked_import(name, *args, **kwargs):
+            if name == "numpy" or name.startswith("numpy."):
+                raise ImportError("No module named 'numpy'")
+            return real_import(name, *args, **kwargs)
+
+        module_name = "services.realtime_personaplex_provider"
+        saved = sys.modules.pop(module_name, None)
+        try:
+            with patch.object(builtins, "__import__", blocked_import):
+                reloaded = importlib.import_module(module_name)
+            self.assertTrue(hasattr(reloaded, "PersonaPlexRealtimeMixin"))
+        finally:
+            sys.modules.pop(module_name, None)
+            if saved is not None:
+                sys.modules[module_name] = saved
+
+    def test_missing_dependency_is_reported_as_an_error_event(self):
+        websocket = CollectingWebSocket()
+        real_import = builtins.__import__
+
+        def blocked_import(name, *args, **kwargs):
+            if name == "sphn":
+                raise ImportError("No module named 'sphn'")
+            return real_import(name, *args, **kwargs)
+
+        with patch.object(builtins, "__import__", blocked_import):
+            asyncio.run(
+                RealtimeVoiceService().stream_personaplex_session(websocket)
+            )
+
+        self.assertEqual([e["type"] for e in websocket.events], ["error"])
+        self.assertIn("requirements-personaplex.txt", websocket.events[0]["message"])
 
 
 if __name__ == "__main__":
