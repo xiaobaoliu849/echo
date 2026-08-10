@@ -55,6 +55,9 @@ PROVIDER_KEY_MAP = {
     "AssemblyAI": "assemblyai_api_key",
     "GPT-SoVITS": "gpt_sovits_api_key",
     "Doubao": "doubao_api_key",
+    # Local moshi server — unauthenticated, but it needs an entry so that
+    # get_provider_settings resolves a base URL for it.
+    "PersonaPlex": "personaplex_api_key",
 }
 
 GOOGLE_INTERACTIONS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -74,6 +77,9 @@ DEFAULT_BASE_URLS = {
     "AssemblyAI": "https://api.assemblyai.com",
     "GPT-SoVITS": "http://127.0.0.1:9880",
     "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
+    # PersonaPlex has no HTTP API; the realtime WebSocket URL is what matters
+    # and it comes from realtime_api_urls (default ws://127.0.0.1:8998).
+    "PersonaPlex": "",
 }
 
 
