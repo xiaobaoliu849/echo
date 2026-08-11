@@ -28,6 +28,8 @@ import {
   EMPTY_VOICE_CHAT_METRICS,
   GOOGLE_PROVIDER,
   GOOGLE_REALTIME_VOICES,
+  GLM4VOICE_PROVIDER,
+  SESAME_CSM_PROVIDER,
   OPENAI_PROVIDER,
   OPENAI_REALTIME_VOICES,
   PERSONAPLEX_PROVIDER,
@@ -69,7 +71,7 @@ export default function useVoiceChat({
 }: Options) {
   const t = createInlineTranslator(language);
   const resolvedProviders = useMemo(
-    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, PERSONAPLEX_PROVIDER]
+    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, PERSONAPLEX_PROVIDER, GLM4VOICE_PROVIDER, SESAME_CSM_PROVIDER]
       .filter(p => providerOptions.includes(p)),
     [providerOptions],
   );

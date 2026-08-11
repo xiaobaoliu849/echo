@@ -610,12 +610,20 @@ export function resolveRealtimeModelOptions(
   const personaplexBuiltIns = provider === PERSONAPLEX_PROVIDER
     ? [DEFAULT_PERSONAPLEX_MODEL]
     : [];
+  const glm4voiceBuiltIns = provider === GLM4VOICE_PROVIDER
+    ? [DEFAULT_GLM4VOICE_MODEL]
+    : [];
+  const sesameCsmBuiltIns = provider === SESAME_CSM_PROVIDER
+    ? [DEFAULT_SESAME_CSM_MODEL]
+    : [];
   const allBuiltIns = [
     ...googleBuiltIns,
     ...openaiBuiltIns,
     ...dashscopeBuiltIns,
     ...doubaoBuiltIns,
     ...personaplexBuiltIns,
+    ...glm4voiceBuiltIns,
+    ...sesameCsmBuiltIns,
   ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];
   return [...new Set(ordered.filter(Boolean))];

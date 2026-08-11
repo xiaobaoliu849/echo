@@ -30,7 +30,9 @@ const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   Doubao: "doubao_api_key",
   // Local moshi server — no API key, but it needs a slot here so the provider
   // shows up in the picker and can carry a realtime base URL.
-  PersonaPlex: "personaplex_api_key"
+  PersonaPlex: "personaplex_api_key",
+  GLM4Voice: "glm4voice_api_key",
+  SesameCSM: "sesame_csm_api_key"
 };
 
 const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_API_KEY_FIELD);

@@ -32,7 +32,10 @@ export const PROVIDERS = [
   "OpenRouter",
   "SiliconFlow",
   "Groq",
-  "Ollama"
+  "Ollama",
+  "PersonaPlex",
+  "GLM4Voice",
+  "SesameCSM"
 ];
 
 export function getDefaultText(t: TranslatePair): string {
