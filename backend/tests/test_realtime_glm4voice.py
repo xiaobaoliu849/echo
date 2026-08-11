@@ -17,17 +17,15 @@ from services.realtime_glm4voice_provider import RealtimeGlm4VoiceMixin
 
 class DummyGlm4VoiceService(RealtimeGlm4VoiceMixin):
     def __init__(self):
-        self.settings_service = MagicMock()
-        self.settings_service.get_realtime_settings.return_value = {
+        self.config = MagicMock()
+        self.config.get_provider_settings.return_value = {
             "model": DEFAULT_GLM4VOICE_REALTIME_MODEL,
             "realtime_base_url": DEFAULT_GLM4VOICE_SERVER_URL,
         }
-        self.memory_service = MagicMock()
         self._send_event = AsyncMock()
         self._deliver_assistant_output = AsyncMock()
         self._finalize_realtime_turn = AsyncMock()
-        self._start_session_recorder = AsyncMock(return_value=None)
-        self._stop_session_recorder = AsyncMock()
+        self._create_voice_session_recorder = AsyncMock(return_value=None)
         self._run_duplex_tasks = AsyncMock()
 
 
@@ -38,6 +36,13 @@ def test_resolve_glm4voice_url():
 
     url_http = service._resolve_glm4voice_url({"realtime_base_url": "127.0.0.1:8999"})
     assert url_http == "ws://127.0.0.1:8999"
+
+
+def test_resolve_glm4voice_settings_defaults():
+    service = DummyGlm4VoiceService()
+    settings = service._resolve_glm4voice_settings(None)
+    assert settings["model"] == DEFAULT_GLM4VOICE_REALTIME_MODEL
+    assert settings["realtime_base_url"] == DEFAULT_GLM4VOICE_SERVER_URL
 
 
 @pytest.mark.asyncio
@@ -51,5 +56,5 @@ async def test_stream_glm4voice_session_connection_failure():
     service._send_event.assert_called_with(
         mock_ws,
         "error",
-        message="无法连接本地 GLM-4-Voice 服务 (ws://127.0.0.1:8999/api/chat)。请检查是否已双击运行 run_glm4voice_server.bat 启动该服务。",
+        message="无法连接本地 GLM-4-Voice 服务（ws://127.0.0.1:8999/api/chat）：Connection refused。请确认已双击运行 run_glm4voice_server.bat，且该服务支持 WebSocket 语音对语音协议。",
     )

@@ -188,7 +188,7 @@ async def voice_chat_ws(
     await websocket.accept()
 
     selected_provider = (provider or "Google").strip()
-    if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex"}:
+    if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "SesameCSM"}:
         await websocket.send_json(
             {
                 "type": "error",

@@ -12,7 +12,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 if TYPE_CHECKING:
     import numpy as np
@@ -81,6 +81,19 @@ class RealtimeSesameCsmMixin:
         if not base.startswith("ws://") and not base.startswith("wss://"):
             base = f"ws://{base}"
         return base.rstrip("/")
+
+    def _resolve_sesame_csm_settings(self, model: str | None) -> dict[str, str]:
+        provider_settings = self.config.get_provider_settings("SesameCSM", model)
+        resolved_model = provider_settings["model"].strip() or DEFAULT_SESAME_CSM_REALTIME_MODEL
+        server_url = (
+            str(provider_settings.get("realtime_base_url", "")).strip()
+            or str(provider_settings.get("base_url", "")).strip()
+            or DEFAULT_SESAME_CSM_SERVER_URL
+        )
+        return {
+            "model": resolved_model,
+            "realtime_base_url": self._resolve_sesame_csm_url({"realtime_base_url": server_url}),
+        }
 
     async def _client_to_sesame_csm_loop(
         self,
@@ -249,11 +262,13 @@ class RealtimeSesameCsmMixin:
         import aiohttp
         import sphn
 
-        settings = self.settings_service.get_realtime_settings(
-            "SesameCSM", model=model or DEFAULT_SESAME_CSM_REALTIME_MODEL
-        )
+        try:
+            settings = self._resolve_sesame_csm_settings(model)
+        except RuntimeError as exc:
+            await self._send_event(websocket, "error", message=str(exc))
+            return
 
-        base_url = self._resolve_sesame_csm_url(settings)
+        base_url = settings["realtime_base_url"]
         text_prompt = (instructions or "").strip() or SESAME_CSM_REALTIME_INSTRUCTIONS
         ws_url = (
             f"{base_url}"
@@ -262,7 +277,11 @@ class RealtimeSesameCsmMixin:
         )
 
         memory_session = RealtimeMemorySession()
-        recorder = await self._start_session_recorder("SesameCSM", settings)
+        recorder = await self._create_voice_session_recorder(
+            provider="SesameCSM",
+            model=settings["model"],
+            voice=voice,
+        )
         opus_writer = sphn.OpusStreamWriter(SESAME_CSM_SAMPLE_RATE)
         opus_reader = sphn.OpusStreamReader(SESAME_CSM_SAMPLE_RATE)
 
@@ -307,15 +326,30 @@ class RealtimeSesameCsmMixin:
                     )
                     await self._run_duplex_tasks(send_task, receive_task)
 
+        except WebSocketDisconnect:
+            return
         except (aiohttp.ClientError, OSError) as exc:
-            logger.warning("Failed to connect to local Sesame CSM-1B server: %s", exc)
+            logger.warning("sesame_csm_connect_failed url=%s err=%s", ws_url, exc)
             await self._send_event(
                 websocket,
                 "error",
                 message=(
-                    f"无法连接本地 Sesame CSM-1B 服务 ({base_url})。"
-                    "请检查是否已双击运行 run_sesame_csm_server.bat 启动该服务。"
+                    f"无法连接本地 Sesame CSM-1B 服务（{base_url}）：{exc}。"
+                    "请确认已双击运行 run_sesame_csm_server.bat，且该服务支持 WebSocket 语音对语音协议。"
                 ),
             )
+            return
+        except Exception as exc:
+            logger.exception("Sesame CSM-1B realtime session failed: %s", exc)
+            await self._send_event(websocket, "error", message=f"Sesame CSM-1B 实时会话失败: {exc}")
+            return
         finally:
-            await self._stop_session_recorder(recorder)
+            # The receive loop already finalizes each turn; this only catches a
+            # turn that was still open when the session dropped.  flush_turn()
+            # is a no-op when there is nothing pending.
+            memory_result = await memory_session.flush_turn()
+            if recorder is not None:
+                await recorder.complete_turn(memory_result)
+            await memory_session.drain()
+            if recorder is not None:
+                await recorder.finish()

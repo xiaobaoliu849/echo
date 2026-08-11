@@ -12,7 +12,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 if TYPE_CHECKING:
     import numpy as np
@@ -29,8 +29,7 @@ from .realtime_session_recorder import VoiceAgentSessionRecorder
 logger = logging.getLogger(__name__)
 
 CLIENT_SAMPLE_RATE = 16000
-GLM4VOICE_SAMPLE_RATE = 24000
-OPUS_FRAME_SIZE = 1920
+GLM4VOICE_SAMPLE_RATE = 22050
 _MSG_AUDIO = 1
 _MSG_TEXT = 2
 TURN_IDLE_TIMEOUT_S = 0.8
@@ -82,6 +81,19 @@ class RealtimeGlm4VoiceMixin:
             base = f"ws://{base}"
         return base.rstrip("/")
 
+    def _resolve_glm4voice_settings(self, model: str | None) -> dict[str, str]:
+        provider_settings = self.config.get_provider_settings("GLM4Voice", model)
+        resolved_model = provider_settings["model"].strip() or DEFAULT_GLM4VOICE_REALTIME_MODEL
+        server_url = (
+            str(provider_settings.get("realtime_base_url", "")).strip()
+            or str(provider_settings.get("base_url", "")).strip()
+            or DEFAULT_GLM4VOICE_SERVER_URL
+        )
+        return {
+            "model": resolved_model,
+            "realtime_base_url": self._resolve_glm4voice_url({"realtime_base_url": server_url}),
+        }
+
     async def _client_to_glm4voice_loop(
         self,
         websocket: WebSocket,
@@ -89,20 +101,12 @@ class RealtimeGlm4VoiceMixin:
         *,
         memory_session: RealtimeMemorySession,
         recorder: VoiceAgentSessionRecorder | None,
-        opus_writer: Any,
     ) -> None:
         np = _numpy()
-        carry = np.zeros(0, dtype=np.float32)
 
         async def encode_and_send(pcm: np.ndarray) -> None:
-            nonlocal carry
-            carry = np.concatenate((carry, pcm)) if carry.size else pcm
-            while carry.shape[0] >= OPUS_FRAME_SIZE:
-                opus_writer.append_pcm(carry[:OPUS_FRAME_SIZE])
-                carry = carry[OPUS_FRAME_SIZE:]
-                chunk = opus_writer.read_bytes()
-                if chunk:
-                    await upstream.send_bytes(bytes([_MSG_AUDIO]) + chunk)
+            # Raw PCM16 at the local server's native sample rate (22050 Hz).
+            await upstream.send_bytes(bytes([_MSG_AUDIO]) + _float_to_pcm16(pcm))
 
         while True:
             message = await websocket.receive()
@@ -150,7 +154,6 @@ class RealtimeGlm4VoiceMixin:
         *,
         memory_session: RealtimeMemorySession,
         recorder: VoiceAgentSessionRecorder | None,
-        opus_reader: Any,
     ) -> None:
         import aiohttp
 
@@ -209,17 +212,14 @@ class RealtimeGlm4VoiceMixin:
 
             kind = data[0]
             if kind == _MSG_AUDIO:
-                opus_reader.append_bytes(data[1:])
-                pcm = opus_reader.read_pcm()
-                if pcm is None or len(pcm) == 0:
+                pcm_bytes = data[1:]
+                if not pcm_bytes:
                     continue
                 await self._deliver_assistant_output(
                     websocket,
                     {
                         "type": "assistant_audio",
-                        "audio": base64.b64encode(
-                            _float_to_pcm16(np.asarray(pcm, dtype=np.float32))
-                        ).decode("ascii"),
+                        "audio": base64.b64encode(pcm_bytes).decode("ascii"),
                         "encoding": "pcm_s16le",
                         "sample_rate": GLM4VOICE_SAMPLE_RATE,
                     },
@@ -247,13 +247,14 @@ class RealtimeGlm4VoiceMixin:
         instructions: str | None = None,
     ) -> None:
         import aiohttp
-        import sphn
 
-        settings = self.settings_service.get_realtime_settings(
-            "GLM4Voice", model=model or DEFAULT_GLM4VOICE_REALTIME_MODEL
-        )
+        try:
+            settings = self._resolve_glm4voice_settings(model)
+        except RuntimeError as exc:
+            await self._send_event(websocket, "error", message=str(exc))
+            return
 
-        base_url = self._resolve_glm4voice_url(settings)
+        base_url = settings["realtime_base_url"]
         text_prompt = (instructions or "").strip() or GLM4VOICE_REALTIME_INSTRUCTIONS
         ws_url = (
             f"{base_url}"
@@ -262,9 +263,11 @@ class RealtimeGlm4VoiceMixin:
         )
 
         memory_session = RealtimeMemorySession()
-        recorder = await self._start_session_recorder("GLM4Voice", settings)
-        opus_writer = sphn.OpusStreamWriter(GLM4VOICE_SAMPLE_RATE)
-        opus_reader = sphn.OpusStreamReader(GLM4VOICE_SAMPLE_RATE)
+        recorder = await self._create_voice_session_recorder(
+            provider="GLM4Voice",
+            model=settings["model"],
+            voice=voice,
+        )
 
         try:
             timeout = aiohttp.ClientTimeout(total=None, sock_connect=10)
@@ -293,7 +296,6 @@ class RealtimeGlm4VoiceMixin:
                             upstream,
                             memory_session=memory_session,
                             recorder=recorder,
-                            opus_writer=opus_writer,
                         )
                     )
                     receive_task = asyncio.create_task(
@@ -302,20 +304,34 @@ class RealtimeGlm4VoiceMixin:
                             upstream,
                             memory_session=memory_session,
                             recorder=recorder,
-                            opus_reader=opus_reader,
                         )
                     )
                     await self._run_duplex_tasks(send_task, receive_task)
 
+        except WebSocketDisconnect:
+            return
         except (aiohttp.ClientError, OSError) as exc:
-            logger.warning("Failed to connect to local GLM-4-Voice server: %s", exc)
+            logger.warning("glm4voice_connect_failed url=%s err=%s", ws_url, exc)
             await self._send_event(
                 websocket,
                 "error",
                 message=(
-                    f"无法连接本地 GLM-4-Voice 服务 ({base_url})。"
-                    "请检查是否已双击运行 run_glm4voice_server.bat 启动该服务。"
+                    f"无法连接本地 GLM-4-Voice 服务（{base_url}）：{exc}。"
+                    "请确认已双击运行 run_glm4voice_server.bat，且该服务支持 WebSocket 语音对语音协议。"
                 ),
             )
+            return
+        except Exception as exc:
+            logger.exception("GLM-4-Voice realtime session failed: %s", exc)
+            await self._send_event(websocket, "error", message=f"GLM-4-Voice 实时会话失败: {exc}")
+            return
         finally:
-            await self._stop_session_recorder(recorder)
+            # The receive loop already finalizes each turn; this only catches a
+            # turn that was still open when the session dropped.  flush_turn()
+            # is a no-op when there is nothing pending.
+            memory_result = await memory_session.flush_turn()
+            if recorder is not None:
+                await recorder.complete_turn(memory_result)
+            await memory_session.drain()
+            if recorder is not None:
+                await recorder.finish()

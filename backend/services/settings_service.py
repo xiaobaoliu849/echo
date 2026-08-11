@@ -84,6 +84,9 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Deepgram": {"default": "", "available": [], "enabled": []},
         "GPT-SoVITS": {"default": "", "available": [], "enabled": []},
         "Doubao": {"default": "doubao-realtime", "available": ["doubao-realtime"], "enabled": ["doubao-realtime"]},
+        "PersonaPlex": {"default": "personaplex-7b-v1-bnb-4bit", "available": ["personaplex-7b-v1-bnb-4bit"], "enabled": ["personaplex-7b-v1-bnb-4bit"]},
+        "GLM4Voice": {"default": "glm-4-voice-9b", "available": ["glm-4-voice-9b"], "enabled": ["glm-4-voice-9b"]},
+        "SesameCSM": {"default": "csm-1b", "available": ["csm-1b"], "enabled": ["csm-1b"]},
     },
     "general_settings": {
         "display_language": "English",

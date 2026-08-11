@@ -55,9 +55,11 @@ PROVIDER_KEY_MAP = {
     "AssemblyAI": "assemblyai_api_key",
     "GPT-SoVITS": "gpt_sovits_api_key",
     "Doubao": "doubao_api_key",
-    # Local moshi server — unauthenticated, but it needs an entry so that
-    # get_provider_settings resolves a base URL for it.
+    # Local speech-to-speech servers — unauthenticated, but need entries so that
+    # get_provider_settings resolves base URLs and registers them in provider lists.
     "PersonaPlex": "personaplex_api_key",
+    "GLM4Voice": "glm4voice_api_key",
+    "SesameCSM": "sesame_csm_api_key",
 }
 
 GOOGLE_INTERACTIONS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
