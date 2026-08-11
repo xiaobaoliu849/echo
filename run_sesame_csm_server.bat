@@ -10,15 +10,10 @@ echo Mode         : Local Native Speech-to-Speech (Fast English)
 echo Port         : 8997 (ws://127.0.0.1:8997)
 echo.
 
-set "NO_TORCH_COMPILE=1"
-set "PYTHON_EXE=python"
+set "PYTHON_EXE=C:\pp-eval\venv\Scripts\python.exe"
 
-where python >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Python environment not found in PATH.
-    echo.
-    pause
-    exit /b 1
+if not exist "%PYTHON_EXE%" (
+    set "PYTHON_EXE=python"
 )
 
 netstat -ano | findstr :8997 >nul 2>&1
@@ -30,7 +25,8 @@ if not errorlevel 1 (
     timeout /t 2 /nobreak >nul
 )
 
-"%PYTHON_EXE%" -m csm.server --host 127.0.0.1 --port 8997
+set "PYTHONPATH=C:\pp-eval\csm;%PYTHONPATH%"
+"%PYTHON_EXE%" "C:\pp-eval\csm\csm_server.py" --host 127.0.0.1 --port 8997
 
 if errorlevel 1 (
     echo.

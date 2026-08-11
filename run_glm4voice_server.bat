@@ -10,15 +10,10 @@ echo Mode         : Local Native Speech-to-Speech (Bilingual)
 echo Port         : 8999 (ws://127.0.0.1:8999)
 echo.
 
-set "NO_TORCH_COMPILE=1"
-set "PYTHON_EXE=python"
+set "PYTHON_EXE=C:\pp-eval\venv\Scripts\python.exe"
 
-where python >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Python environment not found in PATH.
-    echo.
-    pause
-    exit /b 1
+if not exist "%PYTHON_EXE%" (
+    set "PYTHON_EXE=python"
 )
 
 netstat -ano | findstr :8999 >nul 2>&1
@@ -30,7 +25,8 @@ if not errorlevel 1 (
     timeout /t 2 /nobreak >nul
 )
 
-"%PYTHON_EXE%" -m glm4voice.server --host 127.0.0.1 --port 8999
+set "PYTHONPATH=C:\pp-eval\GLM-4-Voice;%PYTHONPATH%"
+"%PYTHON_EXE%" "C:\pp-eval\GLM-4-Voice\model_server.py" --host 127.0.0.1 --port 8999 --model-path "ZhipuAI/glm-4-voice-9b" --dtype int4
 
 if errorlevel 1 (
     echo.
