@@ -1,7 +1,6 @@
 """Model downloader script for VoiceSpirit local realtime voice engines.
 
-Downloads GLM-4-Voice (9B) and Sesame CSM-1B from HF Mirror using stored HF_TOKEN
-with automatic retry for uninterrupted large file downloads.
+Per-file resilient downloader with automatic resume and retry for large safetensors.
 """
 
 from __future__ import annotations
@@ -10,7 +9,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from huggingface_hub import snapshot_download
+from huggingface_hub import HfApi, hf_hub_download
 
 # Force UTF-8 output encoding for Windows CMD
 if hasattr(sys.stdout, "reconfigure"):
@@ -33,44 +32,58 @@ MODELS = [
 ]
 
 
-def download_with_retry(name: str, repo_id: str, requires_token: bool, max_retries: int = 15) -> bool:
+def download_repo_files(name: str, repo_id: str, requires_token: bool) -> bool:
     token = HF_TOKEN if requires_token else None
-    for attempt in range(1, max_retries + 1):
-        print(f"[{name}] Starting/Resuming download for {repo_id} (Attempt {attempt}/{max_retries})...")
-        try:
-            path = snapshot_download(
-                repo_id=repo_id,
-                token=token,
-                resume_download=True,
-                max_workers=4,
-            )
-            print(f"[OK] [{name}] Download complete -> {path}\n")
-            return True
-        except Exception as exc:
-            print(f"[WARN] [{name}] Attempt {attempt} failed: {exc}")
-            if attempt < max_retries:
-                print("Retrying in 5 seconds...")
-                time.sleep(5)
-            else:
-                print(f"[FAIL] [{name}] Failed after {max_retries} attempts.\n")
-                return False
-    return False
+    api = HfApi(token=token)
+    try:
+        print(f"\n[{name}] Fetching file list for {repo_id}...")
+        files = api.list_repo_files(repo_id=repo_id)
+        print(f"[{name}] Found {len(files)} files in repository.")
+    except Exception as exc:
+        print(f"[FAIL] [{name}] Could not list files for {repo_id}: {exc}")
+        return False
+
+    success_files = 0
+    for file in files:
+        if file.startswith(".git") or file.endswith(".gitattributes"):
+            continue
+
+        file_done = False
+        for attempt in range(1, 20):
+            print(f"[{name}] Downloading file: {file} (Attempt {attempt}/20)...")
+            try:
+                hf_hub_download(
+                    repo_id=repo_id,
+                    filename=file,
+                    token=token,
+                    resume_download=True,
+                )
+                print(f"[OK] [{name}] File ready: {file}")
+                file_done = True
+                break
+            except Exception as exc:
+                print(f"[WARN] [{name}] File {file} attempt {attempt} failed: {exc}")
+                time.sleep(3)
+
+        if file_done:
+            success_files += 1
+
+    print(f"[SUMMARY] [{name}] Downloaded {success_files} files for {repo_id}.\n")
+    return True
 
 
 def download_all():
     print("=" * 60)
-    print(" VoiceSpirit Local Realtime Models Downloader")
+    print(" VoiceSpirit Resilient Local Voice Models Downloader")
     print("=" * 60)
     print(f"HF Mirror Endpoint: {os.environ['HF_ENDPOINT']}")
     print(f"Hugging Face Token: {'Detected (' + HF_TOKEN[:10] + '...)' if HF_TOKEN else 'Not set'}\n")
 
-    success_count = 0
     for name, repo_id, requires_token in MODELS:
-        if download_with_retry(name, repo_id, requires_token):
-            success_count += 1
+        download_repo_files(name, repo_id, requires_token)
 
     print("=" * 60)
-    print(f" Download summary: {success_count}/{len(MODELS)} models ready!")
+    print(" All local voice model downloads finished!")
     print("=" * 60)
 
 
