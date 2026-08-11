@@ -25,6 +25,7 @@ if not errorlevel 1 (
     timeout /t 2 /nobreak >nul
 )
 
+set "LOCAL_LLAMA_PATH=C:\Users\WINDOWS\.cache\modelscope\models\LLM-Research--Llama-3.2-1B\snapshots\master"
 set "PYTHONPATH=C:\pp-eval\csm;%PYTHONPATH%"
 "%PYTHON_EXE%" "C:\pp-eval\csm\csm_server.py" --host 127.0.0.1 --port 8997
 
