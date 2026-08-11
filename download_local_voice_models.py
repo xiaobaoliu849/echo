@@ -1,6 +1,6 @@
-"""Model downloader script for VoiceSpirit local realtime voice engines.
+"""ModelScope Ultra-Fast Downloader script for VoiceSpirit local realtime voice engines.
 
-Per-file resilient downloader with automatic resume and unbuffered stdout logging.
+Downloads GLM-4-Voice and Sesame CSM-1B / Llama-3.2-1B using ModelScope high-speed CDN.
 """
 
 from __future__ import annotations
@@ -9,26 +9,19 @@ import os
 import sys
 import time
 from pathlib import Path
-from huggingface_hub import HfApi, hf_hub_download
+from modelscope.hub.snapshot_download import snapshot_download
 
 # Force unbuffered UTF-8 output
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 os.environ["PYTHONUNBUFFERED"] = "1"
-os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-
-TOKEN_FILE = Path.home() / ".cache" / "huggingface" / "token"
-HF_TOKEN = None
-if TOKEN_FILE.exists():
-    HF_TOKEN = TOKEN_FILE.read_text(encoding="utf-8").strip()
 
 MODELS = [
-    ("GLM-4-Voice 9B", "THUDM/glm-4-voice-9b", False),
-    ("GLM-4-Voice Decoder", "THUDM/glm-4-voice-decoder", False),
-    ("GLM-4-Voice Tokenizer", "THUDM/glm-4-voice-tokenizer", False),
-    ("Sesame CSM-1B", "sesame/csm-1b", True),
-    ("Llama 3.2 1B (Sesame Backbone)", "meta-llama/Llama-3.2-1B", True),
+    ("GLM-4-Voice 9B", "ZhipuAI/glm-4-voice-9b"),
+    ("GLM-4-Voice Decoder", "ZhipuAI/glm-4-voice-decoder"),
+    ("GLM-4-Voice Tokenizer", "ZhipuAI/glm-4-voice-tokenizer"),
+    ("Llama 3.2 1B (Sesame Backbone)", "LLM-Research/Llama-3.2-1B"),
 ]
 
 
@@ -36,58 +29,32 @@ def log_print(msg: str):
     print(msg, flush=True)
 
 
-def download_repo_files(name: str, repo_id: str, requires_token: bool) -> bool:
-    token = HF_TOKEN if requires_token else None
-    api = HfApi(token=token)
-    try:
-        log_print(f"\n[{name}] Fetching file list for {repo_id}...")
-        files = api.list_repo_files(repo_id=repo_id)
-        log_print(f"[{name}] Found {len(files)} files in repository.")
-    except Exception as exc:
-        log_print(f"[FAIL] [{name}] Could not list files for {repo_id}: {exc}")
-        return False
-
-    success_files = 0
-    for file in files:
-        if file.startswith(".git") or file.endswith(".gitattributes"):
-            continue
-
-        file_done = False
-        for attempt in range(1, 20):
-            log_print(f"[{name}] Downloading file: {file} (Attempt {attempt}/20)...")
-            try:
-                hf_hub_download(
-                    repo_id=repo_id,
-                    filename=file,
-                    token=token,
-                    resume_download=True,
-                )
-                log_print(f"[OK] [{name}] File ready: {file}")
-                file_done = True
-                break
-            except Exception as exc:
-                log_print(f"[WARN] [{name}] File {file} attempt {attempt} failed: {exc}")
+def download_modelscope_repo(name: str, repo_id: str, max_retries: int = 10) -> bool:
+    for attempt in range(1, max_retries + 1):
+        log_print(f"\n[{name}] Starting/Resuming download for ModelScope {repo_id} (Attempt {attempt}/{max_retries})...")
+        try:
+            path = snapshot_download(repo_id=repo_id)
+            log_print(f"[OK] [{name}] Complete! Local cache path: {path}")
+            return True
+        except Exception as exc:
+            log_print(f"[WARN] [{name}] Attempt {attempt} failed: {exc}")
+            if attempt < max_retries:
                 time.sleep(3)
-
-        if file_done:
-            success_files += 1
-
-    log_print(f"[SUMMARY] [{name}] Downloaded {success_files} files for {repo_id}.\n")
-    return True
+    return False
 
 
 def download_all():
     log_print("=" * 60)
-    log_print(" VoiceSpirit Resilient Local Voice Models Downloader")
+    log_print(" VoiceSpirit ModelScope High-Speed Models Downloader")
     log_print("=" * 60)
-    log_print(f"HF Mirror Endpoint: {os.environ['HF_ENDPOINT']}")
-    log_print(f"Hugging Face Token: {'Detected (' + HF_TOKEN[:10] + '...)' if HF_TOKEN else 'Not set'}\n")
 
-    for name, repo_id, requires_token in MODELS:
-        download_repo_files(name, repo_id, requires_token)
+    success_count = 0
+    for name, repo_id in MODELS:
+        if download_modelscope_repo(name, repo_id):
+            success_count += 1
 
-    log_print("=" * 60)
-    log_print(" All local voice model downloads finished!")
+    log_print("\n" + "=" * 60)
+    log_print(f" Download summary: {success_count}/{len(MODELS)} models ready!")
     log_print("=" * 60)
 
 
