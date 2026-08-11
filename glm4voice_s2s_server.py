@@ -30,13 +30,10 @@ import asyncio
 import io
 import json
 import logging
-import math
 import os
 import sys
-import tempfile
 import time
 import uuid
-import wave
 from typing import Any, Callable
 
 import fastapi
@@ -49,12 +46,26 @@ SAMPLE_RATE = 22050
 _MSG_AUDIO = 1
 _MSG_TEXT = 2
 
-# VAD parameters (RMS energy based)
+# VAD parameters (RMS energy based).  Defaults are overridable on the command
+# line so the mic/room can be tuned without editing this file.
 VAD_FRAME_MS = 20
-VAD_THRESHOLD = 400          # int16 amplitude threshold for "speech"
-VAD_MIN_SPEECH_S = 0.30      # minimum speech before a turn can close
+VAD_THRESHOLD = 900          # int16 RMS threshold for "speech" (~ -37 dBFS)
+VAD_MIN_SPEECH_S = 0.40      # longest *consecutive* speech run needed to arm a turn
 VAD_TRAIL_SILENCE_S = 0.55   # trailing silence that closes the turn
 VAD_MAX_TURN_S = 12.0        # hard cap: force-close the turn
+VAD_PREROLL_S = 0.25         # audio retained ahead of speech onset
+VAD_MAX_UTTERANCE_S = 20.0   # never send more than this much audio to the encoder
+POST_TURN_COOLDOWN_S = 0.30  # ignore the mic briefly after we stop speaking
+
+# The prompt carries every previous turn as raw audio/text tokens, so it grows by
+# ~12.5 tokens per second of conversation.  Prefill is the dominant cost on an
+# int4 worker, so keep only the most recent exchanges.
+MAX_HISTORY_TURNS = 4
+
+# Audio tokens per streamed decode block.  The first block gates time-to-first-
+# sound, so it is much smaller than upstream's 25; later blocks grow to amortize
+# the flow-matching decoder.
+BLOCK_SIZE_LIST = (10, 25, 50, 100, 150, 200)
 
 DEFAULT_SYSTEM_PROMPT = (
     "User will provide you with a speech instruction. Do it step by step. "
@@ -77,14 +88,6 @@ def _float_to_pcm16(data: np.ndarray) -> bytes:
     return (clipped * 32767.0).astype(np.int16).tobytes()
 
 
-def _write_wav(path: str, pcm16: bytes, sample_rate: int) -> None:
-    with wave.open(path, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm16)
-
-
 class Glm4VoicePipeline:
     """Owns the tokenizer + decoder and the streaming conversation logic."""
 
@@ -95,12 +98,16 @@ class Glm4VoicePipeline:
         flow_path: str,
         llm_url: str,
         device: str,
+        max_history_turns: int = MAX_HISTORY_TURNS,
+        block_size_list: tuple[int, ...] = BLOCK_SIZE_LIST,
     ) -> None:
         self.tokenizer_path = tokenizer_path
         self.model_path = model_path
         self.flow_path = flow_path
         self.llm_url = llm_url
         self.device = device
+        self.max_history_turns = max_history_turns
+        self.block_size_list = block_size_list
         self.whisper_model = None
         self.feature_extractor = None
         self.text_tokenizer = None
@@ -166,22 +173,31 @@ class Glm4VoicePipeline:
 
     def _encode_utterance(self, pcm16: bytes) -> str:
         """PCM16@22050 -> serialized <|audio_x|> token string."""
+        import torch
+
         from speech_tokenizer.utils import extract_speech_token
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_path = tmp.name
-        try:
-            _write_wav(tmp_path, pcm16, SAMPLE_RATE)
-            tokens = extract_speech_token(self.whisper_model, self.feature_extractor, [tmp_path])[0]
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+        # extract_speech_token accepts (waveform, sample_rate) tuples, so the
+        # utterance goes straight to the GPU instead of through a temp WAV that
+        # torchaudio would immediately read back.
+        wav = torch.from_numpy(_pcm16_to_float(pcm16)).unsqueeze(0)
+        tokens = extract_speech_token(
+            self.whisper_model, self.feature_extractor, [(wav, SAMPLE_RATE)]
+        )[0]
         if not tokens:
             raise ValueError("No audio tokens extracted from the utterance.")
         inner = "".join(f"<|audio_{int(t)}|>" for t in tokens)
         return f"<|begin_of_audio|>{inner}<|end_of_audio|>"
+
+    @staticmethod
+    def _trim_history(prompt: str, max_turns: int) -> str:
+        """Keep the system header plus the most recent `max_turns` exchanges."""
+        if max_turns <= 0 or not prompt:
+            return prompt
+        parts = prompt.split("<|user|>")
+        if len(parts) <= max_turns + 1:
+            return prompt
+        return parts[0] + "<|user|>" + "<|user|>".join(parts[-max_turns:])
 
     def _run_turn(
         self,
@@ -208,7 +224,7 @@ class Glm4VoicePipeline:
         user_input = self._encode_utterance(pcm16)
         t_prof["encode"] = time.monotonic()
 
-        inputs = prompt
+        inputs = self._trim_history(prompt, self.max_history_turns)
         if "<|system|>" not in inputs:
             inputs += f"<|system|>\n{system_prompt}"
         inputs += f"<|user|>\n{user_input}<|assistant|>streaming_transcription\n"
@@ -247,17 +263,18 @@ class Glm4VoicePipeline:
         this_uuid = str(uuid.uuid4())
         prev_mel = None
         is_finalize = False
-        block_size_list = [25, 50, 100, 150, 200]
+        block_size_list = list(self.block_size_list)
         block_size_idx = 0
         block_size = block_size_list[block_size_idx]
 
-        t_prof["llm_first_byte"] = time.monotonic()
         first_block = True
 
-        for line in response.iter_lines():
+        for line in response.iter_lines(chunk_size=1):
             if not line:
                 continue
             token_id = json.loads(line)["token_id"]
+            if "llm_first_byte" not in t_prof:
+                t_prof["llm_first_byte"] = time.monotonic()
             if token_id == end_token_id:
                 is_finalize = True
 
@@ -287,19 +304,23 @@ class Glm4VoicePipeline:
                 flow_prompt_speech_token = torch.cat((flow_prompt_speech_token, tts_token), dim=-1)
 
                 pcm = _float_to_pcm16(tts_speech.detach().cpu().numpy()[0])
+                block_tokens = len(audio_tokens)
                 _emit("audio", pcm)
                 audio_tokens = []
                 if first_block:
                     first_block = False
                     t_prof["decode_first_block"] = time.monotonic()
                     logger.info(
-                        "glm4voice_turn_profile encode=%.2fs llm_first_byte=%.2fs decode_first_block=%.2fs "
-                        "(utterance=%dB, audio_tokens=%d)",
+                        "glm4voice_turn_profile encode=%.2fs llm_first_byte=%.2fs "
+                        "decode_first_block=%.2fs total_to_first_audio=%.2fs "
+                        "(utterance=%.2fs, prompt_chars=%d, block_tokens=%d)",
                         t_prof["encode"] - t_prof["start"],
                         t_prof["llm_first_byte"] - t_prof["encode"],
                         t_prof["decode_first_block"] - t_prof["llm_first_byte"],
-                        len(pcm16),
-                        len(audio_tokens),
+                        t_prof["decode_first_block"] - t_prof["start"],
+                        len(pcm16) / 2 / SAMPLE_RATE,
+                        len(inputs),
+                        block_tokens,
                     )
 
             # The end-of-turn token is a delimiter, never part of the reply.
@@ -372,15 +393,32 @@ class Glm4VoicePipeline:
         return queue, task
 
 
+class VadConfig:
+    """Tunable VAD thresholds (mutable copy of the module defaults)."""
+
+    def __init__(self) -> None:
+        self.threshold = VAD_THRESHOLD
+        self.min_speech_s = VAD_MIN_SPEECH_S
+        self.trail_silence_s = VAD_TRAIL_SILENCE_S
+        self.max_turn_s = VAD_MAX_TURN_S
+        self.preroll_s = VAD_PREROLL_S
+        self.max_utterance_s = VAD_MAX_UTTERANCE_S
+
+
 class ConversationState:
-    def __init__(self, system_prompt: str) -> None:
+    def __init__(self, system_prompt: str, vad: VadConfig | None = None) -> None:
         self.system_prompt = system_prompt
+        self.vad = vad or VadConfig()
         self.prompt = ""
         self.buffer = bytearray()
         self.trailing_silence_s = 0.0
         self.speech_s = 0.0
         self.last_energy_sample = 0.0
         self.turn_started = time.monotonic()
+        # While the assistant is generating/speaking we drop mic input entirely:
+        # the controller cannot act on it anyway, and keeping it would fold the
+        # reply's own echo plus seconds of silence into the *next* utterance.
+        self.muted = False
 
     def reset_turn_tracking(self) -> None:
         self.trailing_silence_s = 0.0
@@ -393,50 +431,106 @@ class ConversationState:
         return float(np.sqrt(np.mean(np.square(frame.astype(np.float32)))))
 
     def feed_audio(self, data: bytes) -> None:
+        if self.muted:
+            return
         self.buffer.extend(data)
 
+    def clear(self) -> None:
+        self.buffer.clear()
+        self.reset_turn_tracking()
+
     def turn_ready(self) -> bool:
-        """Check VAD on the buffered audio; returns True when to run a turn."""
+        """Check VAD on the buffered audio; returns True when to run a turn.
+
+        Also trims the buffer in place: silence ahead of speech onset is dropped
+        (apart from a short pre-roll) so a caller who stays quiet for a minute
+        does not hand the encoder a minute of silence to tokenize.
+        """
+        vad = self.vad
         frame = VAD_FRAME_MS * SAMPLE_RATE // 1000
-        n_frames = len(self.buffer) // (frame * 2)
+        frame_bytes = frame * 2
+        n_frames = len(self.buffer) // frame_bytes
         if n_frames == 0:
             return False
 
-        s16 = np.frombuffer(self.buffer[: n_frames * frame * 2], dtype=np.int16)
-        frames = s16[: n_frames * frame].reshape(n_frames, frame)
+        s16 = np.frombuffer(self.buffer[: n_frames * frame_bytes], dtype=np.int16)
+        frames = s16.reshape(n_frames, frame)
         energies = np.sqrt(np.mean(np.square(frames.astype(np.float32)), axis=1))
+        is_speech = energies > vad.threshold
 
-        speech_ms = int(np.sum(energies > VAD_THRESHOLD)) * VAD_FRAME_MS
-        trailing = 0
-        for e in energies[::-1]:
-            if e > VAD_THRESHOLD:
-                break
-            trailing += VAD_FRAME_MS
-        self.speech_s = speech_ms / 1000.0
-        self.trailing_silence_s = trailing / 1000.0
-        elapsed = time.monotonic() - self.turn_started
+        preroll_frames = max(1, int(vad.preroll_s * 1000 / VAD_FRAME_MS))
 
-        has_speech = self.speech_s >= VAD_MIN_SPEECH_S
-        closed_by_silence = has_speech and self.trailing_silence_s >= VAD_TRAIL_SILENCE_S
-        closed_by_timeout = has_speech and elapsed >= VAD_MAX_TURN_S
+        if not bool(is_speech.any()):
+            # Pure silence: keep only a short pre-roll so the buffer cannot grow
+            # without bound while nobody is talking.
+            keep = min(n_frames, preroll_frames)
+            drop_bytes = (n_frames - keep) * frame_bytes
+            if drop_bytes > 0:
+                del self.buffer[:drop_bytes]
+                self.turn_started = time.monotonic()
+            self.speech_s = 0.0
+            self.trailing_silence_s = 0.0
+            return False
+
+        speech_idx = np.flatnonzero(is_speech)
+        onset = int(speech_idx[0])
+
+        # Drop everything before the pre-roll ahead of speech onset.
+        drop_frames = max(0, onset - preroll_frames)
+        if drop_frames > 0:
+            del self.buffer[: drop_frames * frame_bytes]
+            energies = energies[drop_frames:]
+            is_speech = is_speech[drop_frames:]
+            n_frames -= drop_frames
+            self.turn_started = time.monotonic() - (n_frames * VAD_FRAME_MS / 1000.0)
+
+        # Longest *consecutive* speech run, so isolated clicks/keystrokes do not
+        # accumulate into a false turn the way a total-frame count does.
+        longest = 0
+        run = 0
+        for flag in is_speech:
+            if flag:
+                run += 1
+                longest = max(longest, run)
+            else:
+                run = 0
+        trailing = int(n_frames - 1 - np.flatnonzero(is_speech)[-1])
+
+        self.speech_s = longest * VAD_FRAME_MS / 1000.0
+        self.trailing_silence_s = trailing * VAD_FRAME_MS / 1000.0
+        elapsed = n_frames * VAD_FRAME_MS / 1000.0
+
+        has_speech = self.speech_s >= vad.min_speech_s
+        closed_by_silence = has_speech and self.trailing_silence_s >= vad.trail_silence_s
+        closed_by_timeout = has_speech and elapsed >= vad.max_turn_s
         return bool(closed_by_silence or closed_by_timeout)
 
     def take_utterance(self) -> bytes | None:
         if not self.buffer:
             return None
-        data = bytes(self.buffer)
+        max_bytes = int(self.vad.max_utterance_s * SAMPLE_RATE) * 2
+        if len(self.buffer) > max_bytes:
+            # Keep the tail: the most recent speech is what the user just said.
+            data = bytes(self.buffer[-max_bytes:])
+        else:
+            data = bytes(self.buffer)
         self.buffer.clear()
         self.reset_turn_tracking()
         return data
 
 
-async def handle_connection(ws: Any, pipeline: Glm4VoicePipeline, system_prompt: str) -> None:
+async def handle_connection(
+    ws: Any,
+    pipeline: Glm4VoicePipeline,
+    system_prompt: str,
+    vad: VadConfig | None = None,
+) -> None:
     await ws.accept()
     # Handshake: any first message from the server is treated as success by the
     # VoiceSpirit provider; send a text line so it also carries intent.
     await ws.send_bytes(bytes([_MSG_TEXT]) + "GLM-4-Voice ready".encode("utf-8"))
 
-    state = ConversationState(system_prompt)
+    state = ConversationState(system_prompt, vad)
     closed = asyncio.Event()
 
     async def reader() -> None:
@@ -483,34 +577,46 @@ async def handle_connection(ws: Any, pipeline: Glm4VoicePipeline, system_prompt:
                 async with _GLOBAL_GENERATION_LOCK:
                     if closed.is_set():
                         return
-                    queue, produce_task = await pipeline._stream_turn(
-                        state.prompt, state.system_prompt, utterance
-                    )
-                    while True:
-                        kind, payload = await queue.get()
-                        if closed.is_set():
-                            break
-                        if kind == "done":
-                            state.prompt = payload
-                            break
-                        if kind == "error":
-                            try:
-                                await ws.send_bytes(
-                                    bytes([_MSG_TEXT]) + f"GLM-4-Voice 会话错误: {payload}".encode("utf-8")
-                                )
-                            except Exception:
-                                break
-                            break
-                        if kind == "audio":
-                            await ws.send_bytes(bytes([_MSG_AUDIO]) + payload)
-                        else:
-                            await ws.send_bytes(bytes([_MSG_TEXT]) + str(payload).encode("utf-8"))
-                    if not produce_task.done():
-                        produce_task.cancel()
+                    # Deafen the mic for the whole reply.  Nothing can act on the
+                    # audio until the turn ends, and keeping it would splice the
+                    # reply's own speaker echo into the next utterance.
+                    state.muted = True
                     try:
-                        await produce_task
-                    except asyncio.CancelledError:
-                        pass
+                        queue, produce_task = await pipeline._stream_turn(
+                            state.prompt, state.system_prompt, utterance
+                        )
+                        while True:
+                            kind, payload = await queue.get()
+                            if closed.is_set():
+                                break
+                            if kind == "done":
+                                state.prompt = payload
+                                break
+                            if kind == "error":
+                                try:
+                                    await ws.send_bytes(
+                                        bytes([_MSG_TEXT])
+                                        + f"GLM-4-Voice 会话错误: {payload}".encode("utf-8")
+                                    )
+                                except Exception:
+                                    break
+                                break
+                            if kind == "audio":
+                                await ws.send_bytes(bytes([_MSG_AUDIO]) + payload)
+                            else:
+                                await ws.send_bytes(bytes([_MSG_TEXT]) + str(payload).encode("utf-8"))
+                        if not produce_task.done():
+                            produce_task.cancel()
+                        try:
+                            await produce_task
+                        except asyncio.CancelledError:
+                            pass
+                    finally:
+                        # Let the tail of the reply finish leaving the speakers
+                        # before listening again, then start from a clean buffer.
+                        await asyncio.sleep(POST_TURN_COOLDOWN_S)
+                        state.clear()
+                        state.muted = False
 
     reader_task = asyncio.create_task(reader())
     controller_task = asyncio.create_task(controller())
@@ -535,6 +641,26 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8999)
     parser.add_argument("--device", default="cuda" if os.environ.get("CUDA_VISIBLE_DEVICES", "") else "cuda")
+    parser.add_argument(
+        "--vad-threshold", type=float, default=VAD_THRESHOLD,
+        help="int16 RMS threshold for speech; raise it if the mic self-triggers",
+    )
+    parser.add_argument(
+        "--vad-min-speech", type=float, default=VAD_MIN_SPEECH_S,
+        help="seconds of consecutive speech needed before a turn can close",
+    )
+    parser.add_argument(
+        "--vad-trail-silence", type=float, default=VAD_TRAIL_SILENCE_S,
+        help="trailing silence that closes a turn; lower reacts faster",
+    )
+    parser.add_argument(
+        "--max-history-turns", type=int, default=MAX_HISTORY_TURNS,
+        help="conversation turns kept in the prompt (0 = unbounded, slower)",
+    )
+    parser.add_argument(
+        "--first-block-tokens", type=int, default=BLOCK_SIZE_LIST[0],
+        help="audio tokens in the first decode block; lower speaks sooner",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -542,12 +668,24 @@ def main() -> int:
     global _GLOBAL_GENERATION_LOCK
     _GLOBAL_GENERATION_LOCK = asyncio.Lock()
 
+    vad = VadConfig()
+    vad.threshold = args.vad_threshold
+    vad.min_speech_s = args.vad_min_speech
+    vad.trail_silence_s = args.vad_trail_silence
+
+    block_sizes = tuple(
+        [max(1, args.first_block_tokens)]
+        + [b for b in BLOCK_SIZE_LIST[1:] if b > args.first_block_tokens]
+    ) or (max(1, args.first_block_tokens),)
+
     pipeline = Glm4VoicePipeline(
         tokenizer_path=args.tokenizer_path,
         model_path=args.model_path,
         flow_path=args.flow_path,
         llm_url=args.llm_url,
         device=args.device,
+        max_history_turns=args.max_history_turns,
+        block_size_list=block_sizes,
     )
 
     try:
@@ -567,7 +705,7 @@ def main() -> int:
         query = dict(websocket.query_params)
         system_prompt = str(query.get("text_prompt", "")).strip() or DEFAULT_SYSTEM_PROMPT
         try:
-            await handle_connection(websocket, pipeline, system_prompt)
+            await handle_connection(websocket, pipeline, system_prompt, vad)
         except Exception:
             logger.exception("websocket handler failed")
 

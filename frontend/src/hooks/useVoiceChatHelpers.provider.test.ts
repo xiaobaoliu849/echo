@@ -8,7 +8,6 @@ import {
   OPENAI_PROVIDER,
   PERSONAPLEX_PROVIDER,
   PERSONAPLEX_REALTIME_VOICES,
-  SESAME_CSM_PROVIDER,
   resolveRealtimeProvider,
 } from "./useVoiceChatHelpers";
 
@@ -29,7 +28,6 @@ describe("resolveRealtimeProvider", () => {
     DOUBAO_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
-    SESAME_CSM_PROVIDER,
   ];
 
   it("honours every realtime provider it is offered", () => {
@@ -40,12 +38,9 @@ describe("resolveRealtimeProvider", () => {
     }
   });
 
-  it("keeps local providers GLM4Voice and SesameCSM without falling back", () => {
+  it("keeps the local GLM4Voice provider without falling back", () => {
     expect(resolveRealtimeProvider(GLM4VOICE_PROVIDER, allProviders)).toBe(
       GLM4VOICE_PROVIDER,
-    );
-    expect(resolveRealtimeProvider(SESAME_CSM_PROVIDER, allProviders)).toBe(
-      SESAME_CSM_PROVIDER,
     );
   });
 

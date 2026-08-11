@@ -1,6 +1,6 @@
 """ModelScope Ultra-Fast Downloader script for VoiceSpirit local realtime voice engines.
 
-Downloads GLM-4-Voice and Sesame CSM-1B / Llama-3.2-1B using ModelScope high-speed CDN.
+Downloads GLM-4-Voice using ModelScope high-speed CDN.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ MODELS = [
     ("GLM-4-Voice 9B", "ZhipuAI/glm-4-voice-9b"),
     ("GLM-4-Voice Decoder", "ZhipuAI/glm-4-voice-decoder"),
     ("GLM-4-Voice Tokenizer", "ZhipuAI/glm-4-voice-tokenizer"),
-    ("Llama 3.2 1B (Sesame Backbone)", "LLM-Research/Llama-3.2-1B"),
 ]
 
 

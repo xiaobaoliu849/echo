@@ -58,7 +58,6 @@ export const OPENAI_PROVIDER = "OpenAI";
 export const DOUBAO_PROVIDER = "Doubao";
 export const PERSONAPLEX_PROVIDER = "PersonaPlex";
 export const GLM4VOICE_PROVIDER = "GLM4Voice";
-export const SESAME_CSM_PROVIDER = "SesameCSM";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 // The legacy gemini-2.5-flash-native-audio-preview-12-2025 model has been retired;
@@ -69,7 +68,6 @@ export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
 export const DEFAULT_PERSONAPLEX_MODEL = "personaplex-7b-v1-bnb-4bit";
 export const DEFAULT_GLM4VOICE_MODEL = "glm-4-voice-9b";
-export const DEFAULT_SESAME_CSM_MODEL = "csm-1b";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
   "native-audio",
   "live",
@@ -407,7 +405,7 @@ export function formatRealtimeVoiceOptions(
     options = DOUBAO_REALTIME_VOICES;
   } else if (provider === PERSONAPLEX_PROVIDER) {
     options = PERSONAPLEX_REALTIME_VOICES;
-  } else if (provider === GLM4VOICE_PROVIDER || provider === SESAME_CSM_PROVIDER) {
+  } else if (provider === GLM4VOICE_PROVIDER) {
     options = [{ value: "default", label: "Default · 默认音色", description: "原生默认音色" }];
   } else if (provider === DASHSCOPE_PROVIDER) {
     if (isQwenAudioModel(model)) {
@@ -475,7 +473,6 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
     DOUBAO_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
-    SESAME_CSM_PROVIDER,
   ];
   if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
     return preferredProvider;
@@ -509,8 +506,7 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
     return true;
   }
   if (normalizedProvider === PERSONAPLEX_PROVIDER.toLowerCase() ||
-      normalizedProvider === GLM4VOICE_PROVIDER.toLowerCase() ||
-      normalizedProvider === SESAME_CSM_PROVIDER.toLowerCase()) {
+      normalizedProvider === GLM4VOICE_PROVIDER.toLowerCase()) {
     // Local speech-to-speech providers only ship realtime models.
     return true;
   }
@@ -564,9 +560,6 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   if (provider === GLM4VOICE_PROVIDER) {
     return DEFAULT_GLM4VOICE_MODEL;
   }
-  if (provider === SESAME_CSM_PROVIDER) {
-    return DEFAULT_SESAME_CSM_MODEL;
-  }
   return "";
 }
 
@@ -613,9 +606,6 @@ export function resolveRealtimeModelOptions(
   const glm4voiceBuiltIns = provider === GLM4VOICE_PROVIDER
     ? [DEFAULT_GLM4VOICE_MODEL]
     : [];
-  const sesameCsmBuiltIns = provider === SESAME_CSM_PROVIDER
-    ? [DEFAULT_SESAME_CSM_MODEL]
-    : [];
   const allBuiltIns = [
     ...googleBuiltIns,
     ...openaiBuiltIns,
@@ -623,7 +613,6 @@ export function resolveRealtimeModelOptions(
     ...doubaoBuiltIns,
     ...personaplexBuiltIns,
     ...glm4voiceBuiltIns,
-    ...sesameCsmBuiltIns,
   ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];
   return [...new Set(ordered.filter(Boolean))];

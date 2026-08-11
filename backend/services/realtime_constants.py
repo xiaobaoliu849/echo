@@ -162,13 +162,6 @@ GLM4VOICE_REALTIME_INSTRUCTIONS = (
     "保持回答简洁流畅，适合实时语音播报。"
 )
 
-DEFAULT_SESAME_CSM_REALTIME_MODEL = "csm-1b"
-DEFAULT_SESAME_CSM_REALTIME_VOICE = "default"
-DEFAULT_SESAME_CSM_SERVER_URL = "ws://127.0.0.1:8997/api/chat"
-SESAME_CSM_REALTIME_INSTRUCTIONS = (
-    "You are a warm, patient English conversation partner. Respond with short, natural spoken English."
-)
-
 
 # ---------------------------------------------------------------------------
 # Model-detection helpers

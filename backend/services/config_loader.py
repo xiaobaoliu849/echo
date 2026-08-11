@@ -59,7 +59,6 @@ PROVIDER_KEY_MAP = {
     # get_provider_settings resolves base URLs and registers them in provider lists.
     "PersonaPlex": "personaplex_api_key",
     "GLM4Voice": "glm4voice_api_key",
-    "SesameCSM": "sesame_csm_api_key",
 }
 
 GOOGLE_INTERACTIONS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -79,10 +78,9 @@ DEFAULT_BASE_URLS = {
     "AssemblyAI": "https://api.assemblyai.com",
     "GPT-SoVITS": "http://127.0.0.1:9880",
     "Doubao": "https://openspeech.bytedance.com/api/v3/realtime/dialogue",
-    # PersonaPlex, GLM4Voice, and SesameCSM use local WebSocket URLs
+    # PersonaPlex and GLM4Voice use local WebSocket URLs
     "PersonaPlex": "",
     "GLM4Voice": "",
-    "SesameCSM": "",
 }
 
 

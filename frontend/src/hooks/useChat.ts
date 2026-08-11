@@ -44,8 +44,7 @@ export function isVoiceRealtimeModel(provider: string, model: string): boolean {
   }
   if (
     normalizedProvider === "personaplex" ||
-    normalizedProvider === "glm4voice" ||
-    normalizedProvider === "sesamecsm"
+    normalizedProvider === "glm4voice"
   ) {
     return true;
   }
@@ -74,9 +73,6 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
   const normalizedProv = (provider || "").trim().toLowerCase();
   if (normalizedProv === "glm4voice" || model.toLowerCase().includes("glm-4-voice")) {
     return t("智谱端到端语音", "GLM-4-Voice bilingual");
-  }
-  if (normalizedProv === "sesamecsm" || model.toLowerCase().includes("csm")) {
-    return t("Sesame 极速英文", "Sesame CSM English");
   }
   if (normalizedProv === "personaplex" || model.toLowerCase().includes("personaplex")) {
     return t("NVIDIA 全双工陪练", "NVIDIA duplex call");

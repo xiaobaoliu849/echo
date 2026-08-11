@@ -121,6 +121,25 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.getByText("gemini-3.1-flash-live-preview").closest(".vsModelFlyout")).toHaveStyle("top: 48px");
   });
 
+  it("aligns the Level-3 voice flyout with the same row as the Level-2 flyout", () => {
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      const text = this.textContent || "";
+      if (text.includes("Google")) return 48;
+      if (text.includes("DashScope")) return 6;
+      return 0;
+    });
+    renderPopover();
+    openPanel();
+
+    // Hovering a realtime model opens the voice category; the voice list must
+    // line up with the model flyout (the provider row), not the panel top.
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    fireEvent.mouseEnter(screen.getByText("gemini-3.1-flash-live-preview"));
+    const voiceFlyout = document.querySelector(".vsVoiceLevel3Flyout") as HTMLElement;
+    expect(voiceFlyout).not.toBeNull();
+    expect(voiceFlyout).toHaveStyle("top: 48px");
+  });
+
   it("always shows a Done button in the footer that closes the panel", () => {
     renderPopover();
     openPanel();

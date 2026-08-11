@@ -13,7 +13,6 @@ from services.realtime_voice_service import (
     DEFAULT_DOUBAO_REALTIME_VOICE,
     DEFAULT_PERSONAPLEX_REALTIME_VOICE,
     DEFAULT_GLM4VOICE_REALTIME_VOICE,
-    DEFAULT_SESAME_CSM_REALTIME_VOICE,
     RealtimeVoiceService,
 )
 from services.voice_agent_session_repository import VoiceAgentSessionRepository
@@ -188,7 +187,7 @@ async def voice_chat_ws(
     await websocket.accept()
 
     selected_provider = (provider or "Google").strip()
-    if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "SesameCSM"}:
+    if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice"}:
         await websocket.send_json(
             {
                 "type": "error",
@@ -243,12 +242,6 @@ async def voice_chat_ws(
                 websocket,
                 model=model,
                 voice=(voice or DEFAULT_GLM4VOICE_REALTIME_VOICE).strip(),
-            )
-        elif selected_provider == "SesameCSM":
-            await voice_chat_service.stream_sesame_csm_session(
-                websocket,
-                model=model,
-                voice=(voice or DEFAULT_SESAME_CSM_REALTIME_VOICE).strip(),
             )
         else:
             await voice_chat_service.stream_google_session(

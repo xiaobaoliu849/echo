@@ -178,7 +178,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       const spaceBelow = window.innerHeight - rect.bottom - margin;
       const upward = spaceAbove >= spaceBelow;
       setOpenUpward(upward);
-      setFlyoutToLeft(rect.left + 660 > window.innerWidth);
+      // Panel (184) + gap (6) + Level-2 (260) + gap (6) + Level-3 (260) = 716px
+      // of cascade to the right of the trigger before it needs to flip.
+      setFlyoutToLeft(rect.left + 716 > window.innerWidth);
       setPanelMaxHeight(Math.max(200, Math.min(520, upward ? spaceAbove : spaceBelow)));
 
       // Clear active states on open so user starts cleanly at Level 1 / Level 2
@@ -368,7 +370,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
           {/* LEVEL 3: VOICE TIMBRE & TRANSLATION SETTINGS (音色与同传/扩展设定) */}
           {activeCategory ? (
-            <div className={`vsVoiceLevel3Flyout${flyoutToLeft ? " flyLeft" : ""}`}>
+            <div
+              className={`vsVoiceLevel3Flyout${flyoutToLeft ? " flyLeft" : ""}`}
+              // Share the Level-2 offset so the voice list stays on the row of the
+              // browsed provider instead of snapping back to the top of the panel.
+              style={{ top: flyoutTop, maxHeight: `${panelMaxHeight}px` }}
+            >
               {/* Category Tab Bar: only useful when there is more than one category */}
               {canShowVoiceCategory && canShowTranslationCategory ? (
                 <div className="vsCascadingTabBar">

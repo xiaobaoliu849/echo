@@ -1980,6 +1980,7 @@ button:focus-visible {
   left: calc(100% + 272px);
   min-width: 260px;
   max-width: calc(100vw - 48px);
+  overflow-y: auto;
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: 12px;

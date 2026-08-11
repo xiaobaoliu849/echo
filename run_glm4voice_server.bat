@@ -16,7 +16,16 @@ if not exist "%PYTHON_EXE%" (
     set "PYTHON_EXE=python"
 )
 
-set "PYTHONPATH=C:\pp-eval\GLM-4-Voice;C:\pp-eval\GLM-4-Voice\third_party\Matcha-TTS;%PYTHONPATH%"
+set "GLM_ROOT=C:\pp-eval\GLM-4-Voice"
+rem Never leave a trailing ";" here. An empty ambient PYTHONPATH would turn into a
+rem whitespace-only search-path entry further down, and CPython aborts at startup
+rem with "OSError: failed to make path absolute" / "Fatal Python error: error
+rem evaluating path" before any user code runs.
+if defined PYTHONPATH (
+    set "PYTHONPATH=%GLM_ROOT%;%GLM_ROOT%\third_party\Matcha-TTS;%PYTHONPATH%"
+) else (
+    set "PYTHONPATH=%GLM_ROOT%;%GLM_ROOT%\third_party\Matcha-TTS"
+)
 set "LOCAL_MODEL_PATH=C:\Users\WINDOWS\.cache\modelscope\models\ZhipuAI--glm-4-voice-9b\snapshots\master"
 if not exist "%LOCAL_MODEL_PATH%" (
     set "LOCAL_MODEL_PATH=C:\Users\WINDOWS\.cache\modelscope\models\THUDM--glm-4-voice-9b\snapshots\master"
@@ -50,7 +59,7 @@ timeout /t 2 /nobreak >nul
 echo Ensuring pinned dependency versions (transformers 4.44.1 / accelerate 0.33.0)...
 "%PYTHON_EXE%" -c "import transformers, accelerate; assert transformers.__version__ == '4.44.1', transformers.__version__; assert accelerate.__version__ == '0.33.0', accelerate.__version__" >nul 2>&1
 if errorlevel 1 (
-    echo Installing pinned transformers / accelerate (required by GLM-4-Voice 9B)...
+    echo Installing pinned transformers 4.44.1 / accelerate 0.33.0 required by GLM-4-Voice 9B...
     "%PYTHON_EXE%" -m pip install "transformers==4.44.1" "accelerate==0.33.0"
     if errorlevel 1 (
         echo [ERROR] Failed to install pinned transformers/accelerate.
@@ -60,7 +69,7 @@ if errorlevel 1 (
 )
 "%PYTHON_EXE%" -c "import numpy; assert int(numpy.__version__.split('.')[0]) < 2, numpy.__version__" >nul 2>&1
 if errorlevel 1 (
-    echo Installing numpy 1.x (required by GLM-4-Voice decoder)...
+    echo Installing numpy 1.x required by GLM-4-Voice decoder...
     "%PYTHON_EXE%" -m pip install "numpy<2"
     if errorlevel 1 (
         echo [ERROR] Failed to install numpy 1.x.
@@ -70,7 +79,7 @@ if errorlevel 1 (
 )
 "%PYTHON_EXE%" -c "import scipy; assert int(scipy.__version__.split('.')[0]) < 2, scipy.__version__" >nul 2>&1
 if errorlevel 1 (
-    echo Installing scipy 1.13.1 (compatible with numpy 1.x)...
+    echo Installing scipy 1.13.1 compatible with numpy 1.x...
     "%PYTHON_EXE%" -m pip install "scipy==1.13.1"
     if errorlevel 1 (
         echo [ERROR] Failed to install scipy 1.13.1.
@@ -98,7 +107,10 @@ if errorlevel 1 (
 )
 
 echo Starting GLM-4-Voice LLM Worker on port 10000 (background window)...
-start "GLM-4-Voice LLM Worker" /min cmd /k "set PYTHONPATH=C:\pp-eval\GLM-4-Voice;%%PYTHONPATH%% && ""%PYTHON_EXE%"" ""C:\pp-eval\GLM-4-Voice\model_server.py"" --host 127.0.0.1 --port 10000 --model-path ""%LOCAL_MODEL_PATH%"" --dtype int4"
+rem The worker inherits PYTHONPATH from this script, so do NOT re-set it inside the
+rem cmd /k string: an unquoted "set VAR=value && ..." swallows the space before the
+rem "&&" into the value, appending a whitespace-only entry that kills the interpreter.
+start "GLM-4-Voice LLM Worker" /min cmd /k ""%PYTHON_EXE%" "%GLM_ROOT%\model_server.py" --host 127.0.0.1 --port 10000 --model-path "%LOCAL_MODEL_PATH%" --dtype int4 > "%~dp0glm4voice_worker.log" 2>&1"
 
 echo Waiting for GLM-4-Voice LLM Worker to be ready (port 10000, up to 120s)...
 set /a LLM_WAIT=0
