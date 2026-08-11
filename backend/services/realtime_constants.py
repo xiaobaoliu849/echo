@@ -154,6 +154,21 @@ PERSONAPLEX_REALTIME_INSTRUCTIONS = (
     "instead of lecturing them."
 )
 
+DEFAULT_GLM4VOICE_REALTIME_MODEL = "glm-4-voice-9b"
+DEFAULT_GLM4VOICE_REALTIME_VOICE = "default"
+DEFAULT_GLM4VOICE_SERVER_URL = "ws://127.0.0.1:8999/api/chat"
+GLM4VOICE_REALTIME_INSTRUCTIONS = (
+    "你是一个亲切、聪明的中文语音助手。请用自然口语化的中文回答用户的问题。"
+    "保持回答简洁流畅，适合实时语音播报。"
+)
+
+DEFAULT_SESAME_CSM_REALTIME_MODEL = "csm-1b"
+DEFAULT_SESAME_CSM_REALTIME_VOICE = "default"
+DEFAULT_SESAME_CSM_SERVER_URL = "ws://127.0.0.1:8997/api/chat"
+SESAME_CSM_REALTIME_INSTRUCTIONS = (
+    "You are a warm, patient English conversation partner. Respond with short, natural spoken English."
+)
+
 
 # ---------------------------------------------------------------------------
 # Model-detection helpers

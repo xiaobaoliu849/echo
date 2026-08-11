@@ -86,6 +86,10 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     DEFAULT_PERSONAPLEX_REALTIME_MODEL,
     DEFAULT_PERSONAPLEX_REALTIME_VOICE,
     DEFAULT_PERSONAPLEX_SERVER_URL,
+    DEFAULT_GLM4VOICE_REALTIME_MODEL,
+    DEFAULT_GLM4VOICE_REALTIME_VOICE,
+    DEFAULT_SESAME_CSM_REALTIME_MODEL,
+    DEFAULT_SESAME_CSM_REALTIME_VOICE,
     PERSONAPLEX_REALTIME_INSTRUCTIONS,
     PERSONAPLEX_REALTIME_VOICES,
     PERSONAPLEX_SAMPLE_RATE,
@@ -114,6 +118,8 @@ from .realtime_openai_provider import OpenAIRealtimeMixin
 from .realtime_qwen_audio_provider import QwenAudioRealtimeMixin
 from .realtime_doubao_provider import DoubaoRealtimeMixin
 from .realtime_personaplex_provider import PersonaPlexRealtimeMixin
+from .realtime_glm4voice_provider import RealtimeGlm4VoiceMixin
+from .realtime_sesame_csm_provider import RealtimeSesameCsmMixin
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +135,8 @@ class RealtimeVoiceService(
     QwenAudioRealtimeMixin,
     DoubaoRealtimeMixin,
     PersonaPlexRealtimeMixin,
+    RealtimeGlm4VoiceMixin,
+    RealtimeSesameCsmMixin,
 ):
     """Orchestrates realtime voice sessions across multiple providers.
 

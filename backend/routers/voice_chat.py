@@ -12,6 +12,8 @@ from services.realtime_voice_service import (
     DEFAULT_QWEN_AUDIO_REALTIME_VOICE,
     DEFAULT_DOUBAO_REALTIME_VOICE,
     DEFAULT_PERSONAPLEX_REALTIME_VOICE,
+    DEFAULT_GLM4VOICE_REALTIME_VOICE,
+    DEFAULT_SESAME_CSM_REALTIME_VOICE,
     RealtimeVoiceService,
 )
 from services.voice_agent_session_repository import VoiceAgentSessionRepository
@@ -235,6 +237,18 @@ async def voice_chat_ws(
                 websocket,
                 model=model,
                 voice=(voice or DEFAULT_PERSONAPLEX_REALTIME_VOICE).strip(),
+            )
+        elif selected_provider == "GLM4Voice":
+            await voice_chat_service.stream_glm4voice_session(
+                websocket,
+                model=model,
+                voice=(voice or DEFAULT_GLM4VOICE_REALTIME_VOICE).strip(),
+            )
+        elif selected_provider == "SesameCSM":
+            await voice_chat_service.stream_sesame_csm_session(
+                websocket,
+                model=model,
+                voice=(voice or DEFAULT_SESAME_CSM_REALTIME_VOICE).strip(),
             )
         else:
             await voice_chat_service.stream_google_session(

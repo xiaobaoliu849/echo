@@ -1,0 +1,340 @@
+实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）服务端事件-大模型服务平台百炼(Model Studio)-阿里云帮助中心
+大模型
+产品
+解决方案
+权益
+定价
+云市场
+伙伴
+服务
+了解阿里云
+查看 "" 全部搜索结果
+AI 助理
+文档
+备案
+控制台
+官方文档
+用户指南（模型）
+用户指南（应用）
+API参考（模型）
+API参考（应用）
+首页
+实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）服务端事件
+更新时间：
+复制 MD 格式
+产品详情
+我的收藏
+本文介绍 Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime 实时语音识别服务通过 WebSocket 推送给客户端的服务端事件，包括 task-started、result-generated、task-finished、task-failed 四类事件的数据结构与字段含义。
+用户指南：
+关于模型介绍和选型建议请参见
+语音识别
+。
+事件交互流程
+：如需了解事件交互时序，请参见
+WebSocket API
+。
+task-started
+说明
+：任务启动成功，客户端可开始发送音频数据。
+header
+object
+属性
+task_id
+string
+客户端生成的任务 ID（UUID 格式）。
+event
+string
+事件类型，固定为
+task-started
+。
+attributes
+object
+附加属性（通常为空）。
+{
+"header": {
+"task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+"event": "task-started",
+"attributes": {}
+},
+"payload": {}
+}
+payload
+object
+固定为
+{}
+。
+result-generated
+说明
+：识别结果，包含中间结果（sentence_end=false）和最终结果（sentence_end=true）。
+header
+object
+属性
+task_id
+string
+客户端生成的任务 ID（UUID 格式）。
+event
+string
+事件类型，固定为
+result-generated
+。
+{
+"header": {
+"task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+"event": "result-generated",
+"attributes": {}
+},
+"payload": {
+"output": {
+"sentence": {
+"begin_time": 170,
+"end_time": 920,
+"text": "好，我知道了",
+"heartbeat": false,
+"sentence_end": true,
+"sentence_id": 1,
+"words": [
+{
+"begin_time": 170,
+"end_time": 295,
+"text": "好",
+"punctuation": "，"
+},
+{
+"begin_time": 295,
+"end_time": 503,
+"text": "我",
+"punctuation": ""
+},
+{
+"begin_time": 503,
+"end_time": 711,
+"text": "知道",
+"punctuation": ""
+},
+{
+"begin_time": 711,
+"end_time": 920,
+"text": "了",
+"punctuation": ""
+}
+]
+}
+},
+"usage": {
+"duration": 3
+}
+}
+}
+payload
+object
+属性
+output
+object
+属性
+usage
+object
+当
+payload.output.sentence.sentence_end
+为
+false
+（当前句子未结束）时，
+usage
+为
+null
+。
+当
+payload.output.sentence.sentence_end
+为
+true
+（当前句子已结束）时，
+usage.duration
+为当前任务计费时长。
+属性
+duration
+integer
+任务计费时长（s）。
+属性
+sentence
+object
+属性
+begin_time
+integer
+句子开始时间（ms）。
+end_time
+integer
+句子结束时间（ms）。
+text
+string
+识别文本。
+heartbeat
+boolean
+若为 true，可跳过该结果（心跳包）。
+sentence_end
+boolean
+是否句子结束（true=最终结果，false=中间结果）。
+sentence_id
+integer
+句子的序号标识。正常识别结果中，sentence_id 从 1 开始递增。当 heartbeat 为 true 时（即心跳包），sentence_id 固定为 0。
+words
+array[object]
+字时间戳信息。
+属性
+begin_time
+integer
+字开始时间（ms）。
+end_time
+integer
+字结束时间（ms）。
+text
+string
+识别文本。
+punctuation
+string
+标点符号。
+task-finished
+说明
+：任务正常结束，可关闭连接或复用连接。
+header
+object
+属性
+task_id
+string
+客户端生成的任务 ID（UUID 格式）。
+event
+string
+事件类型，固定为
+task-finished
+。
+attributes
+object
+附加属性（通常为空）。
+{
+"header": {
+"task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+"event": "task-finished",
+"attributes": {}
+},
+"payload": {
+"output": {},
+"usage": null
+}
+}
+payload
+object
+无需关注其中内容，通常为
+{}
+。
+task-failed
+说明
+：任务失败，连接会被关闭，无法复用。
+header
+object
+属性
+task_id
+string
+客户端生成的任务 ID（UUID 格式）。
+event
+string
+事件类型，固定为
+task-failed
+。
+error_code
+string
+错误类型描述。
+error_message
+string
+具体错误原因。
+attributes
+object
+附加属性（通常为空）。
+{
+"header": {
+"task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+"event": "task-failed",
+"error_code": "CLIENT_ERROR",
+"error_message": "request timeout after 23 seconds.",
+"attributes": {}
+},
+"payload": {}
+}
+payload
+object
+固定为
+{}
+。
+上一篇：客户端事件
+下一篇：Python SDK
+该文章对您有帮助吗？
+反馈
+为什么选择阿里云
+什么是云计算
+全球基础设施
+技术领先
+稳定可靠
+安全合规
+分析师报告
+大模型
+千问大模型
+大模型服务
+AI应用构建
+产品和定价
+全部产品
+免费试用
+产品动态
+产品定价
+配置报价器
+云上成本管理
+技术内容
+技术解决方案
+帮助文档
+开发者社区
+天池大赛
+阿里云认证
+权益
+免费试用
+解决方案免费试用
+高校计划
+推荐返现计划
+服务
+基础服务
+企业增值服务
+迁云服务
+官网公告
+健康看板
+信任中心
+关注阿里云
+关注阿里云公众号或下载阿里云APP，关注云资讯，随时随地运维管控云服务
+联系我们：4008013260
+法律声明
+Cookies 政策
+廉正举报
+安全举报
+联系我们
+加入我们
+友情链接
+阿里巴巴集团
+淘宝网
+千问AI平台
+天猫
+全球速卖通
+阿里巴巴国际交易市场
+1688
+阿里妈妈
+飞猪
+阿里云计算
+万网
+高德
+UC
+友盟
+优酷
+钉钉
+支付宝
+达摩院
+淘宝海外
+阿里云盘
+© 2009-现在 Aliyun.com 版权所有 增值电信业务经营许可证：
+浙B2-20080101
+域名注册服务机构许可：
+浙D3-20210002
+浙公网安备 33010602009975号
+浙B2-20080101-4

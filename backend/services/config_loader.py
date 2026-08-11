@@ -76,10 +76,11 @@ DEFAULT_BASE_URLS = {
     "Deepgram": "https://api.deepgram.com/v1",
     "AssemblyAI": "https://api.assemblyai.com",
     "GPT-SoVITS": "http://127.0.0.1:9880",
-    "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
-    # PersonaPlex has no HTTP API; the realtime WebSocket URL is what matters
-    # and it comes from realtime_api_urls (default ws://127.0.0.1:8998).
+    "Doubao": "https://openspeech.bytedance.com/api/v3/realtime/dialogue",
+    # PersonaPlex, GLM4Voice, and SesameCSM use local WebSocket URLs
     "PersonaPlex": "",
+    "GLM4Voice": "",
+    "SesameCSM": "",
 }
 
 

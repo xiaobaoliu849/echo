@@ -1,0 +1,195 @@
+Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime实时语音识别WebSocket API-大模型服务平台百炼(Model Studio)-阿里云帮助中心
+大模型
+产品
+解决方案
+权益
+定价
+云市场
+伙伴
+服务
+了解阿里云
+查看 "" 全部搜索结果
+AI 助理
+文档
+备案
+控制台
+官方文档
+用户指南（模型）
+用户指南（应用）
+API参考（模型）
+API参考（应用）
+首页
+Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime实时语音识别WebSocket API
+更新时间：
+复制 MD 格式
+产品详情
+我的收藏
+本文介绍通过 WebSocket 连接访问 Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime 实时语音识别服务的接口地址、请求头和交互流程。
+用户指南：
+关于模型介绍和选型建议请参见
+语音识别
+，示例代码请参见
+实时语音识别
+。
+DashScope SDK 目前仅支持 Java 和 Python。使用其他编程语言时，可通过 WebSocket 连接与服务进行通信。
+接口地址
+WebSocket URL 固定如下：
+华北
+2（北京）
+wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference
+调用时请将
+{WorkspaceId}
+替换为真实的
+Workspace ID
+。
+新加坡
+wss://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/api-ws/v1/inference
+调用时请将
+{WorkspaceId}
+替换为真实的
+Workspace ID
+。
+重要
+阿里云百炼为华北
+2（北京）、新加坡地域推出了业务空间专属域名，能够为推理请求提供卓越的性能和更高的稳定性，建议迁移至新域名：
+华北
+2（北京）地域：从
+dashscope.aliyuncs.com
+迁移至
+{WorkspaceId}.cn-beijing.maas.aliyuncs.com
+新加坡地域：从
+dashscope-intl.aliyuncs.com
+迁移至
+{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com
+{WorkspaceId}
+需要替换为真实的
+Workspace ID
+。现有域名仍可正常使用。
+重要
+URL 必须使用
+wss://
+协议，且固定不变。Authorization 在请求头中设置（参见
+请求头
+）。
+请求头
+请求头中需添加如下信息：
+参数
+类型
+是否必选
+说明
+Authorization
+string
+是
+鉴权令牌，格式为
+Bearer <your_api_key>
+，将
+<your_api_key>
+替换为实际的 API Key。
+user-agent
+string
+否
+客户端标识，便于服务端追踪来源。
+X-DashScope-WorkSpace
+string
+否
+阿里云百炼
+业务空间
+ID
+。
+X-DashScope-DataInspection
+string
+否
+是否启用数据合规检测功能。默认不传或设为
+enable
+。如非必要，请勿启用该参数。
+重要
+Authorization 鉴权在 WebSocket 握手阶段验证。如果 API Key 无效或缺失，握手将失败并返回 HTTP 401/403 错误。
+交互流程
+客户端事件和服务端事件的详细说明，请参见
+客户端事件
+和
+服务端事件
+。
+按时间顺序，客户端与服务端的交互流程如下：
+建立连接：客户端与服务端建立 WebSocket 连接。
+开启任务：客户端发送 run-task 指令以开启任务，并接收服务端返回的 task-started 事件，标志着任务已成功开启，可以进行后续步骤。
+发送音频流：客户端开始发送二进制音频（须为单声道音频），并同时接收服务端持续返回的 result-generated 事件，该事件包含语音识别结果。
+通知服务端结束任务：客户端发送 finish-task 指令通知服务端结束任务，并继续接收服务端返回的 result-generated 事件。
+任务结束：客户端收到服务端返回的 task-finished 事件，标志着任务结束。
+关闭连接：客户端关闭 WebSocket 连接。
+上一篇：实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）
+下一篇：客户端事件
+该文章对您有帮助吗？
+反馈
+为什么选择阿里云
+什么是云计算
+全球基础设施
+技术领先
+稳定可靠
+安全合规
+分析师报告
+大模型
+千问大模型
+大模型服务
+AI应用构建
+产品和定价
+全部产品
+免费试用
+产品动态
+产品定价
+配置报价器
+云上成本管理
+技术内容
+技术解决方案
+帮助文档
+开发者社区
+天池大赛
+阿里云认证
+权益
+免费试用
+解决方案免费试用
+高校计划
+推荐返现计划
+服务
+基础服务
+企业增值服务
+迁云服务
+官网公告
+健康看板
+信任中心
+关注阿里云
+关注阿里云公众号或下载阿里云APP，关注云资讯，随时随地运维管控云服务
+联系我们：4008013260
+法律声明
+Cookies 政策
+廉正举报
+安全举报
+联系我们
+加入我们
+友情链接
+阿里巴巴集团
+淘宝网
+千问AI平台
+天猫
+全球速卖通
+阿里巴巴国际交易市场
+1688
+阿里妈妈
+飞猪
+阿里云计算
+万网
+高德
+UC
+友盟
+优酷
+钉钉
+支付宝
+达摩院
+淘宝海外
+阿里云盘
+© 2009-现在 Aliyun.com 版权所有 增值电信业务经营许可证：
+浙B2-20080101
+域名注册服务机构许可：
+浙D3-20210002
+浙公网安备 33010602009975号
+浙B2-20080101-4

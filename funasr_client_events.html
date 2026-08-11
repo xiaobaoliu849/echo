@@ -1,0 +1,1148 @@
+
+
+<!DOCTYPE html><html lang="zh"><head>
+  <meta name="nav-disable" content="flex">
+  
+  <link rel="icon" href="https://img.alicdn.com/imgextra/i2/O1CN01TFs5Qw27uYvfA6gib_!!6000000007857-55-tps-32-32.svg" type="image/x-icon">
+  <link rel="apple-touch-icon" sizes="72x72" href="https://img.alicdn.com/imgextra/i4/O1CN01jlcNT71YBfZJJI7qY_!!6000000003021-2-tps-128-128.png">
+  
+
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta http-equiv="Cache-Control" content="no-siteapp">
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="x-ua-compatible" content="ie=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="applicable-device" content="pc,mobile">
+  <meta name="nav-config" content="footer=default">
+  <meta name="aplus-core" content="aplus.js">
+  <meta name="aplus-ajax" content="chksum">
+  <meta name="aplus-waiting" content="MAN">
+  <meta name="aplus-pvhash" content="1">
+  
+  <meta name="data-spm" content="a2c4g">
+  
+  <script>
+    window.pageStartTime = Date.now();
+  </script>
+
+  
+  <title>
+    实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）客户端事件-大模型服务平台百炼(Model Studio)-阿里云帮助中心
+  </title>
+  <link rel="canonical" href="https://help.aliyun.com/zh/model-studio/fun-asr-client-events">
+  <meta name="keywords" content="px,识别,选,语音,task,content,模型">
+  <meta name="description" content="本文介绍 Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime 实时语音识别服务中客户端通过 WebSocket 发送给服务端的客户端事件，包括 run-task（启动任务）、continue-task（更新上下文）、finish-task（结束任务）等指令的数据结构与字段含义。">
+  <meta name="last-modified" content="2026-07-31T16:09:57+08:00">
+  <meta name="date" content="2026-05-18T11:26:21+08:00">
+  <meta property="og:title" content="客户端事件">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://help.aliyun.com/zh/model-studio/fun-asr-client-events">
+  <meta property="og:image" content="https://img.alicdn.com/imgextra/i1/O1CN012QgtoH1c1Mu70xD3w_!!6000000003540-2-tps-640-640.png">
+  <meta property="og:description" content="本文介绍 Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime 实时语音识别服务中客户端通过 WebSocket 发送给服务端的客户端事件，包括 run-task（启动任务）、continue-task（更新上下文）、finish-task（结束任务）等指令的数据结构与字段含义。">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "url": "https://help.aliyun.com/zh/model-studio/fun-asr-client-events",
+    "publisher": {
+      "@type": "Organization",
+      "name": "阿里云计算",
+      "url": "https://www.aliyun.com/",
+      "logo": "https://img.alicdn.com/imgextra/i1/O1CN01BEqugB1KebzCRyIJl_!!6000000001189-55-tps-48-48.svg"
+    }
+  }
+  </script>
+  
+
+  <link href="https://g.alicdn.com/aliyun-help/help-portal-fe/0.12.51/css/index.css" rel="stylesheet">
+  
+
+  <script>
+    window.globalData = {
+      nodeId: "3034145",
+      website: "cn",
+      language: "zh",
+    }
+    window.$ACE_TRACKER_CONFIG = {
+      "enableHistory": true,
+      "enableHash": false
+    }
+  </script>
+<script>
+    window.__ICE_SSR_ENABLED__=true;
+    window.__ICE_APP_DATA__={};
+window.__ICE_PAGE_PROPS__={"docDetailData":{"storeData":{"alias":"/model-studio/fun-asr-client-events","nodeId":null,"data":{"lastModifiedTime":1785485397000,"keywords":"px,识别,选,语音,task,content,模型","docTitle":"实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）客户端事件","language":"zh","seoTitle":"实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）客户端事件-大模型服务平台百炼(Model Studio)-阿里云帮助中心","title":"客户端事件","content":"<div lang=\"zh\" class=\"icms-help-docs-content\">\n\n  <main id=\"main-3277064\">\n    \n    \n    <p id=\"4cc3dfc91cesn\" data-tag=\"shortdesc\" class=\"shortdesc\">本文介绍 Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime 实时语音识别服务中客户端通过 WebSocket 发送给服务端的客户端事件，包括 run-task（启动任务）、<span data-tag=\"ph\" props=\"china\" id=\"aceaa0a3f041o\" data-cond-props=\"china\" class=\"ph\">continue-task（更新上下文）、</span>finish-task（结束任务）等指令的数据结构与字段含义。</p>\n    <div id=\"13c326e6d85hj\" data-tag=\"body\" class=\"body\">\n      <p data-tag=\"p\" id=\"80d308ad0c34q\" class=\"p\"><b>用户指南：</b>关于模型介绍和选型建议请参见<a href=\"https://help.aliyun.com/zh/model-studio/asr-model/\" id=\"4b2492b64529q\" title=\"\" class=\"xref\">语音识别</a>。</p>\n      <p id=\"61ba1bcdca63s\"><b>事件交互流程</b>：如需了解事件交互时序，请参见<span class=\"help-letter-space\"></span><a href=\"https://help.aliyun.com/zh/model-studio/fun-asr-realtime-websocket-api\" id=\"6acd32075906f\" title=\"\" class=\"xref\">WebSocket API</a>。</p>\n      <section id=\"b5be8be7e855c\" class=\"section\">\n        <section id=\"52462e3e7f4ch\" class=\"section\">\n          <h2 id=\"9cae7e7b85ebm\"><b>run-task</b></h2>\n          <p jc=\"left\" id=\"5d04111806e4q\" style=\"text-align:left\"><b>说明</b>：启动语音识别任务，设置模型、音频格式、采样率等参数。</p>\n          <p jc=\"left\" id=\"8ba3611d22f7j\" style=\"text-align:left\"><b>发送时机</b>：建立 WebSocket 连接后立即发送。</p>\n          <p jc=\"left\" id=\"26bf4e2c8400f\" style=\"text-align:left\"><b>响应事件</b>：服务端返回&nbsp;<code data-tag=\"code\" id=\"eb2ab797d823n\" class=\"code\"><a href=\"https://help.aliyun.com/zh/model-studio/fun-asr-server-events#eac316aeacafj\" id=\"0056c9c72937h\" title=\"\" class=\"xref\">task-started</a></code>&nbsp;事件后才能发送音频。</p>\n          <table bordertype=\"no-border\" id=\"580fcd8f470em\" outputclass=\"api-reference column-layout\" tablewidth=\"100\" tablecolswidth=\"57.54 42.46\" autofit=\"true\" class=\"api-reference column-layout table\">\n            <colgroup colwidth=\"1.15*\" style=\"width:57.54%\"></colgroup>\n            <colgroup colwidth=\"0.85*\" style=\"width:42.46%\"></colgroup>\n            <tbody class=\"tbody\">\n              <tr id=\"50305f0ced03i\">\n                <td id=\"b7c898ab85cbp\" rowspan=\"1\" style=\"background-color:rgba(0, 0, 0, 0);vertical-align:middle\" colspan=\"1\">\n                  <p id=\"eb42f83dffe8u\"><b>header </b><code data-tag=\"code\" code-type=\"xCode\" id=\"dcfbb4e2bd9fm\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                  <div id=\"0b57053640d3b\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                    <p id=\"d931f39ccbe8k\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                    <div id=\"6a0714c3e98ej\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                      <section id=\"d7fd070369afh\" class=\"section\">\n                        <p id=\"e8ab2fba61f3d\"><b>action </b><code data-tag=\"code\" code-type=\"xCode\" id=\"5b5fd9e63d42p\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"2532d6782169p\" class=\"section\">\n                          <p id=\"add8b9f29167k\">指令类型，固定为 <code data-tag=\"code\" id=\"f1fb18a08888v\" class=\"code\">run-task</code>。</p>\n                        </section>\n                      </section>\n                      <section id=\"c148ce96280fu\" class=\"section\">\n                        <p id=\"e2b5b4958dccm\"><b>task_id </b><code data-tag=\"code\" code-type=\"xCode\" id=\"ca329bf48800z\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"61460c7a0b6ev\" class=\"section\">\n                          <p id=\"71fee1d2a825j\">客户端生成的任务 ID（UUID 格式），用于关联后续事件。</p>\n                        </section>\n                      </section>\n                      <section id=\"645e858ef88bk\" class=\"section\">\n                        <p id=\"03dc10a06d06s\"><b>streaming </b><code data-tag=\"code\" code-type=\"xCode\" id=\"d537e0b66810b\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"e8bcd6d1cd3cj\" class=\"section\">\n                          <p id=\"a582827c08f3n\">固定为 <code data-tag=\"code\" id=\"6cec652226f4m\" class=\"code\">duplex</code>。</p>\n                        </section>\n                      </section>\n                    </div>\n                  </div>\n                </td>\n                <td id=\"f0eacbe5e7c4k\" rowspan=\"2\" style=\"background-color:rgba(0, 0, 0, 0);vertical-align:top\" colspan=\"1\">\n                  <section id=\"cb4f243e79ccv\" outputclass=\"stick-top\" class=\"stick-top section\">\n                    <section id=\"sec-rt-code-tabs\" data-tag=\"tabbed-content-box\" outputclass=\"tabbed-content-box\" class=\"tabbed-content-box section\">\n                      <section id=\"sec-rt-code-basic\" class=\"section\">\n                        <h2 id=\"h-rt-code-basic\">基本请求</h2><pre code-type=\"xCode\" id=\"b466de589dacf\" index=\"0\" data-tag=\"codeblock\" outputclass=\"language-json\" class=\"pre codeblock language-json\"><code>{\n    \"header\": {\n        \"action\": \"run-task\",\n        \"task_id\": \"2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx\",\n        \"streaming\": \"duplex\"\n    },\n    \"payload\": {\n        \"task_group\": \"audio\",\n        \"task\": \"asr\",\n        \"function\": \"recognition\",\n        \"model\": \"qwen-audio-3.0-asr-flash-streaming\",\n        \"parameters\": {\n            \"format\": \"pcm\",\n            \"sample_rate\": 16000\n        },\n        \"input\": {}\n    }\n}</code></pre>\n                      </section>\n                      <section id=\"sec-rt-code-ctx\" class=\"section\">\n                        <h2 id=\"h-rt-code-ctx\">携带上下文</h2><pre code-type=\"xCode\" id=\"code-rt-ctx-example\" index=\"0\" data-tag=\"codeblock\" outputclass=\"language-json\" class=\"pre codeblock language-json\"><code>{\n    \"header\": {\n        \"action\": \"run-task\",\n        \"task_id\": \"2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx\",\n        \"streaming\": \"duplex\"\n    },\n    \"payload\": {\n        \"task_group\": \"audio\",\n        \"task\": \"asr\",\n        \"function\": \"recognition\",\n        \"model\": \"qwen-audio-3.0-asr-flash-streaming\",\n        \"parameters\": {\n            \"format\": \"pcm\",\n            \"sample_rate\": 16000\n        },\n        \"input\": {\n            \"context\": [\n                {\n                    \"role\": \"user\",\n                    \"content\": [\n                        {\n                            \"type\": \"input_text\",\n                            \"text\": \"你好啊\"\n                        }\n                    ]\n                },\n                {\n                    \"role\": \"assistant\",\n                    \"content\": [\n                        {\n                            \"type\": \"text\",\n                            \"text\": \"你好啊，我是通义千问，有什么可以帮助你的？\"\n                        }\n                    ]\n                }\n            ]\n        }\n    }\n}</code></pre>\n                      </section>\n                      <section id=\"sec-rt-code-vocab\" class=\"section\">\n                        <h2 id=\"h-rt-code-vocab\">即时热词</h2><pre code-type=\"xCode\" id=\"code-rt-vocab-inst-ex\" index=\"0\" data-tag=\"codeblock\" outputclass=\"language-json\" class=\"pre codeblock language-json\"><code>{\n    \"header\": {\n        \"action\": \"run-task\",\n        \"task_id\": \"2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx\",\n        \"streaming\": \"duplex\"\n    },\n    \"payload\": {\n        \"task_group\": \"audio\",\n        \"task\": \"asr\",\n        \"function\": \"recognition\",\n        \"model\": \"qwen-audio-3.0-asr-flash-streaming\",\n        \"parameters\": {\n            \"format\": \"pcm\",\n            \"sample_rate\": 16000,\n            \"vocabulary\": {\"张三\": 5, \"李四\": 5}\n        },\n        \"input\": {}\n    }\n}</code></pre>\n                      </section>\n                    </section>\n                  </section>\n                  <p id=\"a37215df9eb5q\"></p>\n                </td>\n              </tr>\n              <tr id=\"5a72c30c68f3w\">\n                <td id=\"3e58013523afi\" rowspan=\"1\" style=\"background-color:rgba(0, 0, 0, 0)\" colspan=\"1\">\n                  <p id=\"249d0c1ae67bt\"><b>payload </b><code data-tag=\"code\" code-type=\"xCode\" id=\"e652d6657c1ex\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                  <div id=\"6bac23fd1906z\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                    <p id=\"13a5e2163a66n\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                    <div id=\"654ad96e2c5ek\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                      <section id=\"64efd8a76ce2y\" class=\"section\">\n                        <p id=\"409231ac26a3s\"><b>task_group </b><code data-tag=\"code\" code-type=\"xCode\" id=\"0cbcb72eeb3cq\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"86ab2a7fb48dd\" class=\"section\">\n                          <p id=\"a4b39fb489eao\">任务组，固定为 <code data-tag=\"code\" id=\"37dfa02d790am\" class=\"code\">audio</code>。</p>\n                        </section>\n                      </section>\n                      <section id=\"d6572ab162abd\" class=\"section\">\n                        <p id=\"7b466c6e9d18d\"><b>task </b><code data-tag=\"code\" code-type=\"xCode\" id=\"e4951bc94fa6m\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"884c98979e5di\" class=\"section\">\n                          <p jc=\"left\" uuid=\"m95147brql0uecf9l49\" id=\"33a55485cdd5z\" style=\"text-align:left\">任务类型，固定为 <code data-tag=\"code\" id=\"a3407ee03d0ey\" class=\"code\">asr</code>。</p>\n                        </section>\n                      </section>\n                      <section id=\"246882a24b09a\" class=\"section\">\n                        <p id=\"44bd95686f99x\"><b>function </b><code data-tag=\"code\" code-type=\"xCode\" id=\"112c21369d28x\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"c310622acb42a\" class=\"section\">\n                          <p id=\"9acdd7ce2198q\">功能类型。固定为<code data-tag=\"code\" id=\"e8aee7b353fcw\" class=\"code\">recognition</code>。</p>\n                        </section>\n                      </section>\n                      <section id=\"31b07547c3e1d\" class=\"section\">\n                        <p id=\"80692299c6ecm\"><b>model </b><code data-tag=\"code\" code-type=\"xCode\" id=\"6082a94721a8w\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"8e1d640c3cbcy\" class=\"section\">\n                          <p jc=\"left\" uuid=\"mrymnxs3wudkqcvek9\" id=\"72074c7f63rwe\" style=\"text-align:left\">指定模型名。支持<span class=\"help-letter-space\"></span>Qwen-Audio-3.0-ASR-Flash-Streaming<span class=\"help-letter-space\"></span>和<span class=\"help-letter-space\"></span>Fun-ASR-Realtime<span class=\"help-letter-space\"></span>系列模型，详情请参见<a href=\"https://help.aliyun.com/zh/model-studio/real-time-speech-recognition-user-guide#4a43cc1bb7kxg\" id=\"1c45920115451\" title=\"\" class=\"xref\">支持的模型与地域</a>。</p>\n                        </section>\n                      </section>\n                      <section id=\"ba46f942af7cv\" class=\"section\">\n                        <p id=\"6a57c5665592f\"><b>input </b><code data-tag=\"code\" code-type=\"xCode\" id=\"7f8ec990fe66y\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"1a9795660a7cw\" class=\"section\">\n                          <p id=\"p-rt-input-china-desc\">输入对象。不携带上下文时传入<code data-tag=\"code\" id=\"code-rt-input-empty\" class=\"code\">{}</code>。</p>\n                          <div type=\"important\" id=\"note-rt-ctx-models\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n                            <p id=\"p-rt-ctx-models\">仅 <code data-tag=\"code\" id=\"86e81a22c8ltf\" class=\"code\">qwen-audio-3.0-asr-flash-streaming</code>、<code data-tag=\"code\" id=\"code-rt-ctx-m1\" class=\"code\">fun-asr-realtime</code> 和 <code data-tag=\"code\" id=\"code-rt-ctx-m2\" class=\"code\">fun-asr-realtime-2025-11-07</code> 模型支持上下文。</p>\n                          </div></div>\n                          <section id=\"sec-rt-input-ctx\" class=\"section\">\n                            <div id=\"div-rt-input-exp\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                              <p id=\"p-rt-input-t\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                              <div id=\"div-rt-input-c\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                                <section id=\"sec-rt-ctx\" class=\"section\">\n                                  <p id=\"p-rt-ctx\"><b>context </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx\" class=\"code\"><i>array(object)</i></code><i> </i>（可选）</p>\n                                  <p id=\"9f6bd11bf3q9d\">对话上下文，用于辅助识别、提升专有词汇的识别准确率。使用方法详见<a href=\"https://help.aliyun.com/zh/model-studio/improve-asr-accuracy#ctx-enhance-h2\" id=\"3b7fcdbfd8ugv\" title=\"\" class=\"xref\">上下文增强</a>。</p>\n                                  <div type=\"important\" id=\"note-rt-ctx-limit\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n                                    <p id=\"p-rt-ctx-limit\"><b>约束</b>：上下文消息（<code data-tag=\"code\" id=\"code-rt-ctx-it\" class=\"code\">input_text</code> 和 <code data-tag=\"code\" id=\"code-rt-ctx-tt\" class=\"code\">text</code> 类型）各最多 5 条，超出时保留最近的 5 条。每轮上下文文本总长度（<code data-tag=\"code\" id=\"code-rt-ctx-u\" class=\"code\">user</code> 和 <code data-tag=\"code\" id=\"code-rt-ctx-a\" class=\"code\">assistant</code> 的 <code data-tag=\"code\" id=\"code-rt-ctx-tfield\" class=\"code\">text</code> 字段长度之和）不超过 400 个字符（按字符数计算，每个字符计为 1），超出部分从末尾截断。</p>\n                                  </div></div>\n                                  <div type=\"important\" id=\"note-rt-ctx-order\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n                                    <p id=\"p-rt-ctx-order\">携带上下文时，<code data-tag=\"code\" id=\"code-rt-ctx-order-arr\" class=\"code\">context</code> 中的消息顺序有要求：上下文消息必须按对话轮次排列，每轮中 <code data-tag=\"code\" id=\"code-rt-ctx-order-user\" class=\"code\">user</code>（<code data-tag=\"code\" id=\"code-rt-ctx-order-it\" class=\"code\">input_text</code> 类型）必须在对应的 <code data-tag=\"code\" id=\"code-rt-ctx-order-asst\" class=\"code\">assistant</code>（<code data-tag=\"code\" id=\"code-rt-ctx-order-tt\" class=\"code\">text</code> 类型）之前。</p>\n                                  </div></div>\n                                  <div id=\"div-rt-ctx-exp\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                                    <p id=\"p-rt-ctx-t\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                                    <div id=\"div-rt-ctx-c\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                                      <section id=\"sec-rt-ctx-role\" class=\"section\">\n                                        <p id=\"p-rt-ctx-role\"><b>role </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx-role\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                                        <section id=\"f7979c8e23fph\" class=\"section\">\n                                          <p id=\"p-rt-ctx-role-d\">消息角色。取值范围：</p>\n                                          <ul id=\"ul-rt-ctx-role\">\n                                            <li id=\"li-rt-ctx-role-user\">\n                                              <p id=\"p-rt-ctx-role-user\"><code data-tag=\"code\" id=\"code-rt-ctx-role-user\" class=\"code\">user</code>：前几轮用户语音的识别结果或领域相关的词表。</p>\n                                            </li>\n                                            <li id=\"li-rt-ctx-role-asst\">\n                                              <p id=\"p-rt-ctx-role-asst\"><code data-tag=\"code\" id=\"code-rt-ctx-role-asst\" class=\"code\">assistant</code>：前几轮大语言模型的回复内容。</p>\n                                            </li>\n                                          </ul>\n                                        </section>\n                                      </section>\n                                      <section id=\"sec-rt-ctx-content\" class=\"section\">\n                                        <p id=\"p-rt-ctx-content\"><b>content </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx-content\" class=\"code\"><i>array(object)</i></code><i> </i><b>（必选）</b></p>\n                                        <p id=\"p-rt-ctx-content-d\">消息内容列表。</p>\n                                        <div id=\"div-rt-ctx-content-exp\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                                          <p id=\"p-rt-ctx-content-t\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                                          <div id=\"div-rt-ctx-content-c\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                                            <section id=\"sec-rt-ctx-type\" class=\"section\">\n                                              <p id=\"p-rt-ctx-type\"><b>type </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx-type\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                                              <section id=\"2e95567f107ds\" class=\"section\">\n                                                <p id=\"p-rt-ctx-type-d\">内容类型。取值范围：</p>\n                                                <ul id=\"ul-rt-ctx-type\">\n                                                  <li id=\"li-rt-ctx-type-it\">\n                                                    <p id=\"p-rt-ctx-type-it\"><code data-tag=\"code\" id=\"code-rt-ctx-type-it\" class=\"code\">input_text</code>：前几轮用户语音的识别结果或领域相关的词表（role 为 user 时使用），需同时传入 <code data-tag=\"code\" id=\"code-rt-ctx-type-it-ref\" class=\"code\">text</code> 字段。</p>\n                                                  </li>\n                                                  <li id=\"li-rt-ctx-type-tt\">\n                                                    <p id=\"p-rt-ctx-type-tt\"><code data-tag=\"code\" id=\"code-rt-ctx-type-tt\" class=\"code\">text</code>：前几轮大语言模型的回复内容（role 为 assistant 时使用），需同时传入 <code data-tag=\"code\" id=\"code-rt-ctx-type-tt-ref\" class=\"code\">text</code> 字段。</p>\n                                                  </li>\n                                                </ul>\n                                              </section>\n                                            </section>\n                                            <section id=\"sec-rt-ctx-text\" class=\"section\">\n                                              <p id=\"p-rt-ctx-text\"><b>text </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx-text\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                                              <section id=\"e466ec8aaceck\" class=\"section\">\n                                                <p id=\"p-rt-ctx-text-d\">文本内容。当 <code data-tag=\"code\" id=\"code-rt-ctx-text-cond1\" class=\"code\">type</code> 为 <code data-tag=\"code\" id=\"code-rt-ctx-text-val1\" class=\"code\">input_text</code> 时，填入前几轮用户语音的识别结果或领域相关的词表；当 <code data-tag=\"code\" id=\"code-rt-ctx-text-cond2\" class=\"code\">type</code> 为 <code data-tag=\"code\" id=\"code-rt-ctx-text-val2\" class=\"code\">text</code> 时，填入前几轮大语言模型的回复内容。</p>\n                                              </section>\n                                            </section>\n                                          </div>\n                                        </div>\n                                      </section>\n                                    </div>\n                                  </div>\n                                </section>\n                              </div>\n                            </div>\n                          </section>\n                        </section>\n                      </section>\n                      <section id=\"64ba877decf0e\" class=\"section\">\n                        <p id=\"b4885f03bc98b\"><b>parameters </b><code data-tag=\"code\" code-type=\"xCode\" id=\"0e9a3d931612m\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                        <p id=\"04479d101f17d\">语音识别参数。</p>\n                        <div id=\"076fe2c5af43v\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                          <p id=\"a457b9813f0dv\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                          <div id=\"1a28a1c06f60u\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                            <section id=\"bef9f34a89c0o\" class=\"section\">\n                              <p id=\"52e6be0d73b1b\"><b>format </b><code data-tag=\"code\" code-type=\"xCode\" id=\"ccbe6a0840ddj\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                              <section id=\"42b0432a7a0ep\" class=\"section\">\n                                <p id=\"324ce69d60fak\">音频格式。</p>\n                                <p id=\"0c513b225947b\">取值范围：</p>\n                                <ul id=\"af20e76ea99dj\">\n                                  <li id=\"9844c821493ar\">\n                                    <p id=\"799caa0d375ce\"><code data-tag=\"code\" id=\"7e3d384371e8p\" class=\"code\">pcm</code></p>\n                                  </li>\n                                  <li id=\"0ee53ef9af17r\">\n                                    <p id=\"42451b8edc0ex\"><code data-tag=\"code\" id=\"619037cd026aq\" data-init-id=\"7e3d384371e8p\" class=\"code\">wav</code></p>\n                                  </li>\n                                  <li id=\"197604e7e95br\">\n                                    <p id=\"3197d2debbdfh\"><code data-tag=\"code\" id=\"6b510b829f76p\" data-init-id=\"7e3d384371e8p\" class=\"code\">mp3</code></p>\n                                  </li>\n                                  <li id=\"94b520d6880bp\">\n                                    <p id=\"8dbad5772365d\"><code data-tag=\"code\" id=\"0a1192932296t\" data-init-id=\"7e3d384371e8p\" class=\"code\">opus</code></p>\n                                  </li>\n                                  <li id=\"aea4241bc604u\">\n                                    <p id=\"4cbde5eb5dcea\"><code data-tag=\"code\" id=\"cd26a12e9729w\" data-init-id=\"7e3d384371e8p\" class=\"code\">speex</code></p>\n                                  </li>\n                                  <li id=\"bb96c55d03f9c\">\n                                    <p id=\"7eff4076cd69m\"><code data-tag=\"code\" id=\"d231588ef115g\" data-init-id=\"7e3d384371e8p\" class=\"code\">aac</code></p>\n                                  </li>\n                                  <li id=\"b853f50ee643c\">\n                                    <p id=\"0e0a7ac71659x\"><code data-tag=\"code\" id=\"8347a1392b14r\" data-init-id=\"7e3d384371e8p\" class=\"code\">amr</code></p>\n                                  </li>\n                                </ul>\n                                <div type=\"important\" id=\"49fc31154391s\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n                                  <p id=\"fba8626965mxi\">opus/speex：必须使用<span class=\"help-letter-space\"></span>Ogg<span class=\"help-letter-space\"></span>封装；</p>\n                                  <p id=\"d57494d9e8tv9\">wav：必须为<span class=\"help-letter-space\"></span>PCM<span class=\"help-letter-space\"></span>编码；</p>\n                                  <p id=\"134e274df99sm\">amr：仅支持<span class=\"help-letter-space\"></span>AMR-NB<span class=\"help-letter-space\"></span>类型。</p>\n                                </div></div>\n                              </section>\n                            </section>\n                            <section id=\"a8e7527afd97f\" class=\"section\">\n                              <p id=\"1cb63426cd74x\"><b>sample_rate </b><code data-tag=\"code\" code-type=\"xCode\" id=\"28812f230b11c\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>integer</i></code><i> </i><b>（必选）</b></p>\n                              <section id=\"3e1d6afc0de9g\" class=\"section\">\n                                <p id=\"b4cbcb0e7a37s\">采样率（Hz）。</p>\n                                <p id=\"6ca48e7ee9f4u\">取值范围：8k<span class=\"help-letter-space\"></span>模型仅支持 8000 Hz，其他模型支持任意采样率。</p>\n                              </section>\n                            </section>\n                            <section id=\"02a723a6c13bi\" class=\"section\">\n                              <p id=\"571f828f4a4au\"><b>vocabulary_id </b><code data-tag=\"code\" code-type=\"xCode\" id=\"0bf882f8abf4y\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i>（可选）</p>\n                              <section id=\"ea6c1a719191i\" class=\"section\">\n                                <p jc=\"left\" id=\"75c73ce5a500m\" style=\"text-align:left\">预编译热词列表 ID。</p>\n                                <p id=\"ee7eb826a0s3o\">需预先调用创建热词列表接口生成，识别时传入该 ID 即可使用列表中的热词。</p>\n                                <p id=\"995151ca382q4\">适用于词汇已知且相对稳定、需要跨请求复用同一词表的场景。</p>\n                                <p id=\"144dc062e404z\">使用方法请参见<a href=\"https://help.aliyun.com/zh/model-studio/improve-asr-accuracy#hw-precompiled-h3\" id=\"1a3b14b3ffp1f\" title=\"\" class=\"xref\">预编译热词</a>。</p>\n                              </section>\n                            </section>\n                            <section id=\"sec-rt-vocab-inst\" class=\"section\">\n                              <p id=\"p-rt-vocab-inst\"><b>vocabulary </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-vocab-inst\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>object</i></code><i> </i>（可选）</p>\n                              <section id=\"sec-rt-vocab-inst-d\" class=\"section\">\n                                <section id=\"7cc767492aa2r\" class=\"section\">\n                                  <p id=\"p-rt-vocab-inst-d1\">即时热词。</p>\n                                  <p id=\"415d34492d24x\">以键值对形式传入，键为热词文本（<code data-tag=\"code\" id=\"code-rt-vocab-k\" class=\"code\">string</code>），值为热词权重（<code data-tag=\"code\" id=\"code-rt-vocab-v\" class=\"code\">integer</code>），无需预先创建热词列表。权重取值范围为 [1, 5] 或 50：取 [1, 5] 时值越大模型越倾向输出该词；取 50 时为超级热词，召回率大幅提升，但超级热词数量最多不超过 50 个。</p>\n                                  <p id=\"p-rt-vocab-inst-d3\">适用于临时性、会话级别的热词优化。</p>\n                                  <p id=\"7c60b246a0sgo\">与预编译热词同时配置时，仅即时热词生效。使用方法请参见<a href=\"https://help.aliyun.com/zh/model-studio/improve-asr-accuracy#hw-instant-h3\" id=\"bb6940fd3e3m0\" title=\"\" class=\"xref\">即时热词</a>。</p>\n                                </section>\n                                <div type=\"important\" id=\"b82671d853wxl\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n                                  <p id=\"ae80585e4ch9d\">仅<code data-tag=\"code\" id=\"code-rt-vocab-m\" class=\"code\">qwen-audio-3.0-asr-flash-streaming</code>支持即时热词。</p>\n                                </div></div>\n                              </section>\n                            </section>\n                            <section id=\"2a60d9bb726be\" class=\"section\">\n                              <p id=\"196220ca21d9o\"><b>language_hints </b><code data-tag=\"code\" code-type=\"xCode\" id=\"4d81d3dae36di\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>array[string]</i></code><i> </i>（可选）</p>\n                              <section id=\"b2fcb8092734w\" class=\"section\">\n                                <p id=\"b7f280996400h\">待识别音频语种。无默认值，不设置时模型自动识别。</p>\n                                <p id=\"6269ba3ba6dcd\">对于 Qwen-Audio-3.0-ASR-Flash-Streaming 系列模型，最多支持设置 4 个值，即便设置超出 4 个，也仅前 4 个生效；对于 Fun-ASR-Realtime 系列模型，仅支持设置 1 个值，即便设置多个，也仅第一个生效。</p>\n                                <div id=\"6587de9ee3vtp\" outputclass=\"collapse\" class=\"collapse\">\n                                  <p id=\"d103597ee64t9\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>点击查看支持的语言代码</b></p>\n                                  <div id=\"8482c1f2502g8\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                                    <ul id=\"aa9b011352vbq\">\n                                      <li id=\"11afbe51fdkpe\">\n                                        <p id=\"9b451ddefamvn\">qwen-audio-3.0-asr-flash-streaming、fun-asr-realtime、fun-asr-realtime-2025-11-07：</p>\n                                        <ul id=\"f49e2ddf5c2dk\">\n                                          <li id=\"9d68fbd035aay\">\n                                            <p id=\"714e184b5be0p\">zh: 中文</p>\n                                          </li>\n                                          <li id=\"9eb977916efcz\">\n                                            <p id=\"a8c156efae5e0\">en: 英文</p>\n                                          </li>\n                                          <li id=\"6da4dccc83der\">\n                                            <p id=\"ab2c366471d0d\">ja: 日语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83des\">\n                                            <p id=\"ab2c366471d0e\">ko：韩语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83det\">\n                                            <p id=\"ab2c366471d0f\">vi：越南语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83deu\">\n                                            <p id=\"ab2c366471d0g\">th：泰语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dev\">\n                                            <p id=\"ab2c366471d0h\">id：印尼语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dew\">\n                                            <p id=\"ab2c366471d0i\">ms：马来语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dex\">\n                                            <p id=\"ab2c366471d0j\">tl：菲律宾语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dey\">\n                                            <p id=\"ab2c366471d0k\">hi：印地语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dez\">\n                                            <p id=\"ab2c366471d0l\">ar：阿拉伯语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df0\">\n                                            <p id=\"ab2c366471d0m\">fr：法语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df1\">\n                                            <p id=\"ab2c366471d0n\">de：德语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df2\">\n                                            <p id=\"ab2c366471d0o\">es：西班牙语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df3\">\n                                            <p id=\"ab2c366471d0p\">pt：葡萄牙语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df4\">\n                                            <p id=\"ab2c366471d0q\">ru：俄语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df5\">\n                                            <p id=\"ab2c366471d0r\">it：意大利语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df6\">\n                                            <p id=\"ab2c366471d0s\">nl：荷兰语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df7\">\n                                            <p id=\"ab2c366471d0t\">sv：瑞典语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df8\">\n                                            <p id=\"ab2c366471d0u\">da：丹麦语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83df9\">\n                                            <p id=\"ab2c366471d0v\">fi：芬兰语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dfa\">\n                                            <p id=\"ab2c366471d0w\">no：挪威语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dfb\">\n                                            <p id=\"ab2c366471d0x\">el：希腊语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dfc\">\n                                            <p id=\"ab2c366471d0y\">pl：波兰语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dfd\">\n                                            <p id=\"ab2c366471d0z\">cs：捷克语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dfe\">\n                                            <p id=\"ab2c366471d10\">hu：匈牙利语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dff\">\n                                            <p id=\"ab2c366471d11\">ro：罗马尼亚语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dfg\">\n                                            <p id=\"ab2c366471d12\">bg：保加利亚语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dfh\">\n                                            <p id=\"ab2c366471d13\">hr：克罗地亚语</p>\n                                          </li>\n                                          <li id=\"6da4dccc83dfi\">\n                                            <p id=\"ab2c366471d14\">sk：斯洛伐克语</p>\n                                          </li>\n                                        </ul>\n                                      </li>\n                                      <li id=\"9d68fbd035aax2\">\n                                        <p id=\"714e184b5be0o2\">fun-asr-realtime-2026-02-28：</p>\n                                        <ul id=\"f49e2ddf5c2di2\">\n                                          <li id=\"9d68fbd035aay2\">\n                                            <p id=\"714e184b5be0p2\">zh: 中文</p>\n                                          </li>\n                                          <li id=\"9eb977916efcz2\">\n                                            <p id=\"a8c156efae5e02\">en: 英文</p>\n                                          </li>\n                                          <li id=\"6da4dccc83der2\">\n                                            <p id=\"ab2c366471d0d2\">ja: 日语</p>\n                                          </li>\n                                        </ul>\n                                      </li>\n                                      <li id=\"9eb977916efcy\">\n                                        <p id=\"a8c156efae5dz\">fun-asr-realtime-2025-09-15：</p>\n                                        <ul id=\"f49e2ddf5c2dl\">\n                                          <li id=\"9eb977916efd0\">\n                                            <p id=\"a8c156efae5e1\">zh: 中文</p>\n                                          </li>\n                                          <li id=\"9eb977916efd1\">\n                                            <p id=\"a8c156efae5e2\">en: 英文</p>\n                                          </li>\n                                        </ul>\n                                      </li>\n                                      <li id=\"6da4dccc83dfq\">\n                                        <p id=\"ab2c366471d1c\">fun-asr-flash-8k-realtime、fun-asr-flash-8k-realtime-2026-01-28：</p>\n                                        <ul id=\"f49e2ddf5c2dn\">\n                                          <li id=\"6da4dccc83dfr\">\n                                            <p id=\"ab2c366471d1d\">zh: 中文</p>\n                                          </li>\n                                        </ul>\n                                      </li>\n                                      \n                                    </ul>\n                                  </div>\n                                </div>\n                              </section>\n                            </section>\n                            <section id=\"9d7d178d29bem\" class=\"section\">\n                              <p id=\"3237bd898960z\"><b>semantic_punctuation_enabled </b><code data-tag=\"code\" code-type=\"xCode\" id=\"256a4c87ea45y\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>boolean</i></code><i> </i>（可选）</p>\n                              <section id=\"09aa73ce1104s\" class=\"section\">\n                                <p id=\"16a8a03564c3m\">是否启用语义断句。</p>\n                                <p id=\"74698f4f07e3j\">默认值：false。</p>\n                                <ul id=\"2c7472f1a1b7o\">\n                                  <li id=\"7295ef0368cdf\">\n                                    <p id=\"f7fdb7115280m\">true：开启语义断句，关闭 VAD 断句。</p>\n                                  </li>\n                                  <li id=\"2a9619c461d8h\">\n                                    <p id=\"08fce8e5c75fn\">false（默认）：开启 VAD 断句，关闭语义断句。</p>\n                                  </li>\n                                </ul>\n                                <p jc=\"left\" id=\"d3450876817bw\" style=\"text-align:left\">语义断句准确性更高，适合会议转写场景；VAD（Voice Activity Detection，语音活动检测）断句延迟较低，适合交互场景。</p>\n                              </section>\n                            </section>\n                            <section id=\"126bb7d70aa1f\" class=\"section\">\n                              <p id=\"a1352b2cb4bfb\"><b>max_sentence_silence </b><code data-tag=\"code\" code-type=\"xCode\" id=\"c9a942c4b2aeg\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>integer</i></code><i> </i>（可选）</p>\n                              <section id=\"33c3e952531ct\" class=\"section\">\n                                <section id=\"61dde7531dbbx\" class=\"section\">\n                                  <p id=\"5696d3b37954g\">VAD 断句静音阈值（ms）。当一段语音后的静音时长超过该阈值时，系统会判定该句子已结束。当<code data-tag=\"code\" id=\"a7c3e91b2f8k1\" class=\"code\">semantic_punctuation_enabled</code>为<span class=\"help-letter-space\"></span>true<span class=\"help-letter-space\"></span>时，不作为<code data-tag=\"code\" id=\"b8d4f02c3g9m2\" class=\"code\">sentence_end</code>返回依据，但设置过小可能会影响识别效果。</p>\n                                  <p id=\"971a0b0fdc0br\">默认值：1300。</p>\n                                  <p id=\"298ca18ad666a\">取值范围：[200, 6000]。</p>\n                                </section>\n                              </section>\n                            </section>\n                            <section id=\"27d8ed8ca21ff\" class=\"section\">\n                              <p id=\"b9f4b8ebebfeq\"><b>multi_threshold_mode_enabled </b><code data-tag=\"code\" code-type=\"xCode\" id=\"8b0a8ad63928l\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>boolean</i></code><i> </i>（可选）</p>\n                              <section id=\"7170964f8a48h\" class=\"section\">\n                                <div type=\"important\" id=\"a6e51163468fm\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n                                  <p id=\"1c7501f45865l\">仅在<code data-tag=\"code\" id=\"ee1cbf4ac404m\" class=\"code\">semantic_punctuation_enabled</code>参数为<span class=\"help-letter-space\"></span>false<span class=\"help-letter-space\"></span>时生效。</p>\n                                </div></div>\n                                <section id=\"be237ce66f0bk\" class=\"section\">\n                                  <p id=\"b29c6e8271d3v\">是否启用多阈值模式。启用后可防止 VAD 断句切割过长。</p>\n                                  <p id=\"2a75535c6716l\">默认值：false。</p>\n                                </section>\n                              </section>\n                            </section>\n                            <section id=\"8d5cfd9062f2n\" class=\"section\">\n                              <p id=\"56eddcddcd57o\"><b>heartbeat </b><code data-tag=\"code\" code-type=\"xCode\" id=\"a18e7ce3e65br\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>boolean</i></code><i> </i>（可选）</p>\n                              <section id=\"5e3a5b6bbe4fy\" class=\"section\">\n                                <p id=\"d9bf8063433df\">是否启用心跳包。</p>\n                                <p id=\"2bd109c8745bm\">默认值：false。</p>\n                                <ul id=\"35017a21949fp\" data-spm-anchor-id=\"a2c4g.11186623.0.i90.7c6b6146OjzzmL\">\n                                  <li id=\"b966089c311ch\">\n                                    <p id=\"3092af1c1d8fx\">true：在持续发送静音音频的情况下，可保持与服务端的连接不中断。</p>\n                                  </li>\n                                  <li id=\"c261860a2042t\">\n                                    <p id=\"f46119f4cad0j\">false（默认）：即使持续发送静音音频，连接也将在<span class=\"help-letter-space\"></span>60<span class=\"help-letter-space\"></span>秒后因超时而断开。</p>\n                                  </li>\n                                </ul>\n                                <section id=\"1b75594c99rwl\" class=\"section\">\n                                  <p id=\"fc91dfa3d4mxk\">静音音频指的是在音频文件或数据流中没有声音信号的内容。静音音频可以通过多种方法生成，例如使用音频编辑软件如<span class=\"help-letter-space\"></span>Audacity<span class=\"help-letter-space\"></span>或<span class=\"help-letter-space\"></span>Adobe Audition，或者通过命令行工具如<span class=\"help-letter-space\"></span>FFmpeg。</p>\n                                </section>\n                              </section>\n                            </section>\n                            <section id=\"53da84b40ac1r\" class=\"section\">\n                              <p id=\"ce4e697c496dh\"><b>speech_noise_threshold </b><code data-tag=\"code\" code-type=\"xCode\" id=\"593bc26d0526m\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>float</i></code><i> </i>（可选）</p>\n                              <section id=\"740624df29dea\" class=\"section\">\n                                <p jc=\"left\" id=\"403498f9d4b4v\" style=\"text-align:left\">语音与噪音的判定阈值，用于调整语音活动检测（VAD）的灵敏度。</p>\n                                <p jc=\"left\" id=\"ead86bff7d9dx\" style=\"text-align:left\">取值范围：[-1.0, 1.0]。</p>\n                                <p jc=\"left\" id=\"12e4128a5681c\" style=\"text-align:left\">取值说明：</p>\n                                <ul id=\"d3699552ce33j\">\n                                  <li id=\"c18e6dd37079z\">\n                                    <p id=\"89055acaeed7i\">取值越接近 -1：降低噪音判定阈值，噪音被识别为语音的概率增大，可能导致更多噪音被转写</p>\n                                  </li>\n                                  <li id=\"d7b18a3b3240n\">\n                                    <p id=\"d43865fe9d12r\">取值越接近 +1：提高噪音判定阈值，语音被误判为噪音的概率增大，可能导致部分语音被过滤</p>\n                                  </li>\n                                </ul>\n                                <p jc=\"left\" id=\"59cfb912455bu\" style=\"text-align:left\">此参数为高级配置参数，调整可能显著影响识别效果，建议：</p>\n                                <ul id=\"c5636118174cr\">\n                                  <li id=\"909bea4eda1dd\">\n                                    <p id=\"52af5c5f4bcai\">调整前充分测试验证效果</p>\n                                  </li>\n                                  <li id=\"a0eb9a451505o\">\n                                    <p id=\"2e232f27d309r\">根据实际音频环境小幅度调整（建议步长 0.1）</p>\n                                  </li>\n                                </ul>\n                              </section>\n                            </section>\n                            <section id=\"5174622651e9y\" class=\"section\">\n                              <p id=\"0db6c80f8ea9h\"><b>special_word_filter</b> <code data-tag=\"code\" code-type=\"xCode\" id=\"code-st-swf\" class=\"code\"><i>string</i></code><i> </i>（可选）</p>\n                              <section id=\"ede7279e67tu9\" class=\"section\">\n                                <p id=\"382273aca1dgh\">指定在语音识别过程中需要处理的敏感词，并支持对不同敏感词设置不同的处理方式。详情请参见<a href=\"https://help.aliyun.com/zh/model-studio/real-time-speech-recognition-user-guide#rt03-sensitive-h3\" id=\"3ef29fb268dg1\" title=\"\" class=\"xref\">敏感词过滤</a>。</p>\n                              </section>\n                            </section>\n                          </div>\n                        </div>\n                      </section>\n                    </div>\n                  </div>\n                </td>\n              </tr>\n            </tbody>\n          </table>\n        </section>\n        <section id=\"sec-continue-task\" class=\"section\">\n          <h2 id=\"h-continue-task\"><b>continue-task</b></h2>\n          <p jc=\"left\" id=\"p-ct-desc\" style=\"text-align:left\"><b>说明</b>：在任务执行过程中更新对话上下文信息，用于辅助识别。</p>\n          <p jc=\"left\" id=\"p-ct-timing\" style=\"text-align:left\"><b>发送时机</b>：任务运行中，需要更新对话上下文时发送。</p>\n          <div type=\"important\" id=\"note-ct-models\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n            <p id=\"p-ct-models\">仅 <code data-tag=\"code\" id=\"822eb0934cy0v\" class=\"code\">qwen-audio-3.0-asr-flash-streaming</code>、<code data-tag=\"code\" id=\"code-ct-m1\" class=\"code\">fun-asr-realtime</code> 和 <code data-tag=\"code\" id=\"code-ct-m2\" class=\"code\">fun-asr-realtime-2025-11-07</code> 模型支持该事件。</p>\n          </div></div>\n          <table bordertype=\"no-border\" id=\"tbl-ct\" outputclass=\"api-reference column-layout\" tablewidth=\"100\" tablecolswidth=\"57.54 42.46\" autofit=\"true\" class=\"api-reference column-layout table\">\n            <colgroup colwidth=\"1.15*\" style=\"width:57.54%\"></colgroup>\n            <colgroup colwidth=\"0.85*\" style=\"width:42.46%\"></colgroup>\n            <tbody class=\"tbody\">\n              <tr id=\"tr-ct-header\">\n                <td id=\"td-ct-header\" rowspan=\"1\" style=\"background-color:rgba(0, 0, 0, 0);vertical-align:middle\" colspan=\"1\">\n                  <p id=\"p-ct-header\"><b>header </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-ct-header\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                  <div id=\"div-ct-header-exp\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                    <p id=\"p-ct-header-t\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                    <div id=\"div-ct-header-c\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                      <section id=\"sec-ct-action\" class=\"section\">\n                        <p id=\"p-ct-action\"><b>action </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-ct-action\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"sec-ct-action-d\" class=\"section\">\n                          <p id=\"p-ct-action-d\">指令类型，固定为 <code data-tag=\"code\" id=\"code-ct-action-val\" class=\"code\">continue-task</code>。</p>\n                        </section>\n                      </section>\n                      <section id=\"sec-ct-taskid\" class=\"section\">\n                        <p id=\"p-ct-taskid\"><b>task_id </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-ct-taskid\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"sec-ct-taskid-d\" class=\"section\">\n                          <p id=\"p-ct-taskid-d\">客户端生成的任务 ID（UUID 格式），需与<span class=\"help-letter-space\"></span><a href=\"#9cae7e7b85ebm\" id=\"xref-ct-runtask\" title=\"\" class=\"xref\">run-task</a><span class=\"help-letter-space\"></span>事件中的 task_id 保持一致。</p>\n                        </section>\n                      </section>\n                      <section id=\"sec-ct-streaming\" class=\"section\">\n                        <p id=\"p-ct-streaming\"><b>streaming </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-ct-streaming\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"sec-ct-streaming-d\" class=\"section\">\n                          <p id=\"p-ct-streaming-d\">固定为 <code data-tag=\"code\" id=\"code-ct-streaming-val\" class=\"code\">duplex</code>。</p>\n                        </section>\n                      </section>\n                    </div>\n                  </div>\n                </td>\n                <td id=\"td-ct-code\" rowspan=\"2\" style=\"background-color:rgba(0, 0, 0, 0);vertical-align:top\" colspan=\"1\">\n                  <section id=\"sec-ct-code-stick\" outputclass=\"stick-top\" class=\"stick-top section\"><pre code-type=\"xCode\" id=\"code-ct-example\" index=\"0\" data-tag=\"codeblock\" outputclass=\"language-json\" class=\"pre codeblock language-json\"><code>{\n    \"header\": {\n        \"action\": \"continue-task\",\n        \"task_id\": \"2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx\",\n        \"streaming\": \"duplex\"\n    },\n    \"payload\": {\n        \"input\": {\n            \"context\": [\n                {\n                    \"role\": \"user\",\n                    \"content\": [\n                        {\n                            \"type\": \"input_text\",\n                            \"text\": \"你好啊\"\n                        }\n                    ]\n                },\n                {\n                    \"role\": \"assistant\",\n                    \"content\": [\n                        {\n                            \"type\": \"text\",\n                            \"text\": \"你好啊，我是通义千问，有什么可以帮助你的？\"\n                        }\n                    ]\n                }\n            ]\n        }\n    }\n}</code></pre></section>\n                  <p id=\"p-ct-code-empty\"></p>\n                </td>\n              </tr>\n              <tr id=\"tr-ct-payload\">\n                <td id=\"td-ct-payload\" rowspan=\"1\" style=\"background-color:rgba(0, 0, 0, 0)\" colspan=\"1\">\n                  <p id=\"p-ct-payload\"><b>payload </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-ct-payload\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                  <div id=\"div-ct-payload-exp\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                    <p id=\"p-ct-payload-t\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                    <div id=\"div-ct-payload-c\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                      <section id=\"sec-ct-input\" class=\"section\">\n                        <p id=\"p-ct-input\"><b>input </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-ct-input\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"sec-ct-input-d\" class=\"section\">\n                          <p id=\"p-ct-input-d\">输入对象。</p>\n                          <div id=\"div-ct-input-exp\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                            <p id=\"p-ct-input-t\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                            <div id=\"div-ct-input-c\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                              <section id=\"sec-ct-ctx\" is-conref=\"true\" class=\"section\">\n                                  <p id=\"p-rt-ctx\"><b>context </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx\" class=\"code\"><i>array(object)</i></code><i> </i>（可选）</p>\n                                  <p id=\"9f6bd11bf3q9d\">对话上下文，用于辅助识别、提升专有词汇的识别准确率。使用方法详见<a href=\"https://help.aliyun.com/zh/model-studio/improve-asr-accuracy#ctx-enhance-h2\" id=\"3b7fcdbfd8ugv\" title=\"\" class=\"xref\">上下文增强</a>。</p>\n                                  <div type=\"important\" id=\"note-rt-ctx-limit\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n                                    <p id=\"p-rt-ctx-limit\"><b>约束</b>：上下文消息（<code data-tag=\"code\" id=\"code-rt-ctx-it\" class=\"code\">input_text</code> 和 <code data-tag=\"code\" id=\"code-rt-ctx-tt\" class=\"code\">text</code> 类型）各最多 5 条，超出时保留最近的 5 条。每轮上下文文本总长度（<code data-tag=\"code\" id=\"code-rt-ctx-u\" class=\"code\">user</code> 和 <code data-tag=\"code\" id=\"code-rt-ctx-a\" class=\"code\">assistant</code> 的 <code data-tag=\"code\" id=\"code-rt-ctx-tfield\" class=\"code\">text</code> 字段长度之和）不超过 400 个字符（按字符数计算，每个字符计为 1），超出部分从末尾截断。</p>\n                                  </div></div>\n                                  <div type=\"important\" id=\"note-rt-ctx-order\" class=\"note note-important\"><div class=\"note-icon-wrapper\"><i class=\"icon-note note important\"></i></div><div class=\"noteContentSpan\"><strong>重要 </strong>\n                                    <p id=\"p-rt-ctx-order\">携带上下文时，<code data-tag=\"code\" id=\"code-rt-ctx-order-arr\" class=\"code\">context</code> 中的消息顺序有要求：上下文消息必须按对话轮次排列，每轮中 <code data-tag=\"code\" id=\"code-rt-ctx-order-user\" class=\"code\">user</code>（<code data-tag=\"code\" id=\"code-rt-ctx-order-it\" class=\"code\">input_text</code> 类型）必须在对应的 <code data-tag=\"code\" id=\"code-rt-ctx-order-asst\" class=\"code\">assistant</code>（<code data-tag=\"code\" id=\"code-rt-ctx-order-tt\" class=\"code\">text</code> 类型）之前。</p>\n                                  </div></div>\n                                  <div id=\"div-rt-ctx-exp\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                                    <p id=\"p-rt-ctx-t\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                                    <div id=\"div-rt-ctx-c\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                                      <section id=\"sec-rt-ctx-role\" class=\"section\">\n                                        <p id=\"p-rt-ctx-role\"><b>role </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx-role\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                                        <section id=\"f7979c8e23fph\" class=\"section\">\n                                          <p id=\"p-rt-ctx-role-d\">消息角色。取值范围：</p>\n                                          <ul id=\"ul-rt-ctx-role\">\n                                            <li id=\"li-rt-ctx-role-user\">\n                                              <p id=\"p-rt-ctx-role-user\"><code data-tag=\"code\" id=\"code-rt-ctx-role-user\" class=\"code\">user</code>：前几轮用户语音的识别结果或领域相关的词表。</p>\n                                            </li>\n                                            <li id=\"li-rt-ctx-role-asst\">\n                                              <p id=\"p-rt-ctx-role-asst\"><code data-tag=\"code\" id=\"code-rt-ctx-role-asst\" class=\"code\">assistant</code>：前几轮大语言模型的回复内容。</p>\n                                            </li>\n                                          </ul>\n                                        </section>\n                                      </section>\n                                      <section id=\"sec-rt-ctx-content\" class=\"section\">\n                                        <p id=\"p-rt-ctx-content\"><b>content </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx-content\" class=\"code\"><i>array(object)</i></code><i> </i><b>（必选）</b></p>\n                                        <p id=\"p-rt-ctx-content-d\">消息内容列表。</p>\n                                        <div id=\"div-rt-ctx-content-exp\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                                          <p id=\"p-rt-ctx-content-t\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                                          <div id=\"div-rt-ctx-content-c\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                                            <section id=\"sec-rt-ctx-type\" class=\"section\">\n                                              <p id=\"p-rt-ctx-type\"><b>type </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx-type\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                                              <section id=\"2e95567f107ds\" class=\"section\">\n                                                <p id=\"p-rt-ctx-type-d\">内容类型。取值范围：</p>\n                                                <ul id=\"ul-rt-ctx-type\">\n                                                  <li id=\"li-rt-ctx-type-it\">\n                                                    <p id=\"p-rt-ctx-type-it\"><code data-tag=\"code\" id=\"code-rt-ctx-type-it\" class=\"code\">input_text</code>：前几轮用户语音的识别结果或领域相关的词表（role 为 user 时使用），需同时传入 <code data-tag=\"code\" id=\"code-rt-ctx-type-it-ref\" class=\"code\">text</code> 字段。</p>\n                                                  </li>\n                                                  <li id=\"li-rt-ctx-type-tt\">\n                                                    <p id=\"p-rt-ctx-type-tt\"><code data-tag=\"code\" id=\"code-rt-ctx-type-tt\" class=\"code\">text</code>：前几轮大语言模型的回复内容（role 为 assistant 时使用），需同时传入 <code data-tag=\"code\" id=\"code-rt-ctx-type-tt-ref\" class=\"code\">text</code> 字段。</p>\n                                                  </li>\n                                                </ul>\n                                              </section>\n                                            </section>\n                                            <section id=\"sec-rt-ctx-text\" class=\"section\">\n                                              <p id=\"p-rt-ctx-text\"><b>text </b><code data-tag=\"code\" code-type=\"xCode\" id=\"code-rt-ctx-text\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                                              <section id=\"e466ec8aaceck\" class=\"section\">\n                                                <p id=\"p-rt-ctx-text-d\">文本内容。当 <code data-tag=\"code\" id=\"code-rt-ctx-text-cond1\" class=\"code\">type</code> 为 <code data-tag=\"code\" id=\"code-rt-ctx-text-val1\" class=\"code\">input_text</code> 时，填入前几轮用户语音的识别结果或领域相关的词表；当 <code data-tag=\"code\" id=\"code-rt-ctx-text-cond2\" class=\"code\">type</code> 为 <code data-tag=\"code\" id=\"code-rt-ctx-text-val2\" class=\"code\">text</code> 时，填入前几轮大语言模型的回复内容。</p>\n                                              </section>\n                                            </section>\n                                          </div>\n                                        </div>\n                                      </section>\n                                    </div>\n                                  </div>\n                                </section>\n                            </div>\n                          </div>\n                        </section>\n                      </section>\n                    </div>\n                  </div>\n                </td>\n              </tr>\n            </tbody>\n          </table>\n        </section>\n        <section id=\"dced6858a6cax\" class=\"section\">\n          <h2 id=\"85880fa44008n\"><b>finish-task</b></h2>\n          <p jc=\"left\" id=\"713ea941408dv\" style=\"text-align:left\"><b>说明</b>：通知服务端音频发送完毕，请求结束任务。</p>\n          <p jc=\"left\" id=\"8abfb2dbf229i\" style=\"text-align:left\"><b>发送时机</b>：所有音频数据发送完毕后。</p>\n          <p jc=\"left\" id=\"773862fd317ey\" style=\"text-align:left\"><b>响应事件</b>：服务端返回&nbsp;<code data-tag=\"code\" id=\"7be40ccadea2d\" class=\"code\"><a href=\"https://help.aliyun.com/zh/model-studio/fun-asr-server-events#b8aefe8e0c5fr\" id=\"92488b522b98q\" title=\"\" class=\"xref\">task-finished</a></code>&nbsp;事件。</p>\n          <table bordertype=\"no-border\" id=\"2ed350069de3y\" outputclass=\"api-reference column-layout\" tablewidth=\"100\" tablecolswidth=\"57.54 42.46\" autofit=\"true\" class=\"api-reference column-layout table\">\n            <colgroup colwidth=\"1.15*\" style=\"width:57.54%\"></colgroup>\n            <colgroup colwidth=\"0.85*\" style=\"width:42.46%\"></colgroup>\n            <tbody class=\"tbody\">\n              <tr id=\"e44528e0f525p\">\n                <td id=\"49ec3c551c9er\" rowspan=\"1\" style=\"background-color:rgba(0, 0, 0, 0);vertical-align:middle\" colspan=\"1\">\n                  <p id=\"00ddaa53ab24j\"><b>header </b><code data-tag=\"code\" code-type=\"xCode\" id=\"b1f5e7b87cd6f\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                  <div id=\"44b06b793ff1l\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                    <p id=\"6085404ab288w\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                    <div id=\"b1760c2bb1e7q\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                      <section id=\"059b26965175f\" class=\"section\">\n                        <p id=\"867f9e8bda89l\"><b>action </b><code data-tag=\"code\" code-type=\"xCode\" id=\"6b04b66d0591y\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"0f46487d0046i\" class=\"section\">\n                          <p id=\"2876ed586f1dg\">指令类型，固定为 <code data-tag=\"code\" id=\"a5c98b7f447ac\" class=\"code\">finish-task</code>。</p>\n                        </section>\n                      </section>\n                      <section id=\"f5e0ccc2fd9eu\" class=\"section\">\n                        <p id=\"04d55fd3c3caf\"><b>task_id </b><code data-tag=\"code\" code-type=\"xCode\" id=\"6333f53c39aep\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"3a5e36e8cd86t\" class=\"section\">\n                          <p id=\"8c09ecf8e5f4i\">客户端生成的任务 ID（UUID 格式），需与<span class=\"help-letter-space\"></span><a href=\"#9cae7e7b85ebm\" id=\"d7de12546019e\" title=\"\" class=\"xref\">run-task</a><span class=\"help-letter-space\"></span>事件中的 task_id 保持一致。</p>\n                        </section>\n                      </section>\n                      <section id=\"c6c6c887c6feh\" class=\"section\">\n                        <p id=\"9882553da224l\"><b>streaming </b><code data-tag=\"code\" code-type=\"xCode\" id=\"1dff511a37dac\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>string</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"ead1012c2798h\" class=\"section\">\n                          <p id=\"9bae8fabafc0w\">固定为 <code data-tag=\"code\" id=\"c57e0f2ae27dk\" class=\"code\">duplex</code>。</p>\n                        </section>\n                      </section>\n                    </div>\n                  </div>\n                </td>\n                <td id=\"940544957a8da\" rowspan=\"2\" style=\"background-color:rgba(0, 0, 0, 0);vertical-align:top\" colspan=\"1\">\n                  <section id=\"dfd770e8acdbu\" outputclass=\"stick-top\" class=\"stick-top section\"><pre code-type=\"xCode\" id=\"df615eed3b71k\" index=\"0\" data-tag=\"codeblock\" outputclass=\"language-json\" class=\"pre codeblock language-json\"><code>{\n    \"header\": {\n        \"action\": \"finish-task\",\n        \"task_id\": \"2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx\",\n        \"streaming\": \"duplex\"\n    },\n    \"payload\": {\n        \"input\": {}\n    }\n}</code></pre></section>\n                  <p id=\"267b08692431u\"></p>\n                </td>\n              </tr>\n              <tr id=\"24a6d343e482p\">\n                <td id=\"539f7c48b58ey\" rowspan=\"1\" style=\"background-color:rgba(0, 0, 0, 0)\" colspan=\"1\">\n                  <p id=\"15f15919bd94s\"><b>payload </b><code data-tag=\"code\" code-type=\"xCode\" id=\"46fc52f549edn\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                  <div id=\"a12b405c3371u\" outputclass=\"collapse expanded\" class=\"collapse expanded\">\n                    <p id=\"41e8b70e1400g\" data-tag=\"expandable-title\" class=\"expandable-title\"><b>属性</b></p>\n                    <div id=\"0799bfbf46e5f\" data-tag=\"expandable-content\" class=\"expandable-content\">\n                      <section id=\"0860a9fafd1be\" class=\"section\">\n                        <p id=\"0eb3bfbd23c8n\"><b>input </b><code data-tag=\"code\" code-type=\"xCode\" id=\"1a9fd8ee4c42j\" data-init-id=\"af67e5236f13i\" class=\"code\"><i>object</i></code><i> </i><b>（必选）</b></p>\n                        <section id=\"32d6670b7d0am\" class=\"section\">\n                          <p id=\"b253786eca77w\">固定为<code data-tag=\"code\" id=\"fe3faada3180q\" class=\"code\">{}</code>。</p>\n                        </section>\n                      </section>\n                    </div>\n                  </div>\n                </td>\n              </tr>\n            </tbody>\n          </table>\n        </section>\n      </section>\n      \n        <style>\n          .aliyun-docs-content .one-codeblocks pre {\n            max-height: calc(80vh - 136px) !important;\n            height: auto;\n          }\n\n        </style>\n      \n      \n        <style>\n          .tab-item {\n            font-size: 12px !important;\n            /* 你可以根据需要调整字体大小 */\n            padding: 0px 5px !important;\n          }\n\n        </style>\n      \n      \n        <style>\n          .expandable-content {\n            border-left: none !important;\n            border-right: none !important;\n            border-bottom: none !important;\n          }\n\n        </style>\n      \n      \n        <style>\n          .one-codeblocks.stick-top.section {\n            overflow: hidden !important;\n          }\n\n        </style>\n      \n      <section id=\"9364b09f0acbc\" data-ref-searchable=\"yes\" docid=\"5907685\" is-conref=\"true\" class=\"section\"><style>\n.table-wrapper {\n    overflow: visible !important;\n}\n</style>\n  <style>\n/* 调整 table 宽度 */\n.aliyun-docs-content table.medium-width {\n  max-width: 1018px;\n  width: 100%;\n}\n\n.aliyun-docs-content table.table-no-border tr td:first-child {\n  padding-left: 0;\n}\n\n.aliyun-docs-content table.table-no-border tr td:last-child {\n  padding-right: 0;\n}\n</style>\n \n  <style>\n/* 支持吸顶 */\ndiv:has(.aliyun-docs-content),\n.aliyun-docs-content .markdown-body {\n  overflow: visible;\n}\n.stick-top {\n  position: sticky;\n  top: 46px;\n}\n</style>\n \n  <style>\n/**代码块字体**/\n\n/* 减少表格中的代码块 margin，让表格信息显示更紧凑 */\n.unionContainer .markdown-body table .help-code-block  {\n  margin: 0 !important;\n}\n/* 减少表格中的代码块字号，让表格信息显示更紧凑 */\n.unionContainer .markdown-body .help-code-block pre {\n  font-size: 12px !important;\n}\n/* 减少表格中的代码块字号，让表格信息显示更紧凑 */\n.unionContainer .markdown-body .help-code-block pre code {\n  font-size: 12px !important;\n}\n</style>\n \n  <style>\n\n/** API Reference 表格 **/\n\n.aliyun-docs-content table.api-reference tr td:first-child {\n  margin: 0px;\n  border-bottom: 1px solid #d8d8d8;\n}\n\n.aliyun-docs-content table.api-reference tr:last-child td:first-child {  \n  border-bottom: none;\n}\n\n.aliyun-docs-content table.api-reference p {\n  color: #6e6e80;\n}\n\n.aliyun-docs-content table.api-reference b, i {\n  color: #181818;\n}\n\n.aliyun-docs-content table.api-reference .collapse {\n  border: none;\n  margin-top: 4px;\n  margin-bottom: 4px;\n}\n\n.aliyun-docs-content table.api-reference .collapse .expandable-title-bold {\n  padding: 0;\n}\n\n.aliyun-docs-content table.api-reference .collapse .expandable-title {\n  padding: 0;\n}\n\n.aliyun-docs-content table.api-reference .collapse .expandable-title-bold .title {\n  margin-left: 16px;\n}\n\n.aliyun-docs-content table.api-reference .collapse .expandable-title .title {\n  margin-left: 16px;\n}\n\n.aliyun-docs-content table.api-reference .collapse .expandable-title-bold i.icon {\n  position: absolute;\n  color: #777;\n  font-weight: 100;\n}\n\n.aliyun-docs-content table.api-reference .collapse .expandable-title i.icon {\n  position: absolute;\n  color: #777;\n  font-weight: 100;\n}\n\n.aliyun-docs-content table.api-reference .collapse.expanded .expandable-content {\n  padding: 10px 14px 10px 14px !important;\n  margin: 0;\n  border: 1px solid #e9e9e9;\n}\n\n.aliyun-docs-content table.api-reference .collapse .expandable-title-bold b {\n  font-size: 13px;\n  font-weight: normal;\n  color: #6e6e80;\n}\n\n.aliyun-docs-content table.api-reference .collapse .expandable-title b {\n  font-size: 13px;\n  font-weight: normal;\n  color: #6e6e80;\n}\n\n.aliyun-docs-content table.api-reference .tabbed-content-box {\n  border: none;\n}\n\n.aliyun-docs-content table.api-reference .tabbed-content-box section {\n  padding: 8px 0 !important;\n}\n\n.aliyun-docs-content table.api-reference .tabbed-content-box.mini .tab-box {\n  /*\n  position: absolute;\n  left: 40px;\n  right: 0;\n  */\n}\n\n.aliyun-docs-content .margin-top-33 {\n  margin-top: 33px !important;\n}\n\n.aliyun-docs-content .two-codeblocks pre {\n  max-height: calc(50vh - 136px) !important;\n  height: auto;\n}\n\n.expandable-content section {\n    border-bottom: 1px solid #e9e9e9;\n    padding-top: 6px;\n    padding-bottom: 4px;\n}\n\n.expandable-content section:last-child {\n    border-bottom: none;\n}\n\n.expandable-content section:first-child {\n    padding-top: 0;\n}\n\n</style>\n </section>\n    </div>\n  </main>\n\n\n\n\n</div>","path":"https://help.aliyun.com/zh/model-studio/fun-asr-client-events","productNodeVO":{"emptyNode":false,"level":3,"validDocument":true,"headNavEnable":false,"docTitle":"大模型服务平台百炼","id":2400256,"title":"大模型服务平台百炼","url":"/zh/model-studio/"},"alias":"/model-studio/fun-asr-client-events","showType":1,"taskStatus":"NO_TASK_AVAILABLE","website":"cn","level":8,"developerUrl":"https://developer.aliyun.com/modelstudio/","nodeType":1,"version":9,"url":"/zh/model-studio/fun-asr-client-events","tags":[{"value":"1","key":"accept","desc":"已承接"},{"value":false,"key":"autoTranslation","desc":"非自动翻译"},{"value":3034145,"key":"nodeId","desc":"文档ID"}],"userVO":{},"recommendDocs":[],"directoryPath":{"children":[{"children":[{"children":[{"children":[{"emptyNode":false,"level":8,"validDocument":true,"headNavEnable":false,"docTitle":"客户端事件","id":3034145,"title":"客户端事件","url":"/zh/model-studio/fun-asr-client-events"}],"emptyNode":false,"level":7,"validDocument":true,"headNavEnable":false,"docTitle":"实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）","id":2983775,"title":"实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）","url":"/zh/model-studio/fun-asr-real-time-speech-recognition-api-reference/"}],"emptyNode":false,"level":6,"validDocument":true,"headNavEnable":false,"docTitle":"语音识别","id":2868450,"title":"语音识别","url":"/zh/model-studio/speech-recognition-api-reference/"}],"emptyNode":false,"level":5,"validDocument":true,"headNavEnable":false,"docTitle":"音频","id":3040910,"title":"音频","url":"/zh/model-studio/audio-api-references/"}],"emptyNode":false,"level":3,"validDocument":true,"headNavEnable":false,"docTitle":"大模型服务平台百炼","id":2400256,"title":"大模型服务平台百炼","url":"/zh/model-studio/"},"productUrl":"https://www.aliyun.com/product/bailian","nodeId":3034145,"desc":"本文介绍 Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime 实时语音识别服务中客户端通过 WebSocket 发送给服务端的客户端事件，包括 run-task（启动任务）、continue-task（更新上下文）、finish-task（结束任务）等指令的数据结构与字段含义。"},"breadcrumb":[{"emptyNode":false,"level":3,"validDocument":true,"headNavEnable":false,"docTitle":"大模型服务平台百炼","id":2400256,"title":"大模型服务平台百炼","url":"/zh/model-studio/"},{"emptyNode":false,"level":5,"validDocument":true,"headNavEnable":false,"docTitle":"音频","id":3040910,"title":"音频","url":"/zh/model-studio/audio-api-references/"},{"emptyNode":false,"level":6,"validDocument":true,"headNavEnable":false,"docTitle":"语音识别","id":2868450,"title":"语音识别","url":"/zh/model-studio/speech-recognition-api-reference/"},{"emptyNode":false,"level":7,"validDocument":true,"headNavEnable":false,"docTitle":"实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）","id":2983775,"title":"实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）","url":"/zh/model-studio/fun-asr-real-time-speech-recognition-api-reference/"},{"emptyNode":false,"level":8,"validDocument":true,"headNavEnable":false,"docTitle":"客户端事件","id":3034145,"title":"客户端事件","url":"/zh/model-studio/fun-asr-client-events"}],"isMachineTranslation":false,"isNotFound":false,"helpResponseCode":200,"redirectUrl":"","helpDocVersion":1,"reloadFlag":true}}};
+  </script><link href="https://g.alicdn.com/code/npm/@ali/??hmod-ace-2023-box/0.1.0/index.css,hmod-aliyun-com-global-nav-search/0.8.5/index.css,hmod-aliyun-com-global-nav/0.3.18/index.css" rel="stylesheet"/>
+<link href="https://g.alicdn.com/code/npm/@ali/??hmod-ace-2023-box/0.1.0/index.css,hmod-ace-2024-global-footer/0.2.1/index.css" rel="stylesheet"/>
+</head>
+
+<body><script>
+with(document)with(body)with(insertBefore(createElement("script"),firstChild))setAttribute("exparams","category=&userid=&aplus&yunid=&&trid=2150427417855942798287926e0abb&asid=AQAAAACoAW5qDBYMRQAAAAAnQF3u6aUS0w==",id="tb-beacon-aplus",src=(location>"https"?"//g":"//g")+".alicdn.com/alilog/mlog/aplus_v2.js")
+</script>
+
+  <script>
+    var _performance_domStart = window.performance && window.performance.now();
+  </script>
+  <header><div id="b84c5488c8bd5a069ff818e4a417e5c9"><div class="_18a32969382a277c44015217fbc5cb5a_box"><div class="_3bd147f6948a20d6c528ac898ad4ba47_pc de5ef2fee09ebcb2b1dcaf0c982523bc_theme _277ebb348812c9712fac6b680ad5e513_reset _277ebb348812c9712fac6b680ad5e513_aliyun-font-family" data-ai-assistant-text-selection-tooltip="disabled"><header class="_702422913dd5754f065139ec2d2def80_container   "><button class="_17fcaf1a4ee37405e5ad5fbad24204b4_container _17fcaf1a4ee37405e5ad5fbad24204b4_loading" aria-label="打开菜单" data-spm="d_dashboard_trigger" data-tracker-exp="true"><span class="_17fcaf1a4ee37405e5ad5fbad24204b4_burger "><span class="_17fcaf1a4ee37405e5ad5fbad24204b4_middle"></span></span></button><a href="https://www.aliyun.com/" class="_3f46140aade30bc61f3012933357c477_logo _702422913dd5754f065139ec2d2def80_logo" data-tracker-content="LOGO" data-spm="d_logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4608 1024" fill="#ff6a00" width="80"><path d="M3266.56 773.12h327.68v-102.4h-327.68v-102.4H3584V35.84H2846.72v532.48h317.44v102.4h-327.68v102.4h327.68v112.64h-353.28v102.4h814.08v-102.4h-353.28v-112.64zM3276.8 138.24h215.04v112.64H3276.8V138.24z m0 215.04h215.04V460.8H3276.8V353.28zM3174.4 460.8h-215.04V353.28H3174.4V460.8z m0-209.92h-215.04V138.24H3174.4v112.64zM537.6 445.44H1075.2v122.88H537.6z"></path><path d="M1341.44 5.12h-353.28L1075.2 128l256 81.92c46.08 15.36 76.8 61.44 76.8 107.52v389.12c0 46.08-30.72 92.16-76.8 107.52l-256 81.92-87.04 122.88h353.28c148.48 0 266.24-117.76 266.24-266.24V276.48c0-148.48-117.76-271.36-266.24-271.36zM276.48 814.08c-46.08-15.36-76.8-61.44-76.8-107.52V317.44c0-46.08 30.72-92.16 76.8-107.52l256-81.92L619.52 5.12H266.24C117.76 5.12 0 128 0 276.48v471.04c0 148.48 117.76 266.24 266.24 266.24h353.28l-87.04-122.88-256-76.8zM2493.44 250.88h-261.12v537.6h261.12V250.88z m-107.52 430.08h-56.32V353.28h56.32v327.68zM1848.32 988.16h102.4V138.24h107.52L1996.8 419.84v102.4h61.44v225.28c0 15.36-10.24 25.6-25.6 25.6h-25.6v102.4h51.2c56.32 0 102.4-46.08 102.4-102.4v-358.4H2099.2l61.44-281.6v-102.4h-312.32v957.44z"></path><path d="M2206.72 138.24H2560v660.48c0 46.08-35.84 87.04-87.04 87.04h-76.8v102.4h107.52c87.04 0 163.84-71.68 163.84-163.84V138.24h35.84v-102.4h-496.64v102.4zM3763.2 40.96h737.28v102.4H3763.2zM4541.44 527.36v-102.4H3727.36v102.4h204.8l-163.84 358.4v102.4h691.2c30.72 0 51.2-25.6 51.2-51.2 0-10.24 0-15.36-5.12-20.48l-87.04-194.56h-112.64l76.8 163.84h-496.64l163.84-358.4h491.52z"></path></svg></a><div class="e76910c82efe8556eb8a6ce6019c5d00_container"><button class="e76910c82efe8556eb8a6ce6019c5d00_controller" data-spm="dscroll-left"><i class="ee52067fb65534cb06d3b35f654f5441_icon ddd10ed9ffa4788f54781e516c4c6560-button_left"></i></button><div class="e76910c82efe8556eb8a6ce6019c5d00_menu-warp"><nav class="_0b0e00051b37611378e027e6ac3a695a_menus"><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://www.qianwenai.com/" data-spm="d_menu_0">大模型</a><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://www.aliyun.com/product/list" data-spm="d_menu_1">产品</a><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://www.aliyun.com/solution/tech-solution/" data-spm="d_menu_2">解决方案</a><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://www.aliyun.com/benefit" data-spm="d_menu_3">权益</a><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://www.aliyun.com/price" data-spm="d_menu_4">定价</a><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://market.aliyun.com/" data-spm="d_menu_5">云市场</a><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://partner.aliyun.com/management/v2" data-spm="d_menu_6">伙伴</a><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://www.aliyun.com/service" data-spm="d_menu_7">服务</a><a class="_2cdcedb5935313401458d214540870bc_menu" href="https://www.aliyun.com/about" data-spm="d_menu_8">了解阿里云</a></nav></div><button class="e76910c82efe8556eb8a6ce6019c5d00_controller" data-spm="dscroll-right"><i class="ee52067fb65534cb06d3b35f654f5441_icon ddd10ed9ffa4788f54781e516c4c6560-button_right"></i></button></div><div class="_702422913dd5754f065139ec2d2def80_search-wrap " style="--left-width:0px;--right-width:0px"><div class="global-nav-search _626567c051250ffe2f303af907d3fc83_global-nav-search"><div class="global-search-container _626567c051250ffe2f303af907d3fc83_global-nav-search-desktop-container"><div class="ff4f4a96a12f52ffbdd0d6adbdb6a2b0_position-desktop-search-container"><div><div class="f6fd7e4d3293f0634b9ac54848c275b7_default-search-panel  f6fd7e4d3293f0634b9ac54848c275b7_hidden-default-search-panel"></div><div class="_3b4f5487091623b0b6852e2b46d2729e_search-recommend-panel  _3b4f5487091623b0b6852e2b46d2729e_hidden-search-recommend-panel"><button class="_4b65cdd64479a2fabe582b8c0789821e_search-no-content " type="button">查看 &quot;&quot; 全部搜索结果</button></div></div></div></div><div class="_626567c051250ffe2f303af907d3fc83_global-nav-search-mobile-container"><a class="_626567c051250ffe2f303af907d3fc83_search-button" href="https://www.aliyun.com/search?from=h5-global-nav-search"><span role="img" class="_9a1d73bbcd1a80626a31035a12410804_icon _626567c051250ffe2f303af907d3fc83_search-button-icon"><svg width="1em" height="1em" viewBox="0 0 32 32" focusable="false" color="currentColor" fill="currentColor" class="" data-icon="search"><g><g><path fill-opacity="1" fill-rule="evenodd" d="M14,4C15.3558,4,16.653399999999998,4.262105,17.8926,4.786314C19.089100000000002,5.29242,20.1486,6.00666,21.071,6.92905C21.9933,7.85144,22.7076,8.91087,23.2137,10.10735C23.7379,11.34664,24,12.64419,24,14C24,15.3558,23.7379,16.653399999999998,23.2137,17.892699999999998C22.8382,18.7803,22.3482,19.5925,21.7436,20.3293L27.7072,26.2928L26.293,27.7071L20.3294,21.7435C19.592599999999997,22.3481,18.7803,22.8382,17.8926,23.2137C16.653399999999998,23.7379,15.3558,24,14,24C12.64419,24,11.34664,23.7379,10.10735,23.2137C8.91087,22.7076,7.85144,21.9933,6.92905,21.0709C6.00666,20.1486,5.29242,19.089100000000002,4.786314,17.8926C4.262105,16.653399999999998,4,15.3558,4,14C4,12.64419,4.262105,11.34664,4.786314,10.10735C5.29242,8.91087,6.00666,7.85144,6.92905,6.92905C7.85144,6.00666,8.91087,5.29242,10.10735,4.786314C11.34664,4.262105,12.64419,4,14,4ZM14,6C11.79102,6,9.905439999999999,6.78109,8.34326,8.34326C6.78109,9.905439999999999,6,11.79102,6,14C6,16.209,6.78109,18.0946,8.34326,19.6567C9.905439999999999,21.2189,11.79102,22,14,22C16.209,22,18.0946,21.2189,19.6567,19.6567C21.2189,18.0946,22,16.209,22,14C22,11.79102,21.2189,9.905439999999999,19.6567,8.34326C18.0946,6.78109,16.209,6,14,6Z"></path></g></g></svg></span></a></div></div></div><div class="_174801eef2caf75aeaee91c72b19c09a_container"><a class="global-nav-ai-assistant _174801eef2caf75aeaee91c72b19c09a_item _2d3ef330b3f8055912d355b9a255bfcf_btn" href="https://www.aliyun.com/ai-assistant?displayMode=side" data-spm="dai_assistant" target="_blank"><div class="LogoStyled-aliyun-ai-assistant-rc-8096__sc-1qusfpt-0 cpJKij"><div class="ai-assistant-brand-logo-icon" style="background:no-repeat center/100%  url(https://img.alicdn.com/imgextra/i4/O1CN012X1Rxl1clAgB5waMK_!!6000000003640-2-tps-52-52.png)"><img src="https://img.alicdn.com/imgextra/i2/O1CN01bYc1m81RrcSAyOjMu_!!6000000002165-54-tps-60-60.apng" loading="lazy"/></div><div class="ai-assistant-brand-logo-tooltip "><div class="ai-assistant-logo-tooltip-content">AI 助理</div></div></div></a><button class="_174801eef2caf75aeaee91c72b19c09a_item c017bf0be22012eb313124a5a5408d0f_button"><i class="ee52067fb65534cb06d3b35f654f5441_icon ddd10ed9ffa4788f54781e516c4c6560-intl"></i></button><button class="_174801eef2caf75aeaee91c72b19c09a_item"><i class="ee52067fb65534cb06d3b35f654f5441_icon ddd10ed9ffa4788f54781e516c4c6560-contact f9c0581c7b0803efa9027b0f2d228294_icon"></i></button><a class="_174801eef2caf75aeaee91c72b19c09a_item" href="https://help.aliyun.com/" target="_blank" data-spm="d_quick_access_3">文档</a><a class="_174801eef2caf75aeaee91c72b19c09a_item" href="https://beian.aliyun.com/" target="_blank" data-spm="d_quick_access_4">备案</a><a class="_174801eef2caf75aeaee91c72b19c09a_item" href="https://home.console.aliyun.com/home/dashboard/ProductAndService" target="_blank" data-spm="d_quick_access_5" rel="nofollow">控制台</a><span class="f8312ad103723788906e97b238dccd8c_loading _174801eef2caf75aeaee91c72b19c09a_item"></span></div></header></div><div class="_3bd147f6948a20d6c528ac898ad4ba47_mobile de5ef2fee09ebcb2b1dcaf0c982523bc_theme _277ebb348812c9712fac6b680ad5e513_reset _277ebb348812c9712fac6b680ad5e513_aliyun-font-family"></div><div class="_18a32969382a277c44015217fbc5cb5a_box"></div></div></div></header>
+
+  <div id="app"><div class="MainLayout--mainContainer--FzmzeDI" id="docs-container"><div class="MainLayout--helpBodyHead--fFcCOhC"><div class="HelpBodyHead--helpBodyHeadBox--VWOHGv0 help-body-head" data-spm="help-sub-nav"><div class="HelpBodyHead--helpBodyHead--YgG0_RH help-body-head-content"><div class="HelpBodyHead--helpHeadDocName--eZC8orQ"><a href="/zh" data-spm="d_logo">官方文档</a></div><div class="help-tablist"></div><div class="HelpBodyHead--bodyHeadRight--mgSoj67"></div></div><div class="HelpBodyHead--productList--YJ9ism5" style="display:none"><div class="ProductList--allProducts--Z87vhzs"><div class="ProductList--allProductsHead--l2aMmm6"><div class="ProductList--allProductsSearchWrapper--PgTrGTl"><div class="ProductList--allProductsSearch--edTNjmr"><span role="img" class="Icon--icon--jErARdR ProductList--searchIcon--NrFYKki"><svg width="1em" height="1em" viewBox="0 0 32 32" focusable="false" color="currentColor" fill="currentColor" class="" data-icon="document-search"><g fill-rule="evenodd" stroke-width="1"><path d="M19,3 L27,11 L27,29 L5,29 L5,3 L19,3 Z M18,5 L7,5 L7,27 L25,27 L25,12 L18,12 L18,5 Z M20,6.82842636 L20,10 L23.1715736,10 L20,6.82842636 Z"></path><path d="M15.5,13.5 C16.8806419,13.5 18.0591358,13.9881726 19.0354815,14.9645178 C20.0118272,15.9408637 20.5,17.1193577 20.5,18.5 C20.5,19.5346034 20.2258676,20.4556918 19.6776028,21.2632651 L22.1636839,23.7493687 L20.749464,25.1635761 L18.2634125,22.6775026 C17.4558048,23.2258342 16.5346673,23.5 15.5,23.5 C14.1193581,23.5 12.9408642,23.0118272 11.9645183,22.0354815 C10.9881728,21.0591364 10.5,19.8806426 10.5,18.5 C10.5,17.1193576 10.9881728,15.9408636 11.9645183,14.9645181 C12.9408638,13.9881727 14.1193577,13.5 15.5,13.5 Z M15.5,15.5 C14.6716423,15.5 13.9645529,15.7929106 13.3787317,16.3787317 C12.7929106,16.9645527 12.5,17.6716421 12.5,18.5 C12.5,19.3283571 12.7929105,20.0354462 13.3787315,20.6212673 C13.964553,21.2070891 14.6716425,21.5 15.5,21.5 C16.3283577,21.5 17.0354471,21.2070891 17.6212683,20.6212673 C18.2070894,20.0354462 18.5,19.3283571 18.5,18.5 C18.5,17.6716421 18.2070894,16.9645526 17.6212683,16.3787315 C17.0354471,15.7929105 16.3283577,15.5 15.5,15.5 Z"></path></g></svg></span><input placeholder="输入文档关键字查找"></div></div></div><div class="ProductList--allProductsBody--jNYsZlh"></div></div></div></div></div><div class="PcLayout--docsContainer--pwbB9bE"><div class="PcLayout--mobileHelpBodyHead--g_YCRMg"><div class="HelpBodyHead--mobileHeadBlank--_hX8BWJ"></div></div><div class="PcLayout--aliyunAppLayout--_QE36ni"><nav class="aliyun-docs-menu" id="aliyun-docs-menu"><div class="Menu--helpMenuBox--WZ7MX3B" id="help-menu-box" style="width:300px"><div class="Menu--helpMenuInnerBox--kxSXymh aliyun-docs-toc-content" style="width:300px"><div class="Menu--helpMenuDrag--fs9WrRe help-menu-drag-box"></div><div class="Menu--helpMenu--reWzeMt"><div class="help-menu-subproduct"></div><div class="MenuSearch--collapseActionBar--m98Zp_n"><div class="MenuSearch--searchContainer--yxqXL6w"><div class="MenuSearch--searchInputWrapper--xJnk941"><span role="img" class="Icon--icon--jErARdR MenuSearch--searchIcon--YWpGKq9"><svg width="1em" height="1em" viewBox="0 0 32 32" focusable="false" color="currentColor" fill="currentColor" class="" data-icon="document-search"><g fill-rule="evenodd" stroke-width="1"><path d="M19,3 L27,11 L27,29 L5,29 L5,3 L19,3 Z M18,5 L7,5 L7,27 L25,27 L25,12 L18,12 L18,5 Z M20,6.82842636 L20,10 L23.1715736,10 L20,6.82842636 Z"></path><path d="M15.5,13.5 C16.8806419,13.5 18.0591358,13.9881726 19.0354815,14.9645178 C20.0118272,15.9408637 20.5,17.1193577 20.5,18.5 C20.5,19.5346034 20.2258676,20.4556918 19.6776028,21.2632651 L22.1636839,23.7493687 L20.749464,25.1635761 L18.2634125,22.6775026 C17.4558048,23.2258342 16.5346673,23.5 15.5,23.5 C14.1193581,23.5 12.9408642,23.0118272 11.9645183,22.0354815 C10.9881728,21.0591364 10.5,19.8806426 10.5,18.5 C10.5,17.1193576 10.9881728,15.9408636 11.9645183,14.9645181 C12.9408638,13.9881727 14.1193577,13.5 15.5,13.5 Z M15.5,15.5 C14.6716423,15.5 13.9645529,15.7929106 13.3787317,16.3787317 C12.7929106,16.9645527 12.5,17.6716421 12.5,18.5 C12.5,19.3283571 12.7929105,20.0354462 13.3787315,20.6212673 C13.964553,21.2070891 14.6716425,21.5 15.5,21.5 C16.3283577,21.5 17.0354471,21.2070891 17.6212683,20.6212673 C18.2070894,20.0354462 18.5,19.3283571 18.5,18.5 C18.5,17.6716421 18.2070894,16.9645526 17.6212683,16.3787315 C17.0354471,15.7929105 16.3283577,15.5 15.5,15.5 Z"></path></g></svg></span><input placeholder="在目录中筛选" class="MenuSearch--searchInput--vYXA7NN"></div></div></div><div class="help-menu-scroll-container Menu--menuContent--f6GC88t" data-spm="help-menu-undefined"><ul id="common-menu-container">
+ <li id="2400262" class="Menu--level1--UN3zYr3">
+<a href="/zh/model-studio/model-user-guide/">
+<i class="iconfont icon-close-arrow"></i>
+<span class="Menu--menuItemText--a6B4ZGH">用户指南（模型）</span>
+</a>
+</li>
+ <li id="2840916" class="Menu--level1--UN3zYr3">
+<a href="/zh/model-studio/application-user-guide/">
+<i class="iconfont icon-close-arrow"></i>
+<span class="Menu--menuItemText--a6B4ZGH">用户指南（应用）</span>
+</a>
+</li>
+ <li id="2400264" class="Menu--level1--UN3zYr3">
+<a href="/zh/model-studio/model-api-reference/">
+<i class="iconfont icon-close-arrow"></i>
+<span class="Menu--menuItemText--a6B4ZGH">API参考（模型）</span>
+</a>
+</li>
+ <li id="2863247" class="Menu--level1--UN3zYr3">
+<a href="/zh/model-studio/applicantion-api-reference/">
+<i class="iconfont icon-close-arrow"></i>
+<span class="Menu--menuItemText--a6B4ZGH">API参考（应用）</span>
+</a>
+</li>
+</ul></div></div></div></div></nav><main class="aliyun-docs-view" id="aliyun-docs-view"><div class="ProductDetail--contentWrapper--iCunrBZ"><section class="aliyun-docs-content" style="height:auto"><header class="aliyun-docs-view-header"><div class="Header--topBar--LXfTLL5"><div class="BreadCrumb--breadcrumb--s_Uzlex"><div class="help-header-breadcrumb"><a href="/zh">首页</a></div></div></div><div class="Header--title--iTk2tUo"><h1>实时语音识别（Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime）客户端事件</h1><div class="Header--actionBar--dvzFYrk"><div class="Header--left--x8TGxDL"><span class="Header--updateTime--YXGPhcZ">更新时间：</span></div><div class="Header--right--l4TSW1E"><span class="Header--copyButtonWrapper--LDbniON"><span class="CopyAsMarkdown--copyButton--SVGoWIG"><span role="img" class="Icon--icon--jErARdR"><svg width="1em" height="1em" viewBox="0 0 32 32" focusable="false" color="currentColor" fill="currentColor" class="" data-icon="copy"><g fill-rule="evenodd" stroke-width="1"><polygon fill-rule="nonzero" points="8 6.80000019 8 4 28 4 28 24 25 24 25 22 26 22 26 6 10 6 10 6.80000019"></polygon><path d="M24,8 L24,28 L4,28 L4,8 L24,8 Z M22,10 L6,10 L6,26 L22,26 L22,10 Z"></path></g></svg></span>复制 MD 格式</span></span><div class="Header--linkButton--LpCRs1O"><div class="OuterUrl--outUrl--ZFzJIhk"><a href="https://www.aliyun.com/product/bailian" target="_blank" rel="noreferrer">产品详情</a></div></div><div class="Contact--contactButton--TBwTX5R"><span class="Contact--favoritesBtn--J8mRVBp" title="收藏本文档" data-spm-click="gostr=/aliyun;locaid=collect"><i class="help-iconfont help-icon-like"></i></span><a href="/my_favorites.html">我的收藏</a></div></div></div></div></header><div class="pc-markdown-container unionContainer" id="pc-markdown-container"><div class="markdown-body"><div lang="zh" class="icms-help-docs-content">
+
+  <main id="main-3277064">
+    
+    
+    <p id="4cc3dfc91cesn" data-tag="shortdesc" class="shortdesc">本文介绍 Qwen-Audio-3.0-ASR-Flash-Streaming/Fun-ASR-Realtime 实时语音识别服务中客户端通过 WebSocket 发送给服务端的客户端事件，包括 run-task（启动任务）、<span data-tag="ph" props="china" id="aceaa0a3f041o" data-cond-props="china" class="ph">continue-task（更新上下文）、</span>finish-task（结束任务）等指令的数据结构与字段含义。</p>
+    <div id="13c326e6d85hj" data-tag="body" class="body">
+      <p data-tag="p" id="80d308ad0c34q" class="p"><b>用户指南：</b>关于模型介绍和选型建议请参见<a href="https://help.aliyun.com/zh/model-studio/asr-model/" id="4b2492b64529q" title="" class="xref">语音识别</a>。</p>
+      <p id="61ba1bcdca63s"><b>事件交互流程</b>：如需了解事件交互时序，请参见<span class="help-letter-space"></span><a href="https://help.aliyun.com/zh/model-studio/fun-asr-realtime-websocket-api" id="6acd32075906f" title="" class="xref">WebSocket API</a>。</p>
+      <section id="b5be8be7e855c" class="section">
+        <section id="52462e3e7f4ch" class="section">
+          <h2 id="9cae7e7b85ebm"><b>run-task</b></h2>
+          <p jc="left" id="5d04111806e4q" style="text-align:left"><b>说明</b>：启动语音识别任务，设置模型、音频格式、采样率等参数。</p>
+          <p jc="left" id="8ba3611d22f7j" style="text-align:left"><b>发送时机</b>：建立 WebSocket 连接后立即发送。</p>
+          <p jc="left" id="26bf4e2c8400f" style="text-align:left"><b>响应事件</b>：服务端返回&nbsp;<code data-tag="code" id="eb2ab797d823n" class="code"><a href="https://help.aliyun.com/zh/model-studio/fun-asr-server-events#eac316aeacafj" id="0056c9c72937h" title="" class="xref">task-started</a></code>&nbsp;事件后才能发送音频。</p>
+          <table bordertype="no-border" id="580fcd8f470em" outputclass="api-reference column-layout" tablewidth="100" tablecolswidth="57.54 42.46" autofit="true" class="api-reference column-layout table">
+            <colgroup colwidth="1.15*" style="width:57.54%"></colgroup>
+            <colgroup colwidth="0.85*" style="width:42.46%"></colgroup>
+            <tbody class="tbody">
+              <tr id="50305f0ced03i">
+                <td id="b7c898ab85cbp" rowspan="1" style="background-color:rgba(0, 0, 0, 0);vertical-align:middle" colspan="1">
+                  <p id="eb42f83dffe8u"><b>header </b><code data-tag="code" code-type="xCode" id="dcfbb4e2bd9fm" data-init-id="af67e5236f13i" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                  <div id="0b57053640d3b" outputclass="collapse expanded" class="collapse expanded">
+                    <p id="d931f39ccbe8k" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                    <div id="6a0714c3e98ej" data-tag="expandable-content" class="expandable-content">
+                      <section id="d7fd070369afh" class="section">
+                        <p id="e8ab2fba61f3d"><b>action </b><code data-tag="code" code-type="xCode" id="5b5fd9e63d42p" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="2532d6782169p" class="section">
+                          <p id="add8b9f29167k">指令类型，固定为 <code data-tag="code" id="f1fb18a08888v" class="code">run-task</code>。</p>
+                        </section>
+                      </section>
+                      <section id="c148ce96280fu" class="section">
+                        <p id="e2b5b4958dccm"><b>task_id </b><code data-tag="code" code-type="xCode" id="ca329bf48800z" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="61460c7a0b6ev" class="section">
+                          <p id="71fee1d2a825j">客户端生成的任务 ID（UUID 格式），用于关联后续事件。</p>
+                        </section>
+                      </section>
+                      <section id="645e858ef88bk" class="section">
+                        <p id="03dc10a06d06s"><b>streaming </b><code data-tag="code" code-type="xCode" id="d537e0b66810b" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="e8bcd6d1cd3cj" class="section">
+                          <p id="a582827c08f3n">固定为 <code data-tag="code" id="6cec652226f4m" class="code">duplex</code>。</p>
+                        </section>
+                      </section>
+                    </div>
+                  </div>
+                </td>
+                <td id="f0eacbe5e7c4k" rowspan="2" style="background-color:rgba(0, 0, 0, 0);vertical-align:top" colspan="1">
+                  <section id="cb4f243e79ccv" outputclass="stick-top" class="stick-top section">
+                    <section id="sec-rt-code-tabs" data-tag="tabbed-content-box" outputclass="tabbed-content-box" class="tabbed-content-box section">
+                      <section id="sec-rt-code-basic" class="section">
+                        <h2 id="h-rt-code-basic">基本请求</h2><pre code-type="xCode" id="b466de589dacf" index="0" data-tag="codeblock" outputclass="language-json" class="pre codeblock language-json"><code>{
+    "header": {
+        "action": "run-task",
+        "task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+        "streaming": "duplex"
+    },
+    "payload": {
+        "task_group": "audio",
+        "task": "asr",
+        "function": "recognition",
+        "model": "qwen-audio-3.0-asr-flash-streaming",
+        "parameters": {
+            "format": "pcm",
+            "sample_rate": 16000
+        },
+        "input": {}
+    }
+}</code></pre>
+                      </section>
+                      <section id="sec-rt-code-ctx" class="section">
+                        <h2 id="h-rt-code-ctx">携带上下文</h2><pre code-type="xCode" id="code-rt-ctx-example" index="0" data-tag="codeblock" outputclass="language-json" class="pre codeblock language-json"><code>{
+    "header": {
+        "action": "run-task",
+        "task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+        "streaming": "duplex"
+    },
+    "payload": {
+        "task_group": "audio",
+        "task": "asr",
+        "function": "recognition",
+        "model": "qwen-audio-3.0-asr-flash-streaming",
+        "parameters": {
+            "format": "pcm",
+            "sample_rate": 16000
+        },
+        "input": {
+            "context": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "你好啊"
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "你好啊，我是通义千问，有什么可以帮助你的？"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}</code></pre>
+                      </section>
+                      <section id="sec-rt-code-vocab" class="section">
+                        <h2 id="h-rt-code-vocab">即时热词</h2><pre code-type="xCode" id="code-rt-vocab-inst-ex" index="0" data-tag="codeblock" outputclass="language-json" class="pre codeblock language-json"><code>{
+    "header": {
+        "action": "run-task",
+        "task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+        "streaming": "duplex"
+    },
+    "payload": {
+        "task_group": "audio",
+        "task": "asr",
+        "function": "recognition",
+        "model": "qwen-audio-3.0-asr-flash-streaming",
+        "parameters": {
+            "format": "pcm",
+            "sample_rate": 16000,
+            "vocabulary": {"张三": 5, "李四": 5}
+        },
+        "input": {}
+    }
+}</code></pre>
+                      </section>
+                    </section>
+                  </section>
+                  <p id="a37215df9eb5q"></p>
+                </td>
+              </tr>
+              <tr id="5a72c30c68f3w">
+                <td id="3e58013523afi" rowspan="1" style="background-color:rgba(0, 0, 0, 0)" colspan="1">
+                  <p id="249d0c1ae67bt"><b>payload </b><code data-tag="code" code-type="xCode" id="e652d6657c1ex" data-init-id="af67e5236f13i" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                  <div id="6bac23fd1906z" outputclass="collapse expanded" class="collapse expanded">
+                    <p id="13a5e2163a66n" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                    <div id="654ad96e2c5ek" data-tag="expandable-content" class="expandable-content">
+                      <section id="64efd8a76ce2y" class="section">
+                        <p id="409231ac26a3s"><b>task_group </b><code data-tag="code" code-type="xCode" id="0cbcb72eeb3cq" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="86ab2a7fb48dd" class="section">
+                          <p id="a4b39fb489eao">任务组，固定为 <code data-tag="code" id="37dfa02d790am" class="code">audio</code>。</p>
+                        </section>
+                      </section>
+                      <section id="d6572ab162abd" class="section">
+                        <p id="7b466c6e9d18d"><b>task </b><code data-tag="code" code-type="xCode" id="e4951bc94fa6m" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="884c98979e5di" class="section">
+                          <p jc="left" uuid="m95147brql0uecf9l49" id="33a55485cdd5z" style="text-align:left">任务类型，固定为 <code data-tag="code" id="a3407ee03d0ey" class="code">asr</code>。</p>
+                        </section>
+                      </section>
+                      <section id="246882a24b09a" class="section">
+                        <p id="44bd95686f99x"><b>function </b><code data-tag="code" code-type="xCode" id="112c21369d28x" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="c310622acb42a" class="section">
+                          <p id="9acdd7ce2198q">功能类型。固定为<code data-tag="code" id="e8aee7b353fcw" class="code">recognition</code>。</p>
+                        </section>
+                      </section>
+                      <section id="31b07547c3e1d" class="section">
+                        <p id="80692299c6ecm"><b>model </b><code data-tag="code" code-type="xCode" id="6082a94721a8w" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="8e1d640c3cbcy" class="section">
+                          <p jc="left" uuid="mrymnxs3wudkqcvek9" id="72074c7f63rwe" style="text-align:left">指定模型名。支持<span class="help-letter-space"></span>Qwen-Audio-3.0-ASR-Flash-Streaming<span class="help-letter-space"></span>和<span class="help-letter-space"></span>Fun-ASR-Realtime<span class="help-letter-space"></span>系列模型，详情请参见<a href="https://help.aliyun.com/zh/model-studio/real-time-speech-recognition-user-guide#4a43cc1bb7kxg" id="1c45920115451" title="" class="xref">支持的模型与地域</a>。</p>
+                        </section>
+                      </section>
+                      <section id="ba46f942af7cv" class="section">
+                        <p id="6a57c5665592f"><b>input </b><code data-tag="code" code-type="xCode" id="7f8ec990fe66y" data-init-id="af67e5236f13i" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                        <section id="1a9795660a7cw" class="section">
+                          <p id="p-rt-input-china-desc">输入对象。不携带上下文时传入<code data-tag="code" id="code-rt-input-empty" class="code">{}</code>。</p>
+                          <div type="important" id="note-rt-ctx-models" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+                            <p id="p-rt-ctx-models">仅 <code data-tag="code" id="86e81a22c8ltf" class="code">qwen-audio-3.0-asr-flash-streaming</code>、<code data-tag="code" id="code-rt-ctx-m1" class="code">fun-asr-realtime</code> 和 <code data-tag="code" id="code-rt-ctx-m2" class="code">fun-asr-realtime-2025-11-07</code> 模型支持上下文。</p>
+                          </div></div>
+                          <section id="sec-rt-input-ctx" class="section">
+                            <div id="div-rt-input-exp" outputclass="collapse expanded" class="collapse expanded">
+                              <p id="p-rt-input-t" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                              <div id="div-rt-input-c" data-tag="expandable-content" class="expandable-content">
+                                <section id="sec-rt-ctx" class="section">
+                                  <p id="p-rt-ctx"><b>context </b><code data-tag="code" code-type="xCode" id="code-rt-ctx" class="code"><i>array(object)</i></code><i> </i>（可选）</p>
+                                  <p id="9f6bd11bf3q9d">对话上下文，用于辅助识别、提升专有词汇的识别准确率。使用方法详见<a href="https://help.aliyun.com/zh/model-studio/improve-asr-accuracy#ctx-enhance-h2" id="3b7fcdbfd8ugv" title="" class="xref">上下文增强</a>。</p>
+                                  <div type="important" id="note-rt-ctx-limit" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+                                    <p id="p-rt-ctx-limit"><b>约束</b>：上下文消息（<code data-tag="code" id="code-rt-ctx-it" class="code">input_text</code> 和 <code data-tag="code" id="code-rt-ctx-tt" class="code">text</code> 类型）各最多 5 条，超出时保留最近的 5 条。每轮上下文文本总长度（<code data-tag="code" id="code-rt-ctx-u" class="code">user</code> 和 <code data-tag="code" id="code-rt-ctx-a" class="code">assistant</code> 的 <code data-tag="code" id="code-rt-ctx-tfield" class="code">text</code> 字段长度之和）不超过 400 个字符（按字符数计算，每个字符计为 1），超出部分从末尾截断。</p>
+                                  </div></div>
+                                  <div type="important" id="note-rt-ctx-order" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+                                    <p id="p-rt-ctx-order">携带上下文时，<code data-tag="code" id="code-rt-ctx-order-arr" class="code">context</code> 中的消息顺序有要求：上下文消息必须按对话轮次排列，每轮中 <code data-tag="code" id="code-rt-ctx-order-user" class="code">user</code>（<code data-tag="code" id="code-rt-ctx-order-it" class="code">input_text</code> 类型）必须在对应的 <code data-tag="code" id="code-rt-ctx-order-asst" class="code">assistant</code>（<code data-tag="code" id="code-rt-ctx-order-tt" class="code">text</code> 类型）之前。</p>
+                                  </div></div>
+                                  <div id="div-rt-ctx-exp" outputclass="collapse expanded" class="collapse expanded">
+                                    <p id="p-rt-ctx-t" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                                    <div id="div-rt-ctx-c" data-tag="expandable-content" class="expandable-content">
+                                      <section id="sec-rt-ctx-role" class="section">
+                                        <p id="p-rt-ctx-role"><b>role </b><code data-tag="code" code-type="xCode" id="code-rt-ctx-role" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                                        <section id="f7979c8e23fph" class="section">
+                                          <p id="p-rt-ctx-role-d">消息角色。取值范围：</p>
+                                          <ul id="ul-rt-ctx-role">
+                                            <li id="li-rt-ctx-role-user">
+                                              <p id="p-rt-ctx-role-user"><code data-tag="code" id="code-rt-ctx-role-user" class="code">user</code>：前几轮用户语音的识别结果或领域相关的词表。</p>
+                                            </li>
+                                            <li id="li-rt-ctx-role-asst">
+                                              <p id="p-rt-ctx-role-asst"><code data-tag="code" id="code-rt-ctx-role-asst" class="code">assistant</code>：前几轮大语言模型的回复内容。</p>
+                                            </li>
+                                          </ul>
+                                        </section>
+                                      </section>
+                                      <section id="sec-rt-ctx-content" class="section">
+                                        <p id="p-rt-ctx-content"><b>content </b><code data-tag="code" code-type="xCode" id="code-rt-ctx-content" class="code"><i>array(object)</i></code><i> </i><b>（必选）</b></p>
+                                        <p id="p-rt-ctx-content-d">消息内容列表。</p>
+                                        <div id="div-rt-ctx-content-exp" outputclass="collapse expanded" class="collapse expanded">
+                                          <p id="p-rt-ctx-content-t" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                                          <div id="div-rt-ctx-content-c" data-tag="expandable-content" class="expandable-content">
+                                            <section id="sec-rt-ctx-type" class="section">
+                                              <p id="p-rt-ctx-type"><b>type </b><code data-tag="code" code-type="xCode" id="code-rt-ctx-type" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                                              <section id="2e95567f107ds" class="section">
+                                                <p id="p-rt-ctx-type-d">内容类型。取值范围：</p>
+                                                <ul id="ul-rt-ctx-type">
+                                                  <li id="li-rt-ctx-type-it">
+                                                    <p id="p-rt-ctx-type-it"><code data-tag="code" id="code-rt-ctx-type-it" class="code">input_text</code>：前几轮用户语音的识别结果或领域相关的词表（role 为 user 时使用），需同时传入 <code data-tag="code" id="code-rt-ctx-type-it-ref" class="code">text</code> 字段。</p>
+                                                  </li>
+                                                  <li id="li-rt-ctx-type-tt">
+                                                    <p id="p-rt-ctx-type-tt"><code data-tag="code" id="code-rt-ctx-type-tt" class="code">text</code>：前几轮大语言模型的回复内容（role 为 assistant 时使用），需同时传入 <code data-tag="code" id="code-rt-ctx-type-tt-ref" class="code">text</code> 字段。</p>
+                                                  </li>
+                                                </ul>
+                                              </section>
+                                            </section>
+                                            <section id="sec-rt-ctx-text" class="section">
+                                              <p id="p-rt-ctx-text"><b>text </b><code data-tag="code" code-type="xCode" id="code-rt-ctx-text" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                                              <section id="e466ec8aaceck" class="section">
+                                                <p id="p-rt-ctx-text-d">文本内容。当 <code data-tag="code" id="code-rt-ctx-text-cond1" class="code">type</code> 为 <code data-tag="code" id="code-rt-ctx-text-val1" class="code">input_text</code> 时，填入前几轮用户语音的识别结果或领域相关的词表；当 <code data-tag="code" id="code-rt-ctx-text-cond2" class="code">type</code> 为 <code data-tag="code" id="code-rt-ctx-text-val2" class="code">text</code> 时，填入前几轮大语言模型的回复内容。</p>
+                                              </section>
+                                            </section>
+                                          </div>
+                                        </div>
+                                      </section>
+                                    </div>
+                                  </div>
+                                </section>
+                              </div>
+                            </div>
+                          </section>
+                        </section>
+                      </section>
+                      <section id="64ba877decf0e" class="section">
+                        <p id="b4885f03bc98b"><b>parameters </b><code data-tag="code" code-type="xCode" id="0e9a3d931612m" data-init-id="af67e5236f13i" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                        <p id="04479d101f17d">语音识别参数。</p>
+                        <div id="076fe2c5af43v" outputclass="collapse expanded" class="collapse expanded">
+                          <p id="a457b9813f0dv" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                          <div id="1a28a1c06f60u" data-tag="expandable-content" class="expandable-content">
+                            <section id="bef9f34a89c0o" class="section">
+                              <p id="52e6be0d73b1b"><b>format </b><code data-tag="code" code-type="xCode" id="ccbe6a0840ddj" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                              <section id="42b0432a7a0ep" class="section">
+                                <p id="324ce69d60fak">音频格式。</p>
+                                <p id="0c513b225947b">取值范围：</p>
+                                <ul id="af20e76ea99dj">
+                                  <li id="9844c821493ar">
+                                    <p id="799caa0d375ce"><code data-tag="code" id="7e3d384371e8p" class="code">pcm</code></p>
+                                  </li>
+                                  <li id="0ee53ef9af17r">
+                                    <p id="42451b8edc0ex"><code data-tag="code" id="619037cd026aq" data-init-id="7e3d384371e8p" class="code">wav</code></p>
+                                  </li>
+                                  <li id="197604e7e95br">
+                                    <p id="3197d2debbdfh"><code data-tag="code" id="6b510b829f76p" data-init-id="7e3d384371e8p" class="code">mp3</code></p>
+                                  </li>
+                                  <li id="94b520d6880bp">
+                                    <p id="8dbad5772365d"><code data-tag="code" id="0a1192932296t" data-init-id="7e3d384371e8p" class="code">opus</code></p>
+                                  </li>
+                                  <li id="aea4241bc604u">
+                                    <p id="4cbde5eb5dcea"><code data-tag="code" id="cd26a12e9729w" data-init-id="7e3d384371e8p" class="code">speex</code></p>
+                                  </li>
+                                  <li id="bb96c55d03f9c">
+                                    <p id="7eff4076cd69m"><code data-tag="code" id="d231588ef115g" data-init-id="7e3d384371e8p" class="code">aac</code></p>
+                                  </li>
+                                  <li id="b853f50ee643c">
+                                    <p id="0e0a7ac71659x"><code data-tag="code" id="8347a1392b14r" data-init-id="7e3d384371e8p" class="code">amr</code></p>
+                                  </li>
+                                </ul>
+                                <div type="important" id="49fc31154391s" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+                                  <p id="fba8626965mxi">opus/speex：必须使用<span class="help-letter-space"></span>Ogg<span class="help-letter-space"></span>封装；</p>
+                                  <p id="d57494d9e8tv9">wav：必须为<span class="help-letter-space"></span>PCM<span class="help-letter-space"></span>编码；</p>
+                                  <p id="134e274df99sm">amr：仅支持<span class="help-letter-space"></span>AMR-NB<span class="help-letter-space"></span>类型。</p>
+                                </div></div>
+                              </section>
+                            </section>
+                            <section id="a8e7527afd97f" class="section">
+                              <p id="1cb63426cd74x"><b>sample_rate </b><code data-tag="code" code-type="xCode" id="28812f230b11c" data-init-id="af67e5236f13i" class="code"><i>integer</i></code><i> </i><b>（必选）</b></p>
+                              <section id="3e1d6afc0de9g" class="section">
+                                <p id="b4cbcb0e7a37s">采样率（Hz）。</p>
+                                <p id="6ca48e7ee9f4u">取值范围：8k<span class="help-letter-space"></span>模型仅支持 8000 Hz，其他模型支持任意采样率。</p>
+                              </section>
+                            </section>
+                            <section id="02a723a6c13bi" class="section">
+                              <p id="571f828f4a4au"><b>vocabulary_id </b><code data-tag="code" code-type="xCode" id="0bf882f8abf4y" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i>（可选）</p>
+                              <section id="ea6c1a719191i" class="section">
+                                <p jc="left" id="75c73ce5a500m" style="text-align:left">预编译热词列表 ID。</p>
+                                <p id="ee7eb826a0s3o">需预先调用创建热词列表接口生成，识别时传入该 ID 即可使用列表中的热词。</p>
+                                <p id="995151ca382q4">适用于词汇已知且相对稳定、需要跨请求复用同一词表的场景。</p>
+                                <p id="144dc062e404z">使用方法请参见<a href="https://help.aliyun.com/zh/model-studio/improve-asr-accuracy#hw-precompiled-h3" id="1a3b14b3ffp1f" title="" class="xref">预编译热词</a>。</p>
+                              </section>
+                            </section>
+                            <section id="sec-rt-vocab-inst" class="section">
+                              <p id="p-rt-vocab-inst"><b>vocabulary </b><code data-tag="code" code-type="xCode" id="code-rt-vocab-inst" data-init-id="af67e5236f13i" class="code"><i>object</i></code><i> </i>（可选）</p>
+                              <section id="sec-rt-vocab-inst-d" class="section">
+                                <section id="7cc767492aa2r" class="section">
+                                  <p id="p-rt-vocab-inst-d1">即时热词。</p>
+                                  <p id="415d34492d24x">以键值对形式传入，键为热词文本（<code data-tag="code" id="code-rt-vocab-k" class="code">string</code>），值为热词权重（<code data-tag="code" id="code-rt-vocab-v" class="code">integer</code>），无需预先创建热词列表。权重取值范围为 [1, 5] 或 50：取 [1, 5] 时值越大模型越倾向输出该词；取 50 时为超级热词，召回率大幅提升，但超级热词数量最多不超过 50 个。</p>
+                                  <p id="p-rt-vocab-inst-d3">适用于临时性、会话级别的热词优化。</p>
+                                  <p id="7c60b246a0sgo">与预编译热词同时配置时，仅即时热词生效。使用方法请参见<a href="https://help.aliyun.com/zh/model-studio/improve-asr-accuracy#hw-instant-h3" id="bb6940fd3e3m0" title="" class="xref">即时热词</a>。</p>
+                                </section>
+                                <div type="important" id="b82671d853wxl" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+                                  <p id="ae80585e4ch9d">仅<code data-tag="code" id="code-rt-vocab-m" class="code">qwen-audio-3.0-asr-flash-streaming</code>支持即时热词。</p>
+                                </div></div>
+                              </section>
+                            </section>
+                            <section id="2a60d9bb726be" class="section">
+                              <p id="196220ca21d9o"><b>language_hints </b><code data-tag="code" code-type="xCode" id="4d81d3dae36di" data-init-id="af67e5236f13i" class="code"><i>array[string]</i></code><i> </i>（可选）</p>
+                              <section id="b2fcb8092734w" class="section">
+                                <p id="b7f280996400h">待识别音频语种。无默认值，不设置时模型自动识别。</p>
+                                <p id="6269ba3ba6dcd">对于 Qwen-Audio-3.0-ASR-Flash-Streaming 系列模型，最多支持设置 4 个值，即便设置超出 4 个，也仅前 4 个生效；对于 Fun-ASR-Realtime 系列模型，仅支持设置 1 个值，即便设置多个，也仅第一个生效。</p>
+                                <div id="6587de9ee3vtp" outputclass="collapse" class="collapse">
+                                  <p id="d103597ee64t9" data-tag="expandable-title" class="expandable-title"><b>点击查看支持的语言代码</b></p>
+                                  <div id="8482c1f2502g8" data-tag="expandable-content" class="expandable-content">
+                                    <ul id="aa9b011352vbq">
+                                      <li id="11afbe51fdkpe">
+                                        <p id="9b451ddefamvn">qwen-audio-3.0-asr-flash-streaming、fun-asr-realtime、fun-asr-realtime-2025-11-07：</p>
+                                        <ul id="f49e2ddf5c2dk">
+                                          <li id="9d68fbd035aay">
+                                            <p id="714e184b5be0p">zh: 中文</p>
+                                          </li>
+                                          <li id="9eb977916efcz">
+                                            <p id="a8c156efae5e0">en: 英文</p>
+                                          </li>
+                                          <li id="6da4dccc83der">
+                                            <p id="ab2c366471d0d">ja: 日语</p>
+                                          </li>
+                                          <li id="6da4dccc83des">
+                                            <p id="ab2c366471d0e">ko：韩语</p>
+                                          </li>
+                                          <li id="6da4dccc83det">
+                                            <p id="ab2c366471d0f">vi：越南语</p>
+                                          </li>
+                                          <li id="6da4dccc83deu">
+                                            <p id="ab2c366471d0g">th：泰语</p>
+                                          </li>
+                                          <li id="6da4dccc83dev">
+                                            <p id="ab2c366471d0h">id：印尼语</p>
+                                          </li>
+                                          <li id="6da4dccc83dew">
+                                            <p id="ab2c366471d0i">ms：马来语</p>
+                                          </li>
+                                          <li id="6da4dccc83dex">
+                                            <p id="ab2c366471d0j">tl：菲律宾语</p>
+                                          </li>
+                                          <li id="6da4dccc83dey">
+                                            <p id="ab2c366471d0k">hi：印地语</p>
+                                          </li>
+                                          <li id="6da4dccc83dez">
+                                            <p id="ab2c366471d0l">ar：阿拉伯语</p>
+                                          </li>
+                                          <li id="6da4dccc83df0">
+                                            <p id="ab2c366471d0m">fr：法语</p>
+                                          </li>
+                                          <li id="6da4dccc83df1">
+                                            <p id="ab2c366471d0n">de：德语</p>
+                                          </li>
+                                          <li id="6da4dccc83df2">
+                                            <p id="ab2c366471d0o">es：西班牙语</p>
+                                          </li>
+                                          <li id="6da4dccc83df3">
+                                            <p id="ab2c366471d0p">pt：葡萄牙语</p>
+                                          </li>
+                                          <li id="6da4dccc83df4">
+                                            <p id="ab2c366471d0q">ru：俄语</p>
+                                          </li>
+                                          <li id="6da4dccc83df5">
+                                            <p id="ab2c366471d0r">it：意大利语</p>
+                                          </li>
+                                          <li id="6da4dccc83df6">
+                                            <p id="ab2c366471d0s">nl：荷兰语</p>
+                                          </li>
+                                          <li id="6da4dccc83df7">
+                                            <p id="ab2c366471d0t">sv：瑞典语</p>
+                                          </li>
+                                          <li id="6da4dccc83df8">
+                                            <p id="ab2c366471d0u">da：丹麦语</p>
+                                          </li>
+                                          <li id="6da4dccc83df9">
+                                            <p id="ab2c366471d0v">fi：芬兰语</p>
+                                          </li>
+                                          <li id="6da4dccc83dfa">
+                                            <p id="ab2c366471d0w">no：挪威语</p>
+                                          </li>
+                                          <li id="6da4dccc83dfb">
+                                            <p id="ab2c366471d0x">el：希腊语</p>
+                                          </li>
+                                          <li id="6da4dccc83dfc">
+                                            <p id="ab2c366471d0y">pl：波兰语</p>
+                                          </li>
+                                          <li id="6da4dccc83dfd">
+                                            <p id="ab2c366471d0z">cs：捷克语</p>
+                                          </li>
+                                          <li id="6da4dccc83dfe">
+                                            <p id="ab2c366471d10">hu：匈牙利语</p>
+                                          </li>
+                                          <li id="6da4dccc83dff">
+                                            <p id="ab2c366471d11">ro：罗马尼亚语</p>
+                                          </li>
+                                          <li id="6da4dccc83dfg">
+                                            <p id="ab2c366471d12">bg：保加利亚语</p>
+                                          </li>
+                                          <li id="6da4dccc83dfh">
+                                            <p id="ab2c366471d13">hr：克罗地亚语</p>
+                                          </li>
+                                          <li id="6da4dccc83dfi">
+                                            <p id="ab2c366471d14">sk：斯洛伐克语</p>
+                                          </li>
+                                        </ul>
+                                      </li>
+                                      <li id="9d68fbd035aax2">
+                                        <p id="714e184b5be0o2">fun-asr-realtime-2026-02-28：</p>
+                                        <ul id="f49e2ddf5c2di2">
+                                          <li id="9d68fbd035aay2">
+                                            <p id="714e184b5be0p2">zh: 中文</p>
+                                          </li>
+                                          <li id="9eb977916efcz2">
+                                            <p id="a8c156efae5e02">en: 英文</p>
+                                          </li>
+                                          <li id="6da4dccc83der2">
+                                            <p id="ab2c366471d0d2">ja: 日语</p>
+                                          </li>
+                                        </ul>
+                                      </li>
+                                      <li id="9eb977916efcy">
+                                        <p id="a8c156efae5dz">fun-asr-realtime-2025-09-15：</p>
+                                        <ul id="f49e2ddf5c2dl">
+                                          <li id="9eb977916efd0">
+                                            <p id="a8c156efae5e1">zh: 中文</p>
+                                          </li>
+                                          <li id="9eb977916efd1">
+                                            <p id="a8c156efae5e2">en: 英文</p>
+                                          </li>
+                                        </ul>
+                                      </li>
+                                      <li id="6da4dccc83dfq">
+                                        <p id="ab2c366471d1c">fun-asr-flash-8k-realtime、fun-asr-flash-8k-realtime-2026-01-28：</p>
+                                        <ul id="f49e2ddf5c2dn">
+                                          <li id="6da4dccc83dfr">
+                                            <p id="ab2c366471d1d">zh: 中文</p>
+                                          </li>
+                                        </ul>
+                                      </li>
+                                      
+                                    </ul>
+                                  </div>
+                                </div>
+                              </section>
+                            </section>
+                            <section id="9d7d178d29bem" class="section">
+                              <p id="3237bd898960z"><b>semantic_punctuation_enabled </b><code data-tag="code" code-type="xCode" id="256a4c87ea45y" data-init-id="af67e5236f13i" class="code"><i>boolean</i></code><i> </i>（可选）</p>
+                              <section id="09aa73ce1104s" class="section">
+                                <p id="16a8a03564c3m">是否启用语义断句。</p>
+                                <p id="74698f4f07e3j">默认值：false。</p>
+                                <ul id="2c7472f1a1b7o">
+                                  <li id="7295ef0368cdf">
+                                    <p id="f7fdb7115280m">true：开启语义断句，关闭 VAD 断句。</p>
+                                  </li>
+                                  <li id="2a9619c461d8h">
+                                    <p id="08fce8e5c75fn">false（默认）：开启 VAD 断句，关闭语义断句。</p>
+                                  </li>
+                                </ul>
+                                <p jc="left" id="d3450876817bw" style="text-align:left">语义断句准确性更高，适合会议转写场景；VAD（Voice Activity Detection，语音活动检测）断句延迟较低，适合交互场景。</p>
+                              </section>
+                            </section>
+                            <section id="126bb7d70aa1f" class="section">
+                              <p id="a1352b2cb4bfb"><b>max_sentence_silence </b><code data-tag="code" code-type="xCode" id="c9a942c4b2aeg" data-init-id="af67e5236f13i" class="code"><i>integer</i></code><i> </i>（可选）</p>
+                              <section id="33c3e952531ct" class="section">
+                                <section id="61dde7531dbbx" class="section">
+                                  <p id="5696d3b37954g">VAD 断句静音阈值（ms）。当一段语音后的静音时长超过该阈值时，系统会判定该句子已结束。当<code data-tag="code" id="a7c3e91b2f8k1" class="code">semantic_punctuation_enabled</code>为<span class="help-letter-space"></span>true<span class="help-letter-space"></span>时，不作为<code data-tag="code" id="b8d4f02c3g9m2" class="code">sentence_end</code>返回依据，但设置过小可能会影响识别效果。</p>
+                                  <p id="971a0b0fdc0br">默认值：1300。</p>
+                                  <p id="298ca18ad666a">取值范围：[200, 6000]。</p>
+                                </section>
+                              </section>
+                            </section>
+                            <section id="27d8ed8ca21ff" class="section">
+                              <p id="b9f4b8ebebfeq"><b>multi_threshold_mode_enabled </b><code data-tag="code" code-type="xCode" id="8b0a8ad63928l" data-init-id="af67e5236f13i" class="code"><i>boolean</i></code><i> </i>（可选）</p>
+                              <section id="7170964f8a48h" class="section">
+                                <div type="important" id="a6e51163468fm" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+                                  <p id="1c7501f45865l">仅在<code data-tag="code" id="ee1cbf4ac404m" class="code">semantic_punctuation_enabled</code>参数为<span class="help-letter-space"></span>false<span class="help-letter-space"></span>时生效。</p>
+                                </div></div>
+                                <section id="be237ce66f0bk" class="section">
+                                  <p id="b29c6e8271d3v">是否启用多阈值模式。启用后可防止 VAD 断句切割过长。</p>
+                                  <p id="2a75535c6716l">默认值：false。</p>
+                                </section>
+                              </section>
+                            </section>
+                            <section id="8d5cfd9062f2n" class="section">
+                              <p id="56eddcddcd57o"><b>heartbeat </b><code data-tag="code" code-type="xCode" id="a18e7ce3e65br" data-init-id="af67e5236f13i" class="code"><i>boolean</i></code><i> </i>（可选）</p>
+                              <section id="5e3a5b6bbe4fy" class="section">
+                                <p id="d9bf8063433df">是否启用心跳包。</p>
+                                <p id="2bd109c8745bm">默认值：false。</p>
+                                <ul id="35017a21949fp" data-spm-anchor-id="a2c4g.11186623.0.i90.7c6b6146OjzzmL">
+                                  <li id="b966089c311ch">
+                                    <p id="3092af1c1d8fx">true：在持续发送静音音频的情况下，可保持与服务端的连接不中断。</p>
+                                  </li>
+                                  <li id="c261860a2042t">
+                                    <p id="f46119f4cad0j">false（默认）：即使持续发送静音音频，连接也将在<span class="help-letter-space"></span>60<span class="help-letter-space"></span>秒后因超时而断开。</p>
+                                  </li>
+                                </ul>
+                                <section id="1b75594c99rwl" class="section">
+                                  <p id="fc91dfa3d4mxk">静音音频指的是在音频文件或数据流中没有声音信号的内容。静音音频可以通过多种方法生成，例如使用音频编辑软件如<span class="help-letter-space"></span>Audacity<span class="help-letter-space"></span>或<span class="help-letter-space"></span>Adobe Audition，或者通过命令行工具如<span class="help-letter-space"></span>FFmpeg。</p>
+                                </section>
+                              </section>
+                            </section>
+                            <section id="53da84b40ac1r" class="section">
+                              <p id="ce4e697c496dh"><b>speech_noise_threshold </b><code data-tag="code" code-type="xCode" id="593bc26d0526m" data-init-id="af67e5236f13i" class="code"><i>float</i></code><i> </i>（可选）</p>
+                              <section id="740624df29dea" class="section">
+                                <p jc="left" id="403498f9d4b4v" style="text-align:left">语音与噪音的判定阈值，用于调整语音活动检测（VAD）的灵敏度。</p>
+                                <p jc="left" id="ead86bff7d9dx" style="text-align:left">取值范围：[-1.0, 1.0]。</p>
+                                <p jc="left" id="12e4128a5681c" style="text-align:left">取值说明：</p>
+                                <ul id="d3699552ce33j">
+                                  <li id="c18e6dd37079z">
+                                    <p id="89055acaeed7i">取值越接近 -1：降低噪音判定阈值，噪音被识别为语音的概率增大，可能导致更多噪音被转写</p>
+                                  </li>
+                                  <li id="d7b18a3b3240n">
+                                    <p id="d43865fe9d12r">取值越接近 +1：提高噪音判定阈值，语音被误判为噪音的概率增大，可能导致部分语音被过滤</p>
+                                  </li>
+                                </ul>
+                                <p jc="left" id="59cfb912455bu" style="text-align:left">此参数为高级配置参数，调整可能显著影响识别效果，建议：</p>
+                                <ul id="c5636118174cr">
+                                  <li id="909bea4eda1dd">
+                                    <p id="52af5c5f4bcai">调整前充分测试验证效果</p>
+                                  </li>
+                                  <li id="a0eb9a451505o">
+                                    <p id="2e232f27d309r">根据实际音频环境小幅度调整（建议步长 0.1）</p>
+                                  </li>
+                                </ul>
+                              </section>
+                            </section>
+                            <section id="5174622651e9y" class="section">
+                              <p id="0db6c80f8ea9h"><b>special_word_filter</b> <code data-tag="code" code-type="xCode" id="code-st-swf" class="code"><i>string</i></code><i> </i>（可选）</p>
+                              <section id="ede7279e67tu9" class="section">
+                                <p id="382273aca1dgh">指定在语音识别过程中需要处理的敏感词，并支持对不同敏感词设置不同的处理方式。详情请参见<a href="https://help.aliyun.com/zh/model-studio/real-time-speech-recognition-user-guide#rt03-sensitive-h3" id="3ef29fb268dg1" title="" class="xref">敏感词过滤</a>。</p>
+                              </section>
+                            </section>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <section id="sec-continue-task" class="section">
+          <h2 id="h-continue-task"><b>continue-task</b></h2>
+          <p jc="left" id="p-ct-desc" style="text-align:left"><b>说明</b>：在任务执行过程中更新对话上下文信息，用于辅助识别。</p>
+          <p jc="left" id="p-ct-timing" style="text-align:left"><b>发送时机</b>：任务运行中，需要更新对话上下文时发送。</p>
+          <div type="important" id="note-ct-models" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+            <p id="p-ct-models">仅 <code data-tag="code" id="822eb0934cy0v" class="code">qwen-audio-3.0-asr-flash-streaming</code>、<code data-tag="code" id="code-ct-m1" class="code">fun-asr-realtime</code> 和 <code data-tag="code" id="code-ct-m2" class="code">fun-asr-realtime-2025-11-07</code> 模型支持该事件。</p>
+          </div></div>
+          <table bordertype="no-border" id="tbl-ct" outputclass="api-reference column-layout" tablewidth="100" tablecolswidth="57.54 42.46" autofit="true" class="api-reference column-layout table">
+            <colgroup colwidth="1.15*" style="width:57.54%"></colgroup>
+            <colgroup colwidth="0.85*" style="width:42.46%"></colgroup>
+            <tbody class="tbody">
+              <tr id="tr-ct-header">
+                <td id="td-ct-header" rowspan="1" style="background-color:rgba(0, 0, 0, 0);vertical-align:middle" colspan="1">
+                  <p id="p-ct-header"><b>header </b><code data-tag="code" code-type="xCode" id="code-ct-header" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                  <div id="div-ct-header-exp" outputclass="collapse expanded" class="collapse expanded">
+                    <p id="p-ct-header-t" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                    <div id="div-ct-header-c" data-tag="expandable-content" class="expandable-content">
+                      <section id="sec-ct-action" class="section">
+                        <p id="p-ct-action"><b>action </b><code data-tag="code" code-type="xCode" id="code-ct-action" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="sec-ct-action-d" class="section">
+                          <p id="p-ct-action-d">指令类型，固定为 <code data-tag="code" id="code-ct-action-val" class="code">continue-task</code>。</p>
+                        </section>
+                      </section>
+                      <section id="sec-ct-taskid" class="section">
+                        <p id="p-ct-taskid"><b>task_id </b><code data-tag="code" code-type="xCode" id="code-ct-taskid" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="sec-ct-taskid-d" class="section">
+                          <p id="p-ct-taskid-d">客户端生成的任务 ID（UUID 格式），需与<span class="help-letter-space"></span><a href="#9cae7e7b85ebm" id="xref-ct-runtask" title="" class="xref">run-task</a><span class="help-letter-space"></span>事件中的 task_id 保持一致。</p>
+                        </section>
+                      </section>
+                      <section id="sec-ct-streaming" class="section">
+                        <p id="p-ct-streaming"><b>streaming </b><code data-tag="code" code-type="xCode" id="code-ct-streaming" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="sec-ct-streaming-d" class="section">
+                          <p id="p-ct-streaming-d">固定为 <code data-tag="code" id="code-ct-streaming-val" class="code">duplex</code>。</p>
+                        </section>
+                      </section>
+                    </div>
+                  </div>
+                </td>
+                <td id="td-ct-code" rowspan="2" style="background-color:rgba(0, 0, 0, 0);vertical-align:top" colspan="1">
+                  <section id="sec-ct-code-stick" outputclass="stick-top" class="stick-top section"><pre code-type="xCode" id="code-ct-example" index="0" data-tag="codeblock" outputclass="language-json" class="pre codeblock language-json"><code>{
+    "header": {
+        "action": "continue-task",
+        "task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+        "streaming": "duplex"
+    },
+    "payload": {
+        "input": {
+            "context": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "你好啊"
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "你好啊，我是通义千问，有什么可以帮助你的？"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}</code></pre></section>
+                  <p id="p-ct-code-empty"></p>
+                </td>
+              </tr>
+              <tr id="tr-ct-payload">
+                <td id="td-ct-payload" rowspan="1" style="background-color:rgba(0, 0, 0, 0)" colspan="1">
+                  <p id="p-ct-payload"><b>payload </b><code data-tag="code" code-type="xCode" id="code-ct-payload" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                  <div id="div-ct-payload-exp" outputclass="collapse expanded" class="collapse expanded">
+                    <p id="p-ct-payload-t" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                    <div id="div-ct-payload-c" data-tag="expandable-content" class="expandable-content">
+                      <section id="sec-ct-input" class="section">
+                        <p id="p-ct-input"><b>input </b><code data-tag="code" code-type="xCode" id="code-ct-input" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                        <section id="sec-ct-input-d" class="section">
+                          <p id="p-ct-input-d">输入对象。</p>
+                          <div id="div-ct-input-exp" outputclass="collapse expanded" class="collapse expanded">
+                            <p id="p-ct-input-t" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                            <div id="div-ct-input-c" data-tag="expandable-content" class="expandable-content">
+                              <section id="sec-ct-ctx" is-conref="true" class="section">
+                                  <p id="p-rt-ctx"><b>context </b><code data-tag="code" code-type="xCode" id="code-rt-ctx" class="code"><i>array(object)</i></code><i> </i>（可选）</p>
+                                  <p id="9f6bd11bf3q9d">对话上下文，用于辅助识别、提升专有词汇的识别准确率。使用方法详见<a href="https://help.aliyun.com/zh/model-studio/improve-asr-accuracy#ctx-enhance-h2" id="3b7fcdbfd8ugv" title="" class="xref">上下文增强</a>。</p>
+                                  <div type="important" id="note-rt-ctx-limit" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+                                    <p id="p-rt-ctx-limit"><b>约束</b>：上下文消息（<code data-tag="code" id="code-rt-ctx-it" class="code">input_text</code> 和 <code data-tag="code" id="code-rt-ctx-tt" class="code">text</code> 类型）各最多 5 条，超出时保留最近的 5 条。每轮上下文文本总长度（<code data-tag="code" id="code-rt-ctx-u" class="code">user</code> 和 <code data-tag="code" id="code-rt-ctx-a" class="code">assistant</code> 的 <code data-tag="code" id="code-rt-ctx-tfield" class="code">text</code> 字段长度之和）不超过 400 个字符（按字符数计算，每个字符计为 1），超出部分从末尾截断。</p>
+                                  </div></div>
+                                  <div type="important" id="note-rt-ctx-order" class="note note-important"><div class="note-icon-wrapper"><i class="icon-note note important"></i></div><div class="noteContentSpan"><strong>重要 </strong>
+                                    <p id="p-rt-ctx-order">携带上下文时，<code data-tag="code" id="code-rt-ctx-order-arr" class="code">context</code> 中的消息顺序有要求：上下文消息必须按对话轮次排列，每轮中 <code data-tag="code" id="code-rt-ctx-order-user" class="code">user</code>（<code data-tag="code" id="code-rt-ctx-order-it" class="code">input_text</code> 类型）必须在对应的 <code data-tag="code" id="code-rt-ctx-order-asst" class="code">assistant</code>（<code data-tag="code" id="code-rt-ctx-order-tt" class="code">text</code> 类型）之前。</p>
+                                  </div></div>
+                                  <div id="div-rt-ctx-exp" outputclass="collapse expanded" class="collapse expanded">
+                                    <p id="p-rt-ctx-t" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                                    <div id="div-rt-ctx-c" data-tag="expandable-content" class="expandable-content">
+                                      <section id="sec-rt-ctx-role" class="section">
+                                        <p id="p-rt-ctx-role"><b>role </b><code data-tag="code" code-type="xCode" id="code-rt-ctx-role" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                                        <section id="f7979c8e23fph" class="section">
+                                          <p id="p-rt-ctx-role-d">消息角色。取值范围：</p>
+                                          <ul id="ul-rt-ctx-role">
+                                            <li id="li-rt-ctx-role-user">
+                                              <p id="p-rt-ctx-role-user"><code data-tag="code" id="code-rt-ctx-role-user" class="code">user</code>：前几轮用户语音的识别结果或领域相关的词表。</p>
+                                            </li>
+                                            <li id="li-rt-ctx-role-asst">
+                                              <p id="p-rt-ctx-role-asst"><code data-tag="code" id="code-rt-ctx-role-asst" class="code">assistant</code>：前几轮大语言模型的回复内容。</p>
+                                            </li>
+                                          </ul>
+                                        </section>
+                                      </section>
+                                      <section id="sec-rt-ctx-content" class="section">
+                                        <p id="p-rt-ctx-content"><b>content </b><code data-tag="code" code-type="xCode" id="code-rt-ctx-content" class="code"><i>array(object)</i></code><i> </i><b>（必选）</b></p>
+                                        <p id="p-rt-ctx-content-d">消息内容列表。</p>
+                                        <div id="div-rt-ctx-content-exp" outputclass="collapse expanded" class="collapse expanded">
+                                          <p id="p-rt-ctx-content-t" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                                          <div id="div-rt-ctx-content-c" data-tag="expandable-content" class="expandable-content">
+                                            <section id="sec-rt-ctx-type" class="section">
+                                              <p id="p-rt-ctx-type"><b>type </b><code data-tag="code" code-type="xCode" id="code-rt-ctx-type" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                                              <section id="2e95567f107ds" class="section">
+                                                <p id="p-rt-ctx-type-d">内容类型。取值范围：</p>
+                                                <ul id="ul-rt-ctx-type">
+                                                  <li id="li-rt-ctx-type-it">
+                                                    <p id="p-rt-ctx-type-it"><code data-tag="code" id="code-rt-ctx-type-it" class="code">input_text</code>：前几轮用户语音的识别结果或领域相关的词表（role 为 user 时使用），需同时传入 <code data-tag="code" id="code-rt-ctx-type-it-ref" class="code">text</code> 字段。</p>
+                                                  </li>
+                                                  <li id="li-rt-ctx-type-tt">
+                                                    <p id="p-rt-ctx-type-tt"><code data-tag="code" id="code-rt-ctx-type-tt" class="code">text</code>：前几轮大语言模型的回复内容（role 为 assistant 时使用），需同时传入 <code data-tag="code" id="code-rt-ctx-type-tt-ref" class="code">text</code> 字段。</p>
+                                                  </li>
+                                                </ul>
+                                              </section>
+                                            </section>
+                                            <section id="sec-rt-ctx-text" class="section">
+                                              <p id="p-rt-ctx-text"><b>text </b><code data-tag="code" code-type="xCode" id="code-rt-ctx-text" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                                              <section id="e466ec8aaceck" class="section">
+                                                <p id="p-rt-ctx-text-d">文本内容。当 <code data-tag="code" id="code-rt-ctx-text-cond1" class="code">type</code> 为 <code data-tag="code" id="code-rt-ctx-text-val1" class="code">input_text</code> 时，填入前几轮用户语音的识别结果或领域相关的词表；当 <code data-tag="code" id="code-rt-ctx-text-cond2" class="code">type</code> 为 <code data-tag="code" id="code-rt-ctx-text-val2" class="code">text</code> 时，填入前几轮大语言模型的回复内容。</p>
+                                              </section>
+                                            </section>
+                                          </div>
+                                        </div>
+                                      </section>
+                                    </div>
+                                  </div>
+                                </section>
+                            </div>
+                          </div>
+                        </section>
+                      </section>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <section id="dced6858a6cax" class="section">
+          <h2 id="85880fa44008n"><b>finish-task</b></h2>
+          <p jc="left" id="713ea941408dv" style="text-align:left"><b>说明</b>：通知服务端音频发送完毕，请求结束任务。</p>
+          <p jc="left" id="8abfb2dbf229i" style="text-align:left"><b>发送时机</b>：所有音频数据发送完毕后。</p>
+          <p jc="left" id="773862fd317ey" style="text-align:left"><b>响应事件</b>：服务端返回&nbsp;<code data-tag="code" id="7be40ccadea2d" class="code"><a href="https://help.aliyun.com/zh/model-studio/fun-asr-server-events#b8aefe8e0c5fr" id="92488b522b98q" title="" class="xref">task-finished</a></code>&nbsp;事件。</p>
+          <table bordertype="no-border" id="2ed350069de3y" outputclass="api-reference column-layout" tablewidth="100" tablecolswidth="57.54 42.46" autofit="true" class="api-reference column-layout table">
+            <colgroup colwidth="1.15*" style="width:57.54%"></colgroup>
+            <colgroup colwidth="0.85*" style="width:42.46%"></colgroup>
+            <tbody class="tbody">
+              <tr id="e44528e0f525p">
+                <td id="49ec3c551c9er" rowspan="1" style="background-color:rgba(0, 0, 0, 0);vertical-align:middle" colspan="1">
+                  <p id="00ddaa53ab24j"><b>header </b><code data-tag="code" code-type="xCode" id="b1f5e7b87cd6f" data-init-id="af67e5236f13i" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                  <div id="44b06b793ff1l" outputclass="collapse expanded" class="collapse expanded">
+                    <p id="6085404ab288w" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                    <div id="b1760c2bb1e7q" data-tag="expandable-content" class="expandable-content">
+                      <section id="059b26965175f" class="section">
+                        <p id="867f9e8bda89l"><b>action </b><code data-tag="code" code-type="xCode" id="6b04b66d0591y" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="0f46487d0046i" class="section">
+                          <p id="2876ed586f1dg">指令类型，固定为 <code data-tag="code" id="a5c98b7f447ac" class="code">finish-task</code>。</p>
+                        </section>
+                      </section>
+                      <section id="f5e0ccc2fd9eu" class="section">
+                        <p id="04d55fd3c3caf"><b>task_id </b><code data-tag="code" code-type="xCode" id="6333f53c39aep" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="3a5e36e8cd86t" class="section">
+                          <p id="8c09ecf8e5f4i">客户端生成的任务 ID（UUID 格式），需与<span class="help-letter-space"></span><a href="#9cae7e7b85ebm" id="d7de12546019e" title="" class="xref">run-task</a><span class="help-letter-space"></span>事件中的 task_id 保持一致。</p>
+                        </section>
+                      </section>
+                      <section id="c6c6c887c6feh" class="section">
+                        <p id="9882553da224l"><b>streaming </b><code data-tag="code" code-type="xCode" id="1dff511a37dac" data-init-id="af67e5236f13i" class="code"><i>string</i></code><i> </i><b>（必选）</b></p>
+                        <section id="ead1012c2798h" class="section">
+                          <p id="9bae8fabafc0w">固定为 <code data-tag="code" id="c57e0f2ae27dk" class="code">duplex</code>。</p>
+                        </section>
+                      </section>
+                    </div>
+                  </div>
+                </td>
+                <td id="940544957a8da" rowspan="2" style="background-color:rgba(0, 0, 0, 0);vertical-align:top" colspan="1">
+                  <section id="dfd770e8acdbu" outputclass="stick-top" class="stick-top section"><pre code-type="xCode" id="df615eed3b71k" index="0" data-tag="codeblock" outputclass="language-json" class="pre codeblock language-json"><code>{
+    "header": {
+        "action": "finish-task",
+        "task_id": "2bf83b9a-baeb-4fda-8d9a-xxxxxxxxxxxx",
+        "streaming": "duplex"
+    },
+    "payload": {
+        "input": {}
+    }
+}</code></pre></section>
+                  <p id="267b08692431u"></p>
+                </td>
+              </tr>
+              <tr id="24a6d343e482p">
+                <td id="539f7c48b58ey" rowspan="1" style="background-color:rgba(0, 0, 0, 0)" colspan="1">
+                  <p id="15f15919bd94s"><b>payload </b><code data-tag="code" code-type="xCode" id="46fc52f549edn" data-init-id="af67e5236f13i" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                  <div id="a12b405c3371u" outputclass="collapse expanded" class="collapse expanded">
+                    <p id="41e8b70e1400g" data-tag="expandable-title" class="expandable-title"><b>属性</b></p>
+                    <div id="0799bfbf46e5f" data-tag="expandable-content" class="expandable-content">
+                      <section id="0860a9fafd1be" class="section">
+                        <p id="0eb3bfbd23c8n"><b>input </b><code data-tag="code" code-type="xCode" id="1a9fd8ee4c42j" data-init-id="af67e5236f13i" class="code"><i>object</i></code><i> </i><b>（必选）</b></p>
+                        <section id="32d6670b7d0am" class="section">
+                          <p id="b253786eca77w">固定为<code data-tag="code" id="fe3faada3180q" class="code">{}</code>。</p>
+                        </section>
+                      </section>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+      
+        <style>
+          .aliyun-docs-content .one-codeblocks pre {
+            max-height: calc(80vh - 136px) !important;
+            height: auto;
+          }
+
+        </style>
+      
+      
+        <style>
+          .tab-item {
+            font-size: 12px !important;
+            /* 你可以根据需要调整字体大小 */
+            padding: 0px 5px !important;
+          }
+
+        </style>
+      
+      
+        <style>
+          .expandable-content {
+            border-left: none !important;
+            border-right: none !important;
+            border-bottom: none !important;
+          }
+
+        </style>
+      
+      
+        <style>
+          .one-codeblocks.stick-top.section {
+            overflow: hidden !important;
+          }
+
+        </style>
+      
+      <section id="9364b09f0acbc" data-ref-searchable="yes" docid="5907685" is-conref="true" class="section"><style>
+.table-wrapper {
+    overflow: visible !important;
+}
+</style>
+  <style>
+/* 调整 table 宽度 */
+.aliyun-docs-content table.medium-width {
+  max-width: 1018px;
+  width: 100%;
+}
+
+.aliyun-docs-content table.table-no-border tr td:first-child {
+  padding-left: 0;
+}
+
+.aliyun-docs-content table.table-no-border tr td:last-child {
+  padding-right: 0;
+}
+</style>
+ 
+  <style>
+/* 支持吸顶 */
+div:has(.aliyun-docs-content),
+.aliyun-docs-content .markdown-body {
+  overflow: visible;
+}
+.stick-top {
+  position: sticky;
+  top: 46px;
+}
+</style>
+ 
+  <style>
+/**代码块字体**/
+
+/* 减少表格中的代码块 margin，让表格信息显示更紧凑 */
+.unionContainer .markdown-body table .help-code-block  {
+  margin: 0 !important;
+}
+/* 减少表格中的代码块字号，让表格信息显示更紧凑 */
+.unionContainer .markdown-body .help-code-block pre {
+  font-size: 12px !important;
+}
+/* 减少表格中的代码块字号，让表格信息显示更紧凑 */
+.unionContainer .markdown-body .help-code-block pre code {
+  font-size: 12px !important;
+}
+</style>
+ 
+  <style>
+
+/** API Reference 表格 **/
+
+.aliyun-docs-content table.api-reference tr td:first-child {
+  margin: 0px;
+  border-bottom: 1px solid #d8d8d8;
+}
+
+.aliyun-docs-content table.api-reference tr:last-child td:first-child {  
+  border-bottom: none;
+}
+
+.aliyun-docs-content table.api-reference p {
+  color: #6e6e80;
+}
+
+.aliyun-docs-content table.api-reference b, i {
+  color: #181818;
+}
+
+.aliyun-docs-content table.api-reference .collapse {
+  border: none;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.aliyun-docs-content table.api-reference .collapse .expandable-title-bold {
+  padding: 0;
+}
+
+.aliyun-docs-content table.api-reference .collapse .expandable-title {
+  padding: 0;
+}
+
+.aliyun-docs-content table.api-reference .collapse .expandable-title-bold .title {
+  margin-left: 16px;
+}
+
+.aliyun-docs-content table.api-reference .collapse .expandable-title .title {
+  margin-left: 16px;
+}
+
+.aliyun-docs-content table.api-reference .collapse .expandable-title-bold i.icon {
+  position: absolute;
+  color: #777;
+  font-weight: 100;
+}
+
+.aliyun-docs-content table.api-reference .collapse .expandable-title i.icon {
+  position: absolute;
+  color: #777;
+  font-weight: 100;
+}
+
+.aliyun-docs-content table.api-reference .collapse.expanded .expandable-content {
+  padding: 10px 14px 10px 14px !important;
+  margin: 0;
+  border: 1px solid #e9e9e9;
+}
+
+.aliyun-docs-content table.api-reference .collapse .expandable-title-bold b {
+  font-size: 13px;
+  font-weight: normal;
+  color: #6e6e80;
+}
+
+.aliyun-docs-content table.api-reference .collapse .expandable-title b {
+  font-size: 13px;
+  font-weight: normal;
+  color: #6e6e80;
+}
+
+.aliyun-docs-content table.api-reference .tabbed-content-box {
+  border: none;
+}
+
+.aliyun-docs-content table.api-reference .tabbed-content-box section {
+  padding: 8px 0 !important;
+}
+
+.aliyun-docs-content table.api-reference .tabbed-content-box.mini .tab-box {
+  /*
+  position: absolute;
+  left: 40px;
+  right: 0;
+  */
+}
+
+.aliyun-docs-content .margin-top-33 {
+  margin-top: 33px !important;
+}
+
+.aliyun-docs-content .two-codeblocks pre {
+  max-height: calc(50vh - 136px) !important;
+  height: auto;
+}
+
+.expandable-content section {
+    border-bottom: 1px solid #e9e9e9;
+    padding-top: 6px;
+    padding-bottom: 4px;
+}
+
+.expandable-content section:last-child {
+    border-bottom: none;
+}
+
+.expandable-content section:first-child {
+    padding-top: 0;
+}
+
+</style>
+ </section>
+    </div>
+  </main>
+
+
+
+
+</div></div><div class="aliyun-docs-pagination"><div class="NextPage--container--cfVcdEE"><span class="NextPage--paginationLeft--WTOmehr"><a href="/zh/model-studio/fun-asr-realtime-websocket-api" data-spm-click="gostr=/aliyun;locaid=preDoc"><i class="iconfont icon-prev-arrow"></i>上一篇：WebSocket API</a></span><span class="NextPage--paginationRight--TgS6P1r"><a href="/zh/model-studio/fun-asr-server-events" data-spm-click="gostr=/aliyun;locaid=nextDoc">下一篇：服务端事件<i class="iconfont icon-next-arrow"></i></a></span></div></div></div><div class="RecommendDoc--container--M1qVQax"></div><div class="FeedbackButton--feedbackContainer--njtB22l aliyun-docs-feedback" id="help-doc-feedback"><div class="FeedbackButton--feedbackHelpTip--JxaBwdy">该文章对您有帮助吗？</div><div class="FeedbackButton--feedbackButtonContainer--ujiXFNJ"><div class="FeedbackButton--feedbackButtonBox--GmY1Nor"><button class="FeedbackButton--iconButton--fx4Xcop"><i class="help-iconfont help-icon-tag-empty"></i></button><button class="FeedbackButton--iconButton--fx4Xcop"><i class="help-iconfont help-icon-tag-empty" style="display:inline-block;transform:rotateX(-180deg)"></i></button><button class="FeedbackButton--clickButton--YxH6n96"><i class="help-iconfont help-icon-bianji"></i>反馈</button></div></div></div></section><div class="aliyun-docs-side" id="aliyun-docs-side"><div id="aliyun-docs-side-content" class="aliyun-docs-side-content ProductDetail--rightBox--GGLE5sH"><ul class="Outline--synopsisBox--zm_HamD" id="outline-container"></ul></div><div id="aliyun-docs-side-blank" class="aliyun-docs-side-blank"></div></div></div></main></div></div><div id="aliyun-docs-selection-div"></div></div></div>
+  <footer><div id="3bb41582dcb65a8be6c43572cd44f6bf"><div class="_18a32969382a277c44015217fbc5cb5a_box"><footer class="_49ada0cd752f65901c49f2eed0d6c3d5_container" aria-label="PC 端页尾"><div class="_49ada0cd752f65901c49f2eed0d6c3d5_inner"><div class="_296d5000d6fdcaff9d0bfd209c64fbbc_services"><nav class="_296d5000d6fdcaff9d0bfd209c64fbbc_homepage-footer-main-services" aria-label="页脚导航"><section class="a52e48969cced2d562e47543eeb73ebb_ali-main-services"><h3 class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-title">为什么选择阿里云</h3><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/about/what-is-cloud-computing" target="_blank">什么是云计算</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://infrastructure.aliyun.com/" target="_blank">全球基础设施</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/why-us/leading-technology" target="_blank">技术领先</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/why-us/reliability" target="_blank">稳定可靠</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/why-us/security-compliance" target="_blank">安全合规</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/analyst-reports" target="_blank">分析师报告</a></section><section class="a52e48969cced2d562e47543eeb73ebb_ali-main-services"><h3 class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-title">大模型</h3><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/product/tongyi" target="_blank">千问大模型</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://bailian.console.aliyun.com/?tab=model#/model-market" target="_blank" rel="nofollow">大模型服务</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://bailian.console.aliyun.com/app-center?tab=app#/app-center" target="_blank" rel="nofollow">AI应用构建</a></section><section class="a52e48969cced2d562e47543eeb73ebb_ali-main-services"><h3 class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-title">产品和定价</h3><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/product/list" target="_blank">全部产品</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://free.aliyun.com/" target="_blank">免费试用</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/product/news/" target="_blank">产品动态</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/price/detail" target="_blank">产品定价</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/price/cpq/list" target="_blank">配置报价器</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/price/cost-management" target="_blank">云上成本管理</a></section><section class="a52e48969cced2d562e47543eeb73ebb_ali-main-services"><h3 class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-title">技术内容</h3><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/solution/tech-solution" target="_blank">技术解决方案</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://help.aliyun.com/" target="_blank">帮助文档</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://developer.aliyun.com/" target="_blank">开发者社区</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://tianchi.aliyun.com/" target="_blank">天池大赛</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://edu.aliyun.com/" target="_blank">阿里云认证</a></section><section class="a52e48969cced2d562e47543eeb73ebb_ali-main-services"><h3 class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-title">权益</h3><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://free.aliyun.com/" target="_blank">免费试用</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/solution/free" target="_blank">解决方案免费试用</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://university.aliyun.com/" target="_blank">高校计划</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://dashi.aliyun.com/?ambRef=shouYeDaoHang2&amp;pageCode=yunparterIndex" target="_blank">推荐返现计划</a></section><section class="a52e48969cced2d562e47543eeb73ebb_ali-main-services"><h3 class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-title">服务</h3><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/service" target="_blank">基础服务</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/service/supportplans" target="_blank">企业增值服务</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/service/devopsimpl/devopsimpl_cloudmigration_public_cn" target="_blank">迁云服务</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://www.aliyun.com/notice/" target="_blank">官网公告</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://status.aliyun.com/" target="_blank">健康看板</a><a class="a52e48969cced2d562e47543eeb73ebb_ali-main-services-link" href="https://security.aliyun.com/trust-center" target="_blank">信任中心</a></section></nav><article class="_7b44142961778903dda8af3f769cd06c_focus"><h3 class="_7b44142961778903dda8af3f769cd06c_ali-main-services-title">关注阿里云</h3><p class="_7b44142961778903dda8af3f769cd06c_ali-main-services-desc">关注阿里云公众号或下载阿里云APP，关注云资讯，随时随地运维管控云服务</p><img alt="阿里云APP" src="https://img.alicdn.com/imgextra/i4/O1CN01XLesV31fkf7pYNATb_!!6000000004045-2-tps-400-400.png" class="_7b44142961778903dda8af3f769cd06c_ali-official-code" loading="lazy"/><img alt="阿里云微信" src="https://img.alicdn.com/tfs/TB1AOdINW6qK1RjSZFmXXX0PFXa-258-258.jpg" class="_7b44142961778903dda8af3f769cd06c_ali-official-code" loading="lazy"/><p class="_7b44142961778903dda8af3f769cd06c_consult-text">联系我们：4008013260</p></article></div><div class="_4598709a854bea355ceb6ef9f23f10d4_about-link-wrap"><a href="https://help.aliyun.com/product/67275.html" class="_4598709a854bea355ceb6ef9f23f10d4_ali-about-link" target="_blank">法律声明</a><a href="https://terms.alicdn.com/legal-agreement/terms/platform_service/20220906101446934/20220906101446934.html" class="_4598709a854bea355ceb6ef9f23f10d4_ali-about-link" target="_blank">Cookies 政策</a><a href="https://aliyun.jubao.alibaba.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-about-link" target="_blank">廉正举报</a><a href="https://report.aliyun.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-about-link" target="_blank">安全举报</a><a href="https://www.aliyun.com/contact" class="_4598709a854bea355ceb6ef9f23f10d4_ali-about-link" target="_blank">联系我们</a><a href="https://careers.aliyun.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-about-link" target="_blank">加入我们</a></div><section class="_4598709a854bea355ceb6ef9f23f10d4_friend-link-wrap"><h3 hidden="">友情链接</h3><a href="https://www.alibabagroup.com/cn/global/home" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">阿里巴巴集团</a><a href="https://www.taobao.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">淘宝网</a><a href="https://www.qianwenai.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">千问AI平台</a><a href="https://www.tmall.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">天猫</a><a href="https://www.aliexpress.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">全球速卖通</a><a href="https://www.alibaba.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">阿里巴巴国际交易市场</a><a href="https://www.1688.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">1688</a><a href="https://www.alimama.com/index.htm" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">阿里妈妈</a><a href="https://www.fliggy.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">飞猪</a><a href="https://www.aliyun.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">阿里云计算</a><a href="https://wanwang.aliyun.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">万网</a><a href="https://mobile.amap.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">高德</a><a href="https://www.uc.cn/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">UC</a><a href="https://www.umeng.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">友盟</a><a href="https://www.youku.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">优酷</a><a href="https://www.dingtalk.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">钉钉</a><a href="https://www.alipay.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">支付宝</a><a href="https://damo.alibaba.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">达摩院</a><a href="https://world.taobao.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">淘宝海外</a><a href="https://www.aliyundrive.com/" class="_4598709a854bea355ceb6ef9f23f10d4_ali-friend-link" target="_blank">阿里云盘</a></section><p class="_4598709a854bea355ceb6ef9f23f10d4_ali-copyright-text">© 2009-现在 Aliyun.com 版权所有 增值电信业务经营许可证： <a href="http://beian.miit.gov.cn/" target="_blank">浙B2-20080101</a> 域名注册服务机构许可： <a href="https://domain.miit.gov.cn/域名注册服务机构/互联网域名/阿里云计算有限公司 " target="_blank">浙D3-20210002</a></p><p class="_4598709a854bea355ceb6ef9f23f10d4_ali-report-wrap"><a href="https://zzlz.gsxt.gov.cn/businessCheck/verifKey.do?showType=p&amp;serial=91330106673959654P-SAIC_SHOW_10000091330106673959654P1782269316568&amp;signData=MEUCIQDTH78jfQrqhsr99oZZLEZ9bvrSnyF%20tsaiBM1kAscJ1AIgWUzC8x%20mPem4t8XfwhDOOOIaNULiW8MBaKLkRHa0eWw%3D" target="_blank" class="_4598709a854bea355ceb6ef9f23f10d4_ali-report-link"><img src="//gw.alicdn.com/tfs/TB1GxwdSXXXXXa.aXXXXXXXXXXX-65-70.gif" class="_4598709a854bea355ceb6ef9f23f10d4_ali-report-img" alt="" loading="lazy"/></a><a href="http://www.beian.gov.cn/portal/registerSystemInfo" target="_blank" class="_4598709a854bea355ceb6ef9f23f10d4_ali-report-link"><img src="//img.alicdn.com/tfs/TB1..50QpXXXXX7XpXXXXXXXXXX-40-40.png" class="_4598709a854bea355ceb6ef9f23f10d4_ali-report-img" alt="浙公网安备 33010602009975号" loading="lazy"/><span class="_4598709a854bea355ceb6ef9f23f10d4_ali-report-link-text">浙公网安备 33010602009975号</span></a><a href="https://beian.miit.gov.cn/" target="_blank" class="_4598709a854bea355ceb6ef9f23f10d4_ali-report-link"><span class="_4598709a854bea355ceb6ef9f23f10d4_ali-report-link-text _4598709a854bea355ceb6ef9f23f10d4_ali-report-link-text-unique">浙B2-20080101-4</span></a></p></div></footer><footer class="_4b41e3343c851a7a8833c9165b249eb2_container" aria-label="移动端页尾"></footer></div></div></footer>
+
+
+
+<script>
+  var _performance_domEnd = window.performance && window.performance.now();
+</script>
+
+
+  <script>
+    window.ALIYUN_PERF && window.ALIYUN_PERF.getPCP().then(rst => {
+      var data = {
+        product: 'help.aliyun.com',
+        ua: navigator.userAgent,
+        device: 'pc',
+        page: 'index',
+        lang: 'zh',
+        cna: '',
+        url: window.location.href,
+        action: 'pcp',
+        userParams1: rst || 0,
+      };
+      let queryStr = Object.keys(data).map(key => data[key] &&
+        `${encodeURIComponent(key)}=${encodeURIComponent(data[key])}`).join('&');
+      fetch('https://help-new.cn-wulanchabu.log.aliyuncs.com/logstores/web-tracking/track?APIVersion=0.6.0&' +
+        queryStr);
+    });
+  </script>
+  
+
+  <script crossorigin="" src="https://g.alicdn.com/code/lib/??react/16.8.6/umd/react.production.min.js,react-dom/16.8.6/umd/react-dom.production.min.js"></script>
+  <script src="https://g.alicdn.com/code/lib/lodash.js/4.17.21/lodash.min.js" crossorigin="anonymous"></script>
+  <script>
+  window.resourceBaseUrl="https://g.alicdn.com/aliyun-help/help-portal-fe/0.12.51/"
+</script>
+<script defer="" src="https://g.alicdn.com/aliyun-help/help-portal-fe/0.12.51/js/index.js"></script>
+<script defer src="https://g.alicdn.com/aliyun-help/help-portal-fe/0.12.51/js/vendor.js"></script>
+  
+  <script async="" src="https://g.alicdn.com/dawn/assets-loader/scripts/fast-login.js?tenantName=help-new-aliyun-com"></script>
+  <script async="" src="https://g.alicdn.com/aliyun/perf/js/index.js"></script>
+  <script src="//cloud-assets.alicdn.com/website.js" crossorigin=""></script>
+  
+
+<script src="https://website.alyasset.com/npm.combo/@ali/biu-loader/0.1.9/~~index.js,plugins/global-react.js,plugins/ace-module.js"></script>
+<script src="https://website.alyasset.com/npm.combo/@ali/~~hmod-preact/0.0.1/index.js,hmod-preact-hooks/0.0.1/index.js,hmod-preact-compat/0.0.1/index.js,hmod-preact-bridge/0.1.4/index.js"></script>
+<script src="https://website.alyasset.com/code.combo/aliyun-com/~~lowcode-env-inject/0.1.5/aliyun.prod.pc.zh-CN.js,lowcode-engine/0.1.137/renderer/build/js/index.js"></script>
+<script src="https://g.alicdn.com/code/npm/@ali/??hmod-ace-2023-box/0.1.0/index.js,hmod-aliyun-com-floating-toolbar/0.2.4/index.js,hmod-aliyun-com-global-nav-search/0.8.5/index.js,hmod-aliyun-com-global-nav-search/0.8.5/locales/zh-CN.js,hmod-aliyun-com-global-nav/0.3.18/index.js,hmod-aliyun-com-global-nav/0.3.18/locales/zh-CN.js"></script>
+<script src="https://website.alyasset.com/lowcode/entry/prod/b84c5488c8bd5a069ff818e4a417e5c9.js"></script>
+<script src="https://g.alicdn.com/code/npm/@ali/??hmod-ace-2023-box/0.1.0/index.js,hmod-ace-2024-global-footer/0.2.1/index.js,hmod-ace-2024-global-footer/0.2.1/locales/zh-CN.js,hmod-lowcode-normal-page/0.1.0/index.js"></script>
+<script src="https://website.alyasset.com/lowcode/entry/prod/3bb41582dcb65a8be6c43572cd44f6bf.js"></script>
+</body></html>

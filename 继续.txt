@@ -1,0 +1,150 @@
+Agent "Explore voice switching logic" finished · 10m 4s
+
+  Thought for 3m 55s (ctrl+o to expand)
+
+● The background investigation independently confirmed my diagnosis — the bug is in the realtime voice-chat popover
+  (VoiceCallSettingsPopover.tsx), not the TTS page: the Level‑3 voice list renders from committed provider/model state
+  while the user is browsing via hover, so it lags one interaction behind. Let me implement the fix.
+
+  Thought for 1m 15s (ctrl+o to expand)
+
+● Diagnosis confirmed by the background investigation. Now implementing the fix.
+
+● Update(frontend\src\hooks\useVoiceChat.ts)
+  ⎿  Added 1 line, removed 1 line
+      1 -import { useEffect, useMemo, useRef, useState } from "react";
+      1 +import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+      2  import {
+      3    buildVoiceChatSessionConfig,
+      4    buildVoiceChatWebSocketUrl,
+
+  Thought for 33s (ctrl+o to expand)
+
+● Update(frontend\src\hooks\useVoiceChat.ts)
+  ⎿  Added 9 lines
+      175      () => formatRealtimeVoiceOptions(voiceChatProvider, language, voiceChatModel),
+      176      [language, voiceChatProvider, voiceChatModel]
+      177    );
+      178 +  // Resolve the voice list for an arbitrary provider/model so pickers can preview
+      179 +  // the voices of a provider/model the user is merely hovering — before it is
+      180 +  // committed via onProviderChange/onModelChange. Without this, the voice flyout
+      181 +  // would always reflect the committed provider and lag one interaction behind
+      182 +  // the browsed one (e.g. showing Qwen voices while a Google model is hovered).
+      183 +  const voiceChatVoiceOptionsFor = useCallback(
+      184 +    (provider: string, model: string) => formatRealtimeVoiceOptions(provider, language, model),
+      185 +    [language]
+      186 +  );
+      187    const voiceChatTargetLanguageOptions = useMemo(
+      188      () => formatLiveTranslateLanguageOptions(language),
+      189      [language]
+
+  Thought for 1m 23s (ctrl+o to expand)
+
+● Update(frontend\src\hooks\useVoiceChat.ts)
+  ⎿  Added 1 line
+      1755      voiceChatVoice,
+      1756      voiceChatVoiceLabel,
+      1757      voiceChatVoiceOptions,
+      1758 +    voiceChatVoiceOptionsFor,
+      1759      voiceChatLiveTranslate,
+      1760      voiceChatTranslationMode,
+      1761      voiceChatSourceLanguageCode,
+
+  Thought for 56s (ctrl+o to expand)
+
+● The background investigation confirmed the exact same diagnosis. Task 1 (hook) is done. Now let me update the factory
+  and the popover.
+
+  Thought for 1m 27s (ctrl+o to expand)
+
+● Now updating the factory so voiceChatVoiceOptionsFor defaults to returning the (possibly overridden) voice list — this
+  keeps all existing popover tests working.
+
+● Update(frontend\src\test\factories.ts)
+  ⎿  Added 1 line
+      113  export function createVoiceChatController(
+      114    overrides: Partial<UseVoiceChatResult> = {}
+      115  ): UseVoiceChatResult {
+      116 +  const voiceOptions = overrides.voiceChatVoiceOptions ?? [{ value: "Puck", label: "Puck" }];
+      117    return {
+      118      voiceChatProvider: "Google",
+      119      voiceChatProviderOptions: ["Google"],
+
+  Thought for 47s (ctrl+o to expand)
+
+● Continuing the implementation. Let me finish the factory update — wire voiceOptions into the controller and add the
+  voiceChatVoiceOptionsFor default.
+
+● Update(frontend\src\test\factories.ts)
+  ⎿  Added 2 lines, removed 1 line
+      124      ],
+      125      voiceChatVoice: "Puck",
+      126      voiceChatVoiceLabel: "Puck",
+      127 -    voiceChatVoiceOptions: [{ value: "Puck", label: "Puck" }],
+      127 +    voiceChatVoiceOptions: voiceOptions,
+      128 +    voiceChatVoiceOptionsFor: (_provider: string, _model: string) => voiceOptions,
+      129      voiceChatLiveTranslate: false,
+      130      voiceChatTranslationMode: "bidirectional",
+      131      voiceChatSourceLanguageCode: "zh-Hans",
+
+  Thought for 1m 42s (ctrl+o to expand)
+
+● Factory done. Now the core fix in the popover. First, add the preview‑aware provider/model resolution and
+  voice‑options memo.
+
+● Update(frontend\src\components\VoiceCallSettingsPopover.tsx)
+  ⎿  Added 24 lines
+       95      (chat ? chat.chatModel : "");
+       96    const isCurrentModelRealtime = isVoiceRealtimeModel(currentProviderName, currentModelName);
+       97
+       98 +  // The provider/model the user is currently *browsing* (hovering) in the cascade,
+       99 +  // resolved to a coherent pair so the Level-3 voice list can preview the voices of
+      100 +  // a provider/model that has NOT been committed yet. Falls back to the committed
+      101 +  // model when it belongs to the browsed provider, otherwise to the first realtime
+      102 +  // model of the browsed provider. This fixes the voice flyout lagging one
+      103 +  // interaction behind the browsed provider (e.g. showing Qwen voices while a
+      104 +  // Google model is hovered — the list used to be driven only by committed state).
+      105 +  const previewModel = useMemo(() => {
+      106 +    if (hoveredModel) return hoveredModel;
+      107 +    if (currentProviderName === voiceChat.voiceChatProvider && voiceChat.voiceChatModel) {
+      108 +      return voiceChat.voiceChatModel;
+      109 +    }
+      110 +    if (chat && currentProviderName === chat.chatProvider && chat.chatModel) {
+      111 +      return chat.chatModel;
+      112 +    }
+      113 +    const firstRealtime = currentProviderGroup?.models.find((m) => m.isRealtime);
+      114 +    return firstRealtime?.model || currentProviderGroup?.models[0]?.model || "";
+      115 +  }, [hoveredModel, currentProviderName, currentProviderGroup, voiceChat.voiceChatProvider, voiceChat.
+          +voiceChatModel, chat]);
+      116 +
+      117 +  const previewVoiceOptions = useMemo(
+      118 +    () => voiceChat.voiceChatVoiceOptionsFor(currentProviderName, previewModel),
+      119 +    [voiceChat.voiceChatVoiceOptionsFor, currentProviderName, previewModel]
+      120 +  );
+      121 +
+      122    const isLiveTranslateModel =
+      123      isLiveTranslateModelHelper(currentProviderName, currentModelName) ||
+      124      (currentModelName === voiceChat.voiceChatModel && voiceChat.voiceChatLiveTranslate);
+
+  Thought for 1m 5s (ctrl+o to expand)
+
+● I've added the preview-aware voice options. Now let me refactor handleModelSelect to share a commit helper, and update
+  the Level‑3 voice list to render previewVoiceOptions and commit provider+model+voice on selection. Let me re-read the
+  current state of the popover around those areas.
+
+  Thought for 1m 17s, read 1 file (ctrl+o to expand)
+
+● 继续完成弹窗的核心修改。先把提交逻辑抽成共享的 commitProviderModel，让 handleModelSelect 和音色点选复用。
+
+● Update(frontend\src\components\VoiceCallSettingsPopover.tsx)
+  ⎿  Error editing file
+
+  Thought for 43s (ctrl+o to expand)
+
+● The \u001f in the source is a literal escape sequence, not the control character. Let me match it exactly.
+  ⎿  Error editing file
+
+● API Error: Request rejected (429) · Your token-plan 5-hour quota has been exhausted. The quota will reset at
+  07-27 09:52:00 UTC.
+
+✻ Cogitated for 28m 41s
