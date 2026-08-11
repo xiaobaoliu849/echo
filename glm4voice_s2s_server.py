@@ -37,7 +37,7 @@ import tempfile
 import time
 import uuid
 import wave
-from typing import Any
+from typing import Any, Callable
 
 import fastapi
 import numpy as np
@@ -149,6 +149,19 @@ class Glm4VoicePipeline:
             device=self.device,
         )
         self._audio_offset = self.text_tokenizer.convert_tokens_to_ids("<|audio_0|>")
+
+        # Warm up the decoder: the first token2wav call pays one-off CUDA kernel
+        # compile / init costs that otherwise land on the user's first turn.
+        logger.info("Warming up GLM-4-Voice decoder ...")
+        with torch.no_grad():
+            warmup = torch.zeros(1, 25, dtype=torch.int64, device=self.device)
+            self.audio_decoder.token2wav(
+                warmup,
+                uuid="warmup",
+                prompt_token=torch.zeros(1, 0, dtype=torch.int64, device=self.device),
+                prompt_feat=torch.zeros(1, 0, 80, device=self.device),
+                finalize=True,
+            )
         logger.info("GLM-4-Voice pipeline ready (sample_rate=%d).", SAMPLE_RATE)
 
     def _encode_utterance(self, pcm16: bytes) -> str:
@@ -179,16 +192,21 @@ class Glm4VoicePipeline:
         temperature: float = 0.8,
         top_p: float = 0.8,
         max_new_tokens: int = 512,
+        chunk_sink: Callable[[tuple[str, Any]], None] | None = None,
     ) -> tuple[str, list[tuple[str, Any]]]:
         """Encode user audio, stream the LLM reply, decode audio blocks.
 
         Returns (next_prompt, chunks) where each chunk is ("audio", bytes) or
-        ("text", str).
+        ("text", str).  When chunk_sink is provided, every chunk is pushed to
+        it the moment it is ready so the caller can stream replies as they are
+        decoded instead of waiting for the whole turn.
         """
         import requests
         import torch
 
+        t_prof = {"start": time.monotonic()}
         user_input = self._encode_utterance(pcm16)
+        t_prof["encode"] = time.monotonic()
 
         inputs = prompt
         if "<|system|>" not in inputs:
@@ -218,6 +236,12 @@ class Glm4VoicePipeline:
         all_completion_segments: list[tuple[str, Any]] = []  # ("text", ids) | ("audio", ids)
         chunks: list[tuple[str, Any]] = []
 
+        def _emit(kind: str, payload: Any) -> None:
+            if chunk_sink is not None:
+                chunk_sink((kind, payload))
+            else:
+                chunks.append((kind, payload))
+
         tts_mels: list[Any] = []
         flow_prompt_speech_token = torch.zeros(1, 0, dtype=torch.int64).to(self.device)
         this_uuid = str(uuid.uuid4())
@@ -226,6 +250,9 @@ class Glm4VoicePipeline:
         block_size_list = [25, 50, 100, 150, 200]
         block_size_idx = 0
         block_size = block_size_list[block_size_idx]
+
+        t_prof["llm_first_byte"] = time.monotonic()
+        first_block = True
 
         for line in response.iter_lines():
             if not line:
@@ -260,8 +287,20 @@ class Glm4VoicePipeline:
                 flow_prompt_speech_token = torch.cat((flow_prompt_speech_token, tts_token), dim=-1)
 
                 pcm = _float_to_pcm16(tts_speech.detach().cpu().numpy()[0])
-                chunks.append(("audio", pcm))
+                _emit("audio", pcm)
                 audio_tokens = []
+                if first_block:
+                    first_block = False
+                    t_prof["decode_first_block"] = time.monotonic()
+                    logger.info(
+                        "glm4voice_turn_profile encode=%.2fs llm_first_byte=%.2fs decode_first_block=%.2fs "
+                        "(utterance=%dB, audio_tokens=%d)",
+                        t_prof["encode"] - t_prof["start"],
+                        t_prof["llm_first_byte"] - t_prof["encode"],
+                        t_prof["decode_first_block"] - t_prof["llm_first_byte"],
+                        len(pcm16),
+                        len(audio_tokens),
+                    )
 
             # The end-of-turn token is a delimiter, never part of the reply.
             if not is_finalize:
@@ -293,10 +332,44 @@ class Glm4VoicePipeline:
             completion = "".join(completion_parts).strip()
             next_prompt = inputs + completion + "\n"
             if text_tokens:
-                chunks.append(("text", self.text_tokenizer.decode(text_tokens, spaces_between_special_tokens=False)))
+                _emit(
+                    "text",
+                    self.text_tokenizer.decode(text_tokens, spaces_between_special_tokens=False),
+                )
             return next_prompt, chunks
 
         return inputs, chunks
+
+    async def _stream_turn(
+        self,
+        prompt: str,
+        system_prompt: str,
+        pcm16: bytes,
+    ) -> tuple[asyncio.Queue[tuple[str, Any]], asyncio.Task[Any]]:
+        """Run _run_turn in a worker thread, streaming chunks through a queue.
+
+        Queue items are ("audio", bytes), ("text", str), ("error", Exception)
+        or ("done", next_prompt).  Caller must await the task after the loop.
+        """
+        queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+
+        async def produce() -> None:
+            try:
+                next_prompt, _ = await asyncio.to_thread(
+                    self._run_turn,
+                    prompt,
+                    system_prompt,
+                    pcm16,
+                    chunk_sink=queue.put_nowait,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("turn failed")
+                queue.put_nowait(("error", exc))
+                return
+            queue.put_nowait(("done", next_prompt))
+
+        task = asyncio.create_task(produce())
+        return queue, task
 
 
 class ConversationState:
@@ -403,36 +476,41 @@ async def handle_connection(ws: Any, pipeline: Glm4VoicePipeline, system_prompt:
                 utterance = state.take_utterance()
                 if not utterance:
                     continue
+                logger.info(
+                    "glm4voice_turn_start utterance=%dB speech=%.2fs trail=%.2fs",
+                    len(utterance), state.speech_s, state.trailing_silence_s,
+                )
                 async with _GLOBAL_GENERATION_LOCK:
                     if closed.is_set():
                         return
-                    try:
-                        next_prompt, chunks = await asyncio.to_thread(
-                            pipeline._run_turn,
-                            state.prompt,
-                            state.system_prompt,
-                            utterance,
-                        )
-                        state.prompt = next_prompt
-                    except Exception as exc:
-                        logger.exception("turn failed")
-                        try:
-                            await ws.send_bytes(
-                                bytes([_MSG_TEXT]) + f"GLM-4-Voice 会话错误: {exc}".encode("utf-8")
-                            )
-                        except Exception:
-                            return
-                        continue
-                    try:
-                        for kind, payload in chunks:
-                            if closed.is_set():
+                    queue, produce_task = await pipeline._stream_turn(
+                        state.prompt, state.system_prompt, utterance
+                    )
+                    while True:
+                        kind, payload = await queue.get()
+                        if closed.is_set():
+                            break
+                        if kind == "done":
+                            state.prompt = payload
+                            break
+                        if kind == "error":
+                            try:
+                                await ws.send_bytes(
+                                    bytes([_MSG_TEXT]) + f"GLM-4-Voice 会话错误: {payload}".encode("utf-8")
+                                )
+                            except Exception:
                                 break
-                            if kind == "audio":
-                                await ws.send_bytes(bytes([_MSG_AUDIO]) + payload)
-                            else:
-                                await ws.send_bytes(bytes([_MSG_TEXT]) + str(payload).encode("utf-8"))
-                    except Exception:
-                        return
+                            break
+                        if kind == "audio":
+                            await ws.send_bytes(bytes([_MSG_AUDIO]) + payload)
+                        else:
+                            await ws.send_bytes(bytes([_MSG_TEXT]) + str(payload).encode("utf-8"))
+                    if not produce_task.done():
+                        produce_task.cancel()
+                    try:
+                        await produce_task
+                    except asyncio.CancelledError:
+                        pass
 
     reader_task = asyncio.create_task(reader())
     controller_task = asyncio.create_task(controller())
