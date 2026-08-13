@@ -14,6 +14,10 @@ WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 SENSITIVE_READ_PATH_PREFIXES = (
     "/api/agent-runs",
     "/api/voice-chat/sessions",
+    # GET /api/settings returns every configured API key in plaintext; reads
+    # must be authenticated (admin-level when admin auth is configured,
+    # mirroring the PUT guard).
+    "/api/settings",
 )
 
 
@@ -170,4 +174,23 @@ def validate_auth_header(authorization: str | None, *, require_admin: bool = Fal
 async def require_api_auth(
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> None:
+    validate_auth_header(authorization)
+
+
+def validate_websocket_token(token: str | None) -> None:
+    """Validate a WebSocket handshake token before ``accept()``.
+
+    The HTTP auth middleware never sees WebSocket scopes, so realtime
+    endpoints must enforce auth themselves during the handshake.  Browsers
+    cannot set custom headers on ``new WebSocket(url)``, so the client passes
+    its bearer token as the ``token`` query parameter instead.
+
+    No-op when auth is disabled (localhost single-user mode).  Otherwise
+    raises the same 401/403 ``HTTPException``s as ``validate_auth_header``;
+    callers should close the socket (without accepting) and return.
+    """
+    if not is_auth_enabled():
+        return
+    cleaned = str(token or "").strip()
+    authorization = f"Bearer {cleaned}" if cleaned else None
     validate_auth_header(authorization)

@@ -151,6 +151,15 @@ function resolveAuthToken(useAdminToken: boolean): string {
   return getStoredApiToken() || API_TOKEN;
 }
 
+// Browsers cannot set custom headers on the WebSocket handshake, so realtime
+// endpoints accept the bearer token as a `token` query parameter instead.
+// The backend validates it exactly like an Authorization header (and ignores
+// it when auth is disabled). Falls back to the admin token so admin-only
+// deployments still connect.
+export function getRealtimeWebSocketToken(): string {
+  return getStoredApiToken() || getStoredAdminToken() || API_TOKEN || API_ADMIN_TOKEN;
+}
+
 export function getAuthRuntimeConfig(): AuthRuntimeConfig {
   return {
     apiToken: getStoredApiToken(),
@@ -503,6 +512,10 @@ export function buildVoiceChatWebSocketUrl(params: {
   }
   if (params.voiceCloneFrequency) {
     wsUrl.searchParams.set("voice_clone_frequency", params.voiceCloneFrequency);
+  }
+  const wsToken = getRealtimeWebSocketToken();
+  if (wsToken) {
+    wsUrl.searchParams.set("token", wsToken);
   }
   return wsUrl.toString();
 }
@@ -1313,7 +1326,12 @@ export async function deleteTranscriptionJob(jobId: string): Promise<void> {
 export function buildRealtimeTranscriptionWebSocketUrl(): string {
   const httpUrl = new URL(API_BASE_URL);
   const protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${httpUrl.host}/api/transcription/realtime`;
+  const wsUrl = new URL(`${protocol}//${httpUrl.host}/api/transcription/realtime`);
+  const wsToken = getRealtimeWebSocketToken();
+  if (wsToken) {
+    wsUrl.searchParams.set("token", wsToken);
+  }
+  return wsUrl.toString();
 }
 
 export async function saveTranscriptionText(

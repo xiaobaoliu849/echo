@@ -66,6 +66,7 @@ class ApiSmokeTests(unittest.TestCase):
         sensitive_read = method.upper() == "GET" and (
             path.startswith("/api/agent-runs")
             or path.startswith("/api/voice-chat/sessions")
+            or path.startswith("/api/settings")
         )
         if (
             default_auth
@@ -2523,6 +2524,142 @@ class ApiSmokeTests(unittest.TestCase):
                     r_retry_again.json()["detail"]["code"],
                     "AUDIO_AGENT_RUN_NOT_RETRYABLE",
                 )
+
+
+class _StubRealtimeAsrSession:
+    """Offline stand-in for the DashScope streaming ASR session."""
+
+    async def start(self) -> None:
+        pass
+
+    async def send_audio(self, data: bytes) -> None:
+        pass
+
+    async def finish(self) -> None:
+        pass
+
+    async def events(self):
+        return
+        yield  # pragma: no cover - makes this an async generator
+
+    async def close(self) -> None:
+        pass
+
+
+class ApiAuthHardeningTests(unittest.TestCase):
+    """P0 hardening: WebSocket handshake auth + GET /api/settings guard."""
+
+    def setUp(self) -> None:
+        self._auth_env_patcher = patch.dict(
+            os.environ,
+            {
+                "VOICESPIRIT_API_TOKEN": "test-api-token",
+                "VOICESPIRIT_ADMIN_TOKEN": "test-admin-token",
+            },
+            clear=False,
+        )
+        self._auth_env_patcher.start()
+        self.app = create_app()
+
+    def tearDown(self) -> None:
+        self._auth_env_patcher.stop()
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        async def runner() -> httpx.Response:
+            transport = httpx.ASGITransport(app=self.app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                return await client.request(method, path, **kwargs)
+
+        return asyncio.run(runner())
+
+    # -- GET /api/settings guard -------------------------------------------
+
+    def test_get_settings_requires_auth(self) -> None:
+        response = self._request("GET", "/api/settings/")
+        self.assertEqual(response.status_code, 401)
+
+    def test_get_settings_rejects_non_admin_token(self) -> None:
+        response = self._request(
+            "GET",
+            "/api/settings/",
+            headers={"Authorization": "Bearer test-api-token"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_get_settings_allows_admin_token(self) -> None:
+        response = self._request(
+            "GET",
+            "/api/settings/",
+            headers={"Authorization": "Bearer test-admin-token"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("settings", response.json())
+
+    # -- voice-chat WebSocket handshake auth -------------------------------
+
+    def test_voice_chat_ws_rejects_missing_token(self) -> None:
+        from fastapi.testclient import TestClient
+        from starlette.websockets import WebSocketDisconnect
+
+        client = TestClient(self.app)
+        with self.assertRaises(WebSocketDisconnect):
+            with client.websocket_connect("/api/voice-chat/ws?provider=NoSuchProvider") as ws:
+                ws.receive_json()
+
+    def test_voice_chat_ws_rejects_invalid_token(self) -> None:
+        from fastapi.testclient import TestClient
+        from starlette.websockets import WebSocketDisconnect
+
+        client = TestClient(self.app)
+        with self.assertRaises(WebSocketDisconnect):
+            with client.websocket_connect(
+                "/api/voice-chat/ws?provider=NoSuchProvider&token=wrong-token"
+            ) as ws:
+                ws.receive_json()
+
+    def test_voice_chat_ws_accepts_valid_token(self) -> None:
+        from fastapi.testclient import TestClient
+
+        client = TestClient(self.app)
+        # An unsupported provider makes the server answer with a structured
+        # error and close 1003 *after* accepting — proving the handshake got
+        # past the auth gate without touching any real upstream.
+        with client.websocket_connect(
+            "/api/voice-chat/ws?provider=NoSuchProvider&token=test-api-token"
+        ) as ws:
+            payload = ws.receive_json()
+            self.assertEqual(payload.get("type"), "error")
+
+    # -- realtime transcription WebSocket handshake auth -------------------
+
+    def test_transcription_realtime_ws_rejects_missing_token(self) -> None:
+        from fastapi.testclient import TestClient
+        from starlette.websockets import WebSocketDisconnect
+
+        client = TestClient(self.app)
+        with self.assertRaises(WebSocketDisconnect):
+            with client.websocket_connect("/api/transcription/realtime") as ws:
+                ws.receive_json()
+
+    def test_transcription_realtime_ws_accepts_valid_token(self) -> None:
+        from fastapi.testclient import TestClient
+
+        client = TestClient(self.app)
+        original_factory = transcription_router.build_streaming_asr_session
+        transcription_router.build_streaming_asr_session = (
+            lambda *args, **kwargs: _StubRealtimeAsrSession()
+        )
+        try:
+            with client.websocket_connect(
+                "/api/transcription/realtime?token=test-admin-token"
+            ) as ws:
+                ws.send_json({"type": "config"})
+                started = ws.receive_json()
+                self.assertEqual(started.get("type"), "started")
+                finished = ws.receive_json()
+                self.assertEqual(finished.get("type"), "finished")
+        finally:
+            transcription_router.build_streaming_asr_session = original_factory
 
 
 if __name__ == "__main__":

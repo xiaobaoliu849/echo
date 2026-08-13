@@ -91,6 +91,8 @@ except ImportError:  # pragma: no cover - IDE fallback
         build_streaming_asr_session,
     )
 
+from services.api_auth_guard import validate_websocket_token
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 transcription_service = TranscriptionService()
@@ -1003,6 +1005,15 @@ async def transcription_realtime_ws(websocket: WebSocket) -> None:
       3. text JSON {"type": "finish"} to flush and end
     Server sends: started / sentence / finished / error.
     """
+    # The HTTP auth middleware does not cover WebSocket scopes; enforce auth
+    # during the handshake itself (browser passes the bearer token as the
+    # ``token`` query parameter).
+    try:
+        validate_websocket_token(websocket.query_params.get("token"))
+    except HTTPException:
+        # Closing before accept() rejects the handshake (HTTP 403 upstream).
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     session = None
     upstream_task: asyncio.Task | None = None

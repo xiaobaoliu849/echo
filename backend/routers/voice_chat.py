@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, WebSocket
 from pydantic import BaseModel, Field
 
+from services.api_auth_guard import validate_websocket_token
 from services.realtime_voice_service import (
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_GOOGLE_REALTIME_VOICE,
@@ -183,7 +184,17 @@ async def voice_chat_ws(
     echo_target_language: bool = True,
     enable_voice_clone: bool = False,
     voice_clone_frequency: str = "once",
+    token: str | None = None,
 ) -> None:
+    # The HTTP auth middleware does not cover WebSocket scopes; enforce auth
+    # during the handshake itself. The browser passes the bearer token as the
+    # ``token`` query parameter because custom headers are unavailable there.
+    try:
+        validate_websocket_token(token)
+    except HTTPException:
+        # Closing before accept() rejects the handshake (HTTP 403 upstream).
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
 
     selected_provider = (provider or "Google").strip()

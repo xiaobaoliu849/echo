@@ -253,11 +253,12 @@ class ParseRealtimeConfigTests(unittest.TestCase):
 class _FakeClientWs:
     """Fake browser-side socket for the FastAPI WS handler."""
 
-    def __init__(self, inbox: list[dict]):
+    def __init__(self, inbox: list[dict], query_params: dict | None = None):
         self.inbox = list(inbox)
         self.sent: list[dict] = []
         self.accepted = False
         self.close_code: int | None = None
+        self.query_params: dict = dict(query_params or {})
 
     async def accept(self):
         self.accepted = True
@@ -312,6 +313,14 @@ class _FakeSession:
 
 
 class RealtimeWsHandlerTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # These tests exercise ASR flow, not the auth gate. Force auth off so
+        # the fake sockets are never rejected because of whatever tokens
+        # happen to be configured on the machine running the tests.
+        patcher = patch("services.api_auth_guard.is_auth_enabled", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     async def test_full_session_flow(self):
         client = _FakeClientWs([
             {"text": json.dumps({"type": "config", "language_hints": ["zh"]})},
