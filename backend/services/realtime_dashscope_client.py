@@ -242,8 +242,12 @@ class DashScopeAudioRealtimeConversation:
                 'user-agent': 'VoiceSpirit/Realtime',
             },
             max_size=16777216,
-            ping_interval=None,
-            ping_timeout=None,
+            # Keepalive pings: without them a half-open TCP connection (VPN
+            # drop, laptop sleep, NAT timeout) hangs the session forever
+            # because nothing ever notices the peer is gone. Matches the
+            # doubao/openai providers.
+            ping_interval=30,
+            ping_timeout=20,
         )
         self.callback.on_open()
         self._receiver_task = asyncio.create_task(self._receive_loop())

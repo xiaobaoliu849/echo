@@ -871,7 +871,15 @@ function handleSseChunk(chunk: string, handlers: StreamEventHandlers): boolean {
     return false;
   }
 
-  const payload = JSON.parse(parsed.data) as Record<string, unknown>;
+  // SSE events are self-contained: one malformed event (truncated chunk at a
+  // proxy boundary, stray keep-alive comment) must not kill the whole chat
+  // stream — skip it and keep reading.
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(parsed.data) as Record<string, unknown>;
+  } catch {
+    return false;
+  }
   if (parsed.event === "delta") {
     const content = payload.content;
     if (typeof content === "string" && content.length > 0) {

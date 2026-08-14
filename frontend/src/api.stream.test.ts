@@ -86,4 +86,37 @@ describe("chat stream parsing", () => {
     expect(reasoningText).toBe("Analyzing...");
     expect(deltaText).toBe("Final answer");
   });
+
+  it("skips a malformed SSE event instead of killing the whole stream", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      createStreamResponse([
+        'event: delta\ndata: {"content":"Hello"}\n\n',
+        'event: delta\ndata: {this is not json\n\n',
+        'event: delta\ndata: {"content":" world"}\n\n',
+        'event: done\ndata: {"memories_retrieved":0,"memory_saved":false}\n\n',
+      ])
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    let output = "";
+    let doneCalled = false;
+    await streamChatCompletion(
+      {
+        provider: "DashScope",
+        model: "qwen-plus",
+        messages: [{ role: "user", content: "hello" }],
+      },
+      {
+        onDelta: (chunk) => {
+          output += chunk;
+        },
+        onDone: () => {
+          doneCalled = true;
+        },
+      }
+    );
+
+    expect(output).toBe("Hello world");
+    expect(doneCalled).toBe(true);
+  });
 });

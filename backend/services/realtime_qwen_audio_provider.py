@@ -901,8 +901,11 @@ class QwenAudioRealtimeMixin:
                 ws_url,
                 additional_headers=extra_headers,
                 max_size=2**24,
-                ping_interval=None,
-                ping_timeout=None,
+                # Keepalive pings: without them a half-open TCP connection
+                # (VPN drop, laptop sleep, NAT timeout) hangs the session
+                # forever because nothing notices the peer is gone.
+                ping_interval=30,
+                ping_timeout=20,
             ) as dash_ws:
                 # ── session.update with tools + turn detection ──
                 # Default: server_vad with a moderate 2000ms silence window.

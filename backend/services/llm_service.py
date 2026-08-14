@@ -43,7 +43,11 @@ class LLMService:
         import datetime
         now = datetime.datetime.now().astimezone()
         weekdays = ["一", "二", "三", "四", "五", "六", "日"]
-        time_tag = f"【系统当前实时时间】：{now.strftime('%Y-%m-%d %H:%M:%S')} {now.tzname()} (星期{weekdays[now.weekday()]})\n"
+        # Date precision only. The previous second-level clock rewrote the
+        # system prompt on every single request, which defeated upstream
+        # prompt caching entirely (a fresh prefix each second). Date-level
+        # awareness still answers "今天星期几" style questions correctly.
+        time_tag = f"【系统当前日期】：{now.strftime('%Y-%m-%d')} (星期{weekdays[now.weekday()]})\n"
 
         result: list[dict[str, Any]] = []
         has_system = False
@@ -52,7 +56,7 @@ class LLMService:
             if msg.get("role") == "system":
                 has_system = True
                 content = msg.get("content", "")
-                if isinstance(content, str) and "【系统当前实时时间】" not in content:
+                if isinstance(content, str) and "【系统当前日期】" not in content:
                     result.append({**msg, "content": f"{time_tag}{content}"})
                 else:
                     result.append(msg)
@@ -62,7 +66,7 @@ class LLMService:
         if not has_system:
             result.insert(0, {
                 "role": "system",
-                "content": f"{time_tag}你是一个智能语音与文本助手。请依据【系统当前实时时间】解答用户涉及日期与时间的疑问。",
+                "content": f"{time_tag}你是一个智能语音与文本助手。请依据【系统当前日期】解答用户涉及日期与时间的疑问。",
             })
 
         return result
