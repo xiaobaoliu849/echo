@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import threading
+import time
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -37,6 +38,9 @@ except ImportError:
 # endpoint would hang the synthesis coroutine forever (the realtime
 # synthesize_tts tool path included). Generous enough for long PDF read-aloud.
 EDGE_TTS_TIMEOUT_SECONDS = 180.0
+# Fetching the voice catalog is a single small request; on timeout the caller
+# falls back to FALLBACK_EDGE_VOICES.
+EDGE_TTS_VOICES_TIMEOUT_SECONDS = 30.0
 
 # Dedicated executor for blocking TTS work (local ChatTTS/torch inference, the
 # dashscope SDK's synchronous call(), Azure pull-stream reads). Keeps these
@@ -45,6 +49,10 @@ EDGE_TTS_TIMEOUT_SECONDS = 180.0
 _TTS_BLOCKING_EXECUTOR = ThreadPoolExecutor(
     max_workers=4, thread_name_prefix="tts-blocking"
 )
+
+# TTSService is a module-level singleton (routers/tts.py), so __init__ cache
+# cleanup runs once per process. Re-run eviction lazily at most this often.
+CACHE_CLEANUP_INTERVAL_SECONDS = 3600.0
 
 
 async def _run_tts_blocking(func: Any, *args: Any) -> Any:
@@ -253,6 +261,7 @@ class TTSService:
         self.output_dir = resolved_output
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._cleanup_old_cache()
+        self._last_cache_cleanup = time.monotonic()
 
     def _cleanup_old_cache(self, max_files: int = 500, max_age_hours: int = 72) -> None:
         """Remove stale TTS audio files to prevent unbounded disk usage."""
@@ -284,6 +293,15 @@ class TTSService:
                     f.unlink(missing_ok=True)
                 except OSError:
                     continue
+
+    async def _maybe_cleanup_cache(self) -> None:
+        """Periodic lazy eviction; __init__ cleanup only runs once per process."""
+        now = time.monotonic()
+        if now - self._last_cache_cleanup < CACHE_CLEANUP_INTERVAL_SECONDS:
+            return
+        # Stamp first so concurrent requests trigger at most one cleanup.
+        self._last_cache_cleanup = now
+        await _run_tts_blocking(self._cleanup_old_cache)
 
     @staticmethod
     def _atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -1130,6 +1148,7 @@ class TTSService:
         engine: str | None = None,
         model: str | None = None,
     ) -> TTSAudioResult:
+        await self._maybe_cleanup_cache()
         cleaned = self._clean_text(text)
 
         # Keep backward compatibility for callers that omit engine while passing
@@ -1230,41 +1249,33 @@ class TTSService:
         if not lines:
             raise ValueError("No valid dialogue lines found.")
 
-        # 2. Synthesize each line using the respective speaker's voice
-        segment_paths = []
-        segment_results: list[TTSAudioResult] = []
+        # 2. Synthesize each line using the respective speaker's voice.
+        # Lines are independent — fan out with a small concurrency cap
+        # (provider rate limits + local GPU inference) instead of serial awaits.
+        synth_semaphore = asyncio.Semaphore(4)
+
+        async def _synthesize_line(line: dict[str, Any]) -> TTSAudioResult:
+            async with synth_semaphore:
+                return await self.generate_audio(
+                    text=line["text"],
+                    voice=voice_a if line["role"] == "A" else voice_b,
+                    rate=rate,
+                    engine=engine if line["role"] == "A" else (engine_b or engine),
+                    model=model if line["role"] == "A" else (model_b or model),
+                )
+
+        segment_results = list(await asyncio.gather(*(_synthesize_line(line) for line in lines)))
         used_voice_by_role: dict[str, str] = {}
-        for idx, line in enumerate(lines):
-            selected_voice = voice_a if line["role"] == "A" else voice_b
-            selected_engine = engine if line["role"] == "A" else (engine_b or engine)
-            selected_model = model if line["role"] == "A" else (model_b or model)
-            result = await self.generate_audio(
-                text=line["text"],
-                voice=selected_voice,
-                rate=rate,
-                engine=selected_engine,
-                model=selected_model,
-            )
-            segment_results.append(result)
+        for line, result in zip(lines, segment_results):
             used_voice_by_role.setdefault(line["role"], result.voice)
-            segment_paths.append(Path(result.file_path))
+        segment_paths = [Path(result.file_path) for result in segment_results]
 
         # 3. Merge audio files using pydub with a 250ms silence gap.
         output_name = f"dialogue_{uuid.uuid4().hex[:8]}.mp3"
         output_path = self.output_dir / output_name
 
         try:
-            from pydub import AudioSegment
-            combined = None
-            silence = AudioSegment.silent(duration=250)
-            for idx, segment in enumerate(segment_paths):
-                audio = AudioSegment.from_file(str(segment))
-                if combined is None:
-                    combined = audio
-                else:
-                    combined += silence + audio
-            if combined is not None:
-                combined.export(str(output_path), format="mp3", bitrate="192k")
+            await _run_tts_blocking(self._merge_dialogue_segments, segment_paths, output_path)
         except ImportError as exc:
             raise RuntimeError("pydub is required to merge dialogue audio segments.") from exc
         except Exception as exc:
@@ -1285,6 +1296,21 @@ class TTSService:
             filename="tts_dialogue.mp3",
             cache_hit=False,
         )
+
+    @staticmethod
+    def _merge_dialogue_segments(segment_paths: list[Path], output_path: Path) -> None:
+        """pydub/ffmpeg merge — blocking; call via _run_tts_blocking."""
+        from pydub import AudioSegment
+        combined = None
+        silence = AudioSegment.silent(duration=250)
+        for segment in segment_paths:
+            audio = AudioSegment.from_file(str(segment))
+            if combined is None:
+                combined = audio
+            else:
+                combined += silence + audio
+        if combined is not None:
+            combined.export(str(output_path), format="mp3", bitrate="192k")
 
     def _clean_edge_voice_short_name(self, short_name: str) -> str:
         if "-" in short_name:
@@ -1327,7 +1353,9 @@ class TTSService:
             return self._filter_by_locale(FALLBACK_EDGE_VOICES, locale)
 
         try:
-            voices_manager = await edge_tts.VoicesManager.create()
+            voices_manager = await asyncio.wait_for(
+                edge_tts.VoicesManager.create(), timeout=EDGE_TTS_VOICES_TIMEOUT_SECONDS
+            )
             voices = voices_manager.voices
             normalized = [
                 {

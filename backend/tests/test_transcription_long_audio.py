@@ -358,5 +358,55 @@ class ListJobsFilterTests(unittest.TestCase):
         self.assertEqual(statuses, {"queued", "running", "submitted"})
 
 
+class JobStoreEvictionTests(unittest.TestCase):
+    def test_evicts_oldest_jobs_and_sidecars_beyond_cap(self):
+        import json
+        import os
+
+        from services.transcription_service import (
+            MAX_TRANSCRIPTION_JOBS,
+            TranscriptionJob,
+        )
+
+        service = _make_service()
+        for index in range(MAX_TRANSCRIPTION_JOBS + 5):
+            job_id = f"tx_evict{index:08d}"
+            path = service.jobs_dir / f"{job_id}.json"
+            path.write_text(
+                json.dumps({"job_id": job_id, "file_path": "x.mp3", "mode": "sync"}),
+                encoding="utf-8",
+            )
+            # Ascending mtimes so eviction order is deterministic.
+            os.utime(path, (1000 + index, 1000 + index))
+
+        oldest_id = "tx_evict00000000"
+        (service.jobs_dir / f"{oldest_id}.txt").write_text("transcript", encoding="utf-8")
+        (service.jobs_dir / f"{oldest_id}_words.json").write_text("[]", encoding="utf-8")
+
+        service._write_job(
+            TranscriptionJob(job_id="tx_evict_trigger", file_path="x.mp3", mode="sync")
+        )
+
+        remaining = list(service.jobs_dir.glob("tx_*.json"))
+        self.assertEqual(len(remaining), MAX_TRANSCRIPTION_JOBS)
+        self.assertFalse((service.jobs_dir / f"{oldest_id}.json").exists())
+        self.assertFalse((service.jobs_dir / f"{oldest_id}.txt").exists())
+        self.assertFalse((service.jobs_dir / f"{oldest_id}_words.json").exists())
+        # Newest jobs survive.
+        self.assertTrue((service.jobs_dir / "tx_evict_trigger.json").exists())
+
+    def test_no_eviction_under_cap(self):
+        from services.transcription_service import TranscriptionJob
+
+        service = _make_service()
+        for index in range(3):
+            service._write_job(
+                TranscriptionJob(
+                    job_id=f"tx_keep{index:08d}", file_path="x.mp3", mode="sync"
+                )
+            )
+        self.assertEqual(len(list(service.jobs_dir.glob("tx_*.json"))), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

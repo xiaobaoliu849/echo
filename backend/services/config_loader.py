@@ -126,6 +126,21 @@ class BackendConfig:
             return api_keys[key]
         return default
 
+    def peek_setting(self, key: str, default: Any = "") -> Any:
+        """Same lookup as get_setting but without deep-copying the config.
+
+        For hot read-only paths (per-request API key lookups). The returned
+        value must be treated as read-only — mutating it corrupts the shared
+        in-memory config.
+        """
+        cfg = self._config
+        if key in cfg:
+            return cfg[key]
+        api_keys = cfg.get("api_keys", {})
+        if isinstance(api_keys, dict) and key in api_keys:
+            return api_keys[key]
+        return default
+
     @staticmethod
     def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
         for key, value in source.items():

@@ -241,13 +241,23 @@ async def doubao_asr_transcribe_file(
             req_bytes = _build_full_client_request(payload)
             await ws.send(req_bytes)
             
-            # 2. Read file and send audio chunks
+            # 2. Read file and send audio chunks. f.read + gzip run off the
+            # event loop (one thread hop per chunk covering both) so large
+            # uploads don't stall the loop with thousands of small sync calls.
             chunk_size = 3200
+
+            def _read_and_build(f: Any) -> tuple[bytes | None, bool]:
+                data = f.read(chunk_size)
+                if not data:
+                    return None, True
+                is_last = len(data) < chunk_size
+                return _build_audio_request(data, is_last=is_last), is_last
+
             sent_last = False
             with open(file_path, "rb") as f:
                 while True:
-                    data = f.read(chunk_size)
-                    if not data:
+                    packet, is_last = await asyncio.to_thread(_read_and_build, f)
+                    if packet is None:
                         # EOF reached — send an empty last-packet marker if we
                         # haven't already (happens when file size is an exact
                         # multiple of chunk_size).
@@ -255,8 +265,7 @@ async def doubao_asr_transcribe_file(
                             await ws.send(_build_audio_request(b"", is_last=True))
                             sent_last = True
                         break
-                    is_last = len(data) < chunk_size
-                    await ws.send(_build_audio_request(data, is_last=is_last))
+                    await ws.send(packet)
                     if is_last:
                         sent_last = True
                         break

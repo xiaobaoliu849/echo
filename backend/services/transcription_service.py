@@ -133,6 +133,12 @@ def _read_qwen_audio_base64(path: Path) -> str:
     return base64.b64encode(audio_bytes).decode("utf-8")
 
 
+# Bound the tx_*.json job store: without eviction every transcription job
+# (plus its .txt/_words.json sidecars) accumulates forever, and list_jobs
+# re-reads the whole directory each call.
+MAX_TRANSCRIPTION_JOBS = 500
+
+
 @dataclass(slots=True)
 class TranscriptionJob:
     file_path: str
@@ -169,35 +175,30 @@ class TranscriptionService:
 
     def _dashscope_key(self) -> str:
         self.config.reload()
-        api_keys = self.config.get_all().get("api_keys", {})
-        return str(api_keys.get("dashscope_api_key", "")).strip()
+        return str(self.config.peek_setting("dashscope_api_key", "")).strip()
 
     def _xiaomi_key(self) -> str:
         self.config.reload()
-        api_keys = self.config.get_all().get("api_keys", {})
-        return str(api_keys.get("xiaomi_api_key", "")).strip()
+        return str(self.config.peek_setting("xiaomi_api_key", "")).strip()
 
     def _deepgram_key(self) -> str:
         self.config.reload()
-        api_keys = self.config.get_all().get("api_keys", {})
-        return str(api_keys.get("deepgram_api_key", "")).strip()
+        return str(self.config.peek_setting("deepgram_api_key", "")).strip()
 
     def _openai_key(self) -> str:
         self.config.reload()
-        api_keys = self.config.get_all().get("api_keys", {})
-        return str(api_keys.get("openai_api_key", "")).strip()
+        return str(self.config.peek_setting("openai_api_key", "")).strip()
 
     def _assemblyai_key(self) -> str:
         self.config.reload()
-        api_keys = self.config.get_all().get("api_keys", {})
-        return str(api_keys.get("assemblyai_api_key", "")).strip()
+        return str(self.config.peek_setting("assemblyai_api_key", "")).strip()
 
     def _doubao_key(self) -> str:
         self.config.reload()
-        token = str(self.config.get_setting("doubao_access_token", "")).strip()
+        token = str(self.config.peek_setting("doubao_access_token", "")).strip()
         if not token:
             # Fallback to doubao_api_key for backward compatibility
-            token = str(self.config.get_setting("doubao_api_key", "")).strip()
+            token = str(self.config.peek_setting("doubao_api_key", "")).strip()
         if not token:
             try:
                 provider_settings = self.config.get_provider_settings("Doubao")
@@ -208,13 +209,13 @@ class TranscriptionService:
 
     def _doubao_app_id(self) -> str:
         self.config.reload()
-        return str(self.config.get_setting("doubao_app_id", "")).strip()
+        return str(self.config.peek_setting("doubao_app_id", "")).strip()
 
     def _doubao_resource_id(self) -> str:
         self.config.reload()
-        res_id = str(self.config.get_setting("doubao_asr_resource_id", "")).strip()
+        res_id = str(self.config.peek_setting("doubao_asr_resource_id", "")).strip()
         if not res_id:
-            res_id = str(self.config.get_setting("doubao_resource_id", "")).strip()
+            res_id = str(self.config.peek_setting("doubao_resource_id", "")).strip()
         return res_id if res_id else DOUBAO_ASR_2_RESOURCE
 
     def _mimo_chat_url(self) -> str:
@@ -282,7 +283,41 @@ class TranscriptionService:
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        self._evict_old_jobs()
         return job
+
+    def _evict_old_jobs(self, max_jobs: int = MAX_TRANSCRIPTION_JOBS) -> None:
+        """Remove oldest job records (and sidecar files) beyond the cap.
+
+        Oldest-first by mtime; in-flight jobs are always the newest so they
+        are never evicted here. Files under published/ are untouched.
+        """
+        try:
+            paths = sorted(
+                (
+                    p
+                    for p in self.jobs_dir.glob("tx_*.json")
+                    if not p.stem.endswith("_words")  # word-timestamp sidecar, not a job
+                ),
+                key=lambda p: p.stat().st_mtime,
+            )
+        except OSError:
+            return
+        excess = len(paths) - max_jobs
+        if excess <= 0:
+            return
+        for path in paths[:excess]:
+            job_id = path.stem
+            artifacts = (
+                path,
+                self.jobs_dir / f"{job_id}.txt",
+                self.jobs_dir / f"{job_id}_words.json",
+            )
+            for artifact in artifacts:
+                try:
+                    artifact.unlink(missing_ok=True)
+                except OSError:
+                    continue
 
     def get_job(self, job_id: str) -> TranscriptionJob | None:
         path = self._job_path(job_id)
@@ -495,6 +530,9 @@ class TranscriptionService:
 
         probe: MediaProbe | None = None
         if audio_tools.ffmpeg_available():
+            # Resolve the MP3-encoder cache off the event loop before the
+            # sync helpers below (first call shells out to ffmpeg -encoders).
+            await audio_tools.warmup_mp3_encoder()
             try:
                 probe = await audio_tools.probe_media(path)
             except AudioToolsError as exc:

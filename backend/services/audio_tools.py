@@ -107,6 +107,17 @@ def normalized_suffix() -> str:
     return ".mp3" if detect_mp3_encoder() else ".wav"
 
 
+async def warmup_mp3_encoder() -> None:
+    """Resolve the encoder cache off the event loop.
+
+    The first detect_mp3_encoder() call runs ``ffmpeg -encoders`` as a
+    blocking subprocess; every later call is a cache hit. Async pipelines
+    should await this once up front so the sync helpers (normalized_suffix,
+    asr_limits, _asr_codec_args) never run that subprocess on the event loop.
+    """
+    await asyncio.to_thread(detect_mp3_encoder)
+
+
 def asr_limits(sync_max: int, chunk: int) -> tuple[int, int]:
     """Return (sync_max_seconds, chunk_seconds) tuned to the local codec.
 
