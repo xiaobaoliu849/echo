@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import uuid
 from datetime import datetime
@@ -9,6 +10,8 @@ from typing import Any
 
 from .agent_run_repository import AgentRunRepository
 from .audio_agent_repository import ClosingConnection
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceAgentSessionRepository:
@@ -31,11 +34,19 @@ class VoiceAgentSessionRepository:
             factory=ClosingConnection,
         )
         conn.row_factory = sqlite3.Row
-        # WAL lets UI reads proceed while the recorder writes; busy_timeout
-        # absorbs brief write lock overlaps between the repositories sharing
-        # this database file instead of raising "database is locked".
-        conn.execute("PRAGMA journal_mode=WAL")
+        # busy_timeout first: switching journal mode below needs exclusive
+        # access, and the timeout absorbs brief lock overlaps between the
+        # repositories sharing this database file instead of raising
+        # "database is locked".
         conn.execute("PRAGMA busy_timeout=5000")
+        # WAL lets UI reads proceed while the recorder writes. It persists
+        # on the database file; tolerate failure (e.g. filesystems without
+        # shared-memory support) and fall back to the rollback journal
+        # rather than breaking every repository call.
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.Error:
+            logger.debug("WAL journal mode unavailable for %s", self.db_path)
         return conn
 
     @staticmethod

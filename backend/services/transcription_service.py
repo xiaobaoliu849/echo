@@ -111,8 +111,19 @@ def _read_qwen_audio_base64(path: Path) -> str:
     """Read audio for Qwen-Audio ASR, enforcing the 10MB base64 cap.
 
     Runs via ``asyncio.to_thread``; raises ValueError when the audio is
-    too large for the base64 data-URI upload path.
+    too large for the base64 data-URI upload path. A stat-based pre-check
+    rejects oversized files without reading them into memory first (the
+    whole-file read is kept as the authoritative check).
     """
+    try:
+        file_size: int | None = path.stat().st_size
+    except OSError:
+        file_size = None
+    if file_size is not None and file_size > QWEN_AUDIO_ASR_MAX_BASE64_BYTES:
+        raise ValueError(
+            "Qwen-Audio ASR accepts base64 audio up to 10MB. "
+            "Use the async from-url pipeline for larger files."
+        )
     audio_bytes = path.read_bytes()
     if len(audio_bytes) > QWEN_AUDIO_ASR_MAX_BASE64_BYTES:
         raise ValueError(

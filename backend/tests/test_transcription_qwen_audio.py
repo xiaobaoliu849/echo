@@ -161,6 +161,21 @@ class QwenAudioAsrRequestTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 await service._transcribe_with_qwen_audio_asr(Path("big.wav"), "sk-key")
 
+    async def test_rejects_oversized_file_by_stat_without_reading(self):
+        # Real oversized files must be rejected by the stat pre-check before
+        # being read into memory (multi-GB uploads would otherwise OOM).
+        import tempfile
+
+        service = _make_service()
+        with tempfile.TemporaryDirectory() as tmp:
+            big = Path(tmp) / "big.wav"
+            big.write_bytes(b"x" * (QWEN_AUDIO_ASR_MAX_BASE64_BYTES + 1))
+            with patch.object(
+                Path, "read_bytes", side_effect=AssertionError("must not read file")
+            ):
+                with self.assertRaises(ValueError):
+                    await service._transcribe_with_qwen_audio_asr(big, "sk-key")
+
     async def test_empty_transcript_raises(self):
         service = _make_service()
         fake_client = _FakeClient(_FakeResponse({"output": {"text": ""}, "usage": {}}))
