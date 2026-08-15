@@ -1073,6 +1073,32 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertEqual(response.json()["transcript"], "同步转写成功")
         self.assertTrue(response.json()["memory_saved"])
 
+    def test_transcription_upload_rejects_files_above_size_limit(self) -> None:
+        oversized = b"RIFF" + b"x" * 64
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            jobs_dir = Path(tmp_dir) / "jobs"
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+            original_jobs_dir = transcription_router.transcription_service.jobs_dir
+            transcription_router.transcription_service.jobs_dir = jobs_dir
+            try:
+                with patch.object(
+                    transcription_router, "MAX_TRANSCRIPTION_UPLOAD_BYTES", 32
+                ):
+                    response = self._request(
+                        "POST",
+                        "/api/transcription/",
+                        files={"file": ("big.wav", oversized, "audio/wav")},
+                    )
+                self.assertEqual(response.status_code, 413)
+                detail = response.json()["detail"]
+                self.assertEqual(detail["code"], "TRANSCRIPTION_FILE_TOO_LARGE")
+                # No partial upload file may remain on disk.
+                uploads_dir = jobs_dir / "uploads"
+                leftovers = list(uploads_dir.glob("*")) if uploads_dir.exists() else []
+                self.assertEqual(leftovers, [])
+            finally:
+                transcription_router.transcription_service.jobs_dir = original_jobs_dir
+
     def test_transcription_async_job_saves_memory_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             jobs_dir = Path(tmp_dir) / "jobs"
@@ -1238,9 +1264,12 @@ class ApiSmokeTests(unittest.TestCase):
                     status="failed",
                     error="network error",
                 )
+                second_transcript = jobs_dir / f"{second.job_id}.txt"
+                second_transcript.write_text("完整转写内容", encoding="utf-8")
                 transcription_router.transcription_service.update_job(
                     second.job_id or "",
                     status="completed",
+                    transcript_path=str(second_transcript),
                 )
 
                 response = self._request(
@@ -1253,6 +1282,21 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertEqual(payload["count"], 2)
                 self.assertEqual(payload["jobs"][0]["job_id"], second.job_id)
                 self.assertEqual(payload["jobs"][1]["job_id"], first.job_id)
+                # List responses omit transcript text (metadata only) but must
+                # keep has_transcript so the UI can offer the detail view.
+                self.assertIsNone(payload["jobs"][0]["transcript"])
+                self.assertTrue(payload["jobs"][0]["has_transcript"])
+                self.assertIsNone(payload["jobs"][1]["transcript"])
+                self.assertFalse(payload["jobs"][1]["has_transcript"])
+
+                # The single-job endpoint still returns the full transcript.
+                detail = self._request(
+                    "GET",
+                    f"/api/transcription/jobs/{second.job_id}",
+                    params={"refresh": "false"},
+                )
+                self.assertEqual(detail.status_code, 200)
+                self.assertEqual(detail.json()["transcript"], "完整转写内容")
             finally:
                 transcription_router.transcription_service.jobs_dir = original_jobs_dir
 

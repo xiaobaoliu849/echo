@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import shutil
 import tempfile
 import unicodedata
 import uuid
@@ -197,19 +196,27 @@ def _validate_upload(file: UploadFile) -> str:
     return suffix
 
 
-def _job_to_response(job: TranscriptionJob) -> TranscriptionJobResponse:
+async def _job_to_response(
+    job: TranscriptionJob, *, include_transcript: bool = True
+) -> TranscriptionJobResponse:
     transcript = None
     has_transcript = False
     transcript_download_url = None
     if job.transcript_path:
         path = Path(str(job.transcript_path))
         if path.is_file():
-            try:
-                transcript = path.read_text(encoding="utf-8")
-                has_transcript = True
-                transcript_download_url = f"/api/transcription/jobs/{job.job_id}/transcript.txt"
-            except Exception:
-                pass
+            has_transcript = True
+            transcript_download_url = f"/api/transcription/jobs/{job.job_id}/transcript.txt"
+            if include_transcript:
+                try:
+                    # Transcript files can reach MBs for long recordings —
+                    # read off the event loop. List responses pass
+                    # include_transcript=False and skip this entirely.
+                    transcript = await asyncio.to_thread(
+                        lambda: path.read_text(encoding="utf-8")
+                    )
+                except Exception:
+                    transcript = None
     
     # Use dictionary unpacking to avoid "unexpected keyword" IDE errors if inheritance is broken
     # Always prefer the local proxy endpoint when the file exists locally,
@@ -242,12 +249,47 @@ def _job_to_response(job: TranscriptionJob) -> TranscriptionJobResponse:
     return TranscriptionJobResponse(**data)
 
 
+# Upload size cap for transcription files. The local chunking pipeline
+# handles arbitrarily long media, so this guards against pathological
+# uploads (disk exhaustion) rather than acting as a functional limit.
+MAX_TRANSCRIPTION_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024  # 4 GB
+
+_UPLOAD_CHUNK_BYTES = 1024 * 1024  # 1 MiB
+
+
+class _UploadTooLarge(Exception):
+    """Raised inside the copy loop when the upload size cap is exceeded."""
+
+
+def _upload_too_large_exception() -> HTTPException:
+    max_bytes = MAX_TRANSCRIPTION_UPLOAD_BYTES
+    if max_bytes >= 1024**3 and max_bytes % 1024**3 == 0:
+        limit_desc = f"{max_bytes // 1024**3} GB"
+    elif max_bytes >= 1024**2 and max_bytes % 1024**2 == 0:
+        limit_desc = f"{max_bytes // 1024**2} MB"
+    else:
+        limit_desc = f"{max_bytes} bytes"
+    return HTTPException(
+        status_code=413,
+        detail=_error(
+            "TRANSCRIPTION_FILE_TOO_LARGE",
+            f"Uploaded file exceeds the {limit_desc} limit.",
+            {"max_bytes": max_bytes},
+        ),
+    )
+
+
 async def _persist_upload(file: UploadFile, target_dir: Path, suffix: str) -> Path:
     """Persist an upload to disk.
 
     Streams through the spooled temp file when available so large uploads
     (video files can be gigabytes) never sit fully in process memory.
+    Rejects uploads larger than MAX_TRANSCRIPTION_UPLOAD_BYTES with HTTP 413.
     """
+    declared_size = getattr(file, "size", None)
+    if isinstance(declared_size, int) and declared_size > MAX_TRANSCRIPTION_UPLOAD_BYTES:
+        raise _upload_too_large_exception()
+
     target_dir.mkdir(parents=True, exist_ok=True)
     raw_uuid = str(uuid.uuid4().hex)
     uuid_part = "".join([raw_uuid[i] for i in range(12)])
@@ -255,13 +297,36 @@ async def _persist_upload(file: UploadFile, target_dir: Path, suffix: str) -> Pa
     spool = getattr(file, "file", None)
     if spool is not None and hasattr(spool, "read"):
         def _copy() -> None:
+            written = 0
             with target_path.open("wb") as out:
-                shutil.copyfileobj(spool, out)
+                while True:
+                    chunk = spool.read(_UPLOAD_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > MAX_TRANSCRIPTION_UPLOAD_BYTES:
+                        raise _UploadTooLarge()
+                    out.write(chunk)
 
-        await asyncio.to_thread(_copy)
+        try:
+            await asyncio.to_thread(_copy)
+        except _UploadTooLarge:
+            target_path.unlink(missing_ok=True)
+            raise _upload_too_large_exception() from None
     else:
-        content = await file.read()
-        target_path.write_bytes(content)
+        # Fallback for file-likes without a spooled buffer: chunked async
+        # reads with the same cap, then a single off-loop write.
+        chunks: list[bytes] = []
+        written = 0
+        while True:
+            chunk = await file.read(_UPLOAD_CHUNK_BYTES)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > MAX_TRANSCRIPTION_UPLOAD_BYTES:
+                raise _upload_too_large_exception()
+            chunks.append(chunk)
+        await asyncio.to_thread(target_path.write_bytes, b"".join(chunks))
     return target_path
 
 
@@ -270,6 +335,7 @@ async def _persist_upload(file: UploadFile, target_dir: Path, suffix: str) -> Pa
     response_model=TranscriptionSyncResponse,
     responses={
         400: {"description": "Invalid transcription upload.", "model": StructuredErrorResponse},
+        413: {"description": "Upload exceeds the size limit.", "model": StructuredErrorResponse},
         500: {"description": "Transcription failed.", "model": StructuredErrorResponse},
     },
 )
@@ -340,9 +406,12 @@ async def transcribe_audio(
         if result.get("provider"):
             transcription_service.update_job(job.job_id or "", provider=result.get("provider"))
 
-        # Save words to job if available
+        # Save words to job if available (off the event loop — word lists
+        # grow to MBs for long recordings).
         if words:
-            transcription_service._persist_words(job.job_id or "", words_raw)
+            await asyncio.to_thread(
+                transcription_service._persist_words, job.job_id or "", words_raw
+            )
 
         memory_saved = await transcription_service.maybe_save_memory(
             transcript_text=transcript,
@@ -363,6 +432,8 @@ async def transcribe_audio(
                 "provider": result.get("provider"),
             }
         )
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
@@ -380,6 +451,7 @@ async def transcribe_audio(
     response_model=TranscriptionJobResponse,
     responses={
         400: {"description": "Invalid transcription job upload.", "model": StructuredErrorResponse},
+        413: {"description": "Upload exceeds the size limit.", "model": StructuredErrorResponse},
         500: {"description": "Failed to create transcription job.", "model": StructuredErrorResponse},
     },
 )
@@ -394,8 +466,12 @@ async def create_transcription_job(
         job = await transcription_service.prepare_long_transcription_job(upload_path, file.filename)
         if provider:
             job = transcription_service.update_job(job.job_id or "", provider=provider.strip())
-        if transcription_service.can_publish_local_async():
-            job = transcription_service.publish_local_job_for_async(job.job_id or "")
+        # Publishing copies (or uploads, for S3) the entire file — potentially
+        # gigabytes of video — so run it off the event loop.
+        if await asyncio.to_thread(transcription_service.can_publish_local_async):
+            job = await asyncio.to_thread(
+                transcription_service.publish_local_job_for_async, job.job_id or ""
+            )
             job = await transcription_service.submit_long_transcription_job(job.job_id or "")
         else:
             # No public publisher configured — instead of staging the file
@@ -413,7 +489,9 @@ async def create_transcription_job(
                     job.job_id or "", provider=(provider or None)
                 )
             )
-        return _job_to_response(job)
+        return await _job_to_response(job)
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
@@ -440,7 +518,9 @@ async def create_transcription_job_from_url(payload: TranscriptionUrlJobRequest)
             payload.file_url, provider=payload.provider
         )
         job = await transcription_service.submit_long_transcription_job(job.job_id or "")
-        return _job_to_response(job)
+        return await _job_to_response(job)
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
@@ -474,11 +554,21 @@ async def list_transcription_jobs(
             for item in str(status or "").split(",")
             if item.strip()
         }
-        jobs = transcription_service.list_jobs(statuses=statuses, limit=limit)
+        # Job-store scan + per-job JSON parsing run in a worker thread.
+        # List items omit the transcript text (the UI only renders metadata
+        # plus the has_transcript flag), so no per-job transcript reads
+        # happen here — previously this endpoint read every transcript file
+        # synchronously on the event loop.
+        jobs = await asyncio.to_thread(
+            transcription_service.list_jobs, statuses=statuses, limit=limit
+        )
+        job_responses = [
+            await _job_to_response(job, include_transcript=False) for job in jobs
+        ]
         return TranscriptionJobListResponse(
             **{
                 "count": len(jobs),
-                "jobs": [_job_to_response(job) for job in jobs],
+                "jobs": job_responses,
             }
         )
     except ValueError as exc:
@@ -526,7 +616,10 @@ async def get_transcription_job(
             and job.transcript_path
             and Path(job.transcript_path).is_file()
         ):
-            transcript_text = Path(job.transcript_path).read_text(encoding="utf-8")
+            transcript_path_obj = Path(job.transcript_path)
+            transcript_text = await asyncio.to_thread(
+                lambda: transcript_path_obj.read_text(encoding="utf-8")
+            )
             memory_saved = await transcription_service.maybe_save_memory(
                 transcript_text=transcript_text,
                 headers=dict(request.headers),
@@ -534,7 +627,7 @@ async def get_transcription_job(
             )
             if memory_saved:
                 job = transcription_service.update_job(job_id, memory_saved=True)
-        return _job_to_response(job)
+        return await _job_to_response(job)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
@@ -579,9 +672,9 @@ async def retry_transcription_job(job_id: str) -> TranscriptionJobResponse:
                     job_id, provider=job.provider
                 )
             )
-            return _job_to_response(job)
+            return await _job_to_response(job)
         job = await transcription_service.retry_long_transcription_job(job_id)
-        return _job_to_response(job)
+        return await _job_to_response(job)
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,
@@ -691,7 +784,7 @@ async def save_transcription_job_memory(request: Request, job_id: str) -> Transc
             ),
         )
     if job.memory_saved:
-        return _job_to_response(job)
+        return await _job_to_response(job)
 
     transcript_path = Path(job.transcript_path or "")
     if not transcript_path.is_file():
@@ -704,7 +797,9 @@ async def save_transcription_job_memory(request: Request, job_id: str) -> Transc
         )
 
     try:
-        transcript_text = transcript_path.read_text(encoding="utf-8")
+        transcript_text = await asyncio.to_thread(
+            lambda: transcript_path.read_text(encoding="utf-8")
+        )
         memory_saved = await transcription_service.maybe_save_memory(
             transcript_text=transcript_text,
             headers=dict(request.headers),
@@ -719,7 +814,7 @@ async def save_transcription_job_memory(request: Request, job_id: str) -> Transc
                 ),
             )
         job = transcription_service.update_job(job_id, memory_saved=True)
-        return _job_to_response(job)
+        return await _job_to_response(job)
     except HTTPException:
         raise
     except ValueError as exc:
@@ -755,12 +850,15 @@ async def download_transcription_job_transcript(job_id: str) -> Response:
             detail=_error("TRANSCRIPTION_TRANSCRIPT_NOT_FOUND", f"Transcript not found for job: {job_id}"),
         )
 
-    response = Response(
-        content=transcript_path.read_bytes(),
+    # FileResponse streams from the threadpool instead of buffering the whole
+    # (potentially MB-scale) transcript into memory on the event loop.
+    from fastapi.responses import FileResponse  # type: ignore
+
+    return FileResponse(
+        path=str(transcript_path),
         media_type="text/plain; charset=utf-8",
+        filename=f"{job_id}.txt",
     )
-    response.headers["Content-Disposition"] = f'attachment; filename="{job_id}.txt"'
-    return response
 
 
 @router.get( # type: ignore
@@ -899,7 +997,11 @@ async def get_transcription_job_words(job_id: str) -> list[WordTimestamp]:
         )
 
     try:
-        words_data = json.loads(words_path.read_text(encoding="utf-8"))
+        # Words JSON grows linearly with audio length — read + parse off the
+        # event loop.
+        words_data = await asyncio.to_thread(
+            lambda: json.loads(words_path.read_text(encoding="utf-8"))
+        )
         if not isinstance(words_data, list):
             raise ValueError("Invalid words data format")
         return [WordTimestamp(**w) for w in words_data if isinstance(w, dict)]
@@ -939,11 +1041,12 @@ async def save_transcription_text(payload: TranscriptionTextSaveRequest) -> Tran
             transcript=transcript,
         )
         if payload.words:
-            transcription_service._persist_words(
+            await asyncio.to_thread(
+                transcription_service._persist_words,
                 job.job_id or "",
                 [w.model_dump() for w in payload.words],
             )
-        return _job_to_response(job)
+        return await _job_to_response(job)
     except Exception as exc:
         raise HTTPException(
             status_code=500,

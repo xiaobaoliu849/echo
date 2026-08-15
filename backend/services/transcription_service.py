@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import mimetypes
+import shutil
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -95,6 +96,30 @@ SYNC_MAX_DURATION_SECONDS = 270
 # Above this raw size we always transcode first, even for short files
 # (10MB is the Qwen base64 limit; OpenAI Whisper caps at 25MB).
 PREPROCESS_SIZE_THRESHOLD_BYTES = 8 * 1024 * 1024
+
+
+def _read_file_base64(path: Path) -> str:
+    """Read a file and return its base64-encoded contents.
+
+    Runs via ``asyncio.to_thread`` at the call sites so multi-MB audio
+    reads + encoding never block the event loop.
+    """
+    return base64.b64encode(path.read_bytes()).decode("utf-8")
+
+
+def _read_qwen_audio_base64(path: Path) -> str:
+    """Read audio for Qwen-Audio ASR, enforcing the 10MB base64 cap.
+
+    Runs via ``asyncio.to_thread``; raises ValueError when the audio is
+    too large for the base64 data-URI upload path.
+    """
+    audio_bytes = path.read_bytes()
+    if len(audio_bytes) > QWEN_AUDIO_ASR_MAX_BASE64_BYTES:
+        raise ValueError(
+            "Qwen-Audio ASR accepts base64 audio up to 10MB. "
+            "Use the async from-url pipeline for larger files."
+        )
+    return base64.b64encode(audio_bytes).decode("utf-8")
 
 
 @dataclass(slots=True)
@@ -569,16 +594,21 @@ class TranscriptionService:
                 merged["provider"] = resolved_provider
             return merged
         finally:
-            for artifact in temp_artifacts:
-                if artifact.is_dir():
-                    import shutil as _shutil
+            # Deleting the ffmpeg work dir can remove hundreds of MB of
+            # chunks — keep it off the event loop.
+            await asyncio.to_thread(self._cleanup_artifacts, temp_artifacts)
 
-                    try:
-                        _shutil.rmtree(artifact, ignore_errors=True)
-                    except Exception:
-                        logger.debug("Could not remove work dir: %s", artifact)
-                else:
-                    audio_tools.cleanup_paths([artifact])
+    @staticmethod
+    def _cleanup_artifacts(artifacts: list[Path]) -> None:
+        """Remove preprocessing artifacts (blocking; run via to_thread)."""
+        for artifact in artifacts:
+            if artifact.is_dir():
+                try:
+                    shutil.rmtree(artifact, ignore_errors=True)
+                except Exception:
+                    logger.debug("Could not remove work dir: %s", artifact)
+            else:
+                audio_tools.cleanup_paths([artifact])
 
     @staticmethod
     def _merge_chunk_results(
@@ -655,10 +685,14 @@ class TranscriptionService:
             transcript = str(result.get("text", "") or "").strip()
             if not transcript:
                 raise ValueError("Transcription finished but no speech was recognized.")
-            transcript_path = self._persist_transcript(job_id, transcript)
+            # Persist off the event loop — transcripts/word lists grow to MBs
+            # for multi-hour audio.
+            transcript_path = await asyncio.to_thread(
+                self._persist_transcript, job_id, transcript
+            )
             words = result.get("words")
             if words:
-                self._persist_words(job_id, words)
+                await asyncio.to_thread(self._persist_words, job_id, words)
             update_fields: dict[str, Any] = {
                 "status": "completed",
                 "transcript_path": transcript_path,
@@ -800,9 +834,8 @@ class TranscriptionService:
         self, path: Path, api_key: str, url: str, model: str, provider_name: str
     ) -> dict:
         """Returns {"text": str, "duration_seconds": float | None}."""
-        audio_bytes = path.read_bytes()
-
-        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        # Read + base64-encode off the event loop (files up to ~25MB).
+        audio_b64 = await asyncio.to_thread(_read_file_base64, path)
         extension = path.suffix.lower().lstrip(".")
         if extension == "mp3":
             mime_type = "audio/mpeg"
@@ -886,14 +919,8 @@ class TranscriptionService:
         Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}.
         Supports instant hotwords (vocabulary, weight 1-5 or 50) and up to 4 language hints.
         """
-        audio_bytes = path.read_bytes()
-        if len(audio_bytes) > QWEN_AUDIO_ASR_MAX_BASE64_BYTES:
-            raise ValueError(
-                "Qwen-Audio ASR accepts base64 audio up to 10MB. "
-                "Use the async from-url pipeline for larger files."
-            )
-
-        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        # Read + size-check + base64-encode off the event loop (≤10MB).
+        audio_b64 = await asyncio.to_thread(_read_qwen_audio_base64, path)
         extension = path.suffix.lower().lstrip(".") or "wav"
         if extension in {"mp3", "mpga"}:
             mime_type = "audio/mpeg"
@@ -994,7 +1021,8 @@ class TranscriptionService:
 
     async def _transcribe_with_deepgram(self, path: Path, api_key: str) -> dict:
         """Transcribe with Deepgram API. Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}."""
-        audio_bytes = path.read_bytes()
+        # Read off the event loop (files up to ~25MB).
+        audio_bytes = await asyncio.to_thread(path.read_bytes)
         extension = path.suffix.lower().lstrip(".")
         if extension == "mp3":
             content_type = "audio/mpeg"
@@ -1072,7 +1100,8 @@ class TranscriptionService:
 
     async def _transcribe_with_openai_whisper(self, path: Path, api_key: str) -> dict:
         """Transcribe with OpenAI Whisper API. Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}."""
-        audio_bytes = path.read_bytes()
+        # Read off the event loop (files up to 25MB).
+        audio_bytes = await asyncio.to_thread(path.read_bytes)
         filename = path.name
 
         headers = {
@@ -1148,7 +1177,8 @@ class TranscriptionService:
 
     async def _transcribe_with_assemblyai(self, path: Path, api_key: str) -> dict:
         """Transcribe with AssemblyAI API. Supports word-level timestamps, speaker diarization, and auto-highlights."""
-        audio_bytes = path.read_bytes()
+        # Read off the event loop (files up to ~25MB).
+        audio_bytes = await asyncio.to_thread(path.read_bytes)
         extension = path.suffix.lower().lstrip(".")
         if extension == "mp3":
             content_type = "audio/mpeg"
@@ -1277,8 +1307,10 @@ class TranscriptionService:
         job_id_part = str(raw_uuid[:16]) # type: ignore
         job_id = f"tx_sync_{job_id_part}"
         
-        # Save transcript to file
-        transcript_path = self._persist_transcript(job_id, transcript)
+        # Save transcript to file (off the event loop)
+        transcript_path = await asyncio.to_thread(
+            self._persist_transcript, job_id, transcript
+        )
         
         # Explicit initialization with type ignores
         job = TranscriptionJob(
@@ -1433,14 +1465,20 @@ class TranscriptionService:
                 result = await self._resolve_remote_transcript_with_words(remote_status)
                 transcript_text = result["text"]
                 words = result.get("words")
-                transcript_path = self._persist_transcript(job.job_id or "", transcript_text)
+                transcript_path = await asyncio.to_thread(
+                    self._persist_transcript, job.job_id or "", transcript_text
+                )
                 # Save words separately if available
                 if words:
-                    self._persist_words(job.job_id or "", words)
+                    await asyncio.to_thread(
+                        self._persist_words, job.job_id or "", words
+                    )
             except Exception:
                 # Fallback to text-only extraction
                 transcript_text = await self._resolve_remote_transcript(remote_status)
-                transcript_path = self._persist_transcript(job.job_id or "", transcript_text)
+                transcript_path = await asyncio.to_thread(
+                    self._persist_transcript, job.job_id or "", transcript_text
+                )
             error = ""
         elif mapped_status == "failed":
             error = self._extract_remote_error(remote_status) or "Remote transcription failed."
