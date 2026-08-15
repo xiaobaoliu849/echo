@@ -37,6 +37,10 @@ SEARCH_TOTAL_TIMEOUT_SECONDS = 15.0
 # poor recall for fresh news — so this is the path that actually answers
 # current-event questions for mainland users without a VPN.
 LLM_SEARCH_TIMEOUT_SECONDS = 20.0
+# Aggregate budget across all candidate models. Without it the sequential
+# fallback (configured model + qwen3.7-flash + qwen-flash) can stall a realtime
+# voice turn for up to 3 × LLM_SEARCH_TIMEOUT_SECONDS when the endpoint hangs.
+LLM_SEARCH_TOTAL_TIMEOUT_SECONDS = 35.0
 # qwen3.7-flash: 1.8s latency (when enable_thinking=False), lower output cost
 # (0.8元/百万 tokens), context caching support, and strong search synthesis quality.
 LLM_SEARCH_FALLBACK_MODEL = "qwen3.7-flash"
@@ -632,7 +636,15 @@ class VoiceAgentToolService:
             },
             {"role": "user", "content": query},
         ]
+        deadline = time.monotonic() + LLM_SEARCH_TOTAL_TIMEOUT_SECONDS
         for model in candidate_models:
+            remaining = deadline - time.monotonic()
+            if remaining < 1.0:
+                logger.warning(
+                    "llm_web_search_fallback budget exhausted before model=%s query=%r",
+                    model, query[:120],
+                )
+                break
             payload = {
                 "model": model,
                 "messages": messages,
@@ -647,7 +659,9 @@ class VoiceAgentToolService:
                 },
             }
             try:
-                async with httpx.AsyncClient(timeout=LLM_SEARCH_TIMEOUT_SECONDS) as client:
+                async with httpx.AsyncClient(
+                    timeout=min(LLM_SEARCH_TIMEOUT_SECONDS, remaining)
+                ) as client:
                     response = await client.post(
                         f"{base_url}/chat/completions",
                         json=payload,

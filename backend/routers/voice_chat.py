@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket
 from pydantic import BaseModel, Field
 
 from services.api_auth_guard import validate_websocket_token
+from services.realtime_session_recorder import run_db_call
 from services.realtime_voice_service import (
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_GOOGLE_REALTIME_VOICE,
@@ -143,7 +144,7 @@ def _raise_not_found(session_id: str) -> None:
 async def list_voice_agent_sessions(
     limit: int = Query(default=20, ge=1, le=200),
 ) -> VoiceAgentSessionListResponse:
-    sessions = voice_agent_session_repository.list_sessions(limit=limit)
+    sessions = await run_db_call(voice_agent_session_repository.list_sessions, limit=limit)
     return VoiceAgentSessionListResponse(count=len(sessions), sessions=sessions)
 
 
@@ -152,23 +153,33 @@ async def get_voice_agent_metrics_summary(
     limit: int = Query(default=200, ge=1, le=200),
     provider: str = Query(default="", max_length=80),
 ) -> VoiceAgentMetricsSummaryResponse:
-    summary = voice_agent_session_repository.summarize_metrics(limit=limit, provider=provider)
+    summary = await run_db_call(
+        voice_agent_session_repository.summarize_metrics, limit=limit, provider=provider
+    )
     return VoiceAgentMetricsSummaryResponse(provider=(provider or "all"), **summary)
 
 
 @router.get("/sessions/{session_id}", response_model=VoiceAgentSessionDetailResponse)
 async def get_voice_agent_session(session_id: str) -> VoiceAgentSessionDetailResponse:
-    session = voice_agent_session_repository.get_session(session_id)
-    if session is None:
+    # The repository is synchronous SQLite; run all reads for this response in
+    # one hop on the recorder DB executor instead of blocking the event loop.
+    def _load_detail() -> dict[str, Any] | None:
+        session = voice_agent_session_repository.get_session(session_id)
+        if session is None:
+            return None
+        return {
+            **session,
+            "turns": voice_agent_session_repository.list_turns(session_id),
+            "tool_events": voice_agent_session_repository.list_tool_events(session_id),
+            "timeline": voice_agent_session_repository.build_timeline(session_id),
+            "agent_run_links": voice_agent_session_repository.list_agent_run_links(session_id),
+        }
+
+    detail = await run_db_call(_load_detail)
+    if detail is None:
         _raise_not_found(session_id)
-    assert session is not None
-    return VoiceAgentSessionDetailResponse(
-        **session,
-        turns=voice_agent_session_repository.list_turns(session_id),
-        tool_events=voice_agent_session_repository.list_tool_events(session_id),
-        timeline=voice_agent_session_repository.build_timeline(session_id),
-        agent_run_links=voice_agent_session_repository.list_agent_run_links(session_id),
-    )
+    assert detail is not None
+    return VoiceAgentSessionDetailResponse(**detail)
 
 
 @router.websocket("/ws")

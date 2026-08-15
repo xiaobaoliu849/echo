@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
 import hashlib
 import html
 import json
@@ -10,6 +11,7 @@ import re
 import sys
 import threading
 from collections.abc import AsyncGenerator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,29 @@ try:
     import edge_tts
 except ImportError:
     edge_tts = None
+
+# edge_tts.Communicate.save() has no built-in timeout: a stalled Microsoft
+# endpoint would hang the synthesis coroutine forever (the realtime
+# synthesize_tts tool path included). Generous enough for long PDF read-aloud.
+EDGE_TTS_TIMEOUT_SECONDS = 180.0
+
+# Dedicated executor for blocking TTS work (local ChatTTS/torch inference, the
+# dashscope SDK's synchronous call(), Azure pull-stream reads). Keeps these
+# potentially minutes-long jobs off asyncio's default pool so they cannot
+# starve unrelated to_thread users mid-request (mirrors _RECORDER_DB_EXECUTOR).
+_TTS_BLOCKING_EXECUTOR = ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="tts-blocking"
+)
+
+
+async def _run_tts_blocking(func: Any, *args: Any) -> Any:
+    """Run a blocking TTS call on the dedicated TTS executor."""
+    loop = asyncio.get_running_loop()
+    if args:
+        return await loop.run_in_executor(
+            _TTS_BLOCKING_EXECUTOR, functools.partial(func, *args)
+        )
+    return await loop.run_in_executor(_TTS_BLOCKING_EXECUTOR, func)
 
 try:
     import azure.cognitiveservices.speech as speechsdk
@@ -589,7 +614,7 @@ class TTSService:
         return Path(model_dir).expanduser(), hf_endpoint, device
 
     async def _generate_chattts_audio(self, text: str, voice: str, path: Path) -> None:
-        await asyncio.to_thread(self._generate_chattts_audio_sync, text, voice, path)
+        await _run_tts_blocking(self._generate_chattts_audio_sync, text, voice, path)
 
     def _generate_chattts_audio_sync(self, text: str, voice: str, path: Path) -> None:
         global _global_chattts_instance
@@ -769,7 +794,9 @@ class TTSService:
             _fd, _tmp = _tf.mkstemp(dir=str(path.parent), suffix=".tmp")
             os.close(_fd)
             try:
-                await communicator.save(_tmp)
+                await asyncio.wait_for(
+                    communicator.save(_tmp), timeout=EDGE_TTS_TIMEOUT_SECONDS
+                )
                 os.replace(_tmp, str(path))
             except BaseException:
                 try:
@@ -777,6 +804,11 @@ class TTSService:
                 except OSError:
                     pass
                 raise
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError(
+                f"Edge TTS 朗读超时（超过 {EDGE_TTS_TIMEOUT_SECONDS:.0f} 秒未收到微软语音服务响应）。"
+                "请检查网络连接，或稍后再试。"
+            ) from exc
         except Exception as exc:
             raise RuntimeError(f"Edge TTS 朗读生成失败 ({exc})。请检查网络是否能够正常访问微软 Edge 语音服务。") from exc
 
@@ -819,8 +851,8 @@ class TTSService:
         model_name = model or DEFAULT_QWEN_FLASH_MODEL
         voice_name = self._resolve_qwen_voice_for_model(voice, model_name)
         synthesizer = SpeechSynthesizer(model=model_name, voice=voice_name)
-        # dashscope SDK 的 call() 是同步阻塞的网络调用，放到线程池里跑，避免卡住事件循环
-        audio = await asyncio.to_thread(synthesizer.call, text)
+        # dashscope SDK 的 call() 是同步阻塞的网络调用，放到专用线程池里跑，避免卡住事件循环
+        audio = await _run_tts_blocking(synthesizer.call, text)
         if not audio:
             # SDK 合成失败时 call() 返回 None（不会抛异常），常见原因是音色与模型
             # 不兼容或配额/网络问题。带上 request_id 方便排查。
@@ -1385,7 +1417,7 @@ class TTSService:
 
         while True:
             chunk = bytearray(4096)
-            bytes_read = await loop.run_in_executor(None, pull_stream.read, chunk)
+            bytes_read = await _run_tts_blocking(pull_stream.read, chunk)
 
             if bytes_read > 0:
                 audio_base64 = base64.b64encode(chunk[:bytes_read]).decode()

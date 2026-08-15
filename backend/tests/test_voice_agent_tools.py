@@ -470,6 +470,39 @@ class VoiceAgentToolServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(client.requests[0]["json"]["enable_thinking"])  # type: ignore[index]
         self.assertEqual(sources[0]["snippet"], "答案")
 
+    async def test_llm_web_search_fallback_total_budget_stops_retries(self) -> None:
+        """The aggregate budget must stop the sequential model fallback: without
+        it, 3 candidate models × per-call timeout can stall a realtime voice
+        turn for ~60s when the endpoint hangs."""
+        client = _FakeAsyncClient([
+            _FakeHTTPResponse({}, status_error=RuntimeError("hang")),
+            _FakeHTTPResponse({}, status_error=RuntimeError("hang")),
+            _FakeHTTPResponse({"choices": [{"message": {"content": "不该到达"}}]}),
+        ])
+        service = VoiceAgentToolService(
+            research_service=EmptyResearchService(),  # type: ignore[arg-type]
+            llm_service=FakeDashScopeSettingsLLM(),  # type: ignore[arg-type]
+        )
+        timeouts: list[object] = []
+
+        def client_factory(**kwargs: object) -> _FakeAsyncClient:
+            timeouts.append(kwargs.get("timeout"))
+            return client
+
+        # monotonic calls: deadline=0, then per-iteration remaining checks.
+        ticks = iter([0.0, 0.0, 20.0, 34.6])
+        with unittest.mock.patch(
+            "services.voice_agent_tools.httpx.AsyncClient", client_factory
+        ), unittest.mock.patch(
+            "services.voice_agent_tools.time.monotonic", lambda: next(ticks)
+        ):
+            sources = await service._llm_web_search_fallback("查询")
+
+        # Third model never attempted; second attempt got a shrunken timeout.
+        self.assertEqual(len(client.requests), 2)
+        self.assertEqual(timeouts, [20.0, 15.0])
+        self.assertEqual(sources, [])
+
     async def test_llm_web_search_fallback_unconfigured_returns_empty(self) -> None:
         from types import SimpleNamespace
 
