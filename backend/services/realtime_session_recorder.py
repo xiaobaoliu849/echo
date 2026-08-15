@@ -1,14 +1,39 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from .voice_agent_session_repository import VoiceAgentSessionRepository
 from .realtime_memory_session import _merge_memory_text
 
 logger = logging.getLogger(__name__)
+
+# Assistant text arrives as many small streaming deltas per second. Instead of
+# writing every delta to SQLite immediately, they are coalesced in memory and
+# flushed at most this often (and always at turn finalize / barge-in / close).
+ASSISTANT_TEXT_FLUSH_SECONDS = 0.5
+
+# Dedicated single-thread executor for session persistence. SQLite only
+# supports one writer anyway, and keeping these writes off asyncio's default
+# pool stops them from queueing behind long TTS inference jobs (and vice
+# versa) in the middle of a voice turn.
+_RECORDER_DB_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="voice-session-db"
+)
+
+
+async def run_db_call(func: Any, *args: Any, **kwargs: Any) -> Any:
+    """Run a blocking repository call on the dedicated recorder DB executor."""
+    loop = asyncio.get_running_loop()
+    if kwargs:
+        return await loop.run_in_executor(
+            _RECORDER_DB_EXECUTOR, functools.partial(func, *args, **kwargs)
+        )
+    return await loop.run_in_executor(_RECORDER_DB_EXECUTOR, func, *args)
 
 
 class VoiceAgentSessionRecorder:
@@ -18,7 +43,11 @@ class VoiceAgentSessionRecorder:
         self._turn_index = 0
         self._current_turn_id = ""
         self._pending_user_text = ""
+        self._turn_user_text_persisted = False
         self._current_assistant_text = ""
+        self._pending_assistant_delta = ""
+        self._flush_task: asyncio.Task | None = None
+        self._flush_writing = False
         self._started_at = time.perf_counter()
         self._turn_started_at = self._started_at
         self._first_audio_recorded = False
@@ -38,7 +67,7 @@ class VoiceAgentSessionRecorder:
     async def _call_repository(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
         try:
             method = getattr(self.repository, method_name)
-            return await asyncio.to_thread(method, *args, **kwargs)
+            return await run_db_call(method, *args, **kwargs)
         except Exception:
             logger.exception("voice_agent_session_record_failed method=%s session_id=%s", method_name, self.session_id)
             return None
@@ -49,14 +78,62 @@ class VoiceAgentSessionRecorder:
             self._current_turn_id = clean_preferred
         if not self._current_turn_id:
             self._current_turn_id = self._next_turn_id()
-        if self._pending_user_text:
+        # The pending user text is persisted exactly once per turn; without
+        # the flag every assistant delta / audio frame re-wrote it.
+        if self._pending_user_text and not self._turn_user_text_persisted:
             await self._call_repository(
                 "upsert_turn",
                 self.session_id,
                 self._current_turn_id,
                 user_text=self._pending_user_text,
+                fetch_turn=False,
             )
+            self._turn_user_text_persisted = True
         return self._current_turn_id
+
+    def _schedule_assistant_flush(self) -> None:
+        if self._flush_task is not None and not self._flush_task.done():
+            return
+        self._flush_task = asyncio.create_task(self._delayed_assistant_flush())
+
+    async def _delayed_assistant_flush(self) -> None:
+        await asyncio.sleep(ASSISTANT_TEXT_FLUSH_SECONDS)
+        await self._flush_pending_assistant_text()
+
+    async def _flush_pending_assistant_text(self) -> None:
+        """Write any coalesced assistant deltas to the current turn row."""
+        task = self._flush_task
+        self._flush_task = None
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            if self._flush_writing:
+                # A flush already captured the buffer and is mid-write — let
+                # it finish instead of cancelling it (cancelling would drop
+                # the captured delta). The single DB executor keeps write
+                # ordering intact either way.
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            else:
+                # Still sleeping — nothing captured yet, safe to cancel.
+                task.cancel()
+        if not self._pending_assistant_delta or not self._current_turn_id:
+            self._pending_assistant_delta = ""
+            return
+        turn_id = self._current_turn_id
+        delta = self._pending_assistant_delta
+        self._pending_assistant_delta = ""
+        self._flush_writing = True
+        try:
+            await self._call_repository(
+                "upsert_turn",
+                self.session_id,
+                turn_id,
+                assistant_text=delta,
+                fetch_turn=False,
+            )
+        finally:
+            self._flush_writing = False
 
     async def start(self, payload: dict[str, Any]) -> None:
         await self.record_session_event(
@@ -69,7 +146,12 @@ class VoiceAgentSessionRecorder:
         clean_text = str(text or "").strip()
         if not clean_text:
             return ""
+        # A barge-in can arrive while the previous turn still has coalesced
+        # assistant text waiting to flush — persist it against the old turn
+        # before the new one starts.
+        await self._flush_pending_assistant_text()
         self._pending_user_text = clean_text
+        self._turn_user_text_persisted = False
         self._current_turn_id = self._next_turn_id()
         self._current_assistant_text = ""
         self._turn_started_at = time.perf_counter()
@@ -80,7 +162,9 @@ class VoiceAgentSessionRecorder:
             self._current_turn_id,
             user_text=clean_text,
             completion_status="in_progress",
+            fetch_turn=False,
         )
+        self._turn_user_text_persisted = True
         await self.record_session_event(
             "user_transcript",
             source="turn",
@@ -96,12 +180,10 @@ class VoiceAgentSessionRecorder:
             return ""
         turn_id = await self._ensure_turn()
         self._current_assistant_text = _merge_memory_text(self._current_assistant_text, clean_text)
-        await self._call_repository(
-            "upsert_turn",
-            self.session_id,
-            turn_id,
-            assistant_text=clean_text,
-        )
+        # Coalesce streaming deltas and flush them in one delayed write
+        # instead of hitting SQLite once per delta.
+        self._pending_assistant_delta += clean_text
+        self._schedule_assistant_flush()
         return turn_id
 
     async def note_assistant_audio(self) -> tuple[str, int | None]:
@@ -198,9 +280,12 @@ class VoiceAgentSessionRecorder:
     ) -> str:
         if not self._pending_user_text and not self._current_turn_id:
             return ""
+        # Persist coalesced assistant text before the completion events so
+        # the stored turn is complete and event ordering stays intact.
+        await self._flush_pending_assistant_text()
         turn_id = await self._ensure_turn()
         status = "interrupted" if interrupted else "completed"
-        turn = await self._call_repository(
+        await self._call_repository(
             "upsert_turn",
             self.session_id,
             turn_id,
@@ -208,12 +293,9 @@ class VoiceAgentSessionRecorder:
             completed=True,
             interrupted=interrupted,
             completion_status=status,
+            fetch_turn=False,
         )
-        assistant_text = ""
-        if isinstance(turn, dict):
-            assistant_text = str(turn.get("assistant_text", ""))
-        if not assistant_text:
-            assistant_text = self._current_assistant_text
+        assistant_text = self._current_assistant_text
         if assistant_text.strip():
             await self.record_session_event(
                 "assistant_response",
@@ -236,8 +318,10 @@ class VoiceAgentSessionRecorder:
             payload={"interrupted": interrupted, "status": status},
         )
         self._pending_user_text = ""
+        self._turn_user_text_persisted = False
         self._current_turn_id = ""
         self._current_assistant_text = ""
+        self._pending_assistant_delta = ""
         self._first_audio_recorded = False
         return turn_id
 
@@ -248,6 +332,7 @@ class VoiceAgentSessionRecorder:
         return await self._finalize_turn(interrupted=False, memory_payload=memory_payload)
 
     async def finish(self, *, status: str = "closed") -> None:
+        await self._flush_pending_assistant_text()
         await self._call_repository("finish_session", self.session_id, status=status)
 
     async def complete_session(self, *, status: str = "closed") -> None:

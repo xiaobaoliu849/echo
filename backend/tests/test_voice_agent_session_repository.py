@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
+from services import realtime_session_recorder as recorder_module
 from services.realtime_voice_service import RealtimeVoiceService, VoiceAgentSessionRecorder
 from services.voice_agent_session_repository import VoiceAgentSessionRepository
 
@@ -331,6 +334,110 @@ class VoiceAgentSessionRepositoryTests(unittest.IsolatedAsyncioTestCase):
         provider_summary = self.repository.summarize_metrics(limit=1, provider="openai")
         self.assertEqual(provider_summary["session_count"], 1)
         self.assertEqual(provider_summary["providers"][0]["provider"], "OpenAI")
+
+
+class VoiceAgentSessionRecorderCoalescingTests(unittest.IsolatedAsyncioTestCase):
+    """Covers the write-amplification fix: per-delta SQLite writes were
+    coalesced into delayed flushes, redundant user_text rewrites removed,
+    and audio frames no longer trigger turn writes."""
+
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tmpdir.name) / "voice_spirit_test.db"
+        self.repository = VoiceAgentSessionRepository(db_path=self.db_path)
+        session = self.repository.create_session(
+            provider="DashScope", model="qwen-realtime", voice="Cherry"
+        )
+        self.session_id = session["id"]
+
+    def tearDown(self) -> None:
+        self.tmpdir.cleanup()
+
+    def _make_recorder(self) -> VoiceAgentSessionRecorder:
+        return VoiceAgentSessionRecorder(self.repository, self.session_id)
+
+    @staticmethod
+    def _writes_with(spy, key: str) -> list:
+        return [call for call in spy.call_args_list if call.kwargs.get(key)]
+
+    async def test_assistant_deltas_coalesce_into_single_flush(self) -> None:
+        recorder = self._make_recorder()
+        with patch.object(
+            self.repository, "upsert_turn", wraps=self.repository.upsert_turn
+        ) as spy:
+            await recorder.note_user_transcript("你好")
+            for delta in ["这是", "一段", "流式", "回复。"]:
+                await recorder.note_assistant_text(delta)
+            await recorder.note_assistant_audio()
+            await recorder.note_assistant_audio()
+            # In-memory view is complete even before the delayed flush fires.
+            self.assertEqual(recorder.current_assistant_text, "这是一段流式回复。")
+            await recorder.complete_turn()
+
+        # user_text persisted exactly once (no per-delta rewrites)...
+        self.assertEqual(len(self._writes_with(spy, "user_text")), 1)
+        # ...and all assistant deltas went down in one coalesced write.
+        assistant_writes = self._writes_with(spy, "assistant_text")
+        self.assertEqual(len(assistant_writes), 1)
+        self.assertEqual(assistant_writes[0].kwargs["assistant_text"], "这是一段流式回复。")
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0]["assistant_text"], "这是一段流式回复。")
+        self.assertTrue(turns[0]["completed"])
+
+    async def test_delayed_flush_persists_mid_turn(self) -> None:
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("你好")
+        with patch.object(recorder_module, "ASSISTANT_TEXT_FLUSH_SECONDS", 0.01):
+            await recorder.note_assistant_text("先到的文本")
+            await asyncio.sleep(0.05)
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], "先到的文本")
+        # More text after the mid-turn flush still lands, in order.
+        await recorder.note_assistant_text("和后到的文本")
+        await recorder.complete_turn()
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], "先到的文本和后到的文本")
+
+    async def test_barge_in_flushes_previous_turn_before_new_one(self) -> None:
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("第一句")
+        await recorder.note_assistant_text("回答甲")
+        # User barges in before the delayed flush fires.
+        await recorder.note_user_transcript("第二句")
+        await recorder.note_assistant_text("回答乙")
+        await recorder.complete_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(len(turns), 2)
+        first = next(turn for turn in turns if turn["user_text"] == "第一句")
+        second = next(turn for turn in turns if turn["user_text"] == "第二句")
+        self.assertEqual(first["assistant_text"], "回答甲")
+        self.assertEqual(second["assistant_text"], "回答乙")
+
+    async def test_interrupt_flushes_partial_assistant_text(self) -> None:
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("问题")
+        await recorder.note_assistant_text("部分")
+        await recorder.note_assistant_text("回答")
+        await recorder.interrupt_current_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0]["assistant_text"], "部分回答")
+        self.assertTrue(turns[0]["interrupted"])
+        self.assertEqual(turns[0]["completion_status"], "interrupted")
+
+    async def test_audio_frames_do_not_write_after_turn_open(self) -> None:
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("你好")
+        with patch.object(
+            self.repository, "upsert_turn", wraps=self.repository.upsert_turn
+        ) as spy:
+            for _ in range(5):
+                await recorder.note_assistant_audio()
+        self.assertEqual(spy.call_count, 0)
 
 
 if __name__ == "__main__":

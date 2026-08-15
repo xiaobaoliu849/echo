@@ -31,6 +31,11 @@ class VoiceAgentSessionRepository:
             factory=ClosingConnection,
         )
         conn.row_factory = sqlite3.Row
+        # WAL lets UI reads proceed while the recorder writes; busy_timeout
+        # absorbs brief write lock overlaps between the repositories sharing
+        # this database file instead of raising "database is locked".
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
         return conn
 
     @staticmethod
@@ -327,6 +332,7 @@ class VoiceAgentSessionRepository:
         completed: bool = False,
         interrupted: bool | None = None,
         completion_status: str | None = None,
+        fetch_turn: bool = True,
     ) -> dict[str, Any]:
         clean_turn_id = str(turn_id or "").strip()
         if not clean_turn_id:
@@ -397,6 +403,11 @@ class VoiceAgentSessionRepository:
                 ),
             )
             conn.commit()
+        if not fetch_turn:
+            # High-frequency callers (per-delta assistant text flushes) don't
+            # need the row back; skipping the read avoids a full-session
+            # list_turns scan after every write.
+            return {}
         turns = [turn for turn in self.list_turns(session_id) if turn["turn_id"] == clean_turn_id]
         if not turns:
             raise RuntimeError("Failed to load voice agent turn.")

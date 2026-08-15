@@ -46,7 +46,7 @@ from .realtime_tool_protocol import (
 )
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_dashscope_client import DashScopeRealtimeCallback, DashScopeAudioRealtimeConversation
-from .realtime_session_recorder import VoiceAgentSessionRecorder
+from .realtime_session_recorder import VoiceAgentSessionRecorder, run_db_call
 
 # Conditional SDK imports — kept here so that test_api_smoke can patch
 # ``realtime_voice_service.genai`` / ``realtime_voice_service.types``.
@@ -169,7 +169,7 @@ class RealtimeVoiceService(
     ) -> "VoiceAgentSessionRecorder | None":
         try:
             repository = self.voice_session_repository or VoiceAgentSessionRepository()
-            session = await asyncio.to_thread(
+            session = await run_db_call(
                 repository.create_session,
                 provider=provider,
                 model=model,
