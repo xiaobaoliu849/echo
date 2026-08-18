@@ -2468,10 +2468,13 @@ button:focus-visible {
   box-shadow: var(--shadow-md);
 }
 
-.vsComposerCallBtn:disabled {
-  opacity: 0.55;
+.vsComposerCallBtn:disabled,
+.vsComposerCallBtn.disabled {
+  opacity: 0.38;
+  filter: grayscale(0.85);
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 .vsComposerCallBtn.recording {

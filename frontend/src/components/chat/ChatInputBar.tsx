@@ -468,14 +468,22 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
           {!isVoiceActive && (
             <button
               type="button"
-              className="vsComposerCallBtn"
+              className={`vsComposerCallBtn ${!isRealtime ? "disabled" : ""}`}
               aria-label={t("实时通话", "Realtime call")}
-              onClick={() => void voiceChat.onToggleRecording()}
-              disabled={!voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
+              onClick={() => {
+                if (!isRealtime) return;
+                void voiceChat.onToggleRecording();
+              }}
+              disabled={!isRealtime || !voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
               title={
-                isLiveTranslate
-                  ? t(`实时翻译：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Live translate: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
-                  : t(`实时通话：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Realtime call: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+                !isRealtime
+                  ? t(
+                      "当前选择的是文本/多模态模型，实时通话请在左侧切换为实时语音模型（如带「实时」徽章的模型）",
+                      "Current model is a text/multimodal model. Switch to a realtime voice model on the left to start a call."
+                    )
+                  : isLiveTranslate
+                    ? t(`实时翻译：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Live translate: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+                    : t(`实时通话：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Realtime call: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
               }
             >
               <PhoneIcon />

@@ -117,6 +117,31 @@ describe('ChatPage', () => {
         ]);
     });
 
+    it('disables the realtime voice call button when a non-realtime text model is selected', () => {
+        const mockToggle = vi.fn();
+        render(
+            <ChatPage
+                chat={createChatController({
+                    chatProvider: 'Google',
+                    chatModel: 'gemini-3.7-flash',
+                })}
+                voiceChat={createVoiceChatController({
+                    onToggleRecording: mockToggle,
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const callButton = screen.getByRole('button', { name: '实时通话' });
+        expect(callButton).toBeDisabled();
+        expect(callButton).toHaveAttribute('title', expect.stringContaining('当前选择的是文本/多模态模型'));
+
+        fireEvent.click(callButton);
+        expect(mockToggle).not.toHaveBeenCalled();
+
+        expect(screen.getByRole('button', { name: '语音转写' })).toBeInTheDocument();
+    });
+
     it('shows memory badges for realtime voice turns', () => {
         render(
             <ChatPage

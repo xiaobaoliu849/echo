@@ -146,7 +146,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     if (provider !== voiceChat.voiceChatProvider) {
       voiceChat.onProviderChange(provider);
     }
-    voiceChat.onModelChange(model);
+    if (isVoiceRealtimeModel(provider, model)) {
+      voiceChat.onModelChange(model);
+    }
   }
 
   function handleModelSelect(provider: string, model: string) {

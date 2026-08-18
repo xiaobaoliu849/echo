@@ -1383,6 +1383,23 @@ export default function useVoiceChat({
       return;
     }
 
+    const effectiveModel = (
+      voiceChatModel && isRealtimeVoiceModel(voiceChatProvider, voiceChatModel)
+        ? voiceChatModel
+        : resolveDefaultModel(voiceChatProvider, providerModelCatalog)
+    ).trim();
+
+    if (!effectiveModel || !isRealtimeVoiceModel(voiceChatProvider, effectiveModel)) {
+      setVoiceChatBusy(false);
+      setVoiceChatError(
+        t(
+          "当前选择的服务商或模型不支持实时语音通话，请选择实时语音模型后重试。",
+          "The selected provider or model does not support realtime voice calls. Please select a realtime voice model and try again."
+        )
+      );
+      return;
+    }
+
     try {
       const sessionEpoch = markNewSessionEpoch();
       setVoiceChatStatus(t("正在连接实时语音会话…", "Connecting to the realtime voice session…"));
@@ -1450,7 +1467,7 @@ export default function useVoiceChat({
 
       const wsUrl = buildVoiceChatWebSocketUrl({
         provider: voiceChatProvider,
-        model: voiceChatModel.trim() || undefined,
+        model: effectiveModel || undefined,
         voice: voiceChatVoice,
         translationMode: voiceChatLiveTranslate ? voiceChatTranslationMode : undefined,
         sourceLanguageCode: voiceChatLiveTranslate ? voiceChatSourceLanguageCode : undefined,
