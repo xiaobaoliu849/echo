@@ -23,6 +23,11 @@ class TestInterruptionClassifier(unittest.TestCase):
         self.assertEqual(InterruptionClassifier.classify_interruption("ok"), InterruptionIntent.BACKCHANNEL)
         self.assertEqual(InterruptionClassifier.classify_interruption("确实"), InterruptionIntent.BACKCHANNEL)
         self.assertEqual(InterruptionClassifier.classify_interruption("原来如此"), InterruptionIntent.BACKCHANNEL)
+        self.assertEqual(InterruptionClassifier.classify_interruption("That"), InterruptionIntent.BACKCHANNEL)
+        self.assertEqual(InterruptionClassifier.classify_interruption("I"), InterruptionIntent.BACKCHANNEL)
+        self.assertEqual(InterruptionClassifier.classify_interruption("Hello"), InterruptionIntent.BACKCHANNEL)
+        self.assertEqual(InterruptionClassifier.classify_interruption("Yeah sure"), InterruptionIntent.BACKCHANNEL)
+        self.assertEqual(InterruptionClassifier.classify_interruption("I see"), InterruptionIntent.BACKCHANNEL)
 
     def test_true_barge_in(self):
         self.assertEqual(InterruptionClassifier.classify_interruption("等一下"), InterruptionIntent.TRUE_BARGE_IN)
@@ -33,6 +38,10 @@ class TestInterruptionClassifier(unittest.TestCase):
         self.assertEqual(InterruptionClassifier.classify_interruption("换一个话题"), InterruptionIntent.TRUE_BARGE_IN)
         self.assertEqual(InterruptionClassifier.classify_interruption("你刚才说什么"), InterruptionIntent.TRUE_BARGE_IN)
         self.assertEqual(InterruptionClassifier.classify_interruption("不对"), InterruptionIntent.TRUE_BARGE_IN)
+        self.assertEqual(InterruptionClassifier.classify_interruption("stop"), InterruptionIntent.TRUE_BARGE_IN)
+        self.assertEqual(InterruptionClassifier.classify_interruption("hold on"), InterruptionIntent.TRUE_BARGE_IN)
+        self.assertEqual(InterruptionClassifier.classify_interruption("be quiet"), InterruptionIntent.TRUE_BARGE_IN)
+        self.assertEqual(InterruptionClassifier.classify_interruption("Can I know what is your name"), InterruptionIntent.TRUE_BARGE_IN)
 
     def test_structured_rule_and_two_phase_latency(self):
         clock_values = iter((5.0, 5.125))

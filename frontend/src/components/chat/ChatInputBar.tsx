@@ -465,20 +465,22 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
             </button>
           )}
 
-          <button
-            type="button"
-            className={`vsComposerCallBtn ${isVoiceActive ? "recording" : ""}`}
-            aria-label={isVoiceActive ? t("结束实时通话", "End realtime call") : t("实时通话", "Realtime call")}
-            onClick={() => void voiceChat.onToggleRecording()}
-            disabled={!voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
-            title={isVoiceActive ? t("结束实时通话", "End realtime call") : (
-              isLiveTranslate
-                ? t(`实时翻译：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Live translate: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
-                : t(`实时通话：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Realtime call: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
-            )}
-          >
-            {isVoiceActive ? <StopIcon /> : <PhoneIcon />}
-          </button>
+          {!isVoiceActive && (
+            <button
+              type="button"
+              className="vsComposerCallBtn"
+              aria-label={t("实时通话", "Realtime call")}
+              onClick={() => void voiceChat.onToggleRecording()}
+              disabled={!voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
+              title={
+                isLiveTranslate
+                  ? t(`实时翻译：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Live translate: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+                  : t(`实时通话：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Realtime call: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+              }
+            >
+              <PhoneIcon />
+            </button>
+          )}
 
           {canSend ? (
             <button

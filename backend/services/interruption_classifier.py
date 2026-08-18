@@ -223,8 +223,10 @@ class InterruptionClassifier:
     opener (e.g. "喽", "那个", "我想想") while still honoring clear interrupt commands.
     """
 
-    # Minimum effective characters for an utterance to be considered a true barge-in.
+    # Minimum effective characters for a CJK utterance to be considered a true barge-in.
     _MIN_BARGE_IN_CHARS = 4
+    # Minimum words for an English/Latin utterance to be considered a true barge-in.
+    _MIN_BARGE_IN_WORDS = 3
 
     # Layer 1: explicit interrupt commands — always a true barge-in regardless of length.
     _EXPLICIT_BARGE_IN_PATTERNS = [
@@ -246,7 +248,7 @@ class InterruptionClassifier:
         r"^没有$",
         r"^不要(这个|那个|这样)?$",
         r"^换(一个|个)?(话题|说法|方向)?$",
-        r"^(stop|wait|cancel|shut\s*up|quiet)$",
+        r"^(stop|wait|hold\s*on|shut\s*up|quiet|be\s*quiet|cancel|never\s*mind|wrong|no\s*no|pause|stop\s*talking)$",
     ]
 
     # Layer 2: backchannels, fillers, thinking-out-loud and unfinished openers — never interrupt.
@@ -260,7 +262,7 @@ class InterruptionClassifier:
         r"^是(的|啊)?$",
         r"^确实$",
         r"^没毛病$",
-        r"^(OK|ok)$",
+        r"^(OK|ok|okay)$",
         r"^我知道了$",
         r"^明白(了)?$",
         r"^原来如此$",
@@ -285,6 +287,10 @@ class InterruptionClassifier:
         r"^说实话$",
         r"^其实$",
         r"^(咋|怎么)说(呢|吧)?$",
+        # --- English conversational backchannels, fillers and short starters ---
+        r"^(yeah|yes|yep|yup|uh|um|umm|uh-huh|uh\s*huh|mm|mmm|mm-hmm|mm\s*hmm|mhm)$",
+        r"^(well|right|sure|got\s*it|cool|ah|oh|like|so|hey|hi|hello|that|this|i|you|and|alright|fine|thanks|thank\s*you)$",
+        r"^(i\s*see|i\s*mean|you\s*know|go\s*on|i\s*hear\s*you|makes\s*sense)$",
     ]
 
     @classmethod
@@ -304,7 +310,7 @@ class InterruptionClassifier:
 
         # Layer 1: explicit barge-in commands always interrupt, even when short.
         for pattern in cls._EXPLICIT_BARGE_IN_PATTERNS:
-            if re.match(pattern, eval_text, re.IGNORECASE):
+            if re.match(pattern, eval_text, re.IGNORECASE) or re.match(pattern, cleaned_text, re.IGNORECASE):
                 logger.info(
                     "interruption_classification result=TRUE_BARGE_IN text=%r rule=explicit pattern=%r",
                     cleaned_text, pattern,
@@ -316,7 +322,7 @@ class InterruptionClassifier:
 
         # Layer 2: backchannels / fillers / openers never interrupt.
         for pattern in cls._BACKCHANNEL_PATTERNS:
-            if re.match(pattern, eval_text, re.IGNORECASE):
+            if re.match(pattern, eval_text, re.IGNORECASE) or re.match(pattern, cleaned_text, re.IGNORECASE):
                 logger.info("interruption_classification result=BACKCHANNEL text=%r pattern=%r", cleaned_text, pattern)
                 return InterruptionClassification(
                     intent=InterruptionIntent.BACKCHANNEL,
@@ -333,17 +339,31 @@ class InterruptionClassifier:
                 rule="single_char_noise",
             )
 
-        # Layer 3: length fallback. Short utterances that are neither explicit commands
-        # nor known backchannels are most likely unfinished speech — do not interrupt.
-        if len(eval_text) < cls._MIN_BARGE_IN_CHARS:
-            logger.info(
-                "interruption_classification result=BACKCHANNEL text=%r rule=too_short len=%d",
-                cleaned_text, len(eval_text),
-            )
-            return InterruptionClassification(
-                intent=InterruptionIntent.BACKCHANNEL,
-                rule=f"too_short:{len(eval_text)}",
-            )
+        # Layer 3: length & language fallback.
+        # For English/Latin utterances, check word count: 1-2 words are usually fillers or incomplete openers.
+        has_latin = bool(re.search(r"[a-zA-Z]", eval_text))
+        if has_latin:
+            words = re.findall(r"[a-zA-Z0-9']+", cleaned_text)
+            if len(words) < cls._MIN_BARGE_IN_WORDS:
+                logger.info(
+                    "interruption_classification result=BACKCHANNEL text=%r rule=too_few_words words=%d",
+                    cleaned_text, len(words),
+                )
+                return InterruptionClassification(
+                    intent=InterruptionIntent.BACKCHANNEL,
+                    rule=f"too_few_words:{len(words)}",
+                )
+        else:
+            # For CJK utterances, check character count.
+            if len(eval_text) < cls._MIN_BARGE_IN_CHARS:
+                logger.info(
+                    "interruption_classification result=BACKCHANNEL text=%r rule=too_short len=%d",
+                    cleaned_text, len(eval_text),
+                )
+                return InterruptionClassification(
+                    intent=InterruptionIntent.BACKCHANNEL,
+                    rule=f"too_short:{len(eval_text)}",
+                )
 
         logger.info("interruption_classification result=TRUE_BARGE_IN text=%r rule=length", cleaned_text)
         return InterruptionClassification(

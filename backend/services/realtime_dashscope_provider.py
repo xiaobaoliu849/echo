@@ -194,20 +194,26 @@ class DashScopeRealtimeMixin:
                 )
             )
             return
+        model_str = str(getattr(conversation, "model", "") or "").lower()
+        is_qwen35_omni = "qwen3.5-omni" in model_str
+        turn_type = "semantic_vad" if is_qwen35_omni else "server_vad"
+        threshold = 0.5 if is_qwen35_omni else 0.2
+        silence_duration_ms = 900 if is_qwen35_omni else 1200
+        asr_model = "qwen3-asr-flash-realtime" if is_qwen35_omni else None
+
         conversation.update_session(
             output_modalities=[MultiModality.AUDIO, MultiModality.TEXT],  # type: ignore[union-attr]
             voice=voice,
             input_audio_format=AudioFormat.PCM_16000HZ_MONO_16BIT,  # type: ignore[union-attr]
             output_audio_format=AudioFormat.PCM_24000HZ_MONO_16BIT,  # type: ignore[union-attr]
             enable_input_audio_transcription=True,
+            input_audio_transcription_model=asr_model,
             enable_turn_detection=True,
-            # Do NOT pass create_response=False: qwen3.5-omni-realtime honors it
-            # and then never auto-responds after VAD speech_stopped, leaving the
-            # UI stuck at "listening" forever (verified against the live API).
-            # interrupt_response=False stays so barge-in arbitration remains
-            # under the backend's interruption classifier.
+            turn_detection_type=turn_type,
+            turn_detection_threshold=threshold,
+            prefix_padding_ms=500 if is_qwen35_omni else 300,
+            turn_detection_silence_duration_ms=silence_duration_ms,
             turn_detection_param={"interrupt_response": False},
-            turn_detection_silence_duration_ms=2000,
             instructions=instructions,
             tools=dashscope_tool_declarations(),
         )
