@@ -70,7 +70,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Doubao": "",
     },
     "default_models": {
-        "DeepSeek": {"default": "deepseek-chat", "available": ["deepseek-chat", "deepseek-reasoner"], "enabled": ["deepseek-chat", "deepseek-reasoner"]},
+        "DeepSeek": {"default": "deepseek-v4-flash", "available": ["deepseek-v4-flash", "deepseek-v4-pro"], "enabled": ["deepseek-v4-flash", "deepseek-v4-pro"]},
         "OpenRouter": {"default": "deepseek/deepseek-r1", "available": ["deepseek/deepseek-r1", "google/gemini-2.5-flash", "anthropic/claude-3.5-sonnet"], "enabled": ["deepseek/deepseek-r1", "google/gemini-2.5-flash"]},
         "SiliconFlow": {"default": "deepseek-ai/DeepSeek-V3", "available": ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1", "Qwen/Qwen2.5-72B-Instruct"], "enabled": ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1"]},
         "Groq": {"default": "llama-3.3-70b-versatile", "available": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b"], "enabled": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]},

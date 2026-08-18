@@ -720,7 +720,7 @@ class LLMService:
 
         url = f"{settings['base_url']}/chat/completions"
         headers = self._build_headers(provider, settings["api_key"])
-        model = settings.get("model") or ("deepseek-chat" if provider == "DeepSeek" else "qwen-plus")
+        model = settings.get("model") or ("deepseek-v4-flash" if provider == "DeepSeek" else "qwen-plus")
 
         if mode == "memory":
             prompt = (
