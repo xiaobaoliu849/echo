@@ -165,7 +165,13 @@ class FetchModelsResponse(BaseModel):
 
 
 GOOGLE_MODEL_LIST_SUPPLEMENTS = [
-    # The legacy gemini-2.5-flash-native-audio-preview-12-2025 model is retired.
+    # Mainline and frontier text/multimodal models
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    # Realtime voice and live translation models
     "gemini-3.1-flash-live-preview",
     "gemini-3.5-live-translate-preview",
 ]

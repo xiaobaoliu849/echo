@@ -212,4 +212,52 @@ describe('useSettings', () => {
             })
         );
     });
+
+    it('automatically enables newly selected default model and supports bulk enable/disable', async () => {
+        const updateSettingsMock = vi.mocked(updateSettings);
+        updateSettingsMock.mockClear();
+        updateSettingsMock.mockResolvedValue({
+            config_path: '/tmp/config.json',
+            providers: ['DashScope'],
+            settings: {} as any
+        });
+        const { result } = renderHook(() =>
+            useSettings({ formatErrorMessage: createFormatErrorMessageStub() })
+        );
+
+        await waitFor(() => expect(result.current.settingsBusy).toBe(false));
+
+        act(() => {
+            result.current.onDefaultModelChange('gemini-3.7-flash');
+        });
+
+        expect(result.current.settingsDefaultModel).toBe('gemini-3.7-flash');
+        expect(result.current.settingsEnabledModels).toContain('gemini-3.7-flash');
+        expect(result.current.settingsAvailableModels).toContain('gemini-3.7-flash');
+
+        act(() => {
+            result.current.onDisableAllModels();
+        });
+        expect(result.current.settingsEnabledModels).toEqual([]);
+
+        act(() => {
+            result.current.onEnableAllModels();
+        });
+        expect(result.current.settingsEnabledModels).toEqual(result.current.settingsAvailableModels);
+
+        await act(async () => {
+            await result.current.onSubmit({ preventDefault: vi.fn() } as never);
+        });
+
+        expect(updateSettingsMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                default_models: expect.objectContaining({
+                    DashScope: expect.objectContaining({
+                        default: 'gemini-3.7-flash',
+                        enabled: expect.arrayContaining(['gemini-3.7-flash'])
+                    })
+                })
+            })
+        );
+    });
 });

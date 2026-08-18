@@ -122,12 +122,13 @@ describe('useChat', () => {
 
         expect(result.current.chatModelChoices.map((item) => item.label)).toEqual([
             'DashScope / qwen-plus',
+            'Google / gemini-2.5-flash',
             'Google / gemini-2.5-pro',
             'Xiaomi / mimo-v2.5-pro'
         ]);
 
         act(() => {
-            result.current.onModelChoiceChange(result.current.chatModelChoices[1].value);
+            result.current.onModelChoiceChange(result.current.chatModelChoices[2].value);
         });
 
         expect(result.current.chatProvider).toBe('Google');

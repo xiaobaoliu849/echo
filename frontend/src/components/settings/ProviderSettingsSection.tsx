@@ -460,15 +460,42 @@ export default function ProviderSettingsSection({ settings }: Props) {
           </div>
         ) : (
         <div className="vsProviderModelSection">
-          <div className="vsModelManagerHeader">
-            <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
-              {t(`模型 (${availableModels.length})`, `Models (${availableModels.length})`)}
-            </h3>
+          <div className="vsModelManagerHeader" style={{ flexWrap: "wrap", gap: "8px", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
+                {t(
+                  `模型 (已启用 ${(settings.settingsEnabledModels || []).length} / 共 ${availableModels.length})`,
+                  `Models (Enabled ${(settings.settingsEnabledModels || []).length} / Total ${availableModels.length})`
+                )}
+              </h3>
+              {availableModels.length > 0 && (
+                <div style={{ display: "flex", gap: "4px" }}>
+                  <button
+                    type="button"
+                    className="vsBtnSecondary vsBtnSmall"
+                    style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                    onClick={() => settings.onEnableAllModels()}
+                    title={t("启用当前所有可用模型", "Enable all available models")}
+                  >
+                    {t("全选", "All")}
+                  </button>
+                  <button
+                    type="button"
+                    className="vsBtnSecondary vsBtnSmall"
+                    style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                    onClick={() => settings.onDisableAllModels()}
+                    title={t("取消启用所有模型", "Disable all models")}
+                  >
+                    {t("清空", "Clear")}
+                  </button>
+                </div>
+              )}
+            </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <input
                 type="text"
                 className="vsInput vsInputSmall"
-                style={{ width: "160px" }}
+                style={{ width: "150px" }}
                 value={modelSearch}
                 onChange={(e) => setModelSearch(e.target.value)}
                 placeholder={t("筛选已有模型...", "Filter models...")}

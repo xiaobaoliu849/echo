@@ -134,13 +134,16 @@ function resolveDefaultModel(
   const rawAvailable = Array.isArray(providerMeta.availableModels)
     ? providerMeta.availableModels.filter((item) => item.trim())
     : [];
-  const availableModels = enabledModels.length > 0 ? enabledModels : rawAvailable;
+  const preferredDefault = (providerMeta.defaultModel || "").trim();
+
+  let availableModels = enabledModels.length > 0 ? enabledModels : rawAvailable;
+  if (preferredDefault && !availableModels.includes(preferredDefault)) {
+    availableModels = [preferredDefault, ...availableModels];
+  }
 
   const textModels = availableModels.filter((item) => !isVoiceRealtimeModel(provider, item));
-  const preferredDefault = (providerMeta.defaultModel || "").trim();
-  const isPreferredValid = enabledModels.length === 0 || enabledModels.includes(preferredDefault);
 
-  if (preferredDefault && isPreferredValid && !isVoiceRealtimeModel(provider, preferredDefault)) {
+  if (preferredDefault && !isVoiceRealtimeModel(provider, preferredDefault)) {
     return preferredDefault;
   }
   if (textModels.length > 0) {
@@ -163,10 +166,15 @@ function resolveModelOptions(
   const rawAvailable = Array.isArray(providerMeta.availableModels)
     ? providerMeta.availableModels.filter((item) => item.trim())
     : [];
-  const availableModels = enabledModels.length > 0 ? enabledModels : rawAvailable;
+  const preferredDefault = (providerMeta.defaultModel || "").trim();
+
+  let availableModels = enabledModels.length > 0 ? enabledModels : rawAvailable;
+  if (preferredDefault && !availableModels.includes(preferredDefault)) {
+    availableModels = [preferredDefault, ...availableModels];
+  }
 
   if (availableModels.length > 0) {
-    return availableModels.map((item) => item.trim()).filter(Boolean);
+    return [...new Set(availableModels.map((item) => item.trim()).filter(Boolean))];
   }
 
   const realtimeModels = resolveRealtimeModelOptions(provider, providerModelCatalog || {});

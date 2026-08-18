@@ -607,7 +607,14 @@ export default function useSettings({ formatErrorMessage }: Options) {
       const res = await fetchProviderModels(settingsProvider, settingsApiKey, settingsApiUrl);
       setSettingsAvailableModels(res.models);
       setSettingsEnabledModels((prev) => {
-        return prev.filter(m => res.models.includes(m));
+        const filtered = prev.filter(m => res.models.includes(m));
+        if (settingsDefaultModel && res.models.includes(settingsDefaultModel) && !filtered.includes(settingsDefaultModel)) {
+          filtered.push(settingsDefaultModel);
+        }
+        if (prev.length === 0 && res.models.length > 0) {
+          return [...res.models];
+        }
+        return filtered;
       });
       const ttsList = res.tts_models || [];
       if (ttsList.length > 0) {
@@ -619,14 +626,52 @@ export default function useSettings({ formatErrorMessage }: Options) {
       const totalCount = res.models.length + (res.tts_models?.length || 0);
       setSettingsInfo(
         t(
-          `已从 ${settingsProvider} 获取 ${totalCount} 个模型（对话模型 ${res.models.length} 个，TTS 语音模型 ${res.tts_models?.length || 0} 个）。请手动勾选要启用的模型。`,
-          `Fetched ${totalCount} models from ${settingsProvider} (${res.models.length} LLM models, ${res.tts_models?.length || 0} TTS models). Please tick the ones you want to enable.`
+          `已从 ${settingsProvider} 获取 ${totalCount} 个模型（对话模型 ${res.models.length} 个，TTS 语音模型 ${res.tts_models?.length || 0} 个）。`,
+          `Fetched ${totalCount} models from ${settingsProvider} (${res.models.length} LLM models, ${res.tts_models?.length || 0} TTS models).`
         )
       );
     } catch (err) {
       setSettingsError(formatErrorMessage(err, t("获取模型列表失败。", "Failed to fetch models.")));
     } finally {
       setSettingsFetchingModels(false);
+    }
+  }
+
+  function handleDefaultModelChange(modelId: string) {
+    const trimmed = modelId.trim();
+    setSettingsDefaultModel(trimmed);
+    if (trimmed) {
+      setSettingsEnabledModels((prev) => {
+        if (!prev.includes(trimmed)) {
+          return [...prev, trimmed];
+        }
+        return prev;
+      });
+      setSettingsAvailableModels((prev) => {
+        if (!prev.includes(trimmed)) {
+          return [...prev, trimmed];
+        }
+        return prev;
+      });
+    }
+  }
+
+  function handleTtsDefaultModelChange(modelId: string) {
+    const trimmed = modelId.trim();
+    setSettingsTtsDefaultModel(trimmed);
+    if (trimmed) {
+      setSettingsTtsEnabledModels((prev) => {
+        if (!prev.includes(trimmed)) {
+          return [...prev, trimmed];
+        }
+        return prev;
+      });
+      setSettingsTtsAvailableModels((prev) => {
+        if (!prev.includes(trimmed)) {
+          return [...prev, trimmed];
+        }
+        return prev;
+      });
     }
   }
 
@@ -690,6 +735,13 @@ export default function useSettings({ formatErrorMessage }: Options) {
         store_transcript_fulltext: evermemStoreTranscript
       });
 
+      const effectiveEnabled = settingsDefaultModel && !settingsEnabledModels.includes(settingsDefaultModel)
+        ? [...settingsEnabledModels, settingsDefaultModel]
+        : settingsEnabledModels;
+      const effectiveAvailable = settingsDefaultModel && !settingsAvailableModels.includes(settingsDefaultModel)
+        ? [...settingsAvailableModels, settingsDefaultModel]
+        : settingsAvailableModels;
+
       let updatedCustomProviders = [...customProviders];
       if (isCustom) {
         let headersObj = {};
@@ -709,8 +761,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
               api_key: settingsApiKey.trim(),
               base_url: settingsApiUrl.trim(),
               default_model: settingsDefaultModel.trim(),
-              available_models: settingsAvailableModels,
-              enabled_models: settingsEnabledModels,
+              available_models: effectiveAvailable,
+              enabled_models: effectiveEnabled,
               use_max_completion_tokens: settingsProviderUseMaxCompletionTokens,
               custom_headers: headersObj,
             };
@@ -784,12 +836,24 @@ export default function useSettings({ formatErrorMessage }: Options) {
             [settingsProvider]: settingsRealtimeApiUrl.trim()
           };
         }
+        const modelSection: Record<string, any> = {
+          default: settingsDefaultModel.trim(),
+          available: effectiveAvailable,
+          enabled: effectiveEnabled
+        };
+        if (settingsTtsDefaultModel || settingsTtsAvailableModels.length > 0 || settingsTtsEnabledModels.length > 0) {
+          const effectiveTtsEnabled = settingsTtsDefaultModel && !settingsTtsEnabledModels.includes(settingsTtsDefaultModel)
+            ? [...settingsTtsEnabledModels, settingsTtsDefaultModel]
+            : settingsTtsEnabledModels;
+          const effectiveTtsAvailable = settingsTtsDefaultModel && !settingsTtsAvailableModels.includes(settingsTtsDefaultModel)
+            ? [...settingsTtsAvailableModels, settingsTtsDefaultModel]
+            : settingsTtsAvailableModels;
+          modelSection.tts_default = settingsTtsDefaultModel.trim();
+          modelSection.tts_available = effectiveTtsAvailable;
+          modelSection.tts_enabled = effectiveTtsEnabled;
+        }
         patch.default_models = {
-          [settingsProvider]: {
-            default: settingsDefaultModel.trim(),
-            available: settingsAvailableModels,
-            enabled: settingsEnabledModels
-          }
+          [settingsProvider]: modelSection
         };
       }
 
@@ -952,8 +1016,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
     settingsTtsDefaultModel,
     settingsTtsAvailableModels,
     settingsTtsEnabledModels,
-    onTtsDefaultModelChange: setSettingsTtsDefaultModel,
-    onDefaultModelChange: setSettingsDefaultModel,
+    onTtsDefaultModelChange: handleTtsDefaultModelChange,
+    onDefaultModelChange: handleDefaultModelChange,
     onAvailableModelsChange,
     onToggleModelEnabled,
     onEnableAllModels,

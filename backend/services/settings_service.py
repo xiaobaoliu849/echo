@@ -70,15 +70,15 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Doubao": "",
     },
     "default_models": {
-        "DeepSeek": {"default": "", "available": [], "enabled": []},
-        "OpenRouter": {"default": "", "available": [], "enabled": []},
-        "SiliconFlow": {"default": "", "available": [], "enabled": []},
-        "Groq": {"default": "", "available": [], "enabled": []},
-        "DashScope": {"default": "", "available": [], "enabled": [], "tts_default": "qwen-audio-3.0-tts-flash", "tts_available": ["qwen-audio-3.0-tts-flash", "qwen-audio-3.0-tts-plus", "qwen3-tts-flash-2025-11-27"], "tts_enabled": ["qwen-audio-3.0-tts-flash", "qwen-audio-3.0-tts-plus", "qwen3-tts-flash-2025-11-27"]},
-        "Google": {"default": "", "available": [], "enabled": []},
+        "DeepSeek": {"default": "deepseek-chat", "available": ["deepseek-chat", "deepseek-reasoner"], "enabled": ["deepseek-chat", "deepseek-reasoner"]},
+        "OpenRouter": {"default": "deepseek/deepseek-r1", "available": ["deepseek/deepseek-r1", "google/gemini-2.5-flash", "anthropic/claude-3.5-sonnet"], "enabled": ["deepseek/deepseek-r1", "google/gemini-2.5-flash"]},
+        "SiliconFlow": {"default": "deepseek-ai/DeepSeek-V3", "available": ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1", "Qwen/Qwen2.5-72B-Instruct"], "enabled": ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1"]},
+        "Groq": {"default": "llama-3.3-70b-versatile", "available": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b"], "enabled": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]},
+        "DashScope": {"default": "qwen-plus", "available": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen3.5-omni-plus-realtime", "qwen3.5-livetranslate-flash-realtime", "qwen-audio-3.0-realtime-plus"], "enabled": ["qwen-max", "qwen-plus", "qwen3.5-omni-plus-realtime", "qwen3.5-livetranslate-flash-realtime"], "tts_default": "qwen-audio-3.0-tts-flash", "tts_available": ["qwen-audio-3.0-tts-flash", "qwen-audio-3.0-tts-plus", "qwen3-tts-flash-2025-11-27"], "tts_enabled": ["qwen-audio-3.0-tts-flash", "qwen-audio-3.0-tts-plus", "qwen3-tts-flash-2025-11-27"]},
+        "Google": {"default": "gemini-3.7-flash", "available": ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.1-flash-live-preview", "gemini-3.5-live-translate-preview", "gemini-2.5-flash", "gemini-2.5-pro"], "enabled": ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-live-preview", "gemini-3.5-live-translate-preview"]},
         "MiniMax": {"default": "", "available": [], "enabled": [], "tts_default": "speech-02-turbo", "tts_available": ["speech-02-turbo", "speech-02-hd", "speech-01-turbo", "speech-01-hd"], "tts_enabled": ["speech-02-turbo", "speech-02-hd"]},
         "Xiaomi": {"default": "", "available": [], "enabled": [], "tts_default": "mimo-v2.5-tts", "tts_available": ["mimo-v2.5-tts", "mimo-v2-tts"], "tts_enabled": ["mimo-v2.5-tts"]},
-        "OpenAI": {"default": "tts-1", "available": ["tts-1", "tts-1-hd"], "enabled": ["tts-1", "tts-1-hd"], "tts_default": "tts-1", "tts_available": ["tts-1", "tts-1-hd"], "tts_enabled": ["tts-1", "tts-1-hd"]},
+        "OpenAI": {"default": "gpt-4o", "available": ["gpt-4o", "gpt-4o-mini", "gpt-realtime-2", "tts-1", "tts-1-hd"], "enabled": ["gpt-4o", "gpt-4o-mini", "gpt-realtime-2", "tts-1", "tts-1-hd"], "tts_default": "tts-1", "tts_available": ["tts-1", "tts-1-hd"], "tts_enabled": ["tts-1", "tts-1-hd"]},
         "ElevenLabs": {"default": "eleven_multilingual_v2", "available": ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_monolingual_v1"], "enabled": ["eleven_multilingual_v2", "eleven_turbo_v2_5"], "tts_default": "eleven_multilingual_v2", "tts_available": ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_monolingual_v1"], "tts_enabled": ["eleven_multilingual_v2", "eleven_turbo_v2_5"]},
         "Ollama": {"default": "", "available": [], "enabled": []},
         "Deepgram": {"default": "", "available": [], "enabled": []},
@@ -214,11 +214,24 @@ class SettingsService:
                 enabled_raw = []
             enabled = [str(item).strip() for item in enabled_raw if str(item).strip()]
 
+            # Guarantee default model is available and enabled if specified
+            if default_model:
+                if default_model not in available:
+                    available.append(default_model)
+                if enabled and default_model not in enabled:
+                    enabled.append(default_model)
+
             tts_default = str(model_data.get("tts_default", "")).strip()
             tts_available_raw = model_data.get("tts_available", [])
             tts_available = [str(item).strip() for item in tts_available_raw if str(item).strip()] if isinstance(tts_available_raw, list) else []
             tts_enabled_raw = model_data.get("tts_enabled", [])
             tts_enabled = [str(item).strip() for item in tts_enabled_raw if str(item).strip()] if isinstance(tts_enabled_raw, list) else []
+
+            if tts_default:
+                if tts_default not in tts_available:
+                    tts_available.append(tts_default)
+                if tts_enabled and tts_default not in tts_enabled:
+                    tts_enabled.append(tts_default)
 
             item_dict: dict[str, Any] = {
                 "default": default_model,
