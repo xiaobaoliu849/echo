@@ -8754,34 +8754,32 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsComposer.liveActive {
   border-radius: 20px;
-  padding: 0;
-  gap: 0;
-  background: color-mix(in oklab, var(--bg-card) 94%, var(--accent-soft));
-  overflow: hidden;
+  background: color-mix(in oklab, var(--bg-card) 96%, var(--accent-soft));
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--line));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 0 12px color-mix(in oklab, var(--accent) 12%, transparent);
 }
 
-.vsComposer.liveActive .vsComposerToolbar {
-  display: none !important;
-}
-
-.vsLiveVoicePanel {
+.vsLiveVoiceStatusBanner {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 18px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  margin-bottom: 6px;
   width: 100%;
   box-sizing: border-box;
-  background: radial-gradient(circle at top right, color-mix(in oklab, var(--brand) 4%, transparent) 0%, transparent 80%);
+  background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
+  border-radius: 14px;
+  border: 1px solid color-mix(in oklab, var(--accent) 15%, var(--line));
 }
 
 .vsVoiceStatusSection {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  width: 100%;
-  font-size: 13.5px;
+  gap: 10px;
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
 }
 
 .vsVoiceStatusText {
@@ -8790,12 +8788,16 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vsVoiceStatusDot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  flex-shrink: 0;
   display: inline-block;
 }
 
@@ -8818,11 +8820,14 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsVoiceModelBadge {
   background: color-mix(in oklab, var(--accent) 10%, var(--bg-card));
   color: var(--accent-strong);
-  padding: 4px 10px;
-  border-radius: 20px;
+  padding: 3px 8px;
+  border-radius: 16px;
   font-size: 11px;
   font-weight: 600;
   border: 1px solid color-mix(in oklab, var(--accent) 15%, var(--line));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vsVoiceVisualizerContainer {
@@ -8830,33 +8835,32 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 68px;
-  background: color-mix(in oklab, var(--surface) 28%, var(--bg-card));
-  border-radius: 16px;
+  width: 90px;
+  height: 28px;
+  background: color-mix(in oklab, var(--surface) 30%, var(--bg-card));
+  border-radius: 10px;
   overflow: hidden;
+  flex-shrink: 0;
   border: 1px solid color-mix(in oklab, var(--accent) 8%, var(--line));
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .vsVoiceVisualizerWave {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  height: 40px;
+  gap: 4px;
+  height: 20px;
   z-index: 2;
 }
 
 .vsWaveBar {
-  width: 5px;
-  height: 15%;
+  width: 3px;
+  height: 20%;
   background: linear-gradient(to top, var(--brand), color-mix(in oklab, var(--brand) 60%, var(--accent)));
-  border-radius: 4px;
+  border-radius: 3px;
   transition: height 0.08s ease;
 }
 
-/* Fallback idle breathing animation when no volume is active */
 .vsWaveBar:not([style]) {
   animation: wave-breathe 2s ease-in-out infinite;
 }
@@ -8869,87 +8873,126 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsWaveBar.bar-7 { animation-delay: 0.0s; }
 
 @keyframes wave-breathe {
-  0%, 100% { height: 15%; }
-  50% { height: 50%; }
+  0%, 100% { height: 20%; }
+  50% { height: 60%; }
 }
 
 .vsVoiceGlow {
   position: absolute;
-  width: 140px;
-  height: 140px;
-  background: radial-gradient(circle, color-mix(in oklab, var(--brand) 18%, transparent) 0%, transparent 70%);
+  width: 60px;
+  height: 60px;
+  background: radial-gradient(circle, color-mix(in oklab, var(--brand) 20%, transparent) 0%, transparent 70%);
   border-radius: 50%;
   z-index: 1;
-  filter: blur(12px);
+  filter: blur(8px);
   pointer-events: none;
   transition: transform 0.1s ease, opacity 0.1s ease;
 }
 
-.vsVoiceLiveTranscript {
-  width: 100%;
-  padding: 12px 16px;
-  background: color-mix(in oklab, var(--surface) 20%, var(--bg-card));
-  border-radius: 12px;
-  min-height: 52px;
-  max-height: 90px;
-  overflow-y: auto;
-  font-size: 13px;
-  border-left: 4px solid var(--brand);
-  box-sizing: border-box;
-}
-
-.vsTranscriptLine {
-  display: flex;
-  gap: 10px;
-  line-height: 1.6;
-  align-items: flex-start;
-}
-
-.vsTranscriptLine.user .avatar {
-  font-size: 14px;
-}
-
-.vsTranscriptLine.assistant .avatar {
-  font-size: 14px;
-}
-
-.vsTranscriptLine .text {
-  color: var(--text-soft);
-  word-break: break-all;
-  text-align: left;
-}
-
-.vsVoiceCallControlRow {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-}
-
-.vsVoiceCallHangupBtn {
+.vsVoiceCallHangupMiniBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   background: #ef4444;
   color: white;
   border: none;
-  padding: 10px 28px;
-  border-radius: 24px;
-  font-size: 14px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+  transition: all 0.18s ease;
 }
 
-.vsVoiceCallHangupBtn:hover {
+.vsVoiceCallHangupMiniBtn:hover {
   background: #dc2626;
   transform: scale(1.03);
-  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
 }
 
-.vsVoiceCallHangupBtn:active {
+.vsVoiceCallHangupMiniBtn:active {
   transform: scale(0.97);
+}
+
+/* ── Attachment Image Preview Pills in Composer ── */
+.vsAttachmentImagePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  background: color-mix(in oklab, var(--surface) 60%, var(--bg-card));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12px;
+  max-width: 220px;
+}
+
+.vsAttachmentThumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Multimodal Message Attachments in Bubbles ── */
+.vsMessageAttachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vsMessageImageWrapper {
+  max-width: 280px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  background: color-mix(in oklab, var(--surface) 20%, transparent);
+}
+
+.vsMessageImage {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  display: block;
+  border-radius: 10px 10px 0 0;
+}
+
+.vsMessageImageCaption {
+  display: block;
+  font-size: 11px;
+  color: var(--text-soft);
+  padding: 4px 8px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.vsMessageFilePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.vsMessageFileIcon {
+  font-size: 14px;
+}
+
+.vsMessageFileName {
+  max-width: 180px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* ── Interactive Search Sources Card & Deep Thinking Accordion ── */

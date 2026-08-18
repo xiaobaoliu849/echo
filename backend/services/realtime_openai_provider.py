@@ -94,6 +94,10 @@ class OpenAIRealtimeMixin:
                 if command_type == "text_input":
                     content = str(payload.get("text", "")).strip()
                     if content:
+                        if recorder is not None:
+                            await recorder.note_user_transcript(content)
+                        if memory_session is not None:
+                            memory_session.note_user_transcript(content)
                         await openai_ws.send(json.dumps({
                             "type": "conversation.item.create",
                             "item": {
@@ -103,6 +107,24 @@ class OpenAIRealtimeMixin:
                             },
                         }))
                         await openai_ws.send(json.dumps({"type": "response.create"}))
+                    continue
+                if command_type == "media_input":
+                    text_prompt = str(payload.get("text", "")).strip()
+                    note_text = f"[Image] {text_prompt}" if text_prompt else "[Image]"
+                    if recorder is not None:
+                        await recorder.note_user_transcript(note_text)
+                    if memory_session is not None:
+                        memory_session.note_user_transcript(note_text)
+                    prompt = f"[User attached an image]\n{text_prompt}" if text_prompt else "[User attached an image]"
+                    await openai_ws.send(json.dumps({
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "message",
+                            "role": "user",
+                            "content": [{"type": "input_text", "text": prompt}],
+                        },
+                    }))
+                    await openai_ws.send(json.dumps({"type": "response.create"}))
                     continue
                 result = await self._handle_common_client_command(
                     command_type, payload,

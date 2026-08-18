@@ -22,6 +22,11 @@ export type TtsEngine = "edge" | "qwen_flash" | "minimax" | "xiaomi" | "openai" 
 export type ChatAttachment = {
   name: string;
   content: string;
+  type?: "text" | "image" | "pdf" | "audio" | "file";
+  mimeType?: string;
+  dataUrl?: string;
+  url?: string;
+  size?: number;
 };
 
 export type VoiceAgentSource = {

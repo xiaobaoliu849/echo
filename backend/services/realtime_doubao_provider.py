@@ -288,6 +288,39 @@ class DoubaoRealtimeMixin:
                             }))
                             await doubao_ws.send(json.dumps({"type": "response.create"}))
                     continue
+                if command_type == "media_input":
+                    text_prompt = str(payload.get("text", "")).strip()
+                    note_text = f"[Image] {text_prompt}" if text_prompt else "[Image]"
+                    prompt = f"[User attached an image]\n{text_prompt}" if text_prompt else "[User attached an image]"
+                    if is_openspeech:
+                        if memory_session is not None:
+                            memory_session.note_user_transcript(note_text)
+                        if recorder is not None:
+                            voice_turn_id = await recorder.note_user_transcript(note_text)
+                            if voice_turn_id:
+                                openspeech_state["active_turn_id"] = voice_turn_id
+                        msg_bytes = encode_openspeech_frame(
+                            msg_type=MSG_TYPE_FULL_CLIENT_REQ,
+                            payload={"content": prompt},
+                            event=EVENT_CHAT_TEXT_QUERY,
+                            session_id=session_id or None,
+                        )
+                        await doubao_ws.send(msg_bytes)
+                    else:
+                        if recorder is not None:
+                            await recorder.note_user_transcript(note_text)
+                        if memory_session is not None:
+                            memory_session.note_user_transcript(note_text)
+                        await doubao_ws.send(json.dumps({
+                            "type": "conversation.item.create",
+                            "item": {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": prompt}],
+                            },
+                        }))
+                        await doubao_ws.send(json.dumps({"type": "response.create"}))
+                    continue
 
                 result = await self._handle_common_client_command(
                     command_type, payload,

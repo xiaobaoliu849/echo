@@ -85,6 +85,41 @@ class QwenAudioRealtimeMixin:
                     await self._send_event(websocket, "error", message="无效的实时语音消息。")
                     continue
                 command_type = str(payload.get("type", "")).strip()
+                if command_type == "text_input":
+                    content = str(payload.get("text", "")).strip()
+                    if content:
+                        if recorder is not None:
+                            await recorder.note_user_transcript(content)
+                        if memory_session is not None:
+                            memory_session.note_user_transcript(content)
+                        await dash_ws.send(json.dumps({
+                            "type": "conversation.item.create",
+                            "item": {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": content}],
+                            },
+                        }))
+                        await dash_ws.send(json.dumps({"type": "response.create"}))
+                    continue
+                if command_type == "media_input":
+                    text_prompt = str(payload.get("text", "")).strip()
+                    note_text = f"[Image] {text_prompt}" if text_prompt else "[Image]"
+                    if recorder is not None:
+                        await recorder.note_user_transcript(note_text)
+                    if memory_session is not None:
+                        memory_session.note_user_transcript(note_text)
+                    prompt = f"[User attached an image]\n{text_prompt}" if text_prompt else "[User attached an image]"
+                    await dash_ws.send(json.dumps({
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "message",
+                            "role": "user",
+                            "content": [{"type": "input_text", "text": prompt}],
+                        },
+                    }))
+                    await dash_ws.send(json.dumps({"type": "response.create"}))
+                    continue
                 # Qwen-specific: reset echo gate before common handling
                 if command_type == "interruption_client_stopped":
                     if hasattr(interruption, "expected_playback_end_time"):

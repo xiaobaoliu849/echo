@@ -226,8 +226,12 @@ export default function useChat({
     }
   }
 
-  function addChatAttachment(name: string, content: string) {
-    setChatAttachments((prev) => [...prev, { name, content }]);
+  function addChatAttachment(nameOrAttachment: string | ChatAttachment, content?: string) {
+    if (typeof nameOrAttachment === "object") {
+      setChatAttachments((prev) => [...prev, nameOrAttachment]);
+    } else {
+      setChatAttachments((prev) => [...prev, { name: nameOrAttachment, content: content || "" }]);
+    }
   }
 
   function removeChatAttachment(index: number) {

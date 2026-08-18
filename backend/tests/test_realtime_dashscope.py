@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import asyncio
 import json
+from typing import Any
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -122,6 +125,23 @@ class _MemorySession:
 
     async def flush_turn(self) -> dict:
         return {}
+
+
+class _FakeWebSocket:
+    def __init__(self, inbound: list[dict[str, Any]] | None = None) -> None:
+        self.inbound = list(inbound) if inbound is not None else []
+        self.sent_events: list[dict[str, Any]] = []
+
+    async def receive(self) -> dict[str, Any]:
+        if self.inbound:
+            return self.inbound.pop(0)
+        return {"type": "websocket.disconnect"}
+
+    async def send_json(self, data: dict[str, Any]) -> None:
+        self.sent_events.append(data)
+
+
+_FakeToolSession = _ImmediateNativeToolSession
 
 
 class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
@@ -623,6 +643,54 @@ class TestDashScopeOmniSessionConfig(unittest.TestCase):
         # The raw client manages its own first-full/later-lite counter; the
         # mixin must not short-circuit it via send_raw.
         conversation.send_raw.assert_not_called()
+
+    def test_client_to_dashscope_text_input(self) -> None:
+        async def run_test() -> None:
+            service = RealtimeVoiceService.__new__(RealtimeVoiceService)
+            conversation = _StubOmniConversation()
+            client_ws = _FakeWebSocket(
+                inbound=[
+                    {"type": "websocket.receive", "text": json.dumps({"type": "text_input", "text": "你好通义千问"})},
+                ]
+            )
+            mem_session = _MemorySession()
+            tool_session = _FakeToolSession()
+
+            await service._client_to_dashscope_loop(
+                client_ws, conversation, mem_session, tool_session
+            )
+            self.assertEqual(len(conversation.raw_payloads), 2)
+            item_create = conversation.raw_payloads[0]
+            resp_create = conversation.raw_payloads[1]
+            self.assertEqual(item_create["type"], "conversation.item.create")
+            self.assertEqual(item_create["item"]["content"][0]["text"], "你好通义千问")
+            self.assertEqual(resp_create["type"], "response.create")
+
+        asyncio.run(run_test())
+
+    def test_client_to_dashscope_media_input(self) -> None:
+        async def run_test() -> None:
+            service = RealtimeVoiceService.__new__(RealtimeVoiceService)
+            conversation = _StubOmniConversation()
+            client_ws = _FakeWebSocket(
+                inbound=[
+                    {"type": "websocket.receive", "text": json.dumps({"type": "media_input", "text": "帮我看这张图片", "data": "QUJD"})},
+                ]
+            )
+            mem_session = _MemorySession()
+            tool_session = _FakeToolSession()
+
+            await service._client_to_dashscope_loop(
+                client_ws, conversation, mem_session, tool_session
+            )
+            self.assertEqual(len(conversation.raw_payloads), 2)
+            item_create = conversation.raw_payloads[0]
+            resp_create = conversation.raw_payloads[1]
+            self.assertEqual(item_create["type"], "conversation.item.create")
+            self.assertIn("帮我看这张图片", item_create["item"]["content"][0]["text"])
+            self.assertEqual(resp_create["type"], "response.create")
+
+        asyncio.run(run_test())
 
 
 if __name__ == "__main__":

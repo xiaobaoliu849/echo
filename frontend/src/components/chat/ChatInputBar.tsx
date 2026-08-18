@@ -63,14 +63,11 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
   const { t } = useI18n();
   const isVoiceActive = voiceChat.voiceChatRecording || voiceChat.voiceChatConnected;
   const hasInput = chat.chatInput.trim().length > 0;
+  const hasAttachments = (chat.chatAttachments && chat.chatAttachments.length > 0);
+  const canSend = hasInput || hasAttachments;
   const isRealtime = isVoiceRealtimeModel(chat.chatProvider, chat.chatModel);
   const isLiveTranslate = voiceChat.voiceChatLiveTranslate;
-  const textChatBlockedReason = (isRealtime && !isVoiceActive)
-    ? t(
-      "当前是实时语音/实时翻译模型。请点击实时通话按钮开始语音会话，或切换到普通文本模型后再发送文字。",
-      "The current model is realtime voice/live translation only. Start a realtime call, or switch to a text model before sending."
-    )
-    : "";
+
   const [dictating, setDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -114,7 +111,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
       if (visualizerEl) {
         const activeVolume = assistantVolume > 0 ? assistantVolume : micVolume;
         const dataArray = assistantVolume > 0 ? assistantDataArray : micDataArray;
-        
+
         const glowEl = visualizerEl.querySelector(".vsVoiceGlow") as HTMLElement;
         if (glowEl) {
           const scale = 0.9 + (activeVolume / 255) * 0.5;
@@ -214,12 +211,38 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      const isImg = file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name);
+
+      if (isImg) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          chat.addChatAttachment({
+            name: file.name,
+            content: "[Image]",
+            type: "image",
+            mimeType: file.type || "image/jpeg",
+            dataUrl,
+            size: file.size,
+          });
+        };
+        reader.onerror = (event) => {
+          console.error("Failed to read image file:", event);
+          alert(t("读取图片失败：", "Failed to read image file: ") + file.name);
+        };
+        reader.readAsDataURL(file);
+      } else if (isPdf) {
         setParsingFiles((prev) => [...prev, file.name]);
         try {
           const res = await extractPdfText(file);
           if (res && res.text) {
-            chat.addChatAttachment(file.name, res.text);
+            chat.addChatAttachment({
+              name: file.name,
+              content: res.text,
+              type: "pdf",
+              size: file.size,
+            });
           } else {
             alert(t("PDF 提取内容为空。", "Extracted PDF content is empty."));
           }
@@ -234,7 +257,12 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
         reader.onload = (event) => {
           const text = event.target?.result;
           if (typeof text === "string") {
-            chat.addChatAttachment(file.name, text);
+            chat.addChatAttachment({
+              name: file.name,
+              content: text,
+              type: "text",
+              size: file.size,
+            });
           }
         };
         reader.onerror = (event) => {
@@ -247,33 +275,52 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
     e.target.value = "";
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const dataUrl = event.target?.result as string;
+            chat.addChatAttachment({
+              name: file.name || `image-${Date.now()}.png`,
+              content: "[Image]",
+              type: "image",
+              mimeType: file.type || "image/jpeg",
+              dataUrl,
+              size: file.size,
+            });
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    }
+  };
+
+  const placeholder = isVoiceActive
+    ? t("正在实时通话中：可直接说话，或输入文字/粘贴图片发送...", "Live call active: speak freely, or type text / paste images to send...")
+    : isRealtime
+      ? t("输入文字发送启动实时会话，或点击右侧电话按钮通话...", "Type to start realtime chat, or click the phone button to call...")
+      : t("输入聊天内容，或者点击右侧麦克风语音转写...", "Type to chat, or click the microphone on the right to dictate...");
+
   return (
     <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""}`}>
-      {!isVoiceActive ? (
-        <>
-          <textarea
-            rows={1}
-            value={chat.chatInput}
-            disabled={isRealtime}
-            onChange={(e) => chat.onInputChange(e.target.value)}
-            placeholder={isRealtime
-              ? t("当前模型仅支持实时通话，请点击右侧电话按钮开始...", "This model only supports realtime calls. Click the phone button in the bottom right to start...")
-              : t("输入聊天内容，或者点击右侧麦克风语音转写...", "Type to chat, or click the microphone on the right to dictate...")}
-            onKeyDown={chat.onComposerKeyDown}
-          />
-          {dictationError ? <div className="vsComposerInlineHint">{dictationError}</div> : null}
-        </>
-      ) : (
-        <div className="vsLiveVoicePanel">
+      {/* ── Live Voice Top Status Banner during active call ── */}
+      {isVoiceActive && (
+        <div className="vsLiveVoiceStatusBanner">
           <div className="vsVoiceStatusSection">
             <span className="vsVoiceStatusText">
               <span className={`vsVoiceStatusDot ${voiceChat.voiceChatConnected ? "connected" : "connecting"}`} />
               {voiceChat.voiceChatConnected
-                ? (voiceChat.voiceChatReply 
-                    ? t("正在回复...", "Replying...") 
-                    : (voiceChat.voiceChatTranscript 
-                        ? t("正在聆听...", "Listening...") 
-                        : t("已连接，您可以说话", "Connected, feel free to speak")))
+                ? (voiceChat.voiceChatReply
+                    ? t("正在回复...", "Replying...")
+                    : (voiceChat.voiceChatTranscript
+                        ? t("正在聆听...", "Listening...")
+                        : t("已连接，您可以说话或打字", "Connected: speak or type freely")))
                 : t("正在建立安全连接...", "Connecting live session...")}
             </span>
             {voiceChat.voiceChatConnected && (
@@ -293,7 +340,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
               </span>
             )}
           </div>
-          
+
           <div className="vsVoiceVisualizerContainer" id="vs-voice-visualizer">
             <div className="vsVoiceVisualizerWave">
               <div className="vsWaveBar bar-1"></div>
@@ -306,38 +353,64 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
             </div>
             <div className="vsVoiceGlow"></div>
           </div>
-          
-          <div className="vsVoiceCallControlRow">
-            <button
-              type="button"
-              className="vsVoiceCallHangupBtn"
-              onClick={() => void voiceChat.onToggleRecording()}
-              title={t("结束实时通话", "End realtime call")}
-            >
-              <StopIcon />
-              <span>{t("挂断", "Hang up")}</span>
-            </button>
-          </div>
+
+          <button
+            type="button"
+            className="vsVoiceCallHangupMiniBtn"
+            onClick={() => void voiceChat.onToggleRecording()}
+            title={t("挂断实时通话", "Hang up call")}
+          >
+            <StopIcon />
+            <span>{t("挂断", "Hang up")}</span>
+          </button>
         </div>
       )}
 
-      {/* Attachment Preview Section */}
+      {/* ── Input Box (Always active) ── */}
+      <textarea
+        rows={1}
+        value={chat.chatInput}
+        onChange={(e) => chat.onInputChange(e.target.value)}
+        onPaste={handlePaste}
+        placeholder={placeholder}
+        onKeyDown={chat.onComposerKeyDown}
+      />
+      {dictationError ? <div className="vsComposerInlineHint">{dictationError}</div> : null}
+
+      {/* ── Attachment Preview Section ── */}
       {((chat.chatAttachments && chat.chatAttachments.length > 0) || parsingFiles.length > 0) && (
         <div className="vsComposerAttachments">
-          {chat.chatAttachments?.map((att, index) => (
-            <div key={`${index}-${att.name}`} className="vsAttachmentPill">
-              <span className="vsAttachmentPillIcon">📄</span>
-              <span className="vsAttachmentPillName" title={att.name}>{att.name}</span>
-              <button
-                type="button"
-                className="vsAttachmentPillDelete"
-                onClick={() => chat.removeChatAttachment(index)}
-                title={t("删除附件", "Delete attachment")}
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          {chat.chatAttachments?.map((att, index) => {
+            const isImage = att.type === "image" || att.dataUrl?.startsWith("data:image/") || /\.(png|jpe?g|webp|gif)$/i.test(att.name);
+            const imgSrc = att.dataUrl || att.url;
+            return isImage && imgSrc ? (
+              <div key={`${index}-${att.name}`} className="vsAttachmentImagePill">
+                <img src={imgSrc} alt={att.name} className="vsAttachmentThumb" />
+                <span className="vsAttachmentPillName" title={att.name}>{att.name}</span>
+                <button
+                  type="button"
+                  className="vsAttachmentPillDelete"
+                  onClick={() => chat.removeChatAttachment(index)}
+                  title={t("删除附件", "Delete attachment")}
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div key={`${index}-${att.name}`} className="vsAttachmentPill">
+                <span className="vsAttachmentPillIcon">{att.type === "pdf" ? "📕" : "📄"}</span>
+                <span className="vsAttachmentPillName" title={att.name}>{att.name}</span>
+                <button
+                  type="button"
+                  className="vsAttachmentPillDelete"
+                  onClick={() => chat.removeChatAttachment(index)}
+                  title={t("删除附件", "Delete attachment")}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
           {parsingFiles.map((name) => (
             <div key={name} className="vsAttachmentPill loading">
               <span className="spinner-mini"></span>
@@ -347,6 +420,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
         </div>
       )}
 
+      {/* ── Toolbar Section ── */}
       <div className="vsComposerToolbar">
         <div className="vsComposerToolbarLeft">
           <input
@@ -354,19 +428,19 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
             ref={fileInputRef}
             style={{ display: "none" }}
             onChange={handleFileChange}
+            accept="image/*,.pdf,.txt,.md,.json,.py,.ts,.tsx,.js,.html,.css"
             multiple
           />
-          {!isRealtime && (
-            <button
-              type="button"
-              className="vsToolbarBtn"
-              aria-label={t("附件", "Attachment")}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <PaperclipIcon />
-            </button>
-          )}
-          
+          <button
+            type="button"
+            className="vsToolbarBtn"
+            aria-label={t("附件/图片", "Attachment / Image")}
+            onClick={() => fileInputRef.current?.click()}
+            title={t("添加图片或文件 (支持截图粘贴 Ctrl+V)", "Add images or documents (supports pasting Ctrl+V)")}
+          >
+            <PaperclipIcon />
+          </button>
+
           {/* Unified provider → model → voice picker */}
           <VoiceCallSettingsPopover
             voiceChat={voiceChat}
@@ -378,13 +452,13 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
         </div>
 
         <div className="vsComposerToolbarRight">
-          {!isRealtime && (
+          {!isVoiceActive && !isRealtime && (
             <button
               type="button"
               className={`vsToolbarBtn ${dictating ? "recording" : ""}`}
               aria-label={dictating ? t("停止语音转写", "Stop dictation") : t("语音转写", "Dictate")}
               onClick={toggleDictation}
-              disabled={isVoiceActive || chat.chatBusy}
+              disabled={chat.chatBusy}
               title={dictating ? t("停止语音转写", "Stop dictation") : t("语音转写到输入框", "Dictate into the input")}
             >
               <MicIcon />
@@ -406,19 +480,17 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
             {isVoiceActive ? <StopIcon /> : <PhoneIcon />}
           </button>
 
-          {hasInput && !isVoiceActive ? (
+          {canSend ? (
             <button
               type="submit"
               className="vsSendBtn"
-              disabled={chat.chatBusy || Boolean(textChatBlockedReason)}
+              disabled={chat.chatBusy}
               aria-label={t("发送", "Send")}
-              title={textChatBlockedReason || t("发送", "Send")}
+              title={t("发送", "Send")}
             >
               {chat.chatBusy ? <SpinnerIcon /> : <SendIcon />}
             </button>
-          ) : (
-            null
-          )}
+          ) : null}
         </div>
       </div>
     </div>

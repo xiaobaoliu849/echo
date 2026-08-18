@@ -188,6 +188,8 @@ export function createVoiceChatController(
     onOpenVoiceAgentSession: vi.fn(),
     onExportVoiceAgentSession: vi.fn(),
     replaceSession: vi.fn(),
+    sendTextMessage: vi.fn(),
+    startRecordingWithInitialPrompt: vi.fn(),
     micAnalyser: null,
     assistantAnalyser: null,
     ...overrides

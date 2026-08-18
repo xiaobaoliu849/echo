@@ -1776,4 +1776,68 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatModel).toBe("doubao-realtime");
     expect(result.current.voiceChatVoice).toBe("zh_female_vv_jupiter_bigtts");
   });
+
+  it("sends text and image attachments over websocket and updates conversation messages", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-multimodal");
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        providerOptions: ["Google"],
+        preferredProvider: "Google",
+        preferredModel: "gemini-3.1-flash-live-preview",
+        providerModelCatalog: {
+          Google: {
+            defaultModel: "gemini-3.1-flash-live-preview",
+            availableModels: ["gemini-3.1-flash-live-preview"],
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+
+    const ws = FakeWebSocket.instances[0];
+    expect(ws).toBeDefined();
+
+    act(() => {
+      ws.emitOpen();
+      ws.emitMessage({ type: "session_open", model: "gemini-3.1-flash-live-preview" });
+    });
+
+    expect(result.current.voiceChatConnected).toBe(true);
+
+    // Send plain text message
+    act(() => {
+      const sent = result.current.sendTextMessage("这是文字测试");
+      expect(sent).toBe(true);
+    });
+
+    expect(ws.sent).toContain(JSON.stringify({ type: "text_input", text: "这是文字测试" }));
+    expect(result.current.voiceChatMessages).toHaveLength(1);
+    expect(result.current.voiceChatMessages[0].content).toBe("这是文字测试");
+
+    // Send image attachment message
+    act(() => {
+      const sent = result.current.sendTextMessage("看这张图片", [
+        { name: "test.png", content: "[Image]", type: "image", mimeType: "image/png", dataUrl: "data:image/png;base64,ABC" },
+      ]);
+      expect(sent).toBe(true);
+    });
+
+    expect(ws.sent).toContain(
+      JSON.stringify({
+        type: "media_input",
+        media_type: "image",
+        mime_type: "image/png",
+        data: "data:image/png;base64,ABC",
+        text: "看这张图片",
+      })
+    );
+    expect(result.current.voiceChatMessages).toHaveLength(2);
+    expect(result.current.voiceChatMessages[1].content).toBe("看这张图片");
+    expect(result.current.voiceChatMessages[1].attachments).toHaveLength(1);
+  });
 });

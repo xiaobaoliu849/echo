@@ -10,6 +10,7 @@ import {
   listVoiceAgentSessions,
   persistEverMemConversationGroupId,
   type ChatMessage,
+  type ChatAttachment,
   type VoiceAgentSource,
   type VoiceAgentSessionHistory,
   type VoiceAgentSessionHistoryDetailResponse,
@@ -169,6 +170,7 @@ export default function useVoiceChat({
   const lastPreferredProviderRef = useRef(preferredProvider);
   const lastPreferredModelRef = useRef(preferredModel);
   const sessionEpochRef = useRef(0);
+  const pendingInitialPromptRef = useRef<{ prompt: string; attachments?: ChatAttachment[] } | null>(null);
 
   const voiceChatModelOptions = resolveRealtimeModelOptions(voiceChatProvider, providerModelCatalog);
   // Realtime-capable models for every configured provider, so pickers can offer
@@ -753,6 +755,13 @@ export default function useVoiceChat({
         setVoiceChatInterruptionState({ phase: "idle" });
         setAssistantPlaybackGain(1);
         setVoiceChatStatus(t(`实时会话已连接：${event.model}`, `Realtime session connected: ${event.model}`));
+        if (pendingInitialPromptRef.current) {
+          const { prompt, attachments } = pendingInitialPromptRef.current;
+          pendingInitialPromptRef.current = null;
+          setTimeout(() => {
+            sendTextMessage(prompt, attachments);
+          }, 50);
+        }
         return;
       case "memory_config":
         setVoiceChatMemoryScope(event.enabled ? event.scope : "");
@@ -1720,6 +1729,65 @@ export default function useVoiceChat({
     return next;
   }, [voiceChatMessages, voiceChatTranscript, voiceChatReply]);
 
+  const sendTextMessage = useCallback((text: string, attachments: ChatAttachment[] = []): boolean => {
+    const ws = websocketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    const cleanText = text.trim();
+    if (!cleanText && attachments.length === 0) {
+      return false;
+    }
+
+    // Format attachments
+    let formattedText = cleanText;
+    const textAttachments = attachments.filter((att) => att.type !== "image" && !att.dataUrl?.startsWith("data:image/"));
+    const imageAttachments = attachments.filter((att) => att.type === "image" || att.dataUrl?.startsWith("data:image/"));
+
+    if (textAttachments.length > 0) {
+      const formatted = textAttachments
+        .map((att) => `[Attachment: ${att.name}]\n---\n${att.content || ""}\n---`)
+        .join("\n\n");
+      formattedText = formattedText ? `${formatted}\n\n${formattedText}` : formatted;
+    }
+
+    if (imageAttachments.length > 0) {
+      const firstImage = imageAttachments[0];
+      ws.send(
+        JSON.stringify({
+          type: "media_input",
+          media_type: "image",
+          mime_type: firstImage.mimeType || "image/jpeg",
+          data: firstImage.dataUrl || firstImage.content,
+          text: formattedText,
+        })
+      );
+    } else {
+      ws.send(
+        JSON.stringify({
+          type: "text_input",
+          text: formattedText,
+        })
+      );
+    }
+
+    const userMsg: ChatMessage = {
+      role: "user",
+      content: cleanText || (imageAttachments.length > 0 ? t("[发送图片]", "[Sent image]") : t("[发送附件]", "[Sent attachment]")),
+      attachments: attachments.map((att) => ({ ...att })),
+      id: createMessageId(),
+    };
+    setVoiceChatMessages((prev) => [...prev, userMsg]);
+    setVoiceChatReply("");
+    setVoiceChatStatus(t("已发送输入，等待回复…", "Message sent, waiting for reply…"));
+    return true;
+  }, [t]);
+
+  const startRecordingWithInitialPrompt = useCallback(async (prompt: string, attachments: ChatAttachment[] = []) => {
+    pendingInitialPromptRef.current = { prompt, attachments };
+    await startSession();
+  }, []);
+
   function replaceSession(messages: ChatMessage[], memoryGroupId = "") {
     const normalizedGroupId = (memoryGroupId || "").trim();
     markNewSessionEpoch();
@@ -1874,6 +1942,8 @@ export default function useVoiceChat({
     onOpenVoiceAgentSession,
     onExportVoiceAgentSession,
     replaceSession,
+    sendTextMessage,
+    startRecordingWithInitialPrompt,
     micAnalyser: micAnalyserRef.current,
     assistantAnalyser: assistantAnalyserRef.current,
   };

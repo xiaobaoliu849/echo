@@ -61,7 +61,8 @@ describe('ChatPage', () => {
         expect(screen.getByText('Google API Key 未配置，无法启动实时语音会话。')).toBeInTheDocument();
     });
 
-    it('keeps text input but blocks text sending for realtime models', () => {
+    it('allows text input and sends initial prompt to start realtime call for realtime models', () => {
+        const mockStartPrompt = vi.fn();
         render(
             <ChatPage
                 chat={createChatController({
@@ -69,16 +70,51 @@ describe('ChatPage', () => {
                     chatModel: 'qwen3-omni-flash-realtime-2025-12-01',
                     chatInput: 'some input'
                 })}
-                voiceChat={createVoiceChatController()}
+                voiceChat={createVoiceChatController({
+                    startRecordingWithInitialPrompt: mockStartPrompt,
+                })}
                 errorRuntimeContext={{}}
             />
         );
 
-        expect(screen.getByPlaceholderText(/当前模型仅支持实时通话/)).toBeDisabled();
+        const textarea = screen.getByPlaceholderText(/输入文字发送启动实时会话/);
+        expect(textarea).not.toBeDisabled();
         expect(screen.queryByRole('button', { name: '语音转写' })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: '实时通话' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
-        expect(screen.queryByText(/实时语音\/实时翻译模型/)).not.toBeInTheDocument();
+        const sendBtn = screen.getByRole('button', { name: '发送' });
+        expect(sendBtn).not.toBeDisabled();
+
+        fireEvent.click(sendBtn);
+        expect(mockStartPrompt).toHaveBeenCalledWith('some input', []);
+    });
+
+    it('sends text and media directly to active live voice session during voice call', () => {
+        const mockSendText = vi.fn();
+        render(
+            <ChatPage
+                chat={createChatController({
+                    chatProvider: 'Google',
+                    chatModel: 'gemini-3.1-flash-live-preview',
+                    chatInput: '帮我看下这个代码',
+                    chatAttachments: [{ name: 'error.png', content: '[Image]', type: 'image', dataUrl: 'data:image/png;base64,123' }],
+                })}
+                voiceChat={createVoiceChatController({
+                    voiceChatConnected: true,
+                    voiceChatRecording: true,
+                    sendTextMessage: mockSendText,
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        expect(screen.getByText(/已连接，您可以说话或打字/)).toBeInTheDocument();
+        const sendBtn = screen.getByRole('button', { name: '发送' });
+        expect(sendBtn).not.toBeDisabled();
+
+        fireEvent.click(sendBtn);
+        expect(mockSendText).toHaveBeenCalledWith('帮我看下这个代码', [
+            { name: 'error.png', content: '[Image]', type: 'image', dataUrl: 'data:image/png;base64,123' }
+        ]);
     });
 
     it('shows memory badges for realtime voice turns', () => {

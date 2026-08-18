@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchSpeakAudio, type ChatMessage, type TtsEngine } from "../api";
 import ErrorNotice from "../components/ErrorNotice";
 import ChatInputBar from "../components/chat/ChatInputBar";
-import type { UseChatResult } from "../hooks/useChat";
+import { isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import { useI18n } from "../i18n";
@@ -242,6 +242,26 @@ function MessageBubbleImpl({
           </div>
         </div>
       ) : null}
+
+      {msg.attachments && msg.attachments.length > 0 && (
+        <div className="vsMessageAttachments">
+          {msg.attachments.map((att, attIdx) => {
+            const isImage = att.type === "image" || att.dataUrl?.startsWith("data:image/") || /\.(png|jpe?g|webp|gif)$/i.test(att.name);
+            const imgSrc = att.dataUrl || att.url;
+            return isImage && imgSrc ? (
+              <div key={`${attIdx}-${att.name}`} className="vsMessageImageWrapper">
+                <img src={imgSrc} alt={att.name} className="vsMessageImage" />
+                <span className="vsMessageImageCaption">{att.name}</span>
+              </div>
+            ) : (
+              <div key={`${attIdx}-${att.name}`} className="vsMessageFilePill">
+                <span className="vsMessageFileIcon">{att.type === "pdf" ? "📕" : "📄"}</span>
+                <span className="vsMessageFileName">{att.name}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <p>{msg.content}</p>
 
@@ -572,6 +592,25 @@ export default function ChatPage({
     setShowScrollBottomBtn(!isNearBottom && combinedMessages.length > 0);
   }
 
+  const handleComposerSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    const userText = chat.chatInput.trim();
+    const attachments = chat.chatAttachments || [];
+    if (!userText && attachments.length === 0) return;
+
+    if (isVoiceActive) {
+      voiceChat.sendTextMessage(userText, attachments);
+      chat.onInputChange("");
+      chat.clearChatAttachments();
+    } else if (isVoiceRealtimeModel(chat.chatProvider, chat.chatModel)) {
+      voiceChat.startRecordingWithInitialPrompt(userText, attachments);
+      chat.onInputChange("");
+      chat.clearChatAttachments();
+    } else {
+      chat.onSubmit(e);
+    }
+  }, [chat, voiceChat, isVoiceActive]);
+
   return (
     <section className="vsChatWorkspace" style={{ position: "relative" }}>
       {/* ── Body ── */}
@@ -591,7 +630,7 @@ export default function ChatPage({
               </div>
             </div>
 
-            <form onSubmit={chat.onSubmit} className="vsComposerWrapCentered">
+            <form onSubmit={handleComposerSubmit} className="vsComposerWrapCentered">
               <ChatInputBar
                 chat={chat}
                 voiceChat={voiceChat}
@@ -742,7 +781,7 @@ export default function ChatPage({
       {/* ── Bottom composer ── */}
       {(!showWelcome || isVoiceActive) && (
         <div className={`vsComposerWrap ${isVoiceActive ? "liveActive" : ""}`}>
-          <form onSubmit={chat.onSubmit}>
+          <form onSubmit={handleComposerSubmit}>
             <ChatInputBar
               chat={chat}
               voiceChat={voiceChat}

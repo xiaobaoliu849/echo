@@ -279,7 +279,56 @@ class GoogleRealtimeMixin:
                         continue
                     content = str(payload.get("text", "")).strip()
                     if content:
+                        if recorder is not None:
+                            await recorder.note_user_transcript(content)
+                        if memory_session is not None:
+                            memory_session.note_user_transcript(content)
                         await session.send(input=content, end_of_turn=True)
+                    continue
+                if command_type == "media_input":
+                    if is_live_translate:
+                        await self._send_event(
+                            websocket,
+                            "error",
+                            message="Gemini Live Translate 仅支持实时音频输入，不支持多模态文件输入。",
+                        )
+                        continue
+                    data_b64 = str(payload.get("data", "")).strip()
+                    mime_type = str(payload.get("mime_type", "image/jpeg")).strip() or "image/jpeg"
+                    text_prompt = str(payload.get("text", "")).strip()
+                    if data_b64:
+                        if "," in data_b64:
+                            data_b64 = data_b64.split(",", 1)[1]
+                        try:
+                            raw_bytes = base64.b64decode(data_b64)
+                        except Exception:
+                            raw_bytes = b""
+                        if raw_bytes:
+                            note_text = f"[Image] {text_prompt}" if text_prompt else "[Image]"
+                            if recorder is not None:
+                                await recorder.note_user_transcript(note_text)
+                            if memory_session is not None:
+                                memory_session.note_user_transcript(note_text)
+                            if types is not None:
+                                if text_prompt:
+                                    try:
+                                        await session.send(
+                                            input=[
+                                                types.Part.from_bytes(data=raw_bytes, mime_type=mime_type),
+                                                types.Part.from_text(text=text_prompt),
+                                            ],
+                                            end_of_turn=True,
+                                        )
+                                    except Exception:
+                                        # Fallback to separate parts or send_realtime_input
+                                        await session.send_realtime_input(
+                                            media_chunks=[types.Blob(data=raw_bytes, mime_type=mime_type)]
+                                        )
+                                        await session.send(input=text_prompt, end_of_turn=True)
+                                else:
+                                    await session.send_realtime_input(
+                                        media_chunks=[types.Blob(data=raw_bytes, mime_type=mime_type)]
+                                    )
                     continue
                 if command_type == "speech_activity_started":
                     if not is_live_translate and (
