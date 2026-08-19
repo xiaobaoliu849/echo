@@ -58,6 +58,7 @@ export const OPENAI_PROVIDER = "OpenAI";
 export const DOUBAO_PROVIDER = "Doubao";
 export const PERSONAPLEX_PROVIDER = "PersonaPlex";
 export const GLM4VOICE_PROVIDER = "GLM4Voice";
+export const CARTESIA_PROVIDER = "Cartesia";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 // The legacy gemini-2.5-flash-native-audio-preview-12-2025 model has been retired;
@@ -382,6 +383,14 @@ export const PERSONAPLEX_REALTIME_VOICES = [
   { value: "VARM4.pt", label: "VARM4 · Expressive (Male)", description: "表现力更强的男声" },
 ];
 
+export const CARTESIA_REALTIME_VOICES = [
+  { value: "f786b574-daa5-4673-aa0c-cbe3e8534c02", label: "Katie (Female, en-US)", description: "Cartesia Sonic 默认女声" },
+  { value: "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4", label: "Skylar (Female, en-US)", description: "Cartesia Sonic 女声" },
+  { value: "a5136bf9-224c-4d76-b823-52bd5efcffcc", label: "Jameson (Male, en-US)", description: "Cartesia Sonic 男声" },
+  { value: "62ae83ad-4f6a-430b-af41-a9bede9286ca", label: "Gemma (Female, en-GB)", description: "Cartesia Sonic 英式女声" },
+  { value: "ef191366-f52f-447a-a398-ed8c0f2943a1", label: "Archie (Male, en-GB)", description: "Cartesia Sonic 英式男声" },
+];
+
 // Must stay in sync with DEFAULT_PERSONAPLEX_REALTIME_VOICE in the backend's
 // realtime_constants.py — the backend falls back to it for unknown voices.
 export const DEFAULT_PERSONAPLEX_VOICE = "NATF2.pt";
@@ -407,6 +416,8 @@ export function formatRealtimeVoiceOptions(
     options = PERSONAPLEX_REALTIME_VOICES;
   } else if (provider === GLM4VOICE_PROVIDER) {
     options = [{ value: "default", label: "Default · 默认音色", description: "原生默认音色" }];
+  } else if (provider === CARTESIA_PROVIDER) {
+    options = CARTESIA_REALTIME_VOICES;
   } else if (provider === DASHSCOPE_PROVIDER) {
     if (isQwenAudioModel(model)) {
       options = QWEN_AUDIO_VOICES;
@@ -473,6 +484,7 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
     DOUBAO_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
+    CARTESIA_PROVIDER,
   ];
   if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
     return preferredProvider;
@@ -509,6 +521,9 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
       normalizedProvider === GLM4VOICE_PROVIDER.toLowerCase()) {
     // Local speech-to-speech providers only ship realtime models.
     return true;
+  }
+  if (normalizedProvider === CARTESIA_PROVIDER.toLowerCase()) {
+    return normalizedModel.includes("cartesia");
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
     return /^qwen3\.5-omni-(plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel) ||
@@ -560,6 +575,9 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   if (provider === GLM4VOICE_PROVIDER) {
     return DEFAULT_GLM4VOICE_MODEL;
   }
+  if (provider === CARTESIA_PROVIDER) {
+    return "cartesia-realtime";
+  }
   return "";
 }
 
@@ -606,6 +624,9 @@ export function resolveRealtimeModelOptions(
   const glm4voiceBuiltIns = provider === GLM4VOICE_PROVIDER
     ? [DEFAULT_GLM4VOICE_MODEL]
     : [];
+  const cartesiaBuiltIns = provider === CARTESIA_PROVIDER
+    ? ["cartesia-realtime"]
+    : [];
   const allBuiltIns = [
     ...googleBuiltIns,
     ...openaiBuiltIns,
@@ -613,6 +634,7 @@ export function resolveRealtimeModelOptions(
     ...doubaoBuiltIns,
     ...personaplexBuiltIns,
     ...glm4voiceBuiltIns,
+    ...cartesiaBuiltIns,
   ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];
   return [...new Set(ordered.filter(Boolean))];

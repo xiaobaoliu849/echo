@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  CARTESIA_PROVIDER,
   DASHSCOPE_PROVIDER,
   DEFAULT_PERSONAPLEX_VOICE,
   DOUBAO_PROVIDER,
@@ -28,6 +29,7 @@ describe("resolveRealtimeProvider", () => {
     DOUBAO_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
+    CARTESIA_PROVIDER,
   ];
 
   it("honours every realtime provider it is offered", () => {

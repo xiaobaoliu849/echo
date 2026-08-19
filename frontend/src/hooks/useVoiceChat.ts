@@ -30,6 +30,8 @@ import {
   GOOGLE_PROVIDER,
   GOOGLE_REALTIME_VOICES,
   GLM4VOICE_PROVIDER,
+  CARTESIA_PROVIDER,
+  CARTESIA_REALTIME_VOICES,
   OPENAI_PROVIDER,
   OPENAI_REALTIME_VOICES,
   PERSONAPLEX_PROVIDER,
@@ -71,7 +73,7 @@ export default function useVoiceChat({
 }: Options) {
   const t = createInlineTranslator(language);
   const resolvedProviders = useMemo(
-    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, PERSONAPLEX_PROVIDER, GLM4VOICE_PROVIDER]
+    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, PERSONAPLEX_PROVIDER, GLM4VOICE_PROVIDER, CARTESIA_PROVIDER]
       .filter(p => providerOptions.includes(p)),
     [providerOptions],
   );
@@ -85,6 +87,7 @@ export default function useVoiceChat({
       ? (isQwenAudioModel(initialModel) ? "longanqian" : "Tina")
       : initialProvider === OPENAI_PROVIDER ? "alloy"
       : initialProvider === DOUBAO_PROVIDER ? "zh_female_vv_jupiter_bigtts"
+      : initialProvider === CARTESIA_PROVIDER ? "f786b574-daa5-4673-aa0c-cbe3e8534c02"
       : "Puck"
   );
   const [voiceChatTranslationMode, setVoiceChatTranslationMode] = useState<TranslationMode>("bidirectional");
@@ -276,6 +279,10 @@ export default function useVoiceChat({
     } else if (voiceChatProvider === GOOGLE_PROVIDER) {
       if (!GOOGLE_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice("Puck");
+      }
+    } else if (voiceChatProvider === CARTESIA_PROVIDER) {
+      if (!CARTESIA_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
+        setVoiceChatVoice("f786b574-daa5-4673-aa0c-cbe3e8534c02");
       }
     }
     // voiceChatModel must be a dependency: switching between qwen-audio and other

@@ -28,6 +28,14 @@ from .doubao_tts_provider import (
     doubao_tts_synthesize,
     is_doubao_voice,
 )
+from .cartesia_tts_provider import (
+    CARTESIA_VOICES,
+    DEFAULT_CARTESIA_MODEL,
+    DEFAULT_CARTESIA_VOICE,
+    cartesia_tts_synthesize,
+    fetch_cartesia_voices,
+    is_cartesia_voice,
+)
 
 try:
     import edge_tts
@@ -80,6 +88,7 @@ TTS_ENGINE_CHATTTS = "chattts"
 TTS_ENGINE_GPT_SOVITS = "gpt_sovits"
 TTS_ENGINE_AZURE = "azure"
 TTS_ENGINE_DOUBAO = "doubao"
+TTS_ENGINE_CARTESIA = "cartesia"
 
 SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_EDGE,
@@ -92,6 +101,7 @@ SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_GPT_SOVITS,
     TTS_ENGINE_AZURE,
     TTS_ENGINE_DOUBAO,
+    TTS_ENGINE_CARTESIA,
 }
 
 OPENAI_VOICES = [
@@ -598,6 +608,44 @@ class TTSService:
         if not base_url.startswith(("http://", "https://")):
             base_url = f"http://{base_url}"
         return api_key, base_url
+
+    def _cartesia_settings(self) -> tuple[str, str]:
+        """Return (api_key, base_url) for Cartesia."""
+        self.config.reload()
+        cfg = self.config.get_all()
+        api_key = str(cfg.get("api_keys", {}).get("cartesia_api_key", "")).strip()
+        base_url = str(cfg.get("api_urls", {}).get("Cartesia", "")).strip()
+        if not base_url:
+            from .cartesia_tts_provider import DEFAULT_CARTESIA_BASE_URL
+            base_url = DEFAULT_CARTESIA_BASE_URL
+        if not base_url.startswith(("http://", "https://")):
+            base_url = f"https://{base_url}"
+        return api_key, base_url.rstrip("/")
+
+    async def _generate_cartesia_audio(self, text: str, voice: str, path: Path, model: str | None = None) -> None:
+        api_key, base_url = self._cartesia_settings()
+        if not api_key:
+            raise RuntimeError("Cartesia API Key is not configured. 请在 设置 → Cartesia 中填写 cartesia_api_key。")
+        audio_bytes = await cartesia_tts_synthesize(
+            text=text,
+            voice_id=voice,
+            api_key=api_key,
+            base_url=base_url,
+            model=model or DEFAULT_CARTESIA_MODEL,
+        )
+        self._atomic_write_bytes(path, audio_bytes)
+
+    async def _fetch_cartesia_voices(self) -> list[dict[str, Any]]:
+        api_key, base_url = self._cartesia_settings()
+        if not api_key:
+            return CARTESIA_VOICES
+        try:
+            voices = await fetch_cartesia_voices(api_key, base_url)
+            if voices:
+                return voices
+        except Exception:
+            pass
+        return CARTESIA_VOICES
 
     def _doubao_settings(self) -> tuple[str, str, str]:
         """Return (access_token, app_id, cluster) for Doubao OpenSpeech TTS."""
@@ -1128,6 +1176,10 @@ class TTSService:
         # Check Doubao voices
         if is_doubao_voice(voice):
             return TTS_ENGINE_DOUBAO
+        # Check Cartesia voices (UUID voice IDs — must run before the generic
+        # "-" → Edge fallback below, since UUIDs contain dashes)
+        if is_cartesia_voice(voice):
+            return TTS_ENGINE_CARTESIA
         # 2. Check MiniMax voices
         if any(v["name"] == voice for v in MINIMAX_VOICES):
             return TTS_ENGINE_MINIMAX
@@ -1182,6 +1234,8 @@ class TTSService:
             selected_voice = voice or GPT_SOVITS_VOICES[0]["name"]
         elif normalized_engine == TTS_ENGINE_DOUBAO:
             selected_voice = voice or DEFAULT_DOUBAO_TTS_VOICE
+        elif normalized_engine == TTS_ENGINE_CARTESIA:
+            selected_voice = voice or DEFAULT_CARTESIA_VOICE
         else:
             selected_voice = voice or XIAOMI_VOICES[0]["name"]
 
@@ -1215,6 +1269,8 @@ class TTSService:
             await self._generate_gpt_sovits_audio(cleaned, selected_voice, path)
         elif normalized_engine == TTS_ENGINE_DOUBAO:
             await self._generate_doubao_audio(cleaned, selected_voice, rate, path)
+        elif normalized_engine == TTS_ENGINE_CARTESIA:
+            await self._generate_cartesia_audio(cleaned, selected_voice, path, model=model)
         else:
             await self._generate_xiaomi_audio(cleaned, selected_voice, path, model=model)
 
@@ -1333,6 +1389,9 @@ class TTSService:
             return self._filter_by_locale(GPT_SOVITS_VOICES + local_clones, locale)
         if normalized_engine == TTS_ENGINE_DOUBAO:
             return self._filter_by_locale(DOUBAO_VOICES, locale)
+        if normalized_engine == TTS_ENGINE_CARTESIA:
+            voices = await self._fetch_cartesia_voices()
+            return self._filter_by_locale(voices, locale)
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
             # The two Qwen TTS families use incompatible voice sets; when the
             # caller tells us the model, return only voices that work with it.

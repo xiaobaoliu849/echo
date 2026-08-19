@@ -48,6 +48,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "doubao_access_token": "",
         "doubao_app_id": "",
         "doubao_websearch_api_key": "",
+        "cartesia_api_key": "",
     },
     "api_urls": {
         "Google": "",
@@ -64,10 +65,12 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Deepgram": "",
         "GPT-SoVITS": "",
         "Doubao": "",
+        "Cartesia": "",
     },
     "realtime_api_urls": {
         "DashScope": "",
         "Doubao": "",
+        "Cartesia": "",
     },
     "default_models": {
         "DeepSeek": {"default": "deepseek-v4-flash", "available": ["deepseek-v4-flash", "deepseek-v4-pro"], "enabled": ["deepseek-v4-flash", "deepseek-v4-pro"]},
@@ -84,6 +87,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Deepgram": {"default": "", "available": [], "enabled": []},
         "GPT-SoVITS": {"default": "", "available": [], "enabled": []},
         "Doubao": {"default": "doubao-realtime", "available": ["doubao-realtime"], "enabled": ["doubao-realtime"]},
+        "Cartesia": {"default": "cartesia-realtime", "available": ["cartesia-realtime"], "enabled": ["cartesia-realtime"], "tts_default": "sonic-preview", "tts_available": ["sonic-preview", "sonic-3.5", "sonic-3"], "tts_enabled": ["sonic-preview", "sonic-3.5"]},
         "PersonaPlex": {"default": "personaplex-7b-v1-bnb-4bit", "available": ["personaplex-7b-v1-bnb-4bit"], "enabled": ["personaplex-7b-v1-bnb-4bit"]},
         "GLM4Voice": {"default": "glm-4-voice-9b", "available": ["glm-4-voice-9b"], "enabled": ["glm-4-voice-9b"]},
     },

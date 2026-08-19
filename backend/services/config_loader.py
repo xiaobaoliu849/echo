@@ -55,6 +55,7 @@ PROVIDER_KEY_MAP = {
     "AssemblyAI": "assemblyai_api_key",
     "GPT-SoVITS": "gpt_sovits_api_key",
     "Doubao": "doubao_api_key",
+    "Cartesia": "cartesia_api_key",
     # Local speech-to-speech servers — unauthenticated, but need entries so that
     # get_provider_settings resolves base URLs and registers them in provider lists.
     "PersonaPlex": "personaplex_api_key",
@@ -78,6 +79,7 @@ DEFAULT_BASE_URLS = {
     "AssemblyAI": "https://api.assemblyai.com",
     "GPT-SoVITS": "http://127.0.0.1:9880",
     "Doubao": "https://openspeech.bytedance.com/api/v3/realtime/dialogue",
+    "Cartesia": "https://api.cartesia.ai",
     # PersonaPlex and GLM4Voice use local WebSocket URLs
     "PersonaPlex": "",
     "GLM4Voice": "",

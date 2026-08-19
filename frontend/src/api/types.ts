@@ -17,7 +17,7 @@ export type TtsAudioResponse = {
   engine?: string;
 };
 
-export type TtsEngine = "edge" | "qwen_flash" | "minimax" | "xiaomi" | "openai" | "elevenlabs" | "chattts" | "gpt_sovits" | "doubao";
+export type TtsEngine = "edge" | "qwen_flash" | "minimax" | "xiaomi" | "openai" | "elevenlabs" | "chattts" | "gpt_sovits" | "doubao" | "cartesia";
 
 export type ChatAttachment = {
   name: string;

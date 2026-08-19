@@ -81,6 +81,8 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     DEFAULT_GOOGLE_REALTIME_VOICE,
     DEFAULT_OPENAI_REALTIME_MODEL,
     DEFAULT_OPENAI_REALTIME_VOICE,
+    DEFAULT_CARTESIA_REALTIME_MODEL,
+    DEFAULT_CARTESIA_REALTIME_VOICE,
     DEFAULT_DOUBAO_REALTIME_MODEL,
     DEFAULT_DOUBAO_REALTIME_VOICE,
     DEFAULT_PERSONAPLEX_REALTIME_MODEL,
@@ -117,6 +119,7 @@ from .realtime_qwen_audio_provider import QwenAudioRealtimeMixin
 from .realtime_doubao_provider import DoubaoRealtimeMixin
 from .realtime_personaplex_provider import PersonaPlexRealtimeMixin
 from .realtime_glm4voice_provider import RealtimeGlm4VoiceMixin
+from .realtime_cartesia_provider import CartesiaRealtimeMixin
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +136,7 @@ class RealtimeVoiceService(
     DoubaoRealtimeMixin,
     PersonaPlexRealtimeMixin,
     RealtimeGlm4VoiceMixin,
+    CartesiaRealtimeMixin,
 ):
     """Orchestrates realtime voice sessions across multiple providers.
 

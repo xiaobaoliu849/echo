@@ -58,6 +58,13 @@ QWEN_AUDIO_BENIGN_ERROR_PATTERNS = (
 DEFAULT_OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 DEFAULT_OPENAI_REALTIME_VOICE = "alloy"
 
+# Cartesia pipeline: Ink-2 STT (turn detection) → DeepSeek LLM → Sonic TTS.
+# The voice default mirrors cartesia_tts_provider.DEFAULT_CARTESIA_VOICE
+# (Katie, en-US) — duplicated here to keep this module dependency-free.
+DEFAULT_CARTESIA_REALTIME_MODEL = "cartesia-realtime"
+DEFAULT_CARTESIA_REALTIME_VOICE = "f786b574-daa5-4673-aa0c-cbe3e8534c02"
+DEFAULT_CARTESIA_STT_MODEL = "ink-2"
+
 DEFAULT_DOUBAO_REALTIME_MODEL = "doubao-realtime"
 # OpenSpeech dialogue (端到端实时语音大模型) O2.0 voices — the default endpoint
 # is the documented volc.speech.dialog WebSocket API.

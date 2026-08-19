@@ -45,7 +45,7 @@ async def list_voices(
     locale: str | None = Query(default=None, description="Locale prefix, e.g. zh-CN"),
     engine: str = Query(
         default="edge",
-        description="TTS engine: edge, qwen_flash, minimax, xiaomi, openai, elevenlabs, chattts, gpt_sovits, doubao",
+        description="TTS engine: edge, qwen_flash, minimax, xiaomi, openai, elevenlabs, chattts, gpt_sovits, doubao, cartesia",
     ),
     model: str | None = Query(
         default=None,
@@ -83,7 +83,7 @@ async def speak(
     rate: str = Query(default="+0%"),
     engine: str = Query(
         default="edge",
-        description="TTS engine: edge, qwen_flash, minimax, xiaomi, openai, elevenlabs, chattts, gpt_sovits, doubao",
+        description="TTS engine: edge, qwen_flash, minimax, xiaomi, openai, elevenlabs, chattts, gpt_sovits, doubao, cartesia",
     ),
     engine_b: str | None = Query(
         default=None,

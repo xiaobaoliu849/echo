@@ -15,6 +15,7 @@ from services.realtime_voice_service import (
     DEFAULT_DOUBAO_REALTIME_VOICE,
     DEFAULT_PERSONAPLEX_REALTIME_VOICE,
     DEFAULT_GLM4VOICE_REALTIME_VOICE,
+    DEFAULT_CARTESIA_REALTIME_VOICE,
     RealtimeVoiceService,
 )
 from services.voice_agent_session_repository import VoiceAgentSessionRepository
@@ -209,7 +210,7 @@ async def voice_chat_ws(
     await websocket.accept()
 
     selected_provider = (provider or "Google").strip()
-    if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice"}:
+    if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia"}:
         await websocket.send_json(
             {
                 "type": "error",
@@ -221,7 +222,13 @@ async def voice_chat_ws(
         return
 
     try:
-        if selected_provider == "Doubao":
+        if selected_provider == "Cartesia":
+            await voice_chat_service.stream_cartesia_session(
+                websocket,
+                model=model,
+                voice=(voice or DEFAULT_CARTESIA_REALTIME_VOICE).strip(),
+            )
+        elif selected_provider == "Doubao":
             await voice_chat_service.stream_doubao_session(
                 websocket,
                 model=model,

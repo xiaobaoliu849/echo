@@ -28,6 +28,7 @@ export const PROVIDERS = [
   "Google",
   "DashScope",
   "Doubao",
+  "Cartesia",
   "DeepSeek",
   "OpenRouter",
   "SiliconFlow",
