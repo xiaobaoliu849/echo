@@ -697,27 +697,33 @@ export default function useVoiceChat({
       nextPlaybackTimeRef.current = context.currentTime + 0.08;
     }
 
-    const pcm = decodeBase64Pcm(base64Audio);
-    if (!pcm.length) {
-      return;
-    }
+    try {
+      const pcm = decodeBase64Pcm(base64Audio);
+      if (!pcm.length) {
+        return;
+      }
 
-    const buffer = context.createBuffer(1, pcm.length, sampleRate);
-    const channel = buffer.getChannelData(0);
-    for (let i = 0; i < pcm.length; i += 1) {
-      channel[i] = pcm[i] / 32768;
-    }
+      const buffer = context.createBuffer(1, pcm.length, sampleRate);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < pcm.length; i += 1) {
+        channel[i] = pcm[i] / 32768;
+      }
 
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-    source.connect(assistantGainRef.current || context.destination);
-    const startAt = Math.max(context.currentTime + 0.04, nextPlaybackTimeRef.current);
-    source.start(startAt);
-    nextPlaybackTimeRef.current = startAt + buffer.duration;
-    playingSourcesRef.current.push(source);
-    source.addEventListener("ended", () => {
-      playingSourcesRef.current = playingSourcesRef.current.filter((item) => item !== source);
-    });
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(assistantGainRef.current || context.destination);
+      const startAt = Math.max(context.currentTime + 0.04, nextPlaybackTimeRef.current);
+      source.start(startAt);
+      nextPlaybackTimeRef.current = startAt + buffer.duration;
+      playingSourcesRef.current.push(source);
+      source.addEventListener("ended", () => {
+        playingSourcesRef.current = playingSourcesRef.current.filter((item) => item !== source);
+      });
+    } catch (err) {
+      // Log but do NOT propagate — a single corrupt chunk must not kill the
+      // playback timeline for all subsequent chunks in this turn.
+      console.warn("[VoiceChat] playAssistantAudio chunk error:", err);
+    }
   }
 
   function recordInterruptionDecision(
@@ -985,7 +991,9 @@ export default function useVoiceChat({
         if (typeof event.first_audio_ms === "number") {
           setVoiceChatMetrics((previous) => ({ ...previous, firstAudioMs: event.first_audio_ms ?? null }));
         }
-        void playAssistantAudio(event.audio, event.sample_rate);
+        playAssistantAudio(event.audio, event.sample_rate).catch((err) => {
+          console.warn("[VoiceChat] assistant audio promise rejected:", err);
+        });
         return;
       case "interruption_pending":
         if (handledInterruptionCandidatesRef.current.has(event.candidate_id)) {

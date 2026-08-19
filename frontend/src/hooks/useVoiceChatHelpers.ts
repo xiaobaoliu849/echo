@@ -690,6 +690,12 @@ export function decodeBase64Pcm(base64Audio: string): Int16Array {
   for (let i = 0; i < binary.length; i += 1) {
     bytes[i] = binary.charCodeAt(i);
   }
+  // Ensure an even byte count — an odd-length chunk (e.g. from a network
+  // boundary split) would cause `new Int16Array` to throw RangeError.
+  const usableLength = bytes.byteLength & ~1;
+  if (usableLength < bytes.byteLength) {
+    return new Int16Array(bytes.buffer.slice(0, usableLength));
+  }
   return new Int16Array(bytes.buffer);
 }
 

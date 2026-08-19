@@ -404,6 +404,7 @@ class CartesiaRealtimeMixin:
             try:
                 event = json.loads(raw_message)
             except Exception:
+                logger.debug("cartesia_tts_loop: non-JSON message (len=%s)", len(raw_message) if isinstance(raw_message, (str, bytes)) else "?")
                 continue
             event_type = str(event.get("type", ""))
             context_id = str(event.get("context_id", ""))
@@ -412,9 +413,11 @@ class CartesiaRealtimeMixin:
             if event_type == "chunk":
                 audio = event.get("audio")
                 if not audio:
+                    logger.debug("cartesia_tts_loop: chunk with empty audio, context=%s", context_id)
                     continue
                 # Drop audio from superseded (barged-in) contexts.
                 if active is None or context_id != active.context_id:
+                    logger.debug("cartesia_tts_loop: dropping chunk for stale context=%s (active=%s)", context_id, active.context_id if active else "none")
                     continue
                 await self._deliver_assistant_output(
                     websocket,
