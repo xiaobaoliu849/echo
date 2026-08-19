@@ -699,10 +699,6 @@ export function decodeBase64Pcm(base64Audio: string): Int16Array {
   return new Int16Array(bytes.buffer);
 }
 
-function stripTrailingPunctuation(text: string): string {
-  return text.trim().replace(/[.!?。！？,，:：;\s]+$/, "");
-}
-
 export function mergeAssistantText(previous: string, incoming: string): string {
   const next = incoming.trim();
   if (!next) {
@@ -711,31 +707,32 @@ export function mergeAssistantText(previous: string, incoming: string): string {
   if (!previous) {
     return next;
   }
-  const cleanPrev = stripTrailingPunctuation(previous);
-  const cleanNext = stripTrailingPunctuation(next);
-  if (!cleanNext) {
-    return previous;
-  }
-  if (!cleanPrev) {
-    return next;
-  }
-  if (cleanNext === cleanPrev || cleanPrev.endsWith(cleanNext)) {
-    return previous;
-  }
-  // Safety-net: if the incoming text is already a substring of the
-  // accumulated text, it adds nothing new — return unmodified.
-  if (cleanPrev.includes(cleanNext)) {
-    return previous;
-  }
-  if (cleanNext.startsWith(cleanPrev)) {
+  const prevTrimmed = previous.trim();
+
+  // If incoming is an exact cumulative replacement (starts with previous),
+  // adopt it — the provider sent cumulative text, not a delta.
+  if (next.startsWith(prevTrimmed)) {
     return next;
   }
 
-  // Find longest overlap between suffix of cleanPrev and prefix of cleanNext
+  // Exact duplicate of the last chunk — safe to ignore.
+  if (prevTrimmed === next) {
+    return previous;
+  }
+
+  // True tail duplicate: previous already ends with the exact incoming
+  // text.  This catches the case where the same delta is re-delivered.
+  if (prevTrimmed.endsWith(next)) {
+    return previous;
+  }
+
+  // Find longest suffix-prefix overlap to merge without gaps or duplication.
+  // This handles cumulative transcripts where the incoming text overlaps
+  // with the end of the previous text and extends it.
   let maxOverlap = 0;
-  const maxSearchLen = Math.min(cleanPrev.length, cleanNext.length);
+  const maxSearchLen = Math.min(prevTrimmed.length, next.length);
   for (let len = maxSearchLen; len >= 1; len--) {
-    if (cleanPrev.endsWith(cleanNext.slice(0, len))) {
+    if (prevTrimmed.endsWith(next.slice(0, len))) {
       maxOverlap = len;
       break;
     }

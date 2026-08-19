@@ -318,9 +318,10 @@ class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
             await asyncio.sleep(0.1)
             loop_task.cancel()
 
+            # ai_transcript is no longer emitted (frontend had no handler);
+            # text was already streamed via assistant_text events.
             ai_final = [e for e in client_ws.events if e["type"] == "ai_transcript"]
-            self.assertEqual(len(ai_final), 1)
-            self.assertEqual(ai_final[0]["text"], "我是豆包。")
+            self.assertEqual(len(ai_final), 0)
             text_deltas = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
             self.assertEqual(text_deltas, ["我是", "豆包。"])
 
@@ -425,13 +426,13 @@ class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
             types = [e["type"] for e in client_ws.events]
             self.assertIn("assistant_text", types)
             self.assertIn("assistant_audio", types)
-            self.assertIn("ai_transcript", types)
+            # ai_transcript is no longer emitted (frontend had no handler);
+            # text was already streamed via assistant_text events.
+            self.assertNotIn("ai_transcript", types)
             self.assertIn("interrupted", types)
 
             audio_events = [e for e in client_ws.events if e["type"] == "assistant_audio"]
             self.assertEqual(audio_events[0]["sample_rate"], 24000)
-            ai_final = [e for e in client_ws.events if e["type"] == "ai_transcript"]
-            self.assertEqual(ai_final[0]["text"], "你好呀")
             interrupted = [e for e in client_ws.events if e["type"] == "interrupted"]
             self.assertEqual(interrupted[0]["turn_id"], "r2")
 

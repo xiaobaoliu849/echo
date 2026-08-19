@@ -55,7 +55,7 @@ describe("isCJKPredominant", () => {
 
   it("handles CJK compatibility ideographs", () => {
     // U+F900..U+FAFF range — these are rare CJK compat chars
-    expect(isCJKPredominant("これは豈テストです")).toBe(true);
+    expect(isCJKPredominant("これは豈テストです")).toBe(true);
   });
 });
 
@@ -114,17 +114,9 @@ describe("appendStreamingText", () => {
 });
 
 // ---------------------------------------------------------------------------
-// mergeAssistantText — substring containment safety net
+// mergeAssistantText — streaming delta merging
 // ---------------------------------------------------------------------------
 describe("mergeAssistantText", () => {
-  it("returns previous unchanged when incoming text is already contained in previous", () => {
-    // Simulate a duplicate streaming delta: the previous already contains
-    // the incoming text as a substring.
-    const previous = "今日の試合はとても面白かったです";
-    const incoming = "試合はとても面白か";
-    expect(mergeAssistantText(previous, incoming)).toBe(previous);
-  });
-
   it("appends novel text that is not contained in previous", () => {
     const previous = "Hello world";
     const incoming = "how are you";
@@ -147,34 +139,79 @@ describe("mergeAssistantText", () => {
     expect(mergeAssistantText("", "Hello world")).toBe("Hello world");
   });
 
-  it("returns previous when cleaned incoming is empty (only punctuation)", () => {
-    expect(mergeAssistantText("Hello", "!")).toBe("Hello");
-  });
-
-  it("safety net: prevents duplicate CJK appends even with trailing punctuation variation", () => {
-    // The cleaned previous already contains the whole cleaned incoming
-    const previous = "これはテストです。";
-    const incoming = "テストです";
-    expect(mergeAssistantText(previous, incoming)).toBe(previous);
-  });
-
-  it("handles the exact equality case (clean versions equal)", () => {
+  it("handles the exact equality case", () => {
     const previous = "Hello world";
-    const incoming = "Hello world.";
-    // cleanPrev = "Hello world", cleanNext = "Hello world" → equal → return previous
-    expect(mergeAssistantText(previous, incoming)).toBe(previous);
-  });
-
-  it("handles prefix containment: if cleanPrev.startsWith(cleanNext), return previous", () => {
-    // This would be an edge case where incoming is a prefix of previous
-    const previous = "Hello world and more";
     const incoming = "Hello world";
     expect(mergeAssistantText(previous, incoming)).toBe(previous);
   });
 
-  it("handles the 'ends with' check: if cleanPrev ends with cleanNext, return previous", () => {
+  it("handles cumulative prefix: if incoming starts with previous, adopt incoming", () => {
+    const previous = "Hello world";
+    const incoming = "Hello world and more text";
+    expect(mergeAssistantText(previous, incoming)).toBe("Hello world and more text");
+  });
+
+  it("handles true tail duplicate: previous ends with exact incoming", () => {
     const previous = "This is a test message";
     const incoming = "test message";
+    expect(mergeAssistantText(previous, incoming)).toBe(previous);
+  });
+
+  // ---- CRITICAL FIX: repeated words/phrases must NOT be dropped ----
+
+  it("preserves repeated words in natural language", () => {
+    // The assistant says: "I think this is good. I think you should try."
+    // Streaming: first delta "I think this is good.", then delta "I think"
+    // The old buggy code dropped "I think" because includes() found it.
+    const previous = "I think this is good.";
+    const incoming = "I think";
+    // "I think" is NOT a tail of "I think this is good." and is not a
+    // cumulative extension, so it MUST be appended as new content.
+    const result = mergeAssistantText(previous, incoming);
+    expect(result).toBe("I think this is good. I think");
+  });
+
+  it("preserves repeated CJK phrases", () => {
+    // "我觉得这个想法很好。" then "我觉得" — a new sentence starting
+    const previous = "我觉得这个想法很好。";
+    const incoming = "我觉得";
+    const result = mergeAssistantText(previous, incoming);
+    expect(result).toBe("我觉得这个想法很好。我觉得");
+  });
+
+  it("preserves repeated words in numbered lists", () => {
+    const previous = "Step 1: do something.";
+    const incoming = "Step 2: do something else.";
+    const result = mergeAssistantText(previous, incoming);
+    expect(result).toBe("Step 1: do something. Step 2: do something else.");
+  });
+
+  it("preserves punctuation-only deltas", () => {
+    // The old code stripped trailing punctuation, making "!" → "" and dropping it.
+    const previous = "Hello world";
+    const incoming = "!";
+    const result = mergeAssistantText(previous, incoming);
+    expect(result).toBe("Hello world!");
+  });
+
+  it("preserves Chinese punctuation deltas", () => {
+    const previous = "你好世界";
+    const incoming = "。";
+    const result = mergeAssistantText(previous, incoming);
+    expect(result).toBe("你好世界。");
+  });
+
+  it("preserves repeated function words across sentences", () => {
+    const previous = "这是一个很好的问题。";
+    const incoming = "这是";
+    const result = mergeAssistantText(previous, incoming);
+    expect(result).toBe("这是一个很好的问题。这是");
+  });
+
+  it("handles exact tail duplicate correctly", () => {
+    // If the same delta arrives twice, it should be deduplicated.
+    const previous = "Hello world foo bar";
+    const incoming = "foo bar";
     expect(mergeAssistantText(previous, incoming)).toBe(previous);
   });
 });

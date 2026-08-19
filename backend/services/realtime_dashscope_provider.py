@@ -605,20 +605,22 @@ class DashScopeRealtimeMixin:
                 if not gated_tool_turn_id:
                     if event.get("final"):
                         # response.audio_transcript.done / response.text.done
-                        # deliver the FULL transcript. The streaming deltas
-                        # (response.audio_transcript.delta / response.text.delta)
-                        # already delivered it incrementally, and re-emitting the
-                        # whole final text duplicates the reply whenever the final
-                        # transcript differs from the accumulated deltas even
-                        # slightly (trailing punctuation, spacing, re-transcribed
-                        # words) — the frontend merge cannot dedup it. Only emit
-                        # the final text as a fallback when no delta was streamed
-                        # for this response (ultra-fast single-shot replies where
-                        # done arrives before any delta).
-                        if response_id:
-                            if response_id in streamed_text_response_ids:
+                        # delivers the FULL canonical transcript.  When streaming
+                        # deltas already covered this response, emit only the
+                        # novel suffix (if any) as a correction delta — this
+                        # recovers text that was lost to network issues or
+                        # deduplication during the streaming phase.
+                        final_text = str(event.get("text", "")).strip()
+                        if response_id and response_id in streamed_text_response_ids:
+                            recorded = recorder.current_assistant_text if recorder else ""
+                            if final_text and recorded and len(final_text) > len(recorded) + 2:
+                                # The final text is meaningfully longer — emit
+                                # the full final and let the frontend merge
+                                # handle overlap deduplication.
+                                event = {**event, "text": final_text}
+                            else:
                                 continue
-                        elif recorder is not None and bool(recorder.current_assistant_text):
+                        elif not response_id and recorder is not None and bool(recorder.current_assistant_text):
                             continue
                     else:
                         streamed_text_response_ids.add(response_id)

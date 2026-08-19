@@ -46,6 +46,15 @@ def _merge_memory_text(previous: str, incoming: str) -> str:
         return next_text
     if previous.endswith(next_text):
         return previous
+    # Insert a word-boundary space between Latin tokens so memory text
+    # doesn't run words together (e.g. "Hello" + "world" → "Hello world").
+    if previous[-1:].isalnum() and next_text[:1].isalnum():
+        # Only add space when the boundary looks like Latin script;
+        # CJK tokens join directly without spaces.
+        last = previous[-1]
+        first = next_text[0]
+        if (last.isascii() and last.isalpha()) or (first.isascii() and first.isalpha()):
+            return f"{previous} {next_text}"
     return f"{previous}{next_text}"
 
 

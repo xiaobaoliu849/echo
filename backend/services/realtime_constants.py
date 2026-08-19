@@ -327,16 +327,13 @@ def _merge_streaming_text(previous: str, incoming: str) -> tuple[str, str]:
         return next_text, next_text
 
     before_clean = re.sub(r"[.!?。！？,，:：;\s]+$", "", before)
-    next_clean = re.sub(r"[.!?。！？,，:：;\s]+$", "", next_text)
 
-    # Safety-net: if ``next_clean`` is already wholly contained inside
-    # ``before_clean`` then the incoming text adds nothing new — return
-    # the previous text unmodified so callers never emit a duplicate.
-    if next_clean and before_clean:
-        if before_clean == next_clean or before_clean.endswith(next_clean):
-            return before, ""
-        if next_clean in before_clean:
-            return before, ""
+    # Only suppress exact full-text duplicates.  Do NOT check substring
+    # containment (the old ``next_clean in before_clean`` guard) — natural
+    # language routinely repeats words and phrases, and the substring check
+    # silently drops genuinely new streaming deltas.
+    if before == next_text:
+        return before, ""
 
     if before_clean and next_text.startswith(before_clean):
         # ``next_text`` is a prefix extension of ``before_clean`` — the

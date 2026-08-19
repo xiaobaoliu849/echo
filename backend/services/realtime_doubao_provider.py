@@ -470,11 +470,9 @@ class DoubaoRealtimeMixin:
         if event == EVENT_TTS_ENDED:
             ai_acc = state.get("ai_acc") or ""
             active_turn_id = state.get("active_turn_id")
-            if ai_acc:
-                await self._send_event(
-                    websocket, "ai_transcript",
-                    text=ai_acc, is_final=True, turn_id=active_turn_id,
-                )
+            # ai_acc text was already streamed incrementally via assistant_text
+            # events during EVENT_TTS_SENTENCE_START / EVENT_CHAT_RESPONSE.
+            # The frontend has no handler for "ai_transcript", so do not emit it.
             try:
                 await self._finalize_realtime_turn(
                     websocket,
