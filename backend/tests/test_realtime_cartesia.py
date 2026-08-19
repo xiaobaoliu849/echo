@@ -438,6 +438,34 @@ class TestCartesiaTtsLoop(unittest.TestCase):
             self.assertEqual(audio_events[0]["sample_rate"], 24000)
         asyncio.run(run())
 
+    def test_chunk_delivered_with_data_field(self):
+        async def run():
+            service = DummyCartesiaService()
+            ws = CollectingWebSocket()
+            tts_ws = FakeWs(events=[
+                {"type": "chunk", "data": "ZGF0YXRlc3Q=", "context_id": "ctx-1"},
+            ])
+            state = _CartesiaSessionState(tts_model="m", voice="v", llm_model="l", tts_ws=tts_ws)
+            turn = _CartesiaTurn(seq=1, context_id="ctx-1", user_text="hello")
+            state.active = turn
+
+            task = asyncio.create_task(
+                service._cartesia_tts_loop(ws, state, MagicMock(), None)
+            )
+            await asyncio.sleep(0.05)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+            audio_events = [e for e in ws.events if e.get("type") == "assistant_audio"]
+            self.assertEqual(len(audio_events), 1)
+            self.assertEqual(audio_events[0]["audio"], "ZGF0YXRlc3Q=")
+            self.assertEqual(audio_events[0]["encoding"], "pcm_s16le")
+            self.assertEqual(audio_events[0]["sample_rate"], 24000)
+        asyncio.run(run())
+
     def test_chunk_dropped_for_wrong_context(self):
         async def run():
             service = DummyCartesiaService()

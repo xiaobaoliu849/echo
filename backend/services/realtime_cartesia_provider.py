@@ -412,26 +412,32 @@ class CartesiaRealtimeMixin:
             active = state.active
 
             if event_type == "chunk":
-                audio = event.get("audio")
+                audio = event.get("data") or event.get("audio")
                 if not audio:
                     logger.debug("cartesia_tts_loop: chunk with empty audio, context=%s", context_id)
-                    continue
-                # Drop audio from superseded (barged-in) contexts.
-                if active is None or context_id != active.context_id:
-                    logger.debug("cartesia_tts_loop: dropping chunk for stale context=%s (active=%s)", context_id, active.context_id if active else "none")
-                    continue
-                await self._deliver_assistant_output(
-                    websocket,
-                    {
-                        "type": "assistant_audio",
-                        "audio": str(audio),
-                        "encoding": "pcm_s16le",
-                        "sample_rate": 24000,
-                    },
-                    memory_session=memory_session,
-                    recorder=recorder,
-                    record_memory=False,
-                )
+                else:
+                    # Drop audio from superseded (barged-in) contexts.
+                    if active is not None and context_id == active.context_id:
+                        await self._deliver_assistant_output(
+                            websocket,
+                            {
+                                "type": "assistant_audio",
+                                "audio": str(audio),
+                                "encoding": "pcm_s16le",
+                                "sample_rate": 24000,
+                            },
+                            memory_session=memory_session,
+                            recorder=recorder,
+                            record_memory=False,
+                        )
+                    else:
+                        logger.debug("cartesia_tts_loop: dropping chunk for stale context=%s (active=%s)", context_id, active.context_id if active else "none")
+
+                if event.get("done") is True:
+                    if active is not None and context_id == active.context_id:
+                        if state.generation_done_seq == active.seq:
+                            state.active = None
+                            await self._finalize_realtime_turn(websocket, memory_session, recorder)
             elif event_type == "done":
                 if active is None or context_id != active.context_id:
                     continue
