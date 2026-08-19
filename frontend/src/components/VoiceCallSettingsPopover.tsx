@@ -268,34 +268,36 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
         >
           {/* LEVEL 1: PROVIDER SELECTION LIST (服务商) */}
           <div className="vsVoiceLevel1List">
-            {providerGroups.map((group) => {
-              const isSelectedProvider = group.provider === (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
-              const isActiveProvider = group.provider === (activeProvider || currentProviderName);
-              return (
-                <button
-                  key={group.provider}
-                  type="button"
-                  className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isSelectedProvider ? " selected" : ""}`}
-                  ref={(el) => onRowRef(group.provider, el)}
-                  onMouseEnter={() => {
-                    setActiveProvider(group.provider);
-                    setActiveCategory("");
-                    setHoveredModel("");
-                  }}
-                  onClick={() => {
-                    setActiveProvider(group.provider);
-                    setActiveCategory("");
-                    setHoveredModel("");
-                  }}
-                >
-                  <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
-                    {isSelectedProvider ? "✓" : ""}
-                  </span>
-                  <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
-                  <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
-                </button>
-              );
-            })}
+            <div className="vsVoiceLevel1Scroll">
+              {providerGroups.map((group) => {
+                const isSelectedProvider = group.provider === (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
+                const isActiveProvider = group.provider === (activeProvider || currentProviderName);
+                return (
+                  <button
+                    key={group.provider}
+                    type="button"
+                    className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isSelectedProvider ? " selected" : ""}`}
+                    ref={(el) => onRowRef(group.provider, el)}
+                    onMouseEnter={() => {
+                      setActiveProvider(group.provider);
+                      setActiveCategory("");
+                      setHoveredModel("");
+                    }}
+                    onClick={() => {
+                      setActiveProvider(group.provider);
+                      setActiveCategory("");
+                      setHoveredModel("");
+                    }}
+                  >
+                    <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
+                      {isSelectedProvider ? "✓" : ""}
+                    </span>
+                    <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
+                    <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
+                  </button>
+                );
+              })}
+            </div>
 
             <div
               className="vsVoiceSettingsFooter"

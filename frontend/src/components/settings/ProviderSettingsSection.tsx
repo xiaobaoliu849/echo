@@ -77,6 +77,8 @@ export default function ProviderSettingsSection({ settings }: Props) {
   const { t } = useI18n();
   const [modelSearch, setModelSearch] = useState("");
   const [showRawModels, setShowRawModels] = useState(false);
+  const [ttsModelSearch, setTtsModelSearch] = useState("");
+  const [showRawTtsModels, setShowRawTtsModels] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [showDoubaoAccessToken, setShowDoubaoAccessToken] = useState(false);
@@ -105,6 +107,10 @@ export default function ProviderSettingsSection({ settings }: Props) {
   const providerOptions = settings.providerOptions || [];
   const catalog = settings.providerModelCatalog || {};
   const availableModels = settings.settingsAvailableModels || [];
+  const ttsAvailableModels = settings.settingsTtsAvailableModels || [];
+  const isTtsSupported =
+    ["DashScope", "MiniMax", "Xiaomi", "OpenAI", "ElevenLabs", "Cartesia"].includes(settings.settingsProvider) ||
+    ttsAvailableModels.length > 0;
 
   return (
     <div className="vsProviderSettingsGrid">
@@ -430,19 +436,35 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </label>
           )}
 
-          {["DashScope", "MiniMax", "Xiaomi", "OpenAI", "ElevenLabs"].includes(settings.settingsProvider) && (
+          {isTtsSupported && (
             <label className="vsField">
               <span className="vsFieldLabel">{t("默认 TTS 语音模型", "Default TTS Model")}</span>
-              <input
-                className="vsInput"
-                value={settings.settingsTtsDefaultModel || ""}
-                onChange={(e) => settings.onTtsDefaultModelChange?.(e.target.value)}
-                placeholder={t("输入或选择 TTS 模型 ID", "Enter or select TTS model ID")}
-              />
+              {ttsAvailableModels.length > 0 ? (
+                <select
+                  className="vsSelect"
+                  value={settings.settingsTtsDefaultModel || ""}
+                  onChange={(e) => settings.onTtsDefaultModelChange?.(e.target.value)}
+                  disabled={settings.settingsBusy || settings.settingsSaving}
+                >
+                  <option value="">{t("-- 请选择或使用默认 --", "-- Select or use default --")}</option>
+                  {ttsAvailableModels.map((modelId) => (
+                    <option key={modelId} value={modelId}>
+                      {modelId}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="vsInput"
+                  value={settings.settingsTtsDefaultModel || ""}
+                  onChange={(e) => settings.onTtsDefaultModelChange?.(e.target.value)}
+                  placeholder={t("输入或选择 TTS 模型 ID", "Enter or select TTS model ID")}
+                />
+              )}
               <span className="vsFieldHint">
                 {t(
-                  "用于语音中心合成的标准 TTS 模型 (例如 qwen-audio-3.0-tts-flash, qwen3-tts-flash-2025-11-27, speech-02-hd, tts-1-hd 等)",
-                  "Model used for Voice Center synthesis (e.g. qwen-audio-3.0-tts-flash, qwen3-tts-flash-2025-11-27, speech-02-hd, tts-1-hd, etc.)"
+                  "用于语音中心合成的标准 TTS 模型 (例如 sonic-preview, qwen-audio-3.0-tts-flash, speech-02-hd, tts-1-hd 等)",
+                  "Model used for Voice Center synthesis (e.g. sonic-preview, qwen-audio-3.0-tts-flash, speech-02-hd, tts-1-hd, etc.)"
                 )}
               </span>
             </label>
@@ -459,104 +481,200 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </div>
           </div>
         ) : (
-        <div className="vsProviderModelSection">
-          <div className="vsModelManagerHeader" style={{ flexWrap: "wrap", gap: "8px", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
-                {t(
-                  `模型 (已启用 ${(settings.settingsEnabledModels || []).length} / 共 ${availableModels.length})`,
-                  `Models (Enabled ${(settings.settingsEnabledModels || []).length} / Total ${availableModels.length})`
+          <div className="vsProviderModelSection" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* LLM / Chat Models Section */}
+            <div className="vsModelCardSection">
+              <div className="vsModelManagerHeader" style={{ flexWrap: "wrap", gap: "8px", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
+                    {t(
+                      `💬 对话 / 大语言模型 (已启用 ${(settings.settingsEnabledModels || []).length} / 共 ${availableModels.length})`,
+                      `💬 LLM Models (Enabled ${(settings.settingsEnabledModels || []).length} / Total ${availableModels.length})`
+                    )}
+                  </h3>
+                  {availableModels.length > 0 && (
+                    <div style={{ display: "flex", gap: "4px" }}>
+                      <button
+                        type="button"
+                        className="vsBtnSecondary vsBtnSmall"
+                        style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                        onClick={() => settings.onEnableAllModels()}
+                        title={t("启用当前所有可用对话模型", "Enable all available LLM models")}
+                      >
+                        {t("全选", "All")}
+                      </button>
+                      <button
+                        type="button"
+                        className="vsBtnSecondary vsBtnSmall"
+                        style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                        onClick={() => settings.onDisableAllModels()}
+                        title={t("取消启用所有对话模型", "Disable all LLM models")}
+                      >
+                        {t("清空", "Clear")}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    type="text"
+                    className="vsInput vsInputSmall"
+                    style={{ width: "150px" }}
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    placeholder={t("筛选对话模型...", "Filter LLM models...")}
+                  />
+                  <button
+                    type="button"
+                    className="vsBtnSecondary vsBtnSmall"
+                    style={{ whiteSpace: "nowrap", flexShrink: 0, padding: "0 12px", height: "32px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                    onClick={() => void settings.onFetchModels()}
+                    disabled={settings.settingsFetchingModels || settings.settingsBusy}
+                  >
+                    {settings.settingsFetchingModels ? t("拉取中...", "Fetching...") : t("🔄 自动获取", "🔄 Auto Fetch")}
+                  </button>
+                </div>
+              </div>
+
+              <div className="vsModelListContainer">
+                {availableModels
+                  .filter(m => !modelSearch.trim() || m.toLowerCase().includes(modelSearch.toLowerCase()))
+                  .map((modelId) => (
+                    <div key={modelId} className="vsModelListItem">
+                      <span className="vsModelListItemName" title={modelId}>{modelId}</span>
+                      {settings.settingsDefaultModel === modelId && (
+                        <span className="vsModelListItemTag default">{t("默认", "Default")}</span>
+                      )}
+                      <input
+                        type="checkbox"
+                        className="vsSwitch vsSwitchSmall"
+                        checked={(settings.settingsEnabledModels || []).includes(modelId)}
+                        onChange={() => settings.onToggleModelEnabled(modelId)}
+                      />
+                    </div>
+                  ))}
+                {availableModels.length === 0 && (
+                  <div className="vsModelListEmpty">
+                    {t("暂无对话模型。点击“自动获取”或手动输入添加。", "No LLM models configured. Click Auto Fetch or enter manually.")}
+                  </div>
                 )}
-              </h3>
-              {availableModels.length > 0 && (
-                <div style={{ display: "flex", gap: "4px" }}>
-                  <button
-                    type="button"
-                    className="vsBtnSecondary vsBtnSmall"
-                    style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
-                    onClick={() => settings.onEnableAllModels()}
-                    title={t("启用当前所有可用模型", "Enable all available models")}
-                  >
-                    {t("全选", "All")}
-                  </button>
-                  <button
-                    type="button"
-                    className="vsBtnSecondary vsBtnSmall"
-                    style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
-                    onClick={() => settings.onDisableAllModels()}
-                    title={t("取消启用所有模型", "Disable all models")}
-                  >
-                    {t("清空", "Clear")}
-                  </button>
+              </div>
+
+              <button
+                type="button"
+                className="vsRawModelsToggle"
+                onClick={() => setShowRawModels(v => !v)}
+              >
+                {showRawModels
+                  ? t("▾ 收起手动编辑", "▾ Hide raw editor")
+                  : t("▸ 手动编辑可用模型（高级）", "▸ Edit raw models (advanced)")}
+              </button>
+              {showRawModels && (
+                <div style={{ marginTop: 8 }}>
+                  <textarea
+                    className="vsTextarea"
+                    rows={4}
+                    value={settings.settingsAvailableModelsText || ""}
+                    onChange={(e) => settings.onAvailableModelsChange(e.target.value)}
+                    placeholder={"model-a\nmodel-b"}
+                  />
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <input
-                type="text"
-                className="vsInput vsInputSmall"
-                style={{ width: "150px" }}
-                value={modelSearch}
-                onChange={(e) => setModelSearch(e.target.value)}
-                placeholder={t("筛选已有模型...", "Filter models...")}
-              />
-              <button
-                type="button"
-                className="vsBtnSecondary vsBtnSmall"
-                style={{ whiteSpace: "nowrap", flexShrink: 0, padding: "0 12px", height: "32px", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                onClick={() => void settings.onFetchModels()}
-                disabled={settings.settingsFetchingModels || settings.settingsBusy}
-              >
-                {settings.settingsFetchingModels ? t("拉取中...", "Fetching...") : t("🔄 自动获取", "🔄 Auto Fetch")}
-              </button>
-            </div>
-          </div>
 
-          <div className="vsModelListContainer">
-            {availableModels
-              .filter(m => !modelSearch.trim() || m.toLowerCase().includes(modelSearch.toLowerCase()))
-              .map((modelId) => (
-                <div key={modelId} className="vsModelListItem">
-                  <span className="vsModelListItemName" title={modelId}>{modelId}</span>
-                  {settings.settingsDefaultModel === modelId && (
-                    <span className="vsModelListItemTag default">{t("默认", "Default")}</span>
-                  )}
-                  <input
-                    type="checkbox"
-                    className="vsSwitch vsSwitchSmall"
-                    checked={(settings.settingsEnabledModels || []).includes(modelId)}
-                    onChange={() => settings.onToggleModelEnabled(modelId)}
-                  />
+            {/* TTS Models Management (when supported or present) */}
+            {isTtsSupported && (
+              <div className="vsModelCardSection" style={{ marginTop: "4px", paddingTop: "12px", borderTop: "1px dashed var(--line)" }}>
+                <div className="vsModelManagerHeader" style={{ flexWrap: "wrap", gap: "8px", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
+                      {t(
+                        `🔊 TTS 语音合成模型 (已启用 ${(settings.settingsTtsEnabledModels || []).length} / 共 ${ttsAvailableModels.length})`,
+                        `🔊 TTS Models (Enabled ${(settings.settingsTtsEnabledModels || []).length} / Total ${ttsAvailableModels.length})`
+                      )}
+                    </h3>
+                    {ttsAvailableModels.length > 0 && (
+                      <div style={{ display: "flex", gap: "4px" }}>
+                        <button
+                          type="button"
+                          className="vsBtnSecondary vsBtnSmall"
+                          style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                          onClick={() => settings.onEnableAllTtsModels?.()}
+                          title={t("启用当前所有可用 TTS 语音模型", "Enable all available TTS models")}
+                        >
+                          {t("全选", "All")}
+                        </button>
+                        <button
+                          type="button"
+                          className="vsBtnSecondary vsBtnSmall"
+                          style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                          onClick={() => settings.onDisableAllTtsModels?.()}
+                          title={t("取消启用所有 TTS 语音模型", "Disable all TTS models")}
+                        >
+                          {t("清空", "Clear")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <input
+                      type="text"
+                      className="vsInput vsInputSmall"
+                      style={{ width: "150px" }}
+                      value={ttsModelSearch}
+                      onChange={(e) => setTtsModelSearch(e.target.value)}
+                      placeholder={t("筛选 TTS 模型...", "Filter TTS models...")}
+                    />
+                  </div>
                 </div>
-              ))}
-            {availableModels.length === 0 && (
-              <div className="vsModelListEmpty">
-                {t("暂无模型。点击“自动获取”或手动输入添加。", "No models configured. Click Auto Fetch or enter manually.")}
+
+                <div className="vsModelListContainer">
+                  {ttsAvailableModels
+                    .filter(m => !ttsModelSearch.trim() || m.toLowerCase().includes(ttsModelSearch.toLowerCase()))
+                    .map((modelId) => (
+                      <div key={modelId} className="vsModelListItem">
+                        <span className="vsModelListItemName" title={modelId}>{modelId}</span>
+                        {settings.settingsTtsDefaultModel === modelId && (
+                          <span className="vsModelListItemTag default">{t("默认", "Default")}</span>
+                        )}
+                        <input
+                          type="checkbox"
+                          className="vsSwitch vsSwitchSmall"
+                          checked={(settings.settingsTtsEnabledModels || []).includes(modelId)}
+                          onChange={() => settings.onToggleTtsModelEnabled?.(modelId)}
+                        />
+                      </div>
+                    ))}
+                  {ttsAvailableModels.length === 0 && (
+                    <div className="vsModelListEmpty">
+                      {t("暂无 TTS 语音模型。点击上方“自动获取”或手动输入添加。", "No TTS models configured. Click Auto Fetch or enter manually.")}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="vsRawModelsToggle"
+                  onClick={() => setShowRawTtsModels(v => !v)}
+                >
+                  {showRawTtsModels
+                    ? t("▾ 收起手动编辑", "▾ Hide raw editor")
+                    : t("▸ 手动编辑可用 TTS 模型（高级）", "▸ Edit raw TTS models (advanced)")}
+                </button>
+                {showRawTtsModels && (
+                  <div style={{ marginTop: 8 }}>
+                    <textarea
+                      className="vsTextarea"
+                      rows={3}
+                      value={settings.settingsTtsAvailableModelsText || ""}
+                      onChange={(e) => settings.onTtsAvailableModelsChange?.(e.target.value)}
+                      placeholder={"sonic-preview\nsonic-3.5\nsonic-3"}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
-
-          <button
-            type="button"
-            className="vsRawModelsToggle"
-            onClick={() => setShowRawModels(v => !v)}
-          >
-            {showRawModels
-              ? t("▾ 收起手动编辑", "▾ Hide raw editor")
-              : t("▸ 手动编辑可用模型（高级）", "▸ Edit raw models (advanced)")}
-          </button>
-          {showRawModels && (
-            <div style={{ marginTop: 8 }}>
-              <textarea
-                className="vsTextarea"
-                rows={4}
-                value={settings.settingsAvailableModelsText || ""}
-                onChange={(e) => settings.onAvailableModelsChange(e.target.value)}
-                placeholder={"model-a\nmodel-b"}
-              />
-            </div>
-          )}
-        </div>
         )}
       </div>
 

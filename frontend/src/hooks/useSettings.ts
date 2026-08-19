@@ -702,6 +702,32 @@ export default function useSettings({ formatErrorMessage }: Options) {
     setSettingsAvailableModels(list);
   };
 
+  function onToggleTtsModelEnabled(modelId: string) {
+    setSettingsTtsEnabledModels((prev) => {
+      if (prev.includes(modelId)) {
+        return prev.filter((id) => id !== modelId);
+      } else {
+        return [...prev, modelId];
+      }
+    });
+  }
+
+  function onEnableAllTtsModels() {
+    setSettingsTtsEnabledModels([...settingsTtsAvailableModels]);
+  }
+
+  function onDisableAllTtsModels() {
+    setSettingsTtsEnabledModels([]);
+  }
+
+  const onTtsAvailableModelsChange = (text: string) => {
+    const list = text
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    setSettingsTtsAvailableModels(list);
+  };
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setSettingsError("");
@@ -1017,12 +1043,17 @@ export default function useSettings({ formatErrorMessage }: Options) {
     settingsTtsDefaultModel,
     settingsTtsAvailableModels,
     settingsTtsEnabledModels,
+    settingsTtsAvailableModelsText: settingsTtsAvailableModels.join("\n"),
     onTtsDefaultModelChange: handleTtsDefaultModelChange,
     onDefaultModelChange: handleDefaultModelChange,
     onAvailableModelsChange,
     onToggleModelEnabled,
     onEnableAllModels,
     onDisableAllModels,
+    onTtsAvailableModelsChange,
+    onToggleTtsModelEnabled,
+    onEnableAllTtsModels,
+    onDisableAllTtsModels,
     onFetchModels,
     onAddCustomProvider,
     onDeleteCustomProvider,

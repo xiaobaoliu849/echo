@@ -29,9 +29,16 @@ export function useProviderFlyoutTop(open: boolean, activeProvider: string) {
     }
     const row = rowsRef.current.get(activeProvider);
     if (row) {
-      // offsetTop is relative to the panel (the row's positioned ancestor),
-      // matching the flyout's own absolute positioning context.
-      setFlyoutTop(row.offsetTop);
+      if (panelRef.current && panelRef.current.clientHeight > 0) {
+        const rowRect = row.getBoundingClientRect();
+        const panelRect = panelRef.current.getBoundingClientRect();
+        const visualTop = rowRect.top - panelRect.top;
+        const maxTop = Math.max(0, panelRef.current.clientHeight - 60);
+        const clampedTop = Math.max(0, Math.min(visualTop, maxTop));
+        setFlyoutTop(clampedTop);
+      } else {
+        setFlyoutTop(row.offsetTop);
+      }
     }
   }, [open, activeProvider]);
 

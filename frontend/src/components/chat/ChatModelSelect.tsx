@@ -117,26 +117,28 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
         >
           {/* LEVEL 1: PROVIDER LIST */}
           <div className="vsVoiceLevel1List">
-            {groups.map((group) => {
-              const isCurrentProvider = group.provider === chat.chatProvider;
-              const isActiveProvider = group.provider === activeProvider;
-              return (
-                <button
-                  key={group.provider}
-                  type="button"
-                  className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isCurrentProvider ? " selected" : ""}`}
-                  ref={(el) => onRowRef(group.provider, el)}
-                  onMouseEnter={() => setActiveProvider(group.provider)}
-                  onClick={() => setActiveProvider(group.provider)}
-                >
-                  <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
-                    {isCurrentProvider ? "✓" : ""}
-                  </span>
-                  <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
-                  <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
-                </button>
-              );
-            })}
+            <div className="vsVoiceLevel1Scroll">
+              {groups.map((group) => {
+                const isCurrentProvider = group.provider === chat.chatProvider;
+                const isActiveProvider = group.provider === activeProvider;
+                return (
+                  <button
+                    key={group.provider}
+                    type="button"
+                    className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isCurrentProvider ? " selected" : ""}`}
+                    ref={(el) => onRowRef(group.provider, el)}
+                    onMouseEnter={() => setActiveProvider(group.provider)}
+                    onClick={() => setActiveProvider(group.provider)}
+                  >
+                    <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
+                      {isCurrentProvider ? "✓" : ""}
+                    </span>
+                    <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
+                    <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
+                  </button>
+                );
+              })}
+            </div>
 
             <div
               className="vsVoiceSettingsFooter"
