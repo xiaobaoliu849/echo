@@ -194,6 +194,13 @@ DOUBAO_MODEL_LIST_SUPPLEMENTS = [
     "doubao-pro-32k",
     "doubao-lite-32k",
 ]
+CARTESIA_MODEL_LIST_SUPPLEMENTS = [
+    "cartesia-realtime",
+    "sonic-preview",
+    "sonic-3.5",
+    "sonic-3",
+    "ink-2",
+]
 GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
 
 
@@ -349,7 +356,7 @@ def _filter_dashscope_models(model_ids: list[str]) -> list[str]:
 # Keyword fragments that mark a model id as a TTS/voice-synthesis model rather than a
 # chat/realtime model.  Shared by the fetch-models endpoint and the GET /settings
 # supplement-merge path so both classify curated models identically.
-TTS_MODEL_KEYWORDS = ("tts", "speech", "cosyvoice", "sambert", "voice", "eleven", "qwen-audio")
+TTS_MODEL_KEYWORDS = ("tts", "speech", "cosyvoice", "sambert", "voice", "eleven", "qwen-audio", "sonic")
 
 
 def _is_tts_model_id(model_id: str) -> bool:
@@ -439,6 +446,12 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 models=[m for m in DOUBAO_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in DOUBAO_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
+        if provider == "Cartesia":
+            return FetchModelsResponse(
+                provider=provider,
+                models=[m for m in CARTESIA_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in CARTESIA_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
         raise HTTPException(
             status_code=400,
             detail={
@@ -511,6 +524,13 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 provider=provider,
                 models=[m for m in DOUBAO_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in DOUBAO_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
+        if provider == "Cartesia":
+            # Cartesia has no /models endpoint — return curated model list.
+            return FetchModelsResponse(
+                provider=provider,
+                models=[m for m in CARTESIA_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in CARTESIA_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
         detail = exc.response.text[:500] if exc.response is not None else str(exc)
         raise HTTPException(
