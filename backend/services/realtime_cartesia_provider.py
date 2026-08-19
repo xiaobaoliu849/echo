@@ -184,7 +184,7 @@ class CartesiaRealtimeMixin:
     ) -> None:
         base_msg: dict[str, Any] = {
             "model_id": state.tts_model,
-            "voice": {"id": state.voice},
+            "voice": {"mode": "id", "id": state.voice},
             "output_format": {"container": "raw", "encoding": "pcm_s16le", "sample_rate": 24000},
             "language": infer_cartesia_language(turn.user_text),
             "context_id": turn.context_id,
@@ -387,6 +387,7 @@ class CartesiaRealtimeMixin:
                         llm, memory_session, tool_session, recorder,
                     )
             elif event_type == "error":
+                logger.error("Cartesia STT error event: %s", event)
                 await self._send_event(
                     websocket, "error",
                     message=f"Cartesia STT: {event.get('message', 'unknown error')}",
@@ -441,6 +442,7 @@ class CartesiaRealtimeMixin:
                 state.active = None
                 await self._finalize_realtime_turn(websocket, memory_session, recorder)
             elif event_type == "error":
+                logger.error("Cartesia TTS error event: %s", event)
                 await self._send_event(
                     websocket, "error",
                     message=f"Cartesia TTS: {event.get('message', event.get('error', 'unknown error'))}",
@@ -470,7 +472,10 @@ class CartesiaRealtimeMixin:
             voice=voice,
             llm_model=settings["llm_model"],
         )
-        headers = {"Authorization": f"Bearer {settings['api_key']}"}
+        headers = {
+            "Authorization": f"Bearer {settings['api_key']}",
+            "Cartesia-Version": CARTESIA_VERSION,
+        }
         ws_base = settings["ws_base"]
         stt_url = (
             f"{ws_base}/stt/turns/websocket"

@@ -199,7 +199,6 @@ CARTESIA_MODEL_LIST_SUPPLEMENTS = [
     "sonic-preview",
     "sonic-3.5",
     "sonic-3",
-    "ink-2",
 ]
 GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
 

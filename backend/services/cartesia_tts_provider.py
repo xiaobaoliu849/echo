@@ -77,7 +77,7 @@ async def cartesia_tts_synthesize(
     payload: dict[str, Any] = {
         "model_id": model,
         "transcript": text,
-        "voice": {"id": voice_id},
+        "voice": {"mode": "id", "id": voice_id},
         "output_format": {
             "container": "mp3",
             "encoding": "pcm_s16le",
