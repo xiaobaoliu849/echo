@@ -186,7 +186,7 @@ async def get_voice_agent_session(session_id: str) -> VoiceAgentSessionDetailRes
 @router.websocket("/ws")
 async def voice_chat_ws(
     websocket: WebSocket,
-    provider: str = "Google",
+    provider: str = "DashScope",
     model: str | None = None,
     voice: str | None = None,
     voiceprint_audio_urls: list[str] | None = Query(default=None),
@@ -209,13 +209,52 @@ async def voice_chat_ws(
         return
     await websocket.accept()
 
-    selected_provider = (provider or "Google").strip()
+    selected_provider = (provider or "DashScope").strip()
     if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia"}:
         await websocket.send_json(
             {
                 "type": "error",
                 "message": f"当前 Web 实时语音暂不支持 {selected_provider} 供应商。",
                 "provider": selected_provider,
+            }
+        )
+        await websocket.close(code=1003)
+        return
+
+    # ── Pre-validate that the provider's required credentials are present ──
+    # Without this check, sessions connect successfully but silently fail to
+    # produce responses — the user speaks but nothing happens.
+    from services.config_loader import BackendConfig
+    _cfg = BackendConfig()
+    _missing: list[str] = []
+    if selected_provider == "DashScope":
+        if not _cfg.get_setting("dashscope_api_key"):
+            _missing.append("DashScope API Key")
+        _rt_url = _cfg.get_all().get("realtime_api_urls", {})
+        if isinstance(_rt_url, dict) and not _rt_url.get("DashScope", "").strip():
+            _missing.append("DashScope Realtime WebSocket URL")
+    elif selected_provider == "Google":
+        if not _cfg.get_setting("google_api_key"):
+            _missing.append("Google API Key")
+    elif selected_provider == "OpenAI":
+        if not _cfg.get_setting("openai_api_key"):
+            _missing.append("OpenAI API Key")
+    elif selected_provider == "Doubao":
+        if not _cfg.get_setting("doubao_access_token") and not _cfg.get_setting("doubao_api_key"):
+            _missing.append("Doubao Access Token")
+        if not _cfg.get_all().get("doubao_app_id", ""):
+            _missing.append("Doubao App ID")
+    elif selected_provider == "Cartesia":
+        if not _cfg.get_setting("cartesia_api_key"):
+            _missing.append("Cartesia API Key")
+
+    if _missing:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": f"缺少 {selected_provider} 必需的配置: {', '.join(_missing)}。请在「设置 → 插件 → VoiceSpirit」中配置后重试。",
+                "provider": selected_provider,
+                "missing": _missing,
             }
         )
         await websocket.close(code=1003)
