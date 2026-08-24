@@ -49,7 +49,10 @@ class SaveTextWordsTests(unittest.TestCase):
 
     def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
         headers = dict(kwargs.get("headers") or {})
-        if path.startswith("/api/") and method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+        needs_auth = method.upper() in {"POST", "PUT", "PATCH", "DELETE"} or (
+            method.upper() == "GET" and path.startswith("/api/transcription")
+        )
+        if path.startswith("/api/") and needs_auth:
             headers.setdefault("Authorization", f"Bearer {os.getenv('VOICESPIRIT_API_TOKEN', 'test-api-token')}")
             kwargs["headers"] = headers
 

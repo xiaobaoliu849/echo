@@ -32,19 +32,10 @@ def create_app() -> FastAPI:
         version="0.1.0",
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "null",
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        ],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # NOTE: no "null" origin here — sandboxed iframes send Origin: null, and
+    # allowing it with credentials would let any web page drive this API.
+    # Desktop mode loads http://127.0.0.1:8000/app same-origin, dev uses
+    # localhost:5173; neither needs "null".
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon() -> Response:
@@ -273,6 +264,24 @@ def create_app() -> FastAPI:
         )
         return response
 
+    # Registered LAST on purpose: Starlette's add_middleware inserts at the
+    # front, so the last-registered middleware ends up OUTERMOST. CORSMiddleware
+    # must wrap the auth middleware so that 401/403 responses still carry
+    # Access-Control-Allow-* headers (otherwise dev-origin clients only see
+    # opaque network errors instead of the structured error body).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(tts.router, prefix="/api/tts", tags=["tts"])
     app.include_router(documents.router, prefix="/api/tts", tags=["documents"])
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
@@ -297,6 +306,11 @@ def create_app() -> FastAPI:
     frontend_assets = frontend_dist / "assets"
     transcription_public_dir = get_data_dir() / "temp_audio" / "transcription_jobs" / "published"
     transcription_public_dir.mkdir(parents=True, exist_ok=True)
+    # Capability URL, deliberately unauthenticated: the consumer is the cloud
+    # ASR provider fetching source_url (it cannot send Bearer headers). Files
+    # are named "{job_id}{ext}" with a 64-bit random job_id, so URLs are
+    # unguessable; the mount only matters when the user explicitly configures
+    # transcription_settings.public_base_url.
     app.mount(
         "/public/transcription",
         StaticFiles(directory=str(transcription_public_dir)),
@@ -325,8 +339,10 @@ def create_app() -> FastAPI:
         @app.get("/app/{full_path:path}")
         async def web_app_spa(full_path: str) -> FileResponse:
             safe_target = (frontend_dist / full_path).resolve()
+            # is_relative_to (not a string-prefix check) so sibling directories
+            # like frontend/dist.bak cannot be read via /app/../dist-old/...
             if (
-                str(safe_target).startswith(str(frontend_dist_resolved))
+                safe_target.is_relative_to(frontend_dist_resolved)
                 and safe_target.is_file()
             ):
                 return FileResponse(safe_target)

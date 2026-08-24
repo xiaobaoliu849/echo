@@ -1057,14 +1057,13 @@ class QwenAudioRealtimeMixin:
                         tool_session, recorder, interruption,
                     )
                 )
-                done, pending = await asyncio.wait(
-                    {send_task, receive_task},
-                    return_when=asyncio.FIRST_EXCEPTION,
-                )
-                for task in pending:
-                    task.cancel()
-                for task in done:
-                    task.result()
+                # FIRST_EXCEPTION never returns when a task finishes
+                # NORMALLY (e.g. client disconnect breaks the send loop),
+                # which used to strand the receive loop and upstream socket.
+                # _run_duplex_tasks handles both outcomes: cancel the peer,
+                # gather with return_exceptions=True, and re-raise a real
+                # fault so it surfaces to the client.
+                await self._run_duplex_tasks(send_task, receive_task)
         except WebSocketDisconnect:
             return
         except Exception as e:

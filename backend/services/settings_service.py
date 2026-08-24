@@ -30,6 +30,47 @@ MEMORY_SETTINGS_BOOL_KEYS = {
 }
 MEMORY_SETTINGS_STR_KEYS = {"api_url", "api_key", "scope_id"}
 
+# Sentinel returned by GET /api/settings instead of stored credentials, and
+# accepted on PUT as "keep the existing value". A user is never expected to
+# type this literally; anything else (including "") is written verbatim.
+MASKED_SECRET = "__MASKED__"
+
+_SECRET_NESTED_KEYS: dict[str, set[str]] = {
+    "minimax": {"api_key"},
+    "xiaomi": {"api_key"},
+    "memory_settings": {"api_key"},
+    "transcription_settings": {"s3_secret_access_key"},
+    "auth_settings": {"api_token", "admin_token"},
+}
+
+
+def _is_secret_field(section: str, key: str) -> bool:
+    if section == "api_keys":
+        return key.endswith("_api_key") or key in {
+            "doubao_access_token",
+            "doubao_websearch_api_key",
+        }
+    return key in _SECRET_NESTED_KEYS.get(section, set())
+
+
+def _mask_secrets(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of ``data`` with every non-empty credential replaced by
+    MASKED_SECRET, safe to return from GET /api/settings."""
+    masked = copy.deepcopy(data)
+    for section in set(list(masked.keys()) + list(_SECRET_NESTED_KEYS)):
+        value = masked.get(section)
+        if not isinstance(value, dict):
+            continue
+        for key in list(value.keys()):
+            if _is_secret_field(section, str(key)) and str(value.get(key, "")).strip():
+                value[key] = MASKED_SECRET
+    providers = masked.get("custom_providers")
+    if isinstance(providers, list):
+        for item in providers:
+            if isinstance(item, dict) and str(item.get("api_key", "")).strip():
+                item["api_key"] = MASKED_SECRET
+    return masked
+
 DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
     "api_keys": {
         "deepseek_api_key": "",
@@ -344,8 +385,35 @@ class SettingsService:
         return {
             "config_path": str(self.config.config_path),
             "providers": list(SETTINGS_PROVIDERS) + custom_ids,
-            "settings": merged,
+            "settings": _mask_secrets(merged),
         }
+
+    def _resolve_masked_secrets(self, patch: dict[str, Any]) -> None:
+        """Substitute MASKED_SECRET placeholders in an incoming patch with the
+        currently stored values, so a client that round-trips masked settings
+        never overwrites real credentials."""
+        current = self.config.get_all()
+        for section, incoming in patch.items():
+            if not isinstance(incoming, dict):
+                continue
+            stored_section = current.get(section)
+            stored = stored_section if isinstance(stored_section, dict) else {}
+            for key in incoming.keys():
+                if _is_secret_field(section, str(key)) and incoming[key] == MASKED_SECRET:
+                    incoming[key] = str(stored.get(key, "") or "")
+        providers = patch.get("custom_providers")
+        if isinstance(providers, list):
+            stored_providers = current.get("custom_providers")
+            stored_by_id = (
+                {str(p.get("id")): p for p in stored_providers if isinstance(p, dict)}
+                if isinstance(stored_providers, list)
+                else {}
+            )
+            for item in providers:
+                if not isinstance(item, dict) or item.get("api_key") != MASKED_SECRET:
+                    continue
+                existing = stored_by_id.get(str(item.get("id", "")))
+                item["api_key"] = str((existing or {}).get("api_key", "") or "")
 
     def get_settings(self) -> dict[str, Any]:
         self.config.reload()
@@ -353,5 +421,6 @@ class SettingsService:
 
     def update_settings(self, patch: dict[str, Any], merge: bool = True) -> dict[str, Any]:
         normalized_patch = self._normalize_patch(patch)
+        self._resolve_masked_secrets(normalized_patch)
         updated = self.config.update(normalized_patch, merge=merge)
         return self._build_settings_response(updated)

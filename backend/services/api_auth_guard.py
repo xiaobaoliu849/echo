@@ -18,6 +18,8 @@ SENSITIVE_READ_PATH_PREFIXES = (
     # must be authenticated (admin-level when admin auth is configured,
     # mirroring the PUT guard).
     "/api/settings",
+    # Transcription jobs expose full transcript text and job metadata.
+    "/api/transcription",
 )
 
 

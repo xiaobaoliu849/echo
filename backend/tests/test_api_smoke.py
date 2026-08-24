@@ -32,6 +32,7 @@ from services.audio_overview_service import AudioOverviewService, AudioOverviewS
 from services.audio_agent_service import AudioAgentService
 from services.agent_run_service import AgentRunService
 from services.config_loader import BackendConfig, GOOGLE_INTERACTIONS_BASE_URL
+from services.settings_service import MASKED_SECRET
 from services.evermem_config import EverMemConfig
 from services import realtime_voice_service as realtime_voice_module
 from services import tts_service as tts_service_module
@@ -67,6 +68,7 @@ class ApiSmokeTests(unittest.TestCase):
             path.startswith("/api/agent-runs")
             or path.startswith("/api/voice-chat/sessions")
             or path.startswith("/api/settings")
+            or path.startswith("/api/transcription")
         )
         if (
             default_auth
@@ -1173,10 +1175,10 @@ class ApiSmokeTests(unittest.TestCase):
             try:
                 spawned: list[str] = []
 
-                def fake_spawn(coro) -> None:
+                def fake_spawn(coro, job_id: str = "") -> None:
                     # Record that the local chunked pipeline was requested;
                     # close the coroutine so the test never runs ffmpeg.
-                    spawned.append(coro.__qualname__)
+                    spawned.append((coro.__qualname__, job_id))
                     coro.close()
 
                 with patch.object(
@@ -1195,7 +1197,9 @@ class ApiSmokeTests(unittest.TestCase):
                 job_id = payload["job_id"]
                 self.assertIsNone(payload["provider"])
                 self.assertEqual(len(spawned), 1)
-                self.assertIn("process_local_chunked_job", spawned[0])
+                self.assertIn("process_local_chunked_job", spawned[0][0])
+                # The pipeline task is registered so deletion can cancel it.
+                self.assertEqual(spawned[0][1], job_id)
 
                 loaded = self._request("GET", f"/api/transcription/jobs/{job_id}")
                 self.assertEqual(loaded.status_code, 200)
@@ -1768,8 +1772,28 @@ class ApiSmokeTests(unittest.TestCase):
                 )
                 self.assertEqual(r_put.status_code, 200)
                 payload = r_put.json()
-                self.assertEqual(payload["settings"]["api_keys"]["dashscope_api_key"], "test-key")
+                # Credentials are masked in API responses; the real value only
+                # exists on disk.
+                self.assertEqual(
+                    payload["settings"]["api_keys"]["dashscope_api_key"],
+                    MASKED_SECRET,
+                )
                 self.assertEqual(payload["settings"]["default_models"]["DashScope"]["default"], "qwen-plus")
+                stored = json.loads(config_path.read_text(encoding="utf-8"))
+                self.assertEqual(stored["api_keys"]["dashscope_api_key"], "test-key")
+
+                # Round-tripping the masked placeholder must keep the stored key.
+                r_put_masked = self._request(
+                    "PUT",
+                    "/api/settings/",
+                    json={
+                        "merge": True,
+                        "settings": {"api_keys": {"dashscope_api_key": MASKED_SECRET}},
+                    },
+                )
+                self.assertEqual(r_put_masked.status_code, 200)
+                stored = json.loads(config_path.read_text(encoding="utf-8"))
+                self.assertEqual(stored["api_keys"]["dashscope_api_key"], "test-key")
             finally:
                 settings_router.settings_service = original_service
 
@@ -1878,7 +1902,7 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertEqual(r_put.status_code, 200)
                 payload = r_put.json()["settings"]["memory_settings"]
                 self.assertEqual(payload["api_url"], "https://api.example.test")
-                self.assertEqual(payload["api_key"], "memory-key")
+                self.assertEqual(payload["api_key"], MASKED_SECRET)
                 self.assertTrue(payload["temporary_session"])
                 self.assertFalse(payload["remember_chat"])
                 self.assertTrue(payload["remember_voice_chat"])

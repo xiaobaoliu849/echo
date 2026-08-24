@@ -306,13 +306,29 @@ class TranscriptionService:
         excess = len(paths) - max_jobs
         if excess <= 0:
             return
+        uploads_root = (self.jobs_dir / "uploads").resolve()
         for path in paths[:excess]:
             job_id = path.stem
-            artifacts = (
+            artifacts = [
                 path,
                 self.jobs_dir / f"{job_id}.txt",
                 self.jobs_dir / f"{job_id}_words.json",
-            )
+            ]
+            # Also drop the uploaded source media, otherwise multi-GB files
+            # accumulate in uploads/ forever after eviction. Only files this
+            # service manages (inside jobs_dir/uploads) are eligible — never
+            # user originals elsewhere on disk.
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                payload = None
+            if isinstance(payload, dict):
+                try:
+                    source = Path(str(payload.get("file_path", "") or "")).expanduser().resolve()
+                    if uploads_root in source.parents:
+                        artifacts.append(source)
+                except OSError:
+                    pass
             for artifact in artifacts:
                 try:
                     artifact.unlink(missing_ok=True)

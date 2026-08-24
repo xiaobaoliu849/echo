@@ -53,6 +53,7 @@ class PdfExtractTests(unittest.TestCase):
         mock_page2.extract_text.return_value = "This is page 2"
 
         mock_reader = MagicMock()
+        mock_reader.is_encrypted = False
         mock_reader.pages = [mock_page1, mock_page2]
 
         with patch("pypdf.PdfReader", return_value=mock_reader):
@@ -64,16 +65,31 @@ class PdfExtractTests(unittest.TestCase):
         self.assertEqual(data["filename"], "test.pdf")
         self.assertEqual(data["page_count"], 2)
         self.assertEqual(data["text"], "Hello World\n\nThis is page 2")
+        self.assertTrue(data["has_text"])
 
-    def test_extract_pdf_internal_error(self) -> None:
+    def test_extract_pdf_corrupt_file_returns_400(self) -> None:
+        # A corrupt/unreadable PDF is a client-input problem: 400, not 500.
         with patch("pypdf.PdfReader", side_effect=Exception("Corrupt PDF file")):
             files = {"file": ("test.pdf", b"corrupt bytes", "application/pdf")}
             response = self._request("POST", "/api/tts/extract-pdf", files=files)
 
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 400)
         data = response.json()
-        self.assertEqual(data["detail"]["code"], "PDF_EXTRACT_INTERNAL_ERROR")
+        self.assertEqual(data["detail"]["code"], "PDF_EXTRACT_BAD_REQUEST")
         self.assertIn("Corrupt PDF file", data["detail"]["message"])
+
+    def test_extract_pdf_encrypted_returns_400(self) -> None:
+        mock_reader = MagicMock()
+        mock_reader.is_encrypted = True
+
+        with patch("pypdf.PdfReader", return_value=mock_reader), \
+             patch.object(mock_reader, "decrypt", side_effect=Exception("hard lock")):
+            files = {"file": ("locked.pdf", b"%PDF-1.4 encrypted", "application/pdf")}
+            response = self._request("POST", "/api/tts/extract-pdf", files=files)
+
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data["detail"]["code"], "PDF_EXTRACT_ENCRYPTED")
 
     def test_polish_pdf_text_success_mocked(self) -> None:
         async def fake_chat_completion(*args: Any, **kwargs: Any) -> dict[str, Any]:

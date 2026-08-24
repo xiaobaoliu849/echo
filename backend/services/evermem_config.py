@@ -5,12 +5,23 @@ import hashlib
 import logging
 import os
 from typing import Any
+from urllib.parse import urlparse
 
 from .evermem_service import EverMemService # type: ignore
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_EVERMEM_URL = os.getenv("EVERMEM_API_URL", "https://api.evermind.ai").strip()
+
+
+def _url_origin_allowed(url: str, trusted_url: str) -> bool:
+    parsed = urlparse(url)
+    trusted = urlparse(trusted_url)
+    return (
+        parsed.scheme in {"http", "https"}
+        and bool(parsed.netloc)
+        and parsed.netloc.lower() == trusted.netloc.lower()
+    )
 
 
 def _clean_header_value(value: Any) -> str:
@@ -84,9 +95,31 @@ class EverMemConfig:
         self.group_id = _get_header_value(headers, "X-EverMem-Group-ID", "group_id", "groupId")
         env_key = os.getenv("EVERMEM_API_KEY", "").strip()
 
+        # Only clean http(s) URLs are accepted; anything else falls back to the
+        # default endpoint instead of being passed through verbatim.
+        parsed_url = urlparse(header_url) if header_url else None
+        if parsed_url is not None and (
+            parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc
+        ):
+            logger.warning(
+                "Rejected invalid EverMem URL from request headers: %.200s",
+                header_url,
+            )
+            header_url = ""
+
         self.enabled = enabled_header == "true"
         self.url = header_url or DEFAULT_EVERMEM_URL
-        self.key = header_key or env_key or None
+
+        if header_key:
+            # A client-supplied key paired with a client-chosen URL is the
+            # documented bring-your-own-endpoint flow.
+            self.key = header_key
+        elif env_key and _url_origin_allowed(self.url, DEFAULT_EVERMEM_URL):
+            # The server-side credential is only ever attached when the target
+            # is the trusted default host — never to an arbitrary client URL.
+            self.key = env_key
+        else:
+            self.key = None
         self.memory_scope = self._resolve_scope(headers)
 
         if self.enabled and self.key:

@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -104,7 +105,62 @@ class AudioOverviewService:
         self.tts_service = tts_service or TTSService()
         self.output_dir = output_dir or self._default_output_dir()
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._last_cleanup_monotonic = time.monotonic()
         self._init_db()
+        self._cleanup_old_output_files()
+
+    def _cleanup_old_output_files(self, max_files: int = 200, max_age_hours: int = 72) -> None:
+        """Remove stale podcast audio so APPDATA temp usage stays bounded.
+
+        Covers finished episodes, superseded takes, and orphaned intro-music
+        files — nothing else evicts this directory.
+        """
+        try:
+            stats = [
+                (path, path.stat().st_mtime)
+                for path in self.output_dir.iterdir()
+                if path.is_file() and path.suffix == ".mp3"
+            ]
+        except OSError:
+            return
+        # Single pass over pre-collected stats: a file vanishing mid-sweep
+        # cannot crash the caller.
+        cutoff = time.time() - max_age_hours * 3600
+        survivors: list[tuple[Path, float]] = []
+        for path, mtime in stats:
+            if mtime < cutoff:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    continue
+            else:
+                survivors.append((path, mtime))
+        if len(survivors) > max_files:
+            survivors.sort(key=lambda item: item[1])
+            for path, _ in survivors[: len(survivors) - max_files]:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    continue
+
+    async def _maybe_cleanup_old_files(self) -> None:
+        """Throttled lazy eviction for long-running processes."""
+        now = time.monotonic()
+        if now - self._last_cleanup_monotonic < 600:
+            return
+        self._last_cleanup_monotonic = now
+        await asyncio.to_thread(self._cleanup_old_output_files)
+
+    def _unlink_managed_audio(self, path_text: str | None) -> None:
+        """Delete a podcast audio file, but only if this service owns it."""
+        if not path_text:
+            return
+        try:
+            path = Path(str(path_text)).expanduser().resolve()
+            if self.output_dir.resolve() in path.parents and path.is_file():
+                path.unlink()
+        except OSError:
+            pass
 
     @staticmethod
     def _default_db_path() -> Path:
@@ -416,7 +472,7 @@ class AudioOverviewService:
     def delete_podcast(self, podcast_id: int) -> bool:
         with self._connect() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM podcasts WHERE id = ?", (podcast_id,))
+            cursor.execute("SELECT id, audio_path FROM podcasts WHERE id = ?", (podcast_id,))
             row = cursor.fetchone()
             if row is None:
                 return False
@@ -424,6 +480,8 @@ class AudioOverviewService:
             cursor.execute("DELETE FROM podcast_scripts WHERE podcast_id = ?", (podcast_id,))
             cursor.execute("DELETE FROM podcasts WHERE id = ?", (podcast_id,))
             conn.commit()
+        # The DB rows are gone — the audio file would otherwise be orphaned.
+        self._unlink_managed_audio(row["audio_path"])
         return True
 
     async def generate_script(
@@ -830,7 +888,13 @@ class AudioOverviewService:
                 message="Audio merge failed with unknown error.",
                 meta={"reason": str(exc)[:400]},
             ) from exc
+        previous_audio_path = str(podcast.get("audio_path") or "")
         self.update_podcast(podcast_id, audio_path=str(output_path))
+        # The previous take is now unreferenced — remove it so repeated
+        # synthesis doesn't accumulate multi-MB files in APPDATA.
+        if previous_audio_path and previous_audio_path != str(output_path):
+            self._unlink_managed_audio(previous_audio_path)
+        await self._maybe_cleanup_old_files()
 
         return {
             "podcast_id": podcast_id,

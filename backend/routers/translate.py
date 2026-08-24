@@ -99,7 +99,33 @@ async def translate_image(
             detail={"code": "TRANSLATE_IMAGE_BAD_REQUEST", "message": "image_file is required.", "meta": {}},
         )
 
-    data = await image_file.read()
+    if image_file.content_type and not image_file.content_type.lower().startswith("image/"):
+        # Cheap check before reading anything into memory.
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TRANSLATE_IMAGE_BAD_REQUEST", "message": "Only image files are supported.", "meta": {}},
+        )
+
+    # Stream-read with a hard cap: slurping first and validating later let a
+    # huge upload spike RSS by several times its size (raw + base64 + JSON)
+    # in this single-process server.
+    max_image_bytes = 20 * 1024 * 1024
+    buffer = bytearray()
+    while True:
+        chunk = await image_file.read(1024 * 1024)
+        if not chunk:
+            break
+        buffer.extend(chunk)
+        if len(buffer) > max_image_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "TRANSLATE_IMAGE_TOO_LARGE",
+                    "message": f"Image files larger than {max_image_bytes // (1024 * 1024)} MB are not supported.",
+                    "meta": {},
+                },
+            )
+    data = bytes(buffer)
     if not data:
         raise HTTPException(
             status_code=400,

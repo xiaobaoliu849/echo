@@ -97,15 +97,39 @@ router = APIRouter()
 transcription_service = TranscriptionService()
 
 # Strong references for in-flight local chunked transcription tasks. asyncio
-# only keeps weak references to tasks, so without this set a background job
-# could be garbage-collected mid-run.
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
+# only keeps weak references to tasks, so without this registry a background
+# job could be garbage-collected mid-run. Keyed by job id so deleting a job
+# cancels its pipeline instead of letting it keep spending ASR budget.
+_BACKGROUND_TASKS: dict[str, asyncio.Task] = {}
 
 
-def _spawn_background_task(coro) -> None:
+def _spawn_background_task(coro, job_id: str = "") -> None:
     task = asyncio.create_task(coro)
-    _BACKGROUND_TASKS.add(task)
-    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    if job_id:
+        _BACKGROUND_TASKS[job_id] = task
+
+    def _on_done(done: asyncio.Task) -> None:
+        if job_id and _BACKGROUND_TASKS.get(job_id) is done:
+            del _BACKGROUND_TASKS[job_id]
+        # Surface unexpected failures — a silently dead background task would
+        # leave the job polling as "running" forever with no diagnostics.
+        if done.cancelled():
+            return
+        exc = done.exception()
+        if exc is not None:
+            logger.error(
+                "Background transcription task failed: [%s] %s",
+                type(exc).__name__,
+                exc,
+            )
+
+    task.add_done_callback(_on_done)
+
+
+def _cancel_background_task(job_id: str) -> None:
+    task = _BACKGROUND_TASKS.pop(str(job_id), None)
+    if task is not None and not task.done():
+        task.cancel()
 
 
 class StructuredErrorDetail(BaseModel):
@@ -487,7 +511,8 @@ async def create_transcription_job(
             _spawn_background_task(
                 transcription_service.process_local_chunked_job(
                     job.job_id or "", provider=(provider or None)
-                )
+                ),
+                job_id=job.job_id or "",
             )
         return await _job_to_response(job)
     except HTTPException:
@@ -670,7 +695,8 @@ async def retry_transcription_job(job_id: str) -> TranscriptionJobResponse:
             _spawn_background_task(
                 transcription_service.process_local_chunked_job(
                     job_id, provider=job.provider
-                )
+                ),
+                job_id=job_id,
             )
             return await _job_to_response(job)
         job = await transcription_service.retry_long_transcription_job(job_id)
@@ -701,6 +727,10 @@ async def retry_transcription_job(job_id: str) -> TranscriptionJobResponse:
 )
 async def delete_transcription_job(job_id: str) -> dict[str, bool]:
     try:
+        # Stop any in-flight chunked pipeline first: otherwise it keeps
+        # running ffmpeg + paid ASR for a deleted job, and each progress
+        # write resurrects the deleted record.
+        _cancel_background_task(job_id)
         deleted = transcription_service.delete_job(job_id)
         if not deleted:
             raise HTTPException(
@@ -735,6 +765,8 @@ async def batch_delete_transcription_jobs(
             detail=_error("TRANSCRIPTION_JOB_BAD_REQUEST", "job_ids must not be empty."),
         )
     try:
+        for job_id in job_ids:
+            _cancel_background_task(job_id)
         result = transcription_service.delete_jobs(job_ids)
         deleted = cast(list[str], result["deleted"])
         failed = cast(list[str], result["failed"])

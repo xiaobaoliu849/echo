@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from services.desktop_diagnostics_service import DesktopDiagnosticsService
 from services.config_loader import GOOGLE_INTERACTIONS_BASE_URL
-from services.settings_service import SettingsService
+from services.settings_service import MASKED_SECRET, SettingsService
 
 router = APIRouter()
 settings_service = SettingsService()
@@ -419,6 +419,10 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
         pass
 
     api_key = (payload.api_key or "").strip()
+    if api_key == MASKED_SECRET and cfg_settings:
+        # The settings UI sends back the masked placeholder when the user did
+        # not retype the stored key — resolve it to the real configured key.
+        api_key = str(cfg_settings.get("api_key", "")).strip()
     if not api_key and cfg_settings:
         api_key = cfg_settings.get("api_key", "").strip()
 

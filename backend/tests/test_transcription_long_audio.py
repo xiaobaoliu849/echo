@@ -407,6 +407,63 @@ class JobStoreEvictionTests(unittest.TestCase):
             )
         self.assertEqual(len(list(service.jobs_dir.glob("tx_*.json"))), 3)
 
+    def test_eviction_removes_uploaded_source_media(self):
+        import json
+        import os
+
+        from services.transcription_service import (
+            MAX_TRANSCRIPTION_JOBS,
+            TranscriptionJob,
+        )
+
+        service = _make_service()
+        uploads_dir = service.jobs_dir / "uploads"
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+        orphan_id = "tx_upload00000001"
+        upload_file = uploads_dir / f"{orphan_id}.mp4"
+        upload_file.write_bytes(b"fake media bytes")
+
+        # A user original OUTSIDE jobs_dir must never be touched.
+        external = service.jobs_dir.parent / "user_original.mp3"
+        external.write_bytes(b"user data")
+
+        for index in range(MAX_TRANSCRIPTION_JOBS + 5):
+            job_id = f"tx_evict{index:08d}"
+            path = service.jobs_dir / f"{job_id}.json"
+            path.write_text(
+                json.dumps({"job_id": job_id, "file_path": "x.mp3", "mode": "sync"}),
+                encoding="utf-8",
+            )
+            os.utime(path, (1000 + index, 1000 + index))
+
+        oldest_id = "tx_evict00000000"
+        oldest_path = service.jobs_dir / f"{oldest_id}.json"
+        payload = json.loads(oldest_path.read_text(encoding="utf-8"))
+        payload["file_path"] = str(upload_file)
+        oldest_path.write_text(json.dumps(payload), encoding="utf-8")
+        os.utime(oldest_path, (999, 999))
+
+        # Second-oldest points at the external file.
+        second_id = "tx_evict00000001"
+        second_path = service.jobs_dir / f"{second_id}.json"
+        second_payload = json.loads(second_path.read_text(encoding="utf-8"))
+        second_payload["file_path"] = str(external)
+        second_path.write_text(json.dumps(second_payload), encoding="utf-8")
+        os.utime(second_path, (1000, 1000))
+
+        service._write_job(
+            TranscriptionJob(job_id="tx_evict_trigger", file_path="x.mp3", mode="sync")
+        )
+
+        self.assertFalse((service.jobs_dir / f"{oldest_id}.json").exists())
+        # The managed upload was removed with its job record...
+        self.assertFalse(upload_file.exists())
+        # ...but the user's own file outside jobs_dir survives.
+        self.assertTrue(external.exists())
+
+        external.unlink(missing_ok=True)
+
 
 if __name__ == "__main__":
     unittest.main()

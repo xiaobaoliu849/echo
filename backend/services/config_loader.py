@@ -89,19 +89,39 @@ DEFAULT_BASE_URLS = {
 class BackendConfig:
     def __init__(self, config_path: Path | None = None):
         self.config_path = config_path or self._default_config_path()
+        self._backup_path = self.config_path.with_name(self.config_path.name + ".bak")
         self._config: dict[str, Any] = {}
         self._mtime: float | None = None
+        # True 当磁盘上的 config.json 存在但读不出来（损坏或被占用），
+        # 此时禁止 save_all 覆盖写盘，避免把仅存的原始内容冲掉。
+        self._disk_unreadable = False
         self.reload()
 
     @staticmethod
     def _default_config_path() -> Path:
         return get_data_file_path("config.json")
 
+    @staticmethod
+    def _load_json(path: Path) -> dict[str, Any] | None:
+        """Read and parse a JSON config file; return None on any failure."""
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return loaded if isinstance(loaded, dict) else None
+
     def reload(self, force: bool = False) -> None:
         # 基于 mtime 增量刷新：文件没变就直接用内存缓存，避免每个请求都全量读盘 + deepcopy。
         # 外部手动修改 config.json 时 mtime 会变，仍然能正确重新加载。
         if not self.config_path.exists():
-            self._config = {}
+            # 主文件缺失但备份还在（异常中断的极端情况）——从备份恢复。
+            restored = self._load_json(self._backup_path) if self._backup_path.exists() else None
+            if restored is not None:
+                self._config = restored
+                self._disk_unreadable = False
+            else:
+                self._config = {}
+                self._disk_unreadable = False
             self._mtime = None
             return
         try:
@@ -110,10 +130,26 @@ class BackendConfig:
             mtime = None
         if not force and mtime is not None and mtime == self._mtime and self._config:
             return
-        try:
-            self._config = json.loads(self.config_path.read_text(encoding="utf-8"))
-        except Exception:
-            self._config = {}
+        loaded = self._load_json(self.config_path)
+        if loaded is None:
+            # 主文件读不出来（损坏或被占用）：优先保留内存快照，其次 .bak，绝不静默清空。
+            if not self._config:
+                backup_loaded = (
+                    self._load_json(self._backup_path)
+                    if self._backup_path.exists()
+                    else None
+                )
+                if backup_loaded is not None:
+                    self._config = backup_loaded
+                    self._disk_unreadable = False
+                else:
+                    # 无任何可用快照：保持空并标记磁盘不可读，让 save_all 拒绝覆盖，
+                    # 避免把仅存的原始内容冲掉。
+                    self._disk_unreadable = True
+            # mtime 不更新：下次 reload 会重试读取，外部修复文件后能自动恢复。
+            return
+        self._config = loaded
+        self._disk_unreadable = False
         self._mtime = mtime
 
     def get_all(self) -> dict[str, Any]:
@@ -157,12 +193,30 @@ class BackendConfig:
         return target
 
     def save_all(self, data: dict[str, Any]) -> dict[str, Any]:
+        if self._disk_unreadable and not self._config:
+            # 磁盘文件存在但读不出、内存也没有可用快照 —— 此时写盘会把原始内容
+            # 永久冲掉。拒绝保存并让调用方给出明确错误，而不是静默清空所有配置。
+            raise RuntimeError(
+                "config.json exists but cannot be read (corrupted or locked); "
+                "refusing to overwrite it. Fix or remove the file first."
+            )
         self._config = copy.deepcopy(data)
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        self.config_path.write_text(
-            json.dumps(self._config, ensure_ascii=False, indent=4),
-            encoding="utf-8",
-        )
+        payload = json.dumps(self._config, ensure_ascii=False, indent=4)
+        # 原子写入：先写临时文件再 os.replace，进程崩溃/断电也不会留下半个 JSON。
+        tmp_path = self.config_path.with_name(self.config_path.name + ".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # 落盘前把上一份完好配置存为 .bak，供损坏后恢复。
+        try:
+            if self.config_path.exists():
+                shutil.copy2(self.config_path, self._backup_path)
+        except OSError:
+            pass
+        os.replace(tmp_path, self.config_path)
+        self._disk_unreadable = False
         try:
             self._mtime = self.config_path.stat().st_mtime
         except OSError:

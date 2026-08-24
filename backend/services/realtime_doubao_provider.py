@@ -18,6 +18,7 @@ import uuid
 from typing import Any
 
 import websockets
+import websockets.exceptions  # noqa: F401  # explicit: lazy loader hides it otherwise
 from fastapi import WebSocket, WebSocketDisconnect
 
 from .realtime_constants import (
@@ -244,8 +245,12 @@ class DoubaoRealtimeMixin:
         interruption: InterruptionDecisionCoordinator | None = None,
         is_openspeech: bool = False,
         session_id: str = "",
+        openspeech_state: dict[str, Any] | None = None,
     ) -> None:
         interruption = interruption or InterruptionDecisionCoordinator()
+        # Shared with the receive loop so turn ids recorded here are visible
+        # there (a plain local would raise NameError and kill the session).
+        openspeech_state = openspeech_state if isinstance(openspeech_state, dict) else {"active_turn_id": None}
         while True:
             message = await websocket.receive()
             message_type = message.get("type")
@@ -595,13 +600,14 @@ class DoubaoRealtimeMixin:
         interruption: InterruptionDecisionCoordinator | None = None,
         is_openspeech: bool = False,
         session_id: str = "",
+        openspeech_state: dict[str, Any] | None = None,
     ) -> None:
         interruption = interruption or InterruptionDecisionCoordinator()
         active_turn_id: str | None = None
         user_transcript_acc: str = ""
         ai_transcript_acc: str = ""
         turn_start_t0: float = time.perf_counter()
-        openspeech_state: dict[str, Any] = {
+        openspeech_state = openspeech_state or {
             "active_turn_id": None,
             "ai_acc": "",
             "user_acc": "",
@@ -776,6 +782,18 @@ class DoubaoRealtimeMixin:
         interruption = InterruptionDecisionCoordinator()
         memory_session = memory_session or RealtimeMemorySession()
         tool_session = tool_session or VoiceAgentToolSession()
+        # Shared between the two duplex loops; owned here so both sides see
+        # the same turn state.
+        openspeech_state: dict[str, Any] = {
+            "active_turn_id": None,
+            "ai_acc": "",
+            "user_acc": "",
+            "t0": time.perf_counter(),
+            "tts_active": False,
+            "text_source": None,
+            "user_final_sent": False,
+            "websearch_notified": False,
+        }
 
         try:
             async with ws_context as doubao_ws:
@@ -820,12 +838,14 @@ class DoubaoRealtimeMixin:
                     self._client_to_doubao_loop(
                         websocket, doubao_ws, memory_session, tool_session, recorder, interruption,
                         is_openspeech=is_openspeech, session_id=session_id,
+                        openspeech_state=openspeech_state,
                     )
                 )
                 doubao_task = asyncio.create_task(
                     self._doubao_to_client_loop(
                         websocket, doubao_ws, memory_session, tool_session, recorder, interruption,
                         is_openspeech=is_openspeech, session_id=session_id,
+                        openspeech_state=openspeech_state,
                     )
                 )
 

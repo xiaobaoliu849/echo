@@ -1,3 +1,4 @@
+import asyncio
 import io
 from typing import Any
 
@@ -15,6 +16,15 @@ from services.llm_service import LLMService
 router = APIRouter()
 llm_service = LLMService()
 
+# Generous ceiling for read-aloud documents; anything bigger is almost
+# certainly a mis-selected file and would balloon memory during parsing.
+MAX_PDF_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+class _PdfEncryptedError(Exception):
+    pass
+
+
 class StructuredErrorDetail(BaseModel):
     code: str
     message: str
@@ -22,6 +32,40 @@ class StructuredErrorDetail(BaseModel):
 
 class StructuredErrorResponse(BaseModel):
     detail: StructuredErrorDetail
+
+
+def _extract_pdf_sync(content: bytes) -> tuple[int, str]:
+    """CPU-bound pypdf work, run off the event loop by the caller."""
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(content))
+        if reader.is_encrypted:
+            try:
+                # Many "encrypted" PDFs ship with an owner password only and
+                # open fine with an empty user password.
+                reader.decrypt("")
+            except Exception:
+                pass
+            if reader.is_encrypted:
+                raise _PdfEncryptedError(
+                    "This PDF is password-protected. Remove the password and try again."
+                )
+        pages = list(reader.pages)
+    except _PdfEncryptedError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"Unable to read PDF file: {exc}") from exc
+
+    extracted_text = []
+    for page in pages:
+        try:
+            text = page.extract_text()
+        except Exception:
+            text = ""  # one malformed page must not sink the whole document
+        if text:
+            extracted_text.append(text)
+
+    return len(pages), "\n\n".join(extracted_text)
+
 
 @router.post(
     "/extract-pdf",
@@ -49,24 +93,41 @@ async def extract_pdf(
             },
         )
 
+    # Stream-read with a running size cap instead of slurping the whole
+    # upload into memory up front.
+    buffer = io.BytesIO()
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_PDF_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "PDF_EXTRACT_TOO_LARGE",
+                    "message": f"PDF files larger than {MAX_PDF_UPLOAD_BYTES // (1024 * 1024)} MB are not supported.",
+                    "meta": {},
+                },
+            )
+        buffer.write(chunk)
+    content = buffer.getvalue()
+
     try:
-        content = await file.read()
-        pdf_file = io.BytesIO(content)
-        reader = pypdf.PdfReader(pdf_file)
-
-        extracted_text = []
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                extracted_text.append(text)
-
-        full_text = "\n\n".join(extracted_text)
-
-        return {
-            "filename": file.filename,
-            "page_count": len(reader.pages),
-            "text": full_text,
-        }
+        # pypdf parsing is CPU-bound; keep it off the event loop so a big
+        # document cannot freeze realtime voice and every other request.
+        page_count, full_text = await asyncio.to_thread(_extract_pdf_sync, content)
+    except _PdfEncryptedError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "PDF_EXTRACT_ENCRYPTED", "message": str(exc), "meta": {}},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "PDF_EXTRACT_BAD_REQUEST", "message": str(exc), "meta": {}},
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -76,6 +137,14 @@ async def extract_pdf(
                 "meta": {},
             },
         ) from exc
+
+    return {
+        "filename": file.filename,
+        "page_count": page_count,
+        "text": full_text,
+        # Lets the UI distinguish "empty document" from "scanned/no-text PDF".
+        "has_text": bool(full_text.strip()),
+    }
 
 
 class PolishTextRequest(BaseModel):

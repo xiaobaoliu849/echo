@@ -326,6 +326,7 @@ class LLMService:
 
         yield {"type": "meta", "provider": "Google", "model": settings["model"]}
         chunks: list[str] = []
+        saw_completed = False
 
         try:
             timeout = httpx.Timeout(timeout=120.0, read=120.0)
@@ -355,6 +356,7 @@ class LLMService:
                                             chunks.append(text)
                                             yield {"type": "delta", "content": text}
                                 elif event_type == "interaction.completed":
+                                    saw_completed = True
                                     break
                                 event_type = ""
                             continue
@@ -375,6 +377,11 @@ class LLMService:
             raise RuntimeError(f"Google Interactions stream error: {detail}") from exc
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Stream network error: {exc}") from exc
+
+        if not saw_completed:
+            raise RuntimeError(
+                "Google Interactions stream closed before completion; the response was truncated."
+            )
 
         reply = "".join(chunks).strip()
         if not reply:
@@ -555,6 +562,11 @@ class LLMService:
 
         yield {"type": "meta", "provider": provider, "model": settings["model"]}
         chunks: list[str] = []
+        # A stream that ends without the [DONE] sentinel or any finish_reason
+        # was cut off mid-generation — report it instead of presenting a
+        # truncated reply as complete.
+        saw_done = False
+        saw_finish_reason = False
         try:
             timeout = httpx.Timeout(timeout=120.0, read=120.0)
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -569,12 +581,18 @@ class LLMService:
                         if not data_line:
                             continue
                         if data_line == "[DONE]":
+                            saw_done = True
                             break
 
                         try:
                             chunk = json.loads(data_line)
                         except json.JSONDecodeError:
                             continue
+
+                        choices = chunk.get("choices")
+                        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                            if choices[0].get("finish_reason"):
+                                saw_finish_reason = True
 
                         delta, reasoning_delta = self._extract_delta_parts(chunk)
                         if reasoning_delta:
@@ -587,6 +605,11 @@ class LLMService:
             raise RuntimeError(f"Provider stream request failed: {detail}") from exc
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Stream network error: {exc}") from exc
+
+        if not saw_done and not saw_finish_reason:
+            raise RuntimeError(
+                "Provider closed the stream before completion; the response was truncated."
+            )
 
         reply = "".join(chunks).strip()
         if not reply:
