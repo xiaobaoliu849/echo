@@ -1424,6 +1424,11 @@ export default function useVoiceChat({
       } catch {
         memoryGroupId = "";
       }
+      if (sessionEpochRef.current !== sessionEpoch) {
+        // A newer session took over while the EverMem round-trip was in
+        // flight — do not clobber its shared refs/state.
+        return;
+      }
       memoryGroupId = persistEverMemConversationGroupId("voice_chat", memoryGroupId);
       currentUserTurnRef.current = "";
       currentAssistantTurnRef.current = "";
@@ -1461,11 +1466,23 @@ export default function useVoiceChat({
           autoGainControl: true,
         },
       });
+      if (sessionEpochRef.current !== sessionEpoch) {
+        // Superseded during the mic-permission prompt — release the mic we
+        // just opened instead of leaking live tracks.
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       mediaStreamRef.current = stream;
 
       const audioContext = new AudioContextCtor();
       audioContextRef.current = audioContext;
       await audioContext.resume();
+      if (sessionEpochRef.current !== sessionEpoch) {
+        // Superseded while resuming the audio context — tear down only the
+        // objects this invocation owns.
+        void audioContext.close().catch(() => { });
+        return;
+      }
       const assistantGain = audioContext.createGain();
       assistantGain.gain.value = 1;
       assistantGain.connect(audioContext.destination);

@@ -205,6 +205,10 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
 
   // Tear everything down on unmount.
   useEffect(() => {
+    // Re-arm on every (re)mount: under React.StrictMode dev the
+    // mount→cleanup→mount cycle leaves this ref false forever otherwise,
+    // which permanently blocks start().
+    aliveRef.current = true;
     return () => {
       aliveRef.current = false;
       stopTimer();
