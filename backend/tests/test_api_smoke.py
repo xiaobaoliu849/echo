@@ -2678,6 +2678,51 @@ class ApiAuthHardeningTests(unittest.TestCase):
             payload = ws.receive_json()
             self.assertEqual(payload.get("type"), "error")
 
+    def test_voice_chat_ws_doubao_credential_validation(self) -> None:
+        from fastapi.testclient import TestClient
+        from unittest.mock import AsyncMock
+
+        client = TestClient(self.app)
+
+        # 1. Doubao with missing app_id
+        with patch.object(BackendConfig, "get_setting") as mock_get_setting:
+            mock_get_setting.side_effect = lambda k, default="": {
+                "doubao_access_token": "valid_token",
+                "doubao_app_id": "",
+            }.get(k, default)
+            with client.websocket_connect(
+                "/api/voice-chat/ws?provider=Doubao&token=test-api-token"
+            ) as ws:
+                payload = ws.receive_json()
+                self.assertEqual(payload.get("type"), "error")
+                self.assertIn("Doubao App ID", payload.get("missing", []))
+
+        # 2. Doubao with missing access_token
+        with patch.object(BackendConfig, "get_setting") as mock_get_setting:
+            mock_get_setting.side_effect = lambda k, default="": {
+                "doubao_access_token": "",
+                "doubao_api_key": "",
+                "doubao_app_id": "app_123456",
+            }.get(k, default)
+            with client.websocket_connect(
+                "/api/voice-chat/ws?provider=Doubao&token=test-api-token"
+            ) as ws:
+                payload = ws.receive_json()
+                self.assertEqual(payload.get("type"), "error")
+                self.assertIn("Doubao Access Token", payload.get("missing", []))
+
+        # 3. Doubao with valid credentials in api_keys
+        with patch.object(BackendConfig, "get_setting") as mock_get_setting, \
+             patch.object(voice_chat_router.voice_chat_service, "stream_doubao_session", new_callable=AsyncMock) as mock_stream:
+            mock_get_setting.side_effect = lambda k, default="": {
+                "doubao_access_token": "valid_token",
+                "doubao_app_id": "app_123456",
+            }.get(k, default)
+            with client.websocket_connect(
+                "/api/voice-chat/ws?provider=Doubao&token=test-api-token"
+            ) as ws:
+                mock_stream.assert_awaited_once()
+
     # -- realtime transcription WebSocket handshake auth -------------------
 
     def test_transcription_realtime_ws_rejects_missing_token(self) -> None:
