@@ -241,6 +241,174 @@ class TestDoubaoDuplexClientLoop(unittest.TestCase):
         asyncio.run(run_test())
 
 
+class TestDoubaoDuplexTranscriptSemantics(unittest.TestCase):
+    """2026-08-24 实机抓包确认的两条协议语义的回归防线。
+
+    1. input_audio_transcription.delta 是"截至目前"的完整快照(且会回退修订),
+       必须整体替换 —— 按增量累加会让 interim 文本重复刷屏。
+    2. response.output_text.delta 常先于同轮 output_audio.started 到达,
+       不得被任何按轮次开启的抑制窗吞掉。
+    """
+
+    def setUp(self) -> None:
+        self.service = RealtimeVoiceService()
+
+    def test_missing_suffix_helper(self) -> None:
+        f = self.service._duplex_missing_text_suffix
+        self.assertEqual(f("", "abc"), "abc")          # 无增量 → 全文兜底
+        self.assertEqual(f("ab", "abcd"), "cd")        # 前缀延伸 → 补后缀
+        self.assertEqual(f("abc", "abc"), "")          # 一致 → 不补发
+        self.assertEqual(f("abc", ""), "")             # 空全文 → 无操作
+        self.assertEqual(f("abc", "xbc"), "")          # 分歧 → 不安全拼接
+
+    def test_suppression_helper(self) -> None:
+        f = self.service._duplex_output_suppressed
+        self.assertFalse(f({"suppressed_response_id": None}, "r1"))
+        self.assertTrue(f({"suppressed_response_id": "r1"}, "r1"))   # 精确命中
+        self.assertTrue(f({"suppressed_response_id": "r1"}, ""))     # 缺 id 保守丢弃
+        self.assertFalse(f({"suppressed_response_id": "r1"}, "r2"))  # 新一轮不受影响
+        self.assertTrue(f({"suppressed_response_id": ""}, "r9"))     # 未知id → 窗口内全抑制
+
+    def test_asr_delta_interim_is_snapshot_not_accumulation(self) -> None:
+        async def run_test():
+            snapshots = ["你", "你是谁", "你是谁呀？你叫什么名字？", "你是谁呀你叫什么名字"]
+            events = [
+                {"type": "conversation.item.input_audio_transcription.delta", "delta": s}
+                for s in snapshots
+            ] + [{"type": "session.closed"}]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            loop_task = asyncio.create_task(
+                self.service._doubao_to_client_loop(client_ws, doubao_ws, MagicMock(), MagicMock())
+            )
+            await asyncio.sleep(0.15)
+            loop_task.cancel()
+
+            interims = [e["text"] for e in client_ws.events
+                        if e["type"] == "user_transcript" and e.get("interim")]
+            # 每条 interim 都等于快照原文(含回缩修订),绝不能出现累加重复
+            self.assertEqual(interims, snapshots)
+
+        asyncio.run(run_test())
+
+    def test_reply_text_before_audio_started_is_forwarded(self) -> None:
+        """真实顺序:文本增量先于本轮 audio.started 到达,必须全部转发。
+
+        回归背景:旧实现在用户开口时开一刀切抑制窗、直到下一轮
+        output_audio.started 才解除,导致每轮回复的开头文本被整段吞掉。
+        """
+        async def run_test():
+            fake_mem_session = MagicMock()
+            fake_mem_session.flush_turn = AsyncMock(return_value={
+                "attempted_count": 0, "saved_count": 0, "failed_count": 0,
+            })
+            events = [
+                # 用户说话(真实流量中 transcription.started 必然先到)
+                {"type": "conversation.item.input_audio_transcription.started"},
+                {"type": "conversation.item.input_audio_transcription.completed",
+                 "transcript": "你是谁"},
+                # 文本增量先于音频开始(实测头部 6 字都在这个窗口里)
+                {"type": "response.output_text.delta", "delta": "我是豆包，是", "response_id": "r1"},
+                {"type": "response.output_audio.started", "response_id": "r1"},
+                {"type": "response.output_text.delta", "delta": "能陪你聊天的AI。", "response_id": "r1"},
+                {"type": "response.output_text.done",
+                 "text": "我是豆包，是能陪你聊天的AI。", "response_id": "r1"},
+                {"type": "response.output_audio.done", "response_id": "r1"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            loop_task = asyncio.create_task(
+                self.service._doubao_to_client_loop(
+                    client_ws, doubao_ws, fake_mem_session, MagicMock(),
+                )
+            )
+            await asyncio.sleep(0.15)
+            loop_task.cancel()
+
+            texts = "".join(e["text"] for e in client_ws.events if e["type"] == "assistant_text")
+            self.assertEqual(texts, "我是豆包，是能陪你聊天的AI。")
+            turn_completes = [e for e in client_ws.events if e["type"] == "turn_complete"]
+            self.assertEqual(len(turn_completes), 1)
+
+        asyncio.run(run_test())
+
+    def test_multi_segment_reply_keeps_accumulation_baseline(self) -> None:
+        """服务端把一条逻辑回复拆成多个 response_id 分段(实测):
+        换段不得清空已累积文本,否则 done 对账基线断裂、误报分歧。
+        """
+        async def run_test():
+            events = [
+                {"type": "conversation.item.input_audio_transcription.started"},
+                {"type": "conversation.item.input_audio_transcription.completed",
+                 "transcript": "你是谁"},
+                {"type": "response.output_text.delta", "delta": "我是豆包，是", "response_id": "r_a"},
+                {"type": "response.output_audio.started", "response_id": "r_a"},
+                # 分段切换:同一逻辑回复的下半段换了 response_id
+                {"type": "response.output_audio.started", "response_id": "r_b"},
+                {"type": "response.output_text.delta", "delta": "，能陪你聊天。", "response_id": "r_b"},
+                {"type": "response.output_text.done",
+                 "text": "我是豆包，是，能陪你聊天。", "response_id": "r_b"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            loop_task = asyncio.create_task(
+                self.service._doubao_to_client_loop(client_ws, doubao_ws, MagicMock(), MagicMock())
+            )
+            await asyncio.sleep(0.15)
+            loop_task.cancel()
+
+            texts = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
+            # done 与累计一致 → 不补发、不重复
+            self.assertEqual(texts, ["我是豆包，是", "，能陪你聊天。"])
+
+        asyncio.run(run_test())
+
+    def test_done_text_reconciles_missing_suffix(self) -> None:
+        """done.text 与已转发增量对账:缺多少补多少,不重复推送。"""
+        async def run_test():
+            events = [
+                {"type": "response.output_text.delta", "delta": "今天天气", "response_id": "r1"},
+                # 模拟异常路径丢了中间增量
+                {"type": "response.output_text.done",
+                 "text": "今天天气很好，适合出门。", "response_id": "r1"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            loop_task = asyncio.create_task(
+                self.service._doubao_to_client_loop(client_ws, doubao_ws, MagicMock(), MagicMock())
+            )
+            await asyncio.sleep(0.15)
+            loop_task.cancel()
+
+            texts = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
+            self.assertEqual(texts, ["今天天气", "很好，适合出门。"])
+
+        asyncio.run(run_test())
+
+    def test_done_text_equal_to_stream_emits_nothing_extra(self) -> None:
+        async def run_test():
+            events = [
+                {"type": "response.output_text.delta", "delta": "完整回复", "response_id": "r1"},
+                {"type": "response.output_text.done", "text": "完整回复", "response_id": "r1"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            loop_task = asyncio.create_task(
+                self.service._doubao_to_client_loop(client_ws, doubao_ws, MagicMock(), MagicMock())
+            )
+            await asyncio.sleep(0.15)
+            loop_task.cancel()
+
+            texts = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
+            self.assertEqual(texts, ["完整回复"])
+
+        asyncio.run(run_test())
+
+
 class TestDoubaoDuplexServerLoop(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -493,6 +661,102 @@ class TestDoubaoDuplexServerLoop(unittest.TestCase):
             )
             await self._drain(loop_task)
             self.assertEqual(interruption.active_response_id, "resp_x")
+
+        asyncio.run(run_test())
+
+
+    def test_late_asr_completed_does_not_break_suppression_anchor(self) -> None:
+        """对抗审查 P1 回归:迟到的 ASR completed 会把 active_turn_id 覆写成
+        recorder 命名空间 id;打断抑制必须仍锚定豆包在播 response_id,
+        否则残余流漏抑制(幽灵续播 + 幽灵 turn_complete)。
+        """
+        async def run_test():
+            fake_recorder = MagicMock()
+            fake_recorder.note_user_transcript = AsyncMock(return_value="voice-turn-9")
+            fake_recorder.note_assistant_text = AsyncMock(return_value="voice-turn-9")
+            fake_recorder.note_assistant_audio = AsyncMock(return_value=("voice-turn-9", 120))
+            fake_recorder.interrupt_current_turn = AsyncMock()
+            fake_recorder.complete_turn = AsyncMock(return_value="voice-turn-9")
+
+            events = [
+                {"type": "response.output_audio.started", "response_id": "r1"},
+                {"type": "response.output_audio.delta", "delta": "QUJD"},
+                # 迟到的 ASR 终稿:把 active_turn_id 覆写为 recorder 命名空间
+                {"type": "conversation.item.input_audio_transcription.completed",
+                 "transcript": "迟到的识别终稿"},
+                # 用户插话 → barge-in:抑制窗必须锚定 "r1" 而非 "voice-turn-9"
+                {"type": "conversation.item.input_audio_transcription.started"},
+                {"type": "response.output_audio.delta", "delta": "REVG"},
+                {"type": "response.output_text.delta", "delta": "残余文本", "response_id": "r1"},
+                {"type": "response.output_audio.done", "response_id": "r1"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws, recorder=fake_recorder))
+
+            audio_events = [e for e in client_ws.events if e["type"] == "assistant_audio"]
+            self.assertEqual([a["audio"] for a in audio_events], ["QUJD"])  # 残余 REVG 被吞
+            texts = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
+            self.assertEqual(texts, [])  # 残余文本被吞
+            self.assertIn("interrupted", [e["type"] for e in client_ws.events])
+            self.assertNotIn("turn_complete", [e["type"] for e in client_ws.events])
+            fake_recorder.complete_turn.assert_not_awaited()
+
+        asyncio.run(run_test())
+
+    def test_new_reply_text_flows_during_prior_suppression_window(self) -> None:
+        """修复核心组合端到端:r1 被打断进入抑制窗后,r2 的文本增量先于 r2 的
+        audio.started 到达时必须照常转发(旧一刀切实现正是在这里吞掉回复开头)。
+        """
+        async def run_test():
+            fake_mem_session = MagicMock()
+            fake_mem_session.flush_turn = AsyncMock(return_value={
+                "attempted_count": 0, "saved_count": 0, "failed_count": 0,
+            })
+            events = [
+                {"type": "response.output_audio.started", "response_id": "r1"},
+                {"type": "response.output_audio.delta", "delta": "QUJD"},
+                {"type": "conversation.item.input_audio_transcription.started"},  # barge-in
+                {"type": "conversation.item.input_audio_transcription.completed",
+                 "transcript": "新问题"},
+                {"type": "response.output_text.delta", "delta": "新回答开头", "response_id": "r2"},
+                {"type": "response.output_audio.started", "response_id": "r2"},   # 此刻才解除抑制
+                {"type": "response.output_text.delta", "delta": "后半段", "response_id": "r2"},
+                {"type": "response.output_text.done", "text": "新回答开头后半段", "response_id": "r2"},
+                {"type": "response.output_audio.done", "response_id": "r2"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws, memory_session=fake_mem_session))
+
+            texts = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
+            self.assertEqual(texts, ["新回答开头", "后半段"])
+            self.assertNotIn("新回答开头后半段", texts)  # 对账无缺口 → 不补发
+            turn_completes = [e for e in client_ws.events if e["type"] == "turn_complete"]
+            self.assertEqual(len(turn_completes), 1)
+
+        asyncio.run(run_test())
+
+    def test_late_text_done_after_finalize_not_repushed(self) -> None:
+        """对抗审查 P2 回归:audio.done 已收尾(ai_acc 清空)后迟到的 output_text.done
+        不得借"空前缀恒真"把全文再推一遍。
+        """
+        async def run_test():
+            events = [
+                {"type": "response.output_text.delta", "delta": "正文", "response_id": "r1"},
+                {"type": "response.output_audio.started", "response_id": "r1"},
+                {"type": "response.output_audio.done", "response_id": "r1"},   # 收尾,ai_acc 清空
+                {"type": "response.output_text.done", "text": "正文全文", "response_id": "r1"},  # 迟到
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws))
+
+            texts = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
+            self.assertEqual(texts, ["正文"])  # 迟到 done 未产生第二次推送
 
         asyncio.run(run_test())
 

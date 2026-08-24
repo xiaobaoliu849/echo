@@ -268,6 +268,35 @@ class DoubaoRealtimeMixin:
     # Doubao → client
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _duplex_output_suppressed(state: dict[str, Any], response_id: str) -> bool:
+        """True 当该下行增量属于被打断、应丢弃的那轮回复。
+
+        ``suppressed_response_id`` 为 None 表示当前没有抑制窗。全双工的
+        Chat/TTS 事件都携带 response_id(2026-08-24 实测),按 id 精确匹配;
+        barge-in 时拿不到在播 response_id(空串)或个别事件缺失 id 时,
+        在窗口期内保守视为残余流一并丢弃。
+        """
+        suppressed = state.get("suppressed_response_id")
+        if suppressed is None:
+            return False
+        return not suppressed or not response_id or response_id == suppressed
+
+    @staticmethod
+    def _duplex_missing_text_suffix(accumulated: str, final_text: str) -> str:
+        """计算 done.text 相对已转发增量的缺失后缀;分歧(无法安全拼接)返回空串。"""
+        final_text = str(final_text or "")
+        if not final_text or final_text == accumulated:
+            return ""
+        if final_text.startswith(accumulated):
+            return final_text[len(accumulated):]
+        if accumulated:
+            logger.warning(
+                "doubao_duplex_text_done_divergent: acc=%r done=%r",
+                accumulated[:120], final_text[:120],
+            )
+        return ""
+
     async def _doubao_duplex_dispatch(
         self,
         websocket: WebSocket,
@@ -285,16 +314,19 @@ class DoubaoRealtimeMixin:
 
         if event_type == "conversation.item.input_audio_transcription.started":
             # 服务端识别到用户开始说话 —— 打断客户端播报 (barge-in)。
-            # 开启输出抑制窗:被打断那轮的残余增量(delta)在下一轮 started 之前
-            # 全部丢弃,避免旧回复尾部"复活"并在前端二次排期播放。
-            state["suppress_output"] = True
             state["user_acc"] = ""
             state["user_final_sent"] = False
             if state.get("tts_active"):
+                # 定向抑制:只丢弃被打断那轮(active_response_id)的残余增量。
+                # 不能开"一刀切"抑制窗——新一轮回复的文本增量常先于它自己的
+                # output_audio.started 到达(2026-08-24 实测),一刀切会把新回复
+                # 开头整段文本吞掉,造成回复转写缺内容。
+                state["suppressed_response_id"] = str(state.get("active_response_id") or "")
+                state["turn_finalized"] = False
                 state["tts_active"] = False
+                state["active_response_id"] = None
                 state["active_turn_id"] = None
                 state["ai_acc"] = ""
-                state["text_source"] = None
                 if recorder is not None:
                     try:
                         await recorder.interrupt_current_turn()
@@ -310,13 +342,17 @@ class DoubaoRealtimeMixin:
             return True
 
         if event_type == "conversation.item.input_audio_transcription.delta":
-            delta = str(event.get("delta") or "")
-            if delta:
-                state["user_acc"] = (state.get("user_acc") or "") + delta
+            # 官方协议语义(delta 是"截至目前"的完整快照而非增量,且临近结束会
+            # 回退修订标点,见官方 web demo 的 setQuestion 整体替换用法):必须
+            # 整体替换。此前按增量累加,interim 文本反复重复刷屏,直到
+            # completed 才恢复成一遍。
+            snapshot = str(event.get("delta") or "")
+            if snapshot:
+                state["user_acc"] = snapshot
                 # 前端约定: interim=True 原位更新预览,否则视为 final 提交
                 await self._send_event(
                     websocket, "user_transcript",
-                    text=state["user_acc"], interim=True,
+                    text=snapshot, interim=True,
                     turn_id=state.get("active_turn_id"),
                 )
             return True
@@ -346,15 +382,22 @@ class DoubaoRealtimeMixin:
 
         if event_type == "response.output_audio.started":
             response_id = str(event.get("response_id") or "")
-            # 新一轮回复开始 → 解除打断后的输出抑制
-            state["suppress_output"] = False
-            if response_id and response_id != state.get("active_turn_id"):
-                if not state.get("active_turn_id"):
-                    state["active_turn_id"] = response_id
-                state["ai_acc"] = ""
-                state["text_source"] = None
+            # 新一轮回复开始 → 解除对上一轮被打断回复的定向抑制
+            suppressed = state.get("suppressed_response_id")
+            if suppressed is not None and (
+                not suppressed or not response_id or response_id != suppressed
+            ):
+                state["suppressed_response_id"] = None
+            if response_id and response_id != state.get("active_response_id"):
+                # 锚定豆包命名空间的"在播回复 id"(与承载 recorder 话轮 id 的
+                # active_turn_id 严格分离——后者会被迟到的 ASR completed 覆写,
+                # 混用会让打断抑制错锚)。服务端可能把一条逻辑回复拆成多个
+                # response_id 分段(实测):此时不清 ai_acc —— 正常轮次它已被上
+                # 一轮 finalize 清空,非空即分段续流,保留它才能让 done 对账基线完整。
+                state["active_response_id"] = response_id
+                state["turn_finalized"] = False
                 state["websearch_notified"] = False
-                interruption.active_response_id = state.get("active_turn_id")
+                interruption.active_response_id = response_id
             state["tts_active"] = True
             # tts_type=network 表示本轮使用了内置联网搜索 —— 映射为前端的进度提示。
             if (
@@ -371,7 +414,7 @@ class DoubaoRealtimeMixin:
             return True
 
         if event_type == "response.output_audio.delta":
-            if state.get("suppress_output"):
+            if self._duplex_output_suppressed(state, str(event.get("response_id") or "")):
                 return True  # 被打断那轮的残余音频:丢弃,不排期播放
             audio_b64 = str(event.get("delta") or "")
             if audio_b64:
@@ -392,11 +435,11 @@ class DoubaoRealtimeMixin:
             return True
 
         if event_type == "response.output_audio.done":
-            if state.get("suppress_output"):
-                # 被打断那轮的合成结束信号:打断时已收尾,不再触发(否则会产生
-                # 空 turn_complete 提前提交用户正在进行的下一句话)
-                state["suppress_output"] = False
-                state["tts_active"] = False
+            response_id = str(event.get("response_id") or "")
+            if self._duplex_output_suppressed(state, response_id):
+                # 被打断那轮的合成结束信号:静默解除定向抑制,不触发收尾(否则
+                # 会产生空 turn_complete 提前提交用户正在进行的下一句话)
+                state["suppressed_response_id"] = None
                 return True
             # 一轮音频合成结束即本轮收尾(全双工没有独立 TTSEnded 文本事件);
             # status_code=20000002 表示模型识别到用户退出意图。
@@ -421,17 +464,16 @@ class DoubaoRealtimeMixin:
                         pass
             state["ai_acc"] = ""
             state["user_acc"] = ""
-            state["active_turn_id"] = None
+            state["active_response_id"] = None
+            state["turn_finalized"] = True
             state["tts_active"] = False
-            state["text_source"] = None
             return True
 
         if event_type == "response.output_text.delta":
-            if state.get("suppress_output"):
+            if self._duplex_output_suppressed(state, str(event.get("response_id") or "")):
                 return True  # 被打断那轮的残余文本:丢弃
             content = str(event.get("delta") or "")
-            if content and state.get("text_source") in (None, "chat"):
-                state["text_source"] = "chat"
+            if content:
                 state["ai_acc"] = (state.get("ai_acc") or "") + content
                 await self._emit_assistant_output(
                     websocket,
@@ -443,18 +485,27 @@ class DoubaoRealtimeMixin:
             return True
 
         if event_type == "response.output_text.done":
-            # 增量已流式发出时跳过;只有完全没收到增量才用 done.text 兜底
-            final_text = str(event.get("text") or "")
-            if final_text and state.get("text_source") != "chat":
-                state["text_source"] = "chat"
-                state["ai_acc"] = (state.get("ai_acc") or "") + final_text
+            response_id = str(event.get("response_id") or "")
+            if self._duplex_output_suppressed(state, response_id):
+                return True  # 被打断轮次的最终文本:整体丢弃
+            if state.get("turn_finalized"):
+                return True  # 本轮已收尾:迟到的 done 不再二次推送(否则全文翻倍)
+            # done.text 是服务端权威全文。与已流式转发的增量对账,缺多少补多少:
+            # 自愈任何路径造成的缺口且不重复推送(实测 sum(deltas) == done.text)。
+            accumulated = str(state.get("ai_acc") or "")
+            if final_diff := self._duplex_missing_text_suffix(accumulated, str(event.get("text") or "")):
                 await self._emit_assistant_output(
                     websocket,
                     interruption,
-                    {"type": "assistant_text", "text": final_text, "turn_id": state.get("active_turn_id")},
+                    {
+                        "type": "assistant_text",
+                        "text": final_diff,
+                        "turn_id": state.get("active_turn_id"),
+                    },
                     memory_session=memory_session,
                     recorder=recorder,
                 )
+                state["ai_acc"] = accumulated + final_diff
             return True
 
         if event_type == "error":
@@ -492,12 +543,13 @@ class DoubaoRealtimeMixin:
         interruption = interruption or InterruptionDecisionCoordinator()
         # Turn lifecycle state for the downlink dispatch loop.
         turn_state = turn_state or {
-            "active_turn_id": None,
+            "active_turn_id": None,       # recorder 话轮 id(用户转写打标用)
+            "active_response_id": None,   # 豆包在播回复 id(抑制锚点/分段判定用)
+            "turn_finalized": False,      # 本轮是否已收尾(迟到 done 对账守卫)
             "ai_acc": "",
             "user_acc": "",
-            "suppress_output": False,
+            "suppressed_response_id": None,
             "tts_active": False,
-            "text_source": None,
             "user_final_sent": False,
             "websearch_notified": False,
         }
@@ -563,12 +615,13 @@ class DoubaoRealtimeMixin:
         tool_session = tool_session or VoiceAgentToolSession()
         # Turn lifecycle state, owned here and consumed by the downlink loop.
         turn_state: dict[str, Any] = {
-            "active_turn_id": None,
+            "active_turn_id": None,       # recorder 话轮 id(用户转写打标用)
+            "active_response_id": None,   # 豆包在播回复 id(抑制锚点/分段判定用)
+            "turn_finalized": False,      # 本轮是否已收尾(迟到 done 对账守卫)
             "ai_acc": "",
             "user_acc": "",
-            "suppress_output": False,
+            "suppressed_response_id": None,
             "tts_active": False,
-            "text_source": None,
             "user_final_sent": False,
             "websearch_notified": False,
         }
