@@ -858,6 +858,13 @@ class DoubaoRealtimeMixin:
                     "「豆包语音」控制台的 Access Token（X-Api-Access-Key），并且 APP ID "
                     "与该 Token 属于同一个应用；注意火山方舟(Ark)的 API Key 不能用于实时语音。"
                 )
+            elif status_code == 403 or "403" in str(exc):
+                err_msg = (
+                    "火山引擎豆包实时语音拒绝访问 (HTTP 403)。可能原因：\n"
+                    "1. 账户欠费或无可用免费/付费资源包（请检查火山引擎账户余额与订单）；\n"
+                    "2. 该 APP ID 尚未在控制台开通「实时语音对话/语音大模型 (volc.speech.dialog)」服务；\n"
+                    "3. APP ID 与 Access Token 不属于同一个应用项目。"
+                )
             else:
                 err_msg = f"豆包 WebSocket 连接被拒绝 (HTTP {status_code or exc})。"
             logger.error("doubao_ws_connect_failed: %s", exc)
