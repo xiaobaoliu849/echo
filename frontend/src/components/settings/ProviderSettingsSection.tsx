@@ -273,14 +273,14 @@ export default function ProviderSettingsSection({ settings }: Props) {
           {settings.settingsProvider === "Doubao" && (
             <>
               <label className="vsField">
-                <span className="vsFieldLabel">{t("Access Token（豆包语音 · TTS合成 / ASR识别 / 实时语音）", "Access Token (Doubao Voice · TTS / ASR / Realtime)")}</span>
+                <span className="vsFieldLabel">{t("API Key / Access Token（豆包语音 · 实时语音必填）", "API Key / Access Token (Doubao Voice · required for Realtime)")}</span>
                 <div className="vsPasswordFieldWrap">
                   <input
                     className="vsInput"
                     type={showDoubaoAccessToken ? "text" : "password"}
                     value={settings.settingsDoubaoAccessToken || ""}
                     onChange={(e) => settings.onDoubaoAccessTokenChange(e.target.value)}
-                    placeholder={t("豆包语音控制台「服务接口认证信息」的 Access Token", "Access Token from the Doubao Voice console auth info")}
+                    placeholder={t("新版控制台「API Key 管理」的 API Key", "API Key from the new console's API Key management page")}
                   />
                   <button
                     type="button"
@@ -298,13 +298,13 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 </div>
                 <span className="vsFieldHint">
                   {t(
-                    "语音合成（TTS）、语音识别（ASR）与实时语音通用凭证，与上面的文本 API Key 是两套体系；填入并保存后，语音中心与转写页面将直接启用豆包。通常为以 x- 开头的字符串。",
-                    "Universal credential for TTS, ASR, and Realtime voice, separate from the text API key above; after saving, Doubao TTS and ASR are ready to use. Usually starts with x-."
+                    "实时语音只需新版控制台「API Key 管理」的 API Key（UUID 格式，无需 APP ID）。TTS 语音合成仍需旧版控制台的 Access Token，与下方 APP ID 配对。与上面的文本聊天 Key 是两套体系。",
+                    "Realtime voice only needs an API Key from the new console's API Key management page (UUID format, no APP ID). TTS synthesis still requires a legacy-console Access Token paired with the APP ID below. Separate from the text-chat key above."
                   )}
                 </span>
               </label>
               <label className="vsField">
-                <span className="vsFieldLabel">{t("豆包语音 APP ID（TTS/ASR/实时语音必填）", "Doubao Voice APP ID (required for TTS / ASR / Realtime)")}</span>
+                <span className="vsFieldLabel">{t("豆包语音 APP ID（仅 TTS 语音合成需要）", "Doubao Voice APP ID (only needed for TTS)")}</span>
                 <div className="vsPasswordFieldWrap">
                   <input
                     className="vsInput"
@@ -329,15 +329,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 </div>
                 <span className="vsFieldHint">
                   {t(
-                    "豆包语音（TTS/ASR/实时语音）使用「豆包语音」控制台的 Access Token + APP ID 鉴权（两者在「服务接口认证信息」里成对出现）。",
-                    "Doubao voice services (TTS/ASR/Realtime) authenticate with the Access Token + APP ID pair from the Doubao Voice console."
+                    "实时语音无需填写此项。仅 TTS 语音合成需要：与旧版控制台的 Access Token 成对使用（概览页可查）。",
+                    "Not needed for realtime voice. Only TTS synthesis needs it, paired with a legacy-console Access Token (see the console overview page)."
                   )}{" "}
                   <a
-                    href="https://console.volcengine.com/speech/overview"
+                    href="https://console.volcengine.com/speech/new/setting/apikeys"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {t("打开豆包语音控制台", "Open the Doubao Voice console")}
+                    {t("打开新版控制台 API Key 管理", "Open new-console API Key management")}
                   </a>
                 </span>
               </label>
@@ -378,10 +378,10 @@ export default function ProviderSettingsSection({ settings }: Props) {
                   className="vsInput"
                   value={settings.settingsRealtimeApiUrl || ""}
                   onChange={(e) => settings.onRealtimeApiUrlChange(e.target.value)}
-                  placeholder="wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
+                  placeholder="wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue"
                 />
                 <span className="vsFieldHint">
-                  {t("留空则使用豆包端到端实时语音官方地址。", "Leave empty to use the official Doubao end-to-end realtime dialogue endpoint.")}
+                  {t("留空则使用豆包端到端实时语音-全双工版本官方地址。", "Leave empty to use the official Doubao full-duplex realtime dialogue endpoint.")}
                 </span>
               </label>
             </>

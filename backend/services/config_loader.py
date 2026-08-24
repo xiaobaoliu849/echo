@@ -78,7 +78,7 @@ DEFAULT_BASE_URLS = {
     "Deepgram": "https://api.deepgram.com/v1",
     "AssemblyAI": "https://api.assemblyai.com",
     "GPT-SoVITS": "http://127.0.0.1:9880",
-    "Doubao": "https://openspeech.bytedance.com/api/v3/realtime/dialogue",
+    "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
     "Cartesia": "https://api.cartesia.ai",
     # PersonaPlex and GLM4Voice use local WebSocket URLs
     "PersonaPlex": "",

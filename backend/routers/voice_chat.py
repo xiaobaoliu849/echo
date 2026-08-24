@@ -245,10 +245,11 @@ async def voice_chat_ws(
         if not _cfg.get_setting("openai_api_key"):
             _missing.append("OpenAI API Key")
     elif selected_provider == "Doubao":
-        if not _cfg.get_setting("doubao_access_token") and not _cfg.get_setting("doubao_api_key"):
-            _missing.append("Doubao Access Token")
-        if not _cfg.get_setting("doubao_app_id"):
-            _missing.append("Doubao App ID")
+        # 全双工实时语音只需新版控制台 API Key(X-Api-Key 鉴权),无需 APP ID。
+        if not (
+            _cfg.get_setting("doubao_access_token") or _cfg.get_setting("doubao_api_key")
+        ):
+            _missing.append("Doubao API Key")
     elif selected_provider == "Cartesia":
         if not _cfg.get_setting("cartesia_api_key"):
             _missing.append("Cartesia API Key")

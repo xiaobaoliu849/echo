@@ -190,7 +190,7 @@ describe('useSettings', () => {
             result.current.onApiKeyChange('volc_test_key_123');
             result.current.onDoubaoAccessTokenChange('x-access-token-abc');
             result.current.onDoubaoAppIdChange('123456789');
-            result.current.onRealtimeApiUrlChange('wss://openspeech.bytedance.com/api/v3/realtime/dialogue');
+            result.current.onRealtimeApiUrlChange('wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue');
         });
 
         await act(async () => {
@@ -207,7 +207,7 @@ describe('useSettings', () => {
                     doubao_websearch_api_key: ''
                 },
                 realtime_api_urls: {
-                    Doubao: 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue'
+                    Doubao: 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue'
                 }
             })
         );

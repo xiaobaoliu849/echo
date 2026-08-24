@@ -66,21 +66,22 @@ DEFAULT_CARTESIA_REALTIME_VOICE = "f786b574-daa5-4673-aa0c-cbe3e8534c02"
 DEFAULT_CARTESIA_STT_MODEL = "ink-2"
 
 DEFAULT_DOUBAO_REALTIME_MODEL = "doubao-realtime"
-# OpenSpeech dialogue (端到端实时语音大模型) O2.0 voices — the default endpoint
-# is the documented volc.speech.dialog WebSocket API.
+# 端到端实时语音-全双工版本 (SeedPulse duplex) voices — the only supported
+# Doubao realtime transport since 2026-08-24.
 DEFAULT_DOUBAO_REALTIME_VOICE = "zh_female_vv_jupiter_bigtts"
-DEFAULT_DOUBAO_REALTIME_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue"
+# New-console API Key auth (X-Api-Key) + pure JSON event protocol.
+# Endpoint per docs 6561/2549732; session.model is a fixed value.
+DEFAULT_DOUBAO_DUPLEX_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue"
+DEFAULT_DOUBAO_DUPLEX_DIALOG_MODEL = "1.2.6.1"
 DOUBAO_REALTIME_VOICES = (
     "zh_female_vv_jupiter_bigtts",       # vv · 活泼灵动女声 (default)
     "zh_female_xiaohe_jupiter_bigtts",   # xiaohe · 甜美台腔女声
     "zh_male_yunzhou_jupiter_bigtts",    # yunzhou · 清爽沉稳男声
     "zh_male_xiaotian_jupiter_bigtts",   # xiaotian · 清爽磁性男声
-    "en_male_tim_uranus_bigtts",         # Tim · 美式英语 (O2.0 only)
-    "en_female_dacey_uranus_bigtts",     # Dacey · 美式英语 (O2.0 only)
-    "en_female_stokie_uranus_bigtts",    # Stokie · 美式英语 (O2.0 only)
+    "en_male_tim_uranus_bigtts",         # Tim · 美式英语
+    "en_female_dacey_uranus_bigtts",     # Dacey · 美式英语
+    "en_female_stokie_uranus_bigtts",    # Stokie · 美式英语
 )
-# dialog.extra.model — required by StartSession. 1.2.1.1 = O2.0, 2.2.0.0 = SC2.0.
-DEFAULT_DOUBAO_DIALOG_MODEL = "1.2.1.1"
 
 # PersonaPlex — NVIDIA 全双工端到端语音模型，跑在本机 moshi.server 上。
 # 仅支持英文，因此定位为「英语口语陪练」独立模式，不作为通用实时语音后端。

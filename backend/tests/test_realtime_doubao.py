@@ -1,15 +1,20 @@
-"""Tests for Doubao / Volcengine Realtime voice provider mixin."""
+"""Tests for Doubao / Volcengine Realtime voice provider mixin.
+
+Doubao realtime speaks only the 全双工 (duplex) JSON protocol since the legacy
+OpenSpeech binary path was removed on 2026-08-24.
+"""
 
 import asyncio
+import base64
 import json
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from services.interruption_classifier import InterruptionDecisionCoordinator
 from services.realtime_voice_service import RealtimeVoiceService
 from services.realtime_constants import (
-    DEFAULT_DOUBAO_REALTIME_ENDPOINT,
-    DEFAULT_DOUBAO_REALTIME_MODEL,
+    DEFAULT_DOUBAO_DUPLEX_DIALOG_MODEL,
+    DEFAULT_DOUBAO_DUPLEX_ENDPOINT,
     DEFAULT_DOUBAO_REALTIME_VOICE,
 )
 
@@ -35,7 +40,7 @@ class CollectingWebSocket:
 
 
 class FakeDoubaoWs:
-    """Fake Doubao-side WebSocket."""
+    """Fake Doubao-side WebSocket speaking the duplex JSON protocol."""
 
     def __init__(self, events: list[dict] | None = None) -> None:
         self.sent: list[str] = []
@@ -53,416 +58,342 @@ class FakeDoubaoWs:
         return ""
 
 
-class TestRealtimeDoubaoProvider(unittest.TestCase):
+def _default_config(api_key: str = "uuid-style-api-key") -> MagicMock:
+    fake_config = MagicMock()
+    fake_config.get_provider_settings.return_value = {
+        "api_key": api_key, "model": "", "realtime_base_url": "",
+    }
+    fake_config.get_setting.return_value = ""
+    return fake_config
+
+
+class TestRealtimeDoubaoSettings(unittest.TestCase):
+    """Credential resolution — single duplex transport."""
 
     def setUp(self) -> None:
         self.service = RealtimeVoiceService()
 
-    def test_resolve_doubao_settings_success(self) -> None:
-        fake_config = MagicMock()
-        fake_config.get_provider_settings.side_effect = lambda provider, model: {
-            "Doubao": {"api_key": "volc-secret-key", "model": "doubao-realtime", "realtime_base_url": ""},
-        }[provider]
-        fake_config.get_setting.return_value = ""
+    def test_resolve_defaults_to_duplex(self) -> None:
+        fake_config = _default_config()
+        fake_config.get_provider_settings.return_value = {
+            "api_key": "uuid-style-api-key", "model": "doubao-realtime", "realtime_base_url": "",
+        }
         self.service.config = fake_config
 
         settings = self.service._resolve_doubao_settings("doubao-realtime", "zh_female_vv_jupiter_bigtts")
-        self.assertEqual(settings["api_key"], "volc-secret-key")
-        self.assertEqual(settings["model"], "doubao-realtime")
+        self.assertEqual(settings["api_key"], "uuid-style-api-key")
+        self.assertEqual(settings["endpoint"], DEFAULT_DOUBAO_DUPLEX_ENDPOINT)
+        self.assertEqual(settings["dialog_model"], DEFAULT_DOUBAO_DUPLEX_DIALOG_MODEL)
         self.assertEqual(settings["voice"], "zh_female_vv_jupiter_bigtts")
-        self.assertEqual(settings["dialog_model"], "1.2.1.1")
-        self.assertEqual(settings["endpoint"], DEFAULT_DOUBAO_REALTIME_ENDPOINT)
+        # 旧协议相关字段已彻底移除
+        self.assertNotIn("mode", settings)
+        self.assertNotIn("app_id", settings)
 
-    def test_resolve_doubao_settings_voice_fallback(self) -> None:
-        fake_config = MagicMock()
+    def test_resolve_custom_endpoint_passthrough(self) -> None:
+        """自定义 realtime_base_url 直接透传(仍说全双工协议)。"""
+        fake_config = _default_config()
         fake_config.get_provider_settings.return_value = {
-            "api_key": "volc-secret-key", "model": "", "realtime_base_url": "",
+            "api_key": "k", "model": "",
+            "realtime_base_url": "wss://example.internal/duplex/realtime/dialogue",
         }
-        fake_config.get_setting.return_value = ""
         self.service.config = fake_config
 
-        settings = self.service._resolve_doubao_settings(None, "not-a-real-voice")
-        self.assertEqual(settings["voice"], DEFAULT_DOUBAO_REALTIME_VOICE)
+        settings = self.service._resolve_doubao_settings(None, None)
+        self.assertEqual(settings["endpoint"], "wss://example.internal/duplex/realtime/dialogue")
 
-    def test_resolve_doubao_settings_missing_key_raises(self) -> None:
-        fake_config = MagicMock()
-        fake_config.get_provider_settings.return_value = {"api_key": "", "model": "", "realtime_base_url": ""}
-        fake_config.get_setting.return_value = ""
-        self.service.config = fake_config
-
-        with self.assertRaises(RuntimeError) as ctx:
-            self.service._resolve_doubao_settings(None, None)
-        self.assertIn("Access Token 未配置", str(ctx.exception))
-
-    def test_resolve_doubao_settings_access_token_preferred(self) -> None:
-        """独立的 doubao_access_token 字段优先于 ark 体系的 doubao_api_key。"""
-        fake_config = MagicMock()
-        fake_config.get_provider_settings.return_value = {
-            "api_key": "ark-style-key", "model": "", "realtime_base_url": "",
-        }
+    def test_resolve_access_token_preferred(self) -> None:
+        """独立的 doubao_access_token 字段优先于 doubao_api_key。"""
+        fake_config = _default_config(api_key="ark-style-key")
         fake_config.get_setting.side_effect = lambda key, default="": {
-            "doubao_access_token": "x-access-token",
-            "doubao_app_id": "123456789",
+            "doubao_access_token": "new-console-api-key",
         }.get(key, default)
         self.service.config = fake_config
 
         settings = self.service._resolve_doubao_settings(None, None)
-        self.assertEqual(settings["api_key"], "x-access-token")
-        self.assertEqual(settings["app_id"], "123456789")
+        self.assertEqual(settings["api_key"], "new-console-api-key")
 
-    def test_resolve_doubao_settings_falls_back_to_api_key(self) -> None:
-        """旧配置把 Access Token 存在 doubao_api_key 里时仍然可用。"""
-        fake_config = MagicMock()
-        fake_config.get_provider_settings.return_value = {
-            "api_key": "x-legacy-token", "model": "", "realtime_base_url": "",
-        }
-        fake_config.get_setting.return_value = ""
-        self.service.config = fake_config
+    def test_resolve_voice_fallback(self) -> None:
+        self.service.config = _default_config()
+        settings = self.service._resolve_doubao_settings(None, "not-a-real-voice")
+        self.assertEqual(settings["voice"], DEFAULT_DOUBAO_REALTIME_VOICE)
 
-        settings = self.service._resolve_doubao_settings(None, None)
-        self.assertEqual(settings["api_key"], "x-legacy-token")
-
-    def test_client_to_doubao_text_input(self) -> None:
-        async def run_test():
-            client_ws = CollectingWebSocket(inbound=[
-                {"type": "websocket.receive", "text": json.dumps({"type": "text_input", "text": "你好，豆包"})},
-            ])
-            doubao_ws = FakeDoubaoWs()
-            mem_session = MagicMock()
-            tool_session = MagicMock()
-
-            await self.service._client_to_doubao_loop(
-                client_ws, doubao_ws, mem_session, tool_session
-            )
-            self.assertEqual(len(doubao_ws.sent), 2)
-            item_create = json.loads(doubao_ws.sent[0])
-            resp_create = json.loads(doubao_ws.sent[1])
-            self.assertEqual(item_create["type"], "conversation.item.create")
-            self.assertEqual(item_create["item"]["content"][0]["text"], "你好，豆包")
-            self.assertEqual(resp_create["type"], "response.create")
-
-        asyncio.run(run_test())
-
-    def test_doubao_to_client_audio_stream(self) -> None:
-        async def run_test():
-            client_ws = CollectingWebSocket()
-            doubao_events = [
-                {"type": "response.created", "response": {"id": "resp_001"}},
-                {"type": "response.audio_transcript.delta", "delta": "你好"},
-                {"type": "response.audio.delta", "delta": "QUJD"},  # base64 "ABC"
-                {"type": "response.done"},
-            ]
-            doubao_ws = FakeDoubaoWs(events=doubao_events)
-            mem_session = MagicMock()
-            tool_session = MagicMock()
-
-            loop_task = asyncio.create_task(
-                self.service._doubao_to_client_loop(
-                    client_ws, doubao_ws, mem_session, tool_session
-                )
-            )
-            await asyncio.sleep(0.1)
-            loop_task.cancel()
-
-            audio_events = [e for e in client_ws.events if e.get("type") == "assistant_audio"]
-            self.assertEqual(len(audio_events), 1)
-            self.assertEqual(audio_events[0]["audio"], "QUJD")
-
-            text_events = [e for e in client_ws.events if e.get("type") == "assistant_text"]
-            self.assertTrue(len(text_events) >= 1)
-            self.assertIn("你好", text_events[-1]["text"])
-
-        asyncio.run(run_test())
-
-    def test_doubao_session_recorder_methods(self) -> None:
-        async def run_test():
-            fake_repo = MagicMock()
-            from services.realtime_session_recorder import VoiceAgentSessionRecorder
-            recorder = VoiceAgentSessionRecorder(fake_repo, "session_123")
-            await recorder.record_turn_completed()
-            await recorder.complete_session()
-            self.assertTrue(fake_repo.finish_session.called)
-
-        asyncio.run(run_test())
+    def test_resolve_missing_credential_raises(self) -> None:
+        self.service.config = _default_config(api_key="")
+        with self.assertRaises(RuntimeError) as ctx:
+            self.service._resolve_doubao_settings(None, None)
+        self.assertIn("凭证未配置", str(ctx.exception))
 
 
-class FakeOpenSpeechWs:
-    """Fake Doubao-side WebSocket speaking the OpenSpeech binary protocol."""
-
-    def __init__(self, frames: list[bytes] | None = None) -> None:
-        self.sent: list[bytes] = []
-        self._frames = list(frames or [])
-
-    async def send(self, data: bytes) -> None:
-        self.sent.append(data)
-
-    async def recv(self) -> bytes:
-        if self._frames:
-            return self._frames.pop(0)
-        await asyncio.sleep(3600)
-        return b""
-
-
-class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
-    """End-to-end tests of the OpenSpeech dialogue binary-protocol path."""
+class TestDoubaoDuplexHandshake(unittest.TestCase):
 
     def setUp(self) -> None:
         self.service = RealtimeVoiceService()
 
-    def test_handshake_sends_start_connection_then_start_session(self) -> None:
+    def test_handshake_sends_session_create(self) -> None:
         async def run_test():
-            from services.openspeech_dialogue_protocol import (
-                EVENT_CONNECTION_STARTED,
-                EVENT_SESSION_STARTED,
-                EVENT_START_CONNECTION,
-                EVENT_START_SESSION,
-                MSG_TYPE_FULL_CLIENT_REQ,
-                decode_openspeech_frame,
-                encode_openspeech_frame,
-            )
-            doubao_ws = FakeOpenSpeechWs(frames=[
-                encode_openspeech_frame(MSG_TYPE_FULL_CLIENT_REQ, {}, event=EVENT_CONNECTION_STARTED),
-                encode_openspeech_frame(MSG_TYPE_FULL_CLIENT_REQ, {"dialog_id": "d1"}, event=EVENT_SESSION_STARTED, session_id="sid-1"),
+            doubao_ws = FakeDoubaoWs(events=[
+                {"type": "session.created", "session": {"id": "dlg-1"}},
             ])
-            session_id = await self.service._openspeech_handshake(
+            dialog_id = await self.service._duplex_handshake(
                 doubao_ws, voice="zh_female_vv_jupiter_bigtts",
-                instructions=None, dialog_model="1.2.1.1",
+                instructions="你是助手", dialog_model=DEFAULT_DOUBAO_DUPLEX_DIALOG_MODEL,
             )
-            self.assertTrue(session_id)
-            self.assertEqual(len(doubao_ws.sent), 2)
-
-            first = decode_openspeech_frame(doubao_ws.sent[0])
-            self.assertEqual(first.event, EVENT_START_CONNECTION)
-            self.assertEqual(first.payload, b"{}")
-
-            second = decode_openspeech_frame(doubao_ws.sent[1])
-            self.assertEqual(second.event, EVENT_START_SESSION)
-            self.assertEqual(second.session_id, session_id)
-            payload = json.loads(second.payload.decode("utf-8"))
-            self.assertEqual(payload["tts"]["speaker"], "zh_female_vv_jupiter_bigtts")
-            self.assertEqual(payload["dialog"]["extra"]["model"], "1.2.1.1")
-            self.assertEqual(payload["asr"]["audio_info"]["sample_rate"], 16000)
-            self.assertIn("extra", payload["asr"])  # 置空会触发 42000020
+            self.assertEqual(dialog_id, "dlg-1")
+            self.assertEqual(len(doubao_ws.sent), 1)
+            evt = json.loads(doubao_ws.sent[0])
+            self.assertEqual(evt["type"], "session.create")
+            self.assertEqual(evt["session"]["model"], DEFAULT_DOUBAO_DUPLEX_DIALOG_MODEL)
+            self.assertEqual(evt["session"]["instructions"], "你是助手")
+            self.assertEqual(evt["session"]["audio"]["output"]["voice"], "zh_female_vv_jupiter_bigtts")
+            self.assertEqual(evt["session"]["audio"]["input"]["format"]["rate"], 16000)
+            self.assertEqual(evt["session"]["audio"]["output"]["format"]["type"], "pcm_s16le")
+            self.assertIn("extension", evt)
 
         asyncio.run(run_test())
 
-    def test_handshake_connection_failed_raises(self) -> None:
+    def test_handshake_includes_websearch_extension(self) -> None:
         async def run_test():
-            from services.openspeech_dialogue_protocol import (
-                EVENT_CONNECTION_FAILED,
-                MSG_TYPE_FULL_CLIENT_REQ,
-                encode_openspeech_frame,
+            doubao_ws = FakeDoubaoWs(events=[
+                {"type": "session.created", "session": {"id": "dlg-1"}},
+            ])
+            await self.service._duplex_handshake(
+                doubao_ws, voice="v", instructions=None,
+                dialog_model=DEFAULT_DOUBAO_DUPLEX_DIALOG_MODEL,
+                websearch_key="ws-key",
             )
-            doubao_ws = FakeOpenSpeechWs(frames=[
-                encode_openspeech_frame(MSG_TYPE_FULL_CLIENT_REQ, {"error": "bad app id"}, event=EVENT_CONNECTION_FAILED),
+            evt = json.loads(doubao_ws.sent[0])
+            extra = evt["extension"]["dialog"]["extra"]
+            self.assertTrue(extra["enable_volc_websearch"])
+            self.assertEqual(extra["volc_websearch_api_key"], "ws-key")
+
+        asyncio.run(run_test())
+
+    def test_handshake_error_raises(self) -> None:
+        async def run_test():
+            doubao_ws = FakeDoubaoWs(events=[
+                {"type": "error", "error": {"message": "invalid api key", "status_code": 401}},
             ])
             with self.assertRaises(RuntimeError) as ctx:
-                await self.service._openspeech_handshake(
-                    doubao_ws, voice="v", instructions=None, dialog_model="1.2.1.1",
+                await self.service._duplex_handshake(
+                    doubao_ws, voice="v", instructions=None,
+                    dialog_model=DEFAULT_DOUBAO_DUPLEX_DIALOG_MODEL,
                 )
-            self.assertIn("bad app id", str(ctx.exception))
+            self.assertIn("invalid api key", str(ctx.exception))
 
         asyncio.run(run_test())
 
-    def test_openspeech_audio_upload_uses_task_request(self) -> None:
+
+class TestDoubaoDuplexClientLoop(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.service = RealtimeVoiceService()
+
+    def test_audio_upload_uses_json_append(self) -> None:
         async def run_test():
-            from services.openspeech_dialogue_protocol import (
-                EVENT_TASK_REQUEST,
-                MSG_TYPE_AUDIO_CLIENT_REQ,
-                decode_openspeech_frame,
-            )
             client_ws = CollectingWebSocket(inbound=[
                 {"type": "websocket.receive", "bytes": b"\x01\x02" * 320},
             ])
-            doubao_ws = FakeOpenSpeechWs()
+            doubao_ws = FakeDoubaoWs()
             await self.service._client_to_doubao_loop(
                 client_ws, doubao_ws, MagicMock(), MagicMock(),
-                is_openspeech=True, session_id="sid-9",
             )
             self.assertEqual(len(doubao_ws.sent), 1)
-            frame = decode_openspeech_frame(doubao_ws.sent[0])
-            self.assertEqual(frame.msg_type, MSG_TYPE_AUDIO_CLIENT_REQ)
-            self.assertEqual(frame.event, EVENT_TASK_REQUEST)
-            self.assertEqual(frame.session_id, "sid-9")
-            self.assertEqual(frame.payload, b"\x01\x02" * 320)
+            evt = json.loads(doubao_ws.sent[0])
+            self.assertEqual(evt["type"], "input_audio_buffer.append")
+            self.assertEqual(base64.b64decode(evt["audio"]), b"\x01\x02" * 320)
 
         asyncio.run(run_test())
 
-    def test_openspeech_empty_sentence_text_falls_back_to_chat_response(self) -> None:
-        """实测真实流量: 550 增量文本先到,350 的 text 为空 — 文本必须来自 550;
-        559(ChatEnded)在音频之前到达,finalize 必须等 359(TTSEnded)。"""
+    def test_text_input_creates_context_item_with_notice(self) -> None:
+        """全双工没有文本触发回复的事件:只进上下文并发非致命提示,不发 response.create。"""
         async def run_test():
-            from services.openspeech_dialogue_protocol import (
-                EVENT_CHAT_ENDED,
-                EVENT_CHAT_RESPONSE,
-                EVENT_TTS_ENDED,
-                EVENT_TTS_SENTENCE_START,
-                MSG_TYPE_FULL_SERVER_RESP,
-                encode_openspeech_frame,
+            client_ws = CollectingWebSocket(inbound=[
+                {"type": "websocket.receive", "text": json.dumps({"type": "text_input", "text": "你好"})},
+            ])
+            doubao_ws = FakeDoubaoWs()
+            mem_session = MagicMock()
+            await self.service._client_to_doubao_loop(
+                client_ws, doubao_ws, mem_session, MagicMock(),
             )
-            frames = [
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"content": "我是", "reply_id": "r1"}, event=EVENT_CHAT_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"content": "豆包。", "reply_id": "r1"}, event=EVENT_CHAT_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"reply_id": "r1"}, event=EVENT_CHAT_ENDED, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "", "reply_id": "r1"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"reply_id": "r1"}, event=EVENT_TTS_ENDED, session_id="sid-1"),
-            ]
-            client_ws = CollectingWebSocket()
-            doubao_ws = FakeOpenSpeechWs(frames=frames)
-            loop_task = asyncio.create_task(
-                self.service._doubao_to_client_loop(
-                    client_ws, doubao_ws, MagicMock(), MagicMock(),
-                    is_openspeech=True, session_id="sid-1",
-                )
-            )
-            await asyncio.sleep(0.1)
-            loop_task.cancel()
-
-            # ai_transcript is no longer emitted (frontend had no handler);
-            # text was already streamed via assistant_text events.
-            ai_final = [e for e in client_ws.events if e["type"] == "ai_transcript"]
-            self.assertEqual(len(ai_final), 0)
-            text_deltas = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
-            self.assertEqual(text_deltas, ["我是", "豆包。"])
+            mem_session.note_user_transcript.assert_called_with("你好")
+            self.assertEqual(len(doubao_ws.sent), 1)
+            evt = json.loads(doubao_ws.sent[0])
+            self.assertEqual(evt["type"], "conversation.item.create")
+            item = evt["items"][0]
+            self.assertEqual(item["role"], "user")
+            self.assertEqual(item["content"][0]["text"], "你好")
+            self.assertNotIn("response.create", doubao_ws.sent[0])
+            # 非致命提示(error 事件会终止会话,不能用)
+            notices = [e for e in client_ws.events if e["type"] == "agent_progress"]
+            self.assertEqual(len(notices), 1)
+            self.assertEqual(notices[0]["stage"], "text_context_only")
 
         asyncio.run(run_test())
 
-    def test_openspeech_asr_interim_then_final_no_duplicate(self) -> None:
-        """interim 必须带 interim=True(前端原位更新),final 只发一次 —— 重复气泡的回归测试。"""
-        async def run_test():
-            from services.openspeech_dialogue_protocol import (
-                EVENT_ASR_ENDED,
-                EVENT_ASR_INFO,
-                EVENT_ASR_RESPONSE,
-                MSG_TYPE_FULL_SERVER_RESP,
-                encode_openspeech_frame,
+
+class TestDoubaoDuplexServerLoop(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.service = RealtimeVoiceService()
+
+    def _run_loop(self, doubao_ws: FakeDoubaoWs, client_ws: CollectingWebSocket,
+                  recorder=None, memory_session=None):
+        loop_task = asyncio.create_task(
+            self.service._doubao_to_client_loop(
+                client_ws, doubao_ws,
+                memory_session if memory_session is not None else MagicMock(),
+                MagicMock(), recorder=recorder,
             )
-            frames = [
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"question_id": "q1"}, event=EVENT_ASR_INFO, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"results": [{"text": "今天西安的", "is_interim": True}]}, event=EVENT_ASR_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"results": [{"text": "今天西安的天气怎么样", "is_interim": False}]}, event=EVENT_ASR_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {}, event=EVENT_ASR_ENDED, session_id="sid-1"),
-            ]
-            client_ws = CollectingWebSocket()
-            doubao_ws = FakeOpenSpeechWs(frames=frames)
-            loop_task = asyncio.create_task(
-                self.service._doubao_to_client_loop(
-                    client_ws, doubao_ws, MagicMock(), MagicMock(),
-                    is_openspeech=True, session_id="sid-1",
-                )
-            )
-            await asyncio.sleep(0.1)
+        )
+        return loop_task
+
+    async def _drain(self, loop_task) -> None:
+        await asyncio.sleep(0.15)
+        try:
+            await asyncio.wait_for(loop_task, timeout=2)
+        except asyncio.TimeoutError:
             loop_task.cancel()
 
-            transcripts = [e for e in client_ws.events if e["type"] == "user_transcript"]
-            self.assertEqual(len(transcripts), 2)
-            self.assertTrue(transcripts[0].get("interim"))
-            self.assertEqual(transcripts[0]["text"], "今天西安的")
-            self.assertFalse(transcripts[1].get("interim", False))
-            self.assertEqual(transcripts[1]["text"], "今天西安的天气怎么样")
-
-        asyncio.run(run_test())
-
-    def test_openspeech_asr_ended_sends_final_when_only_interim_seen(self) -> None:
+    def test_server_events_turn_flow_with_barge_in(self) -> None:
         async def run_test():
-            from services.openspeech_dialogue_protocol import (
-                EVENT_ASR_ENDED,
-                EVENT_ASR_RESPONSE,
-                MSG_TYPE_FULL_SERVER_RESP,
-                encode_openspeech_frame,
-            )
-            frames = [
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"results": [{"text": "只有中间结果", "is_interim": True}]}, event=EVENT_ASR_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {}, event=EVENT_ASR_ENDED, session_id="sid-1"),
+            events = [
+                {"type": "conversation.item.input_audio_transcription.delta", "delta": "今天"},
+                {"type": "conversation.item.input_audio_transcription.completed",
+                 "transcript": "今天天气怎么样"},
+                {"type": "response.output_text.delta", "delta": "今天晴", "response_id": "resp_1"},
+                {"type": "response.output_audio.started", "response_id": "resp_1", "tts_type": "default"},
+                {"type": "response.output_audio.delta", "delta": "QUJD"},  # base64 "ABC"
+                # 用户插话 → barge-in
+                {"type": "conversation.item.input_audio_transcription.started"},
+                {"type": "session.closed"},
             ]
+            doubao_ws = FakeDoubaoWs(events=events)
             client_ws = CollectingWebSocket()
-            doubao_ws = FakeOpenSpeechWs(frames=frames)
-            loop_task = asyncio.create_task(
-                self.service._doubao_to_client_loop(
-                    client_ws, doubao_ws, MagicMock(), MagicMock(),
-                    is_openspeech=True, session_id="sid-1",
-                )
-            )
-            await asyncio.sleep(0.1)
-            loop_task.cancel()
-
-            transcripts = [e for e in client_ws.events if e["type"] == "user_transcript"]
-            finals = [e for e in transcripts if not e.get("interim")]
-            self.assertEqual(len(finals), 1)
-            self.assertEqual(finals[0]["text"], "只有中间结果")
-
-        asyncio.run(run_test())
-
-    def test_openspeech_server_events_turn_flow(self) -> None:
-        async def run_test():
-            from services.openspeech_dialogue_protocol import (
-                EVENT_ASR_INFO,
-                EVENT_TTS_ENDED,
-                EVENT_TTS_RESPONSE,
-                EVENT_TTS_SENTENCE_START,
-                MSG_TYPE_AUDIO_SERVER_RESP,
-                MSG_TYPE_FULL_SERVER_RESP,
-                encode_openspeech_frame,
-            )
-            frames = [
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "你好呀", "reply_id": "r1"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_AUDIO_SERVER_RESP, b"\x00\x01" * 100, event=EVENT_TTS_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {}, event=EVENT_TTS_ENDED, session_id="sid-1"),
-                # barge-in while a second turn is playing
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "第二句", "reply_id": "r2"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"question_id": "q2"}, event=EVENT_ASR_INFO, session_id="sid-1"),
-            ]
-            client_ws = CollectingWebSocket()
-            doubao_ws = FakeOpenSpeechWs(frames=frames)
-            loop_task = asyncio.create_task(
-                self.service._doubao_to_client_loop(
-                    client_ws, doubao_ws, MagicMock(), MagicMock(),
-                    is_openspeech=True, session_id="sid-1",
-                )
-            )
-            await asyncio.sleep(0.1)
-            loop_task.cancel()
+            await self._drain(self._run_loop(doubao_ws, client_ws))
 
             types = [e["type"] for e in client_ws.events]
+            self.assertIn("user_transcript", types)
             self.assertIn("assistant_text", types)
             self.assertIn("assistant_audio", types)
-            # ai_transcript is no longer emitted (frontend had no handler);
-            # text was already streamed via assistant_text events.
-            self.assertNotIn("ai_transcript", types)
             self.assertIn("interrupted", types)
+
+            transcripts = [e for e in client_ws.events if e["type"] == "user_transcript"]
+            self.assertTrue(transcripts[0].get("interim"))
+            self.assertEqual(transcripts[0]["text"], "今天")
+            finals = [e for e in transcripts if not e.get("interim")]
+            self.assertEqual(len(finals), 1)
+            self.assertEqual(finals[0]["text"], "今天天气怎么样")
 
             audio_events = [e for e in client_ws.events if e["type"] == "assistant_audio"]
             self.assertEqual(audio_events[0]["sample_rate"], 24000)
+            self.assertEqual(audio_events[0]["encoding"], "pcm_s16le")
+
+            text_deltas = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
+            self.assertEqual(text_deltas, ["今天晴"])
+
+            # 空 turn_id 让前端无条件停止播报(绕过 turn_id 匹配守卫)
             interrupted = [e for e in client_ws.events if e["type"] == "interrupted"]
-            self.assertEqual(interrupted[0]["turn_id"], "r2")
+            self.assertEqual(interrupted[0]["turn_id"], "")
 
         asyncio.run(run_test())
 
-    def test_openspeech_emits_turn_complete_and_notes_user_transcript(self) -> None:
-        """验证 Doubao 收到 ASR 后正常记录 user_transcript,在 EVENT_TTS_ENDED 时正确发送 turn_complete 并且 turn_id 保持一致。"""
+    def test_stale_deltas_after_barge_in_are_suppressed(self) -> None:
+        """被打断那轮的残余增量必须丢弃;其 done 不触发收尾(不产生空 turn_complete)。"""
         async def run_test():
-            from services.openspeech_dialogue_protocol import (
-                EVENT_ASR_INFO,
-                EVENT_ASR_RESPONSE,
-                EVENT_ASR_ENDED,
-                EVENT_TTS_SENTENCE_START,
-                EVENT_TTS_RESPONSE,
-                EVENT_TTS_ENDED,
-                MSG_TYPE_AUDIO_SERVER_RESP,
-                MSG_TYPE_FULL_SERVER_RESP,
-                encode_openspeech_frame,
-            )
-            frames = [
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"question_id": "q1"}, event=EVENT_ASR_INFO, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"results": [{"text": "你可以唱一段吗", "is_interim": False}]}, event=EVENT_ASR_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {}, event=EVENT_ASR_ENDED, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"text": "抱歉，我不会唱歌", "reply_id": "r1"}, event=EVENT_TTS_SENTENCE_START, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_AUDIO_SERVER_RESP, b"\x00\x01" * 10, event=EVENT_TTS_RESPONSE, session_id="sid-1"),
-                encode_openspeech_frame(MSG_TYPE_FULL_SERVER_RESP, {"reply_id": "r1"}, event=EVENT_TTS_ENDED, session_id="sid-1"),
-            ]
-            client_ws = CollectingWebSocket()
-            doubao_ws = FakeOpenSpeechWs(frames=frames)
+            fake_recorder = MagicMock()
+            fake_recorder.note_user_transcript = AsyncMock(return_value="voice-turn-1")
+            fake_recorder.note_assistant_text = AsyncMock(return_value="voice-turn-1")
+            fake_recorder.note_assistant_audio = AsyncMock(return_value=("voice-turn-1", 120))
+            fake_recorder.interrupt_current_turn = AsyncMock()
+            fake_recorder.complete_turn = AsyncMock(return_value="voice-turn-1")
 
+            events = [
+                {"type": "conversation.item.input_audio_transcription.completed",
+                 "transcript": "第一个问题"},
+                {"type": "response.output_text.delta", "delta": "第一句", "response_id": "r1"},
+                {"type": "response.output_audio.started", "response_id": "r1"},
+                {"type": "response.output_audio.delta", "delta": "QUJD"},
+                # 用户插话 → barge-in
+                {"type": "conversation.item.input_audio_transcription.started"},
+                # 被打断那轮(r1)的残余流:必须全部丢弃
+                {"type": "response.output_audio.delta", "delta": "REVG"},
+                {"type": "response.output_text.delta", "delta": "残余文本", "response_id": "r1"},
+                # r1 迟到的合成结束信号:不得触发收尾
+                {"type": "response.output_audio.done", "response_id": "r1"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws, recorder=fake_recorder))
+
+            audio_events = [e for e in client_ws.events if e["type"] == "assistant_audio"]
+            self.assertEqual(len(audio_events), 1)  # 只有打断前的 QUJD
+            self.assertEqual(audio_events[0]["audio"], "QUJD")
+            text_deltas = [e["text"] for e in client_ws.events if e["type"] == "assistant_text"]
+            self.assertEqual(text_deltas, ["第一句"])  # 残余文本未转发
+            self.assertIn("interrupted", [e["type"] for e in client_ws.events])
+            # 打断后的 done 不收尾 → 无 turn_complete、recorder 未 complete_turn
+            self.assertNotIn("turn_complete", [e["type"] for e in client_ws.events])
+            fake_recorder.complete_turn.assert_not_awaited()
+
+        asyncio.run(run_test())
+
+    def test_done_without_any_output_does_not_finalize(self) -> None:
+        """无回复输出的轮次(如 ASR-only/空轮)不做收尾,避免空 turn_complete。"""
+        async def run_test():
+            fake_recorder = MagicMock()
+            fake_recorder.note_user_transcript = AsyncMock(return_value="voice-turn-1")
+            fake_recorder.complete_turn = AsyncMock(return_value="")
+
+            events = [
+                {"type": "conversation.item.input_audio_transcription.completed",
+                 "transcript": "只有识别没有回复"},
+                {"type": "response.output_audio.done", "response_id": "r_none"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws, recorder=fake_recorder))
+
+            self.assertNotIn("turn_complete", [e["type"] for e in client_ws.events])
+            fake_recorder.complete_turn.assert_not_awaited()
+
+        asyncio.run(run_test())
+
+    def test_new_turn_after_barge_in_resumes_output_and_finalizes(self) -> None:
+        """打断后新一轮 started 解除抑制,正常转发并收尾。"""
+        async def run_test():
+            fake_mem_session = MagicMock()
+            fake_mem_session.flush_turn = AsyncMock(return_value={"attempted_count": 0, "saved_count": 0, "failed_count": 0})
+            events = [
+                {"type": "response.output_audio.started", "response_id": "r1"},
+                {"type": "response.output_audio.delta", "delta": "QUJD"},
+                {"type": "conversation.item.input_audio_transcription.started"},  # barge-in
+                {"type": "response.output_audio.done", "response_id": "r1"},      # r1 残余 done
+                # 新一轮
+                {"type": "conversation.item.input_audio_transcription.completed", "transcript": "新问题"},
+                {"type": "response.output_text.delta", "delta": "新回答", "response_id": "r2"},
+                {"type": "response.output_audio.started", "response_id": "r2"},
+                {"type": "response.output_audio.delta", "delta": "R0Y="},  # base64 "OT="
+                {"type": "response.output_audio.done", "response_id": "r2"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws, memory_session=fake_mem_session))
+
+            audio_events = [e for e in client_ws.events if e["type"] == "assistant_audio"]
+            self.assertEqual([a["audio"] for a in audio_events], ["QUJD", "R0Y="])
+            self.assertIn("interrupted", [e["type"] for e in client_ws.events])
+            # 只有 r2 正常收尾一次
+            turn_completes = [e for e in client_ws.events if e["type"] == "turn_complete"]
+            self.assertEqual(len(turn_completes), 1)
+
+        asyncio.run(run_test())
+
+    def test_output_audio_done_finalizes_turn_once(self) -> None:
+        """output_audio.done 收尾一轮(发 turn_complete);response.done 不重复收尾。"""
+        async def run_test():
             fake_recorder = MagicMock()
             fake_recorder.note_user_transcript = AsyncMock(return_value="voice-turn-1")
             fake_recorder.note_assistant_text = AsyncMock(return_value="voice-turn-1")
@@ -472,32 +403,89 @@ class TestDoubaoOpenSpeechProtocol(unittest.TestCase):
             fake_mem_session = MagicMock()
             fake_mem_session.flush_turn = AsyncMock(return_value={"attempted_count": 0, "saved_count": 0, "failed_count": 0})
 
-            loop_task = asyncio.create_task(
-                self.service._doubao_to_client_loop(
-                    client_ws, doubao_ws, fake_mem_session, MagicMock(),
-                    recorder=fake_recorder, is_openspeech=True, session_id="sid-1",
-                )
-            )
-            await asyncio.sleep(0.1)
-            loop_task.cancel()
+            events = [
+                {"type": "conversation.item.input_audio_transcription.completed",
+                 "transcript": "唱一段"},
+                {"type": "response.output_text.delta", "delta": "抱歉，我不会唱歌", "response_id": "r1"},
+                {"type": "response.output_audio.started", "response_id": "r1"},
+                {"type": "response.output_audio.done", "response_id": "r1"},
+                {"type": "response.done", "response_id": "r1"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws,
+                                             recorder=fake_recorder,
+                                             memory_session=fake_mem_session))
 
             types = [e["type"] for e in client_ws.events]
-            self.assertIn("user_transcript", types)
-            self.assertIn("assistant_text", types)
-            self.assertIn("assistant_audio", types)
             self.assertIn("turn_complete", types)
-
-            user_transcripts = [e for e in client_ws.events if e["type"] == "user_transcript"]
-            self.assertEqual(user_transcripts[0]["turn_id"], "voice-turn-1")
-            self.assertEqual(user_transcripts[0]["text"], "你可以唱一段吗")
-
             turn_completes = [e for e in client_ws.events if e["type"] == "turn_complete"]
             self.assertEqual(len(turn_completes), 1)
-            self.assertEqual(turn_completes[0]["turn_id"], "voice-turn-1")
+            user_transcripts = [e for e in client_ws.events if e["type"] == "user_transcript"]
+            self.assertEqual(user_transcripts[0]["text"], "唱一段")
+            self.assertFalse(user_transcripts[0].get("interim", False))
+            fake_recorder.complete_turn.assert_awaited()
+
+        asyncio.run(run_test())
+
+    def test_network_tts_type_notifies_websearch_once(self) -> None:
+        async def run_test():
+            events = [
+                {"type": "response.output_audio.started", "response_id": "r1", "tts_type": "network"},
+                {"type": "response.output_audio.delta", "delta": "QUJD"},
+                {"type": "response.output_audio.delta", "delta": "REVG"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws))
+
+            progress = [e for e in client_ws.events if e["type"] == "agent_progress"]
+            self.assertEqual(len(progress), 1)
+            self.assertEqual(progress[0]["stage"], "builtin_websearch")
+
+        asyncio.run(run_test())
+
+    def test_error_event_forwarded_and_session_continues(self) -> None:
+        async def run_test():
+            events = [
+                {"type": "error", "error": {"message": "non fatal", "status_code": 52000042}},
+                {"type": "response.output_audio.delta", "delta": "QUJD"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            await self._drain(self._run_loop(doubao_ws, client_ws))
+
+            errs = [e for e in client_ws.events if e["type"] == "error"]
+            self.assertEqual(len(errs), 1)
+            self.assertIn("non fatal", errs[0]["message"])
+            # error 之后会话仍在继续(音频照常转发)
+            audio_events = [e for e in client_ws.events if e["type"] == "assistant_audio"]
+            self.assertEqual(len(audio_events), 1)
+
+        asyncio.run(run_test())
+
+    def test_interruption_coordinator_receives_response_id(self) -> None:
+        async def run_test():
+            interruption = InterruptionDecisionCoordinator()
+            events = [
+                {"type": "response.output_audio.started", "response_id": "resp_x"},
+                {"type": "session.closed"},
+            ]
+            doubao_ws = FakeDoubaoWs(events=events)
+            client_ws = CollectingWebSocket()
+            loop_task = asyncio.create_task(
+                self.service._doubao_to_client_loop(
+                    client_ws, doubao_ws, MagicMock(), MagicMock(),
+                    interruption=interruption,
+                )
+            )
+            await self._drain(loop_task)
+            self.assertEqual(interruption.active_response_id, "resp_x")
 
         asyncio.run(run_test())
 
 
 if __name__ == "__main__":
     unittest.main()
-
