@@ -195,17 +195,9 @@ class TranscriptionService:
 
     def _doubao_key(self) -> str:
         self.config.reload()
-        token = str(self.config.peek_setting("doubao_access_token", "")).strip()
-        if not token:
-            # Fallback to doubao_api_key for backward compatibility
-            token = str(self.config.peek_setting("doubao_api_key", "")).strip()
-        if not token:
-            try:
-                provider_settings = self.config.get_provider_settings("Doubao")
-                token = str(provider_settings.get("api_key", "")).strip()
-            except Exception:
-                pass
-        return token
+        # Only the dedicated doubao_access_token field (voice-console API Key);
+        # doubao_api_key is the Ark text-chat key, a different credential system.
+        return str(self.config.peek_setting("doubao_access_token", "")).strip()
 
     def _doubao_app_id(self) -> str:
         self.config.reload()
@@ -836,7 +828,7 @@ class TranscriptionService:
             elif provider == "doubao":
                 api_key = self._doubao_key()
                 if not api_key:
-                    raise ValueError("Doubao access token or API Key not configured. Set Doubao API Key or Access Token in Settings.")
+                    raise ValueError("Doubao Access Token not configured. Set the Doubao Voice API Key (Access Token field) in Settings.")
                 app_id = self._doubao_app_id()
                 result = await self._transcribe_with_doubao(path, api_key, app_id=app_id)
             else:

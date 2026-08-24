@@ -58,12 +58,21 @@ class FakeDoubaoWs:
         return ""
 
 
-def _default_config(api_key: str = "uuid-style-api-key") -> MagicMock:
+def _default_config(
+    api_key: str = "uuid-style-api-key",
+    access_token: str | None = None,
+) -> MagicMock:
+    """Fake BackendConfig. ``api_key`` feeds provider_settings (Ark chat key);
+    realtime voice reads only doubao_access_token, which defaults to the same
+    value for fixture convenience."""
     fake_config = MagicMock()
     fake_config.get_provider_settings.return_value = {
         "api_key": api_key, "model": "", "realtime_base_url": "",
     }
-    fake_config.get_setting.return_value = ""
+    token = access_token if access_token is not None else api_key
+    fake_config.get_setting.side_effect = lambda key, default="": {
+        "doubao_access_token": token,
+    }.get(key, default)
     return fake_config
 
 
@@ -102,7 +111,7 @@ class TestRealtimeDoubaoSettings(unittest.TestCase):
         self.assertEqual(settings["endpoint"], "wss://example.internal/duplex/realtime/dialogue")
 
     def test_resolve_access_token_preferred(self) -> None:
-        """独立的 doubao_access_token 字段优先于 doubao_api_key。"""
+        """实时语音只认独立的 doubao_access_token 字段。"""
         fake_config = _default_config(api_key="ark-style-key")
         fake_config.get_setting.side_effect = lambda key, default="": {
             "doubao_access_token": "new-console-api-key",
@@ -118,7 +127,8 @@ class TestRealtimeDoubaoSettings(unittest.TestCase):
         self.assertEqual(settings["voice"], DEFAULT_DOUBAO_REALTIME_VOICE)
 
     def test_resolve_missing_credential_raises(self) -> None:
-        self.service.config = _default_config(api_key="")
+        """凭证缺失即报错;doubao_api_key(方舟文字聊天钥匙)不再回退用作语音凭证。"""
+        self.service.config = _default_config(api_key="ark-style-key", access_token="")
         with self.assertRaises(RuntimeError) as ctx:
             self.service._resolve_doubao_settings(None, None)
         self.assertIn("凭证未配置", str(ctx.exception))

@@ -246,9 +246,7 @@ async def voice_chat_ws(
             _missing.append("OpenAI API Key")
     elif selected_provider == "Doubao":
         # 全双工实时语音只需新版控制台 API Key(X-Api-Key 鉴权),无需 APP ID。
-        if not (
-            _cfg.get_setting("doubao_access_token") or _cfg.get_setting("doubao_api_key")
-        ):
+        if not _cfg.get_setting("doubao_access_token"):
             _missing.append("Doubao API Key")
     elif selected_provider == "Cartesia":
         if not _cfg.get_setting("cartesia_api_key"):

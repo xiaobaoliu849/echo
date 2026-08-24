@@ -57,7 +57,6 @@ class DoubaoRealtimeMixin:
         passed_model = model.strip() if (model and model.strip()) else ""
         provider_settings = self.config.get_provider_settings("Doubao", model)
         resolved_model = passed_model or provider_settings["model"].strip() or DEFAULT_DOUBAO_REALTIME_MODEL
-        api_key = provider_settings["api_key"].strip()
 
         custom_endpoint = provider_settings.get("realtime_base_url", "").strip()
         if "/api/v3/realtime/dialogue" in custom_endpoint:
@@ -87,9 +86,9 @@ class DoubaoRealtimeMixin:
                 access_token = token_candidate.strip()
 
         # 实时语音凭证是豆包语音控制台「API Key 管理」签发的 API Key(UUID 格式,
-        # X-Api-Key 鉴权,无需 APP ID)。优先读独立的 doubao_access_token 字段,
-        # 为空时回退 doubao_api_key 以兼容旧配置。
-        realtime_credential = access_token or api_key
+        # X-Api-Key 鉴权,无需 APP ID)。只认独立的 doubao_access_token 字段,
+        # 不再回退 doubao_api_key(那是火山方舟文字聊天的钥匙,两套体系)。
+        realtime_credential = access_token
         if not realtime_credential:
             raise RuntimeError(
                 "豆包实时语音凭证未配置：请在 设置 → Doubao 的「API Key / Access Token"

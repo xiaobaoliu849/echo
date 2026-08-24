@@ -651,9 +651,6 @@ class TTSService:
         """Return (access_token, app_id, cluster) for Doubao OpenSpeech TTS."""
         self.config.reload()
         access_token = str(self.config.get_setting("doubao_access_token", "")).strip()
-        if not access_token:
-            # Fallback to doubao_api_key for backward compatibility
-            access_token = str(self.config.get_setting("doubao_api_key", "")).strip()
         app_id = str(self.config.get_setting("doubao_app_id", "")).strip()
         cfg = self.config.get_all()
         cluster = str(cfg.get("doubao", {}).get("tts_cluster", "")).strip() or DEFAULT_DOUBAO_TTS_CLUSTER
