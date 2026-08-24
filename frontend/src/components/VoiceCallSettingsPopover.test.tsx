@@ -181,6 +181,61 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.getByText("qwen-audio-3.0-realtime-plus")).toBeInTheDocument();
   });
 
+  it("displays text model on summary button instead of voiceChat realtime model when chat prop is present", () => {
+    const voiceChat = createVoiceChatController({
+      voiceChatProvider: "Google",
+      voiceChatModel: "gemini-3.1-flash-live-preview",
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "Google", models: ["gemini-3.1-flash-live-preview"] },
+      ],
+    });
+    const chat = {
+      chatProvider: "Google",
+      chatModel: "gemini-3.7-flash",
+      chatProviderOptions: ["Google"],
+      chatModelChoices: [
+        { provider: "Google", model: "gemini-3.7-flash", label: "Google / gemini-3.7-flash", value: "Google\u001fgemini-3.7-flash" },
+        { provider: "Google", model: "gemini-3.1-flash-live-preview", label: "Google / gemini-3.1-flash-live-preview", value: "Google\u001fgemini-3.1-flash-live-preview" },
+      ],
+      onProviderChange: vi.fn(),
+      onModelChoiceChange: vi.fn(),
+    } as unknown as Parameters<typeof VoiceCallSettingsPopover>[0]["chat"];
+
+    render(<VoiceCallSettingsPopover voiceChat={voiceChat} chat={chat} t={t} />);
+    expect(screen.getByText("Google / gemini-3.7-flash")).toBeInTheDocument();
+    expect(screen.queryByText(/gemini-3\.1-flash-live-preview/)).not.toBeInTheDocument();
+  });
+
+  it("selects a text model, calls onModelChoiceChange, and closes popover without calling voiceChat.onModelChange", () => {
+    const voiceChat = createVoiceChatController({
+      voiceChatProvider: "Google",
+      voiceChatModel: "gemini-3.1-flash-live-preview",
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "Google", models: ["gemini-3.1-flash-live-preview"] },
+      ],
+    });
+    const chat = {
+      chatProvider: "Google",
+      chatModel: "gemini-3.1-flash-live-preview",
+      chatProviderOptions: ["Google"],
+      chatModelChoices: [
+        { provider: "Google", model: "gemini-3.7-flash", label: "Google / gemini-3.7-flash", value: "Google\u001fgemini-3.7-flash" },
+        { provider: "Google", model: "gemini-3.1-flash-live-preview", label: "Google / gemini-3.1-flash-live-preview", value: "Google\u001fgemini-3.1-flash-live-preview" },
+      ],
+      onProviderChange: vi.fn(),
+      onModelChoiceChange: vi.fn(),
+    } as unknown as Parameters<typeof VoiceCallSettingsPopover>[0]["chat"];
+
+    render(<VoiceCallSettingsPopover voiceChat={voiceChat} chat={chat} t={t} />);
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    fireEvent.click(screen.getByText("gemini-3.7-flash"));
+
+    expect(chat!.onModelChoiceChange).toHaveBeenCalledWith("Google\u001fgemini-3.7-flash");
+    expect(voiceChat.onModelChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("hides the translation category for providers without live-translate support", () => {
     renderPopover();
     openPanel();

@@ -99,14 +99,14 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   // committed model only when it belongs to that provider (no mixed pairs).
   const currentModelName = useMemo(() => {
     if (hoveredModel) return hoveredModel;
-    if (currentProviderName === voiceChat.voiceChatProvider && voiceChat.voiceChatModel) {
-      return voiceChat.voiceChatModel;
-    }
     if (chat && currentProviderName === chat.chatProvider && chat.chatModel) {
       return chat.chatModel;
     }
+    if (currentProviderName === voiceChat.voiceChatProvider && voiceChat.voiceChatModel) {
+      return voiceChat.voiceChatModel;
+    }
     return "";
-  }, [hoveredModel, currentProviderName, voiceChat.voiceChatProvider, voiceChat.voiceChatModel, chat?.chatProvider, chat?.chatModel]);
+  }, [hoveredModel, currentProviderName, chat?.chatProvider, chat?.chatModel, voiceChat.voiceChatProvider, voiceChat.voiceChatModel]);
   const isCurrentModelRealtime = isVoiceRealtimeModel(currentProviderName, currentModelName);
 
   // Realtime model whose voices the Level-3 list previews while the user browses
@@ -138,9 +138,6 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   function commitProviderModel(provider: string, model: string) {
     if (chat) {
-      if (provider !== chat.chatProvider) {
-        chat.onProviderChange(provider);
-      }
       chat.onModelChoiceChange(buildModelChoiceValue(provider, model));
     }
     if (provider !== voiceChat.voiceChatProvider) {
