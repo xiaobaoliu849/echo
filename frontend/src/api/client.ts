@@ -1110,6 +1110,31 @@ export type FetchModelsResponse = {
   tts_models?: string[];
 };
 
+/**
+ * Fetch the real credential behind a MASKED_SECRET placeholder for the
+ * settings UI eye-toggle. Backend rejects non-secret fields with 404.
+ */
+export async function revealSettingsSecret(
+  section?: string,
+  key?: string,
+  providerId?: string
+): Promise<string> {
+  const response = await apiFetch(`${API_BASE_URL}/api/settings/reveal-secret`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      section: section || "",
+      key: key || "",
+      provider_id: providerId || "",
+    }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const data = (await response.json()) as { value: string };
+  return data.value;
+}
+
 export async function fetchProviderModels(
   provider: string,
   apiKey?: string,

@@ -14,7 +14,7 @@ import {
 import { createInlineTranslator, normalizeUiLanguage, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 
-const PROVIDER_API_KEY_FIELD: Record<string, string> = {
+export const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   DeepSeek: "deepseek_api_key",
   OpenRouter: "openrouter_api_key",
   SiliconFlow: "siliconflow_api_key",

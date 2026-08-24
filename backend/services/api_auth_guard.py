@@ -14,9 +14,10 @@ WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 SENSITIVE_READ_PATH_PREFIXES = (
     "/api/agent-runs",
     "/api/voice-chat/sessions",
-    # GET /api/settings returns every configured API key in plaintext; reads
-    # must be authenticated (admin-level when admin auth is configured,
-    # mirroring the PUT guard).
+    # GET /api/settings returns configuration incl. MASKED_SECRET credential
+    # placeholders; POST reveal-secret returns real values. Reads must be
+    # authenticated (admin-level when admin auth is configured, mirroring
+    # the PUT guard).
     "/api/settings",
     # Transcription jobs expose full transcript text and job metadata.
     "/api/transcription",

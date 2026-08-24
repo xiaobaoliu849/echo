@@ -1,5 +1,6 @@
 import EvermindBadge from "../EvermindBadge";
 import type { UseSettingsResult } from "../../hooks/useSettings";
+import SecretInput from "./SecretInput";
 import { useI18n } from "../../i18n";
 
 type Props = {
@@ -67,12 +68,12 @@ export default function MemorySettingsSection({ settings }: Props) {
               </label>
               <label className="vsField">
                 <span className="vsFieldLabel">API Key</span>
-                <input
-                  className="vsInput"
-                  type="password"
+                <SecretInput
                   value={settings.evermemApiKey}
-                  onChange={(e) => settings.onEvermemApiKeyChange(e.target.value)}
+                  onChange={settings.onEvermemApiKeyChange}
                   placeholder={t("EverMemOS 访问密钥", "EverMemOS access key")}
+                  section="memory_settings"
+                  secretKey="api_key"
                 />
               </label>
             </div>

@@ -26,6 +26,16 @@ class SettingsUpdateRequest(BaseModel):
     settings: dict[str, Any] = Field(default_factory=dict, description="Partial settings object to update.")
 
 
+class RevealSecretRequest(BaseModel):
+    section: str = Field(description="Config section, e.g. 'api_keys' or 'custom_providers'.")
+    key: str = Field(default="", description="Secret field name inside the section (ignored for custom_providers).")
+    provider_id: str = Field(default="", description="Custom provider id when section is 'custom_providers'.")
+
+
+class RevealSecretResponse(BaseModel):
+    value: str
+
+
 class StructuredErrorDetail(BaseModel):
     code: str
     message: str
@@ -151,6 +161,42 @@ async def update_settings(payload: SettingsUpdateRequest) -> SettingsResponse:
             },
         ) from exc
     return SettingsResponse(**result)
+
+
+@router.post(
+    "/reveal-secret",
+    response_model=RevealSecretResponse,
+    responses={
+        401: {"description": "Missing admin Bearer token when admin token is enabled.", "model": StructuredErrorResponse},
+        403: {"description": "Authentication token invalid or non-admin token used.", "model": StructuredErrorResponse},
+        404: {"description": "Field is not a revealable secret (or custom provider id unknown).", "model": StructuredErrorResponse},
+        500: {"description": "Failed to read the credential.", "model": StructuredErrorResponse},
+    },
+)
+async def reveal_secret(payload: RevealSecretRequest) -> RevealSecretResponse:
+    """Return one real credential for the settings UI eye-toggle.
+
+    GET /api/settings only returns MASKED_SECRET placeholders; this endpoint
+    hands out the underlying value on explicit request. Auth (admin-level
+    when configured) is enforced by the global middleware, same as PUT.
+    """
+    try:
+        value = settings_service.reveal_secret(
+            payload.section.strip(),
+            payload.key.strip(),
+            payload.provider_id.strip(),
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "SECRET_FIELD_UNKNOWN", "message": str(exc), "meta": {}},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "SECRET_REVEAL_FAILED", "message": f"Reveal secret failed: {exc}", "meta": {}},
+        ) from exc
+    return RevealSecretResponse(value=value)
 
 
 class FetchModelsRequest(BaseModel):

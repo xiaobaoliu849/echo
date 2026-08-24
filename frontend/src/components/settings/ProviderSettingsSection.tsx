@@ -1,6 +1,8 @@
 import { useState, useMemo, ReactNode } from "react";
-import { Terminal, Brain, Eye, EyeOff } from "lucide-react";
+import { Terminal, Brain } from "lucide-react";
 import type { UseSettingsResult } from "../../hooks/useSettings";
+import { PROVIDER_API_KEY_FIELD } from "../../hooks/useSettings";
+import SecretInput from "./SecretInput";
 import { useI18n } from "../../i18n";
 
 type Props = {
@@ -80,10 +82,6 @@ export default function ProviderSettingsSection({ settings }: Props) {
   const [ttsModelSearch, setTtsModelSearch] = useState("");
   const [showRawTtsModels, setShowRawTtsModels] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [showDoubaoAccessToken, setShowDoubaoAccessToken] = useState(false);
-  const [showDoubaoAppId, setShowDoubaoAppId] = useState(false);
-  const [showDoubaoWebsearchKey, setShowDoubaoWebsearchKey] = useState(false);
 
   const [showAddCustomModal, setShowAddCustomModal] = useState(false);
   const [customName, setCustomName] = useState("");
@@ -208,30 +206,16 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 ? t("API Key（火山方舟 · 文字聊天模型）", "API Key (Ark · text chat models)")
                 : "API Key"}
             </span>
-            <div className="vsPasswordFieldWrap">
-              <input
-                className="vsInput"
-                type={showApiKey ? "text" : "password"}
-                value={settings.settingsApiKey || ""}
-                onChange={(e) => settings.onApiKeyChange(e.target.value)}
-                placeholder={settings.settingsProvider === "Doubao"
-                  ? t("ark- 开头，仅用于文字聊天；实时语音用下面的 Access Token", "ark- key, text chat only; realtime voice uses the Access Token below")
-                  : t("输入供应商 API Key", "Enter your API key")}
-              />
-              <button
-                type="button"
-                className="vsPasswordToggleBtn"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setShowApiKey((v) => !v);
-                }}
-                title={showApiKey ? t("隐藏", "Hide") : t("显示", "Show")}
-              >
-                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
+            <SecretInput
+              value={settings.settingsApiKey || ""}
+              onChange={settings.onApiKeyChange}
+              placeholder={settings.settingsProvider === "Doubao"
+                ? t("ark- 开头，仅用于文字聊天；实时语音用下面的 Access Token", "ark- key, text chat only; realtime voice uses the Access Token below")
+                : t("输入供应商 API Key", "Enter your API key")}
+              section="api_keys"
+              secretKey={PROVIDER_API_KEY_FIELD[settings.settingsProvider] || ""}
+              customProviderId={settings.isCustomProvider ? settings.settingsProvider : undefined}
+            />
           </label>
 
           <label className="vsField">
@@ -274,28 +258,13 @@ export default function ProviderSettingsSection({ settings }: Props) {
             <>
               <label className="vsField">
                 <span className="vsFieldLabel">{t("API Key / Access Token（豆包语音 · 实时语音必填）", "API Key / Access Token (Doubao Voice · required for Realtime)")}</span>
-                <div className="vsPasswordFieldWrap">
-                  <input
-                    className="vsInput"
-                    type={showDoubaoAccessToken ? "text" : "password"}
-                    value={settings.settingsDoubaoAccessToken || ""}
-                    onChange={(e) => settings.onDoubaoAccessTokenChange(e.target.value)}
-                    placeholder={t("新版控制台「API Key 管理」的 API Key", "API Key from the new console's API Key management page")}
-                  />
-                  <button
-                    type="button"
-                    className="vsPasswordToggleBtn"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowDoubaoAccessToken((v) => !v);
-                    }}
-                    title={showDoubaoAccessToken ? t("隐藏", "Hide") : t("显示", "Show")}
-                  >
-                    {showDoubaoAccessToken ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+                <SecretInput
+                  value={settings.settingsDoubaoAccessToken || ""}
+                  onChange={settings.onDoubaoAccessTokenChange}
+                  placeholder={t("新版控制台「API Key 管理」的 API Key", "API Key from the new console's API Key management page")}
+                  section="api_keys"
+                  secretKey="doubao_access_token"
+                />
                 <span className="vsFieldHint">
                   {t(
                     "实时语音只需新版控制台「API Key 管理」的 API Key（UUID 格式，无需 APP ID）。TTS 语音合成仍需旧版控制台的 Access Token，与下方 APP ID 配对。与上面的文本聊天 Key 是两套体系。",
@@ -305,28 +274,13 @@ export default function ProviderSettingsSection({ settings }: Props) {
               </label>
               <label className="vsField">
                 <span className="vsFieldLabel">{t("豆包语音 APP ID（仅 TTS 语音合成需要）", "Doubao Voice APP ID (only needed for TTS)")}</span>
-                <div className="vsPasswordFieldWrap">
-                  <input
-                    className="vsInput"
-                    type={showDoubaoAppId ? "text" : "password"}
-                    value={settings.settingsDoubaoAppId || ""}
-                    onChange={(e) => settings.onDoubaoAppIdChange(e.target.value)}
-                    placeholder={t("火山引擎「豆包语音」控制台概览页的 APP ID", "APP ID from the Volcengine Doubao Voice console overview page")}
-                  />
-                  <button
-                    type="button"
-                    className="vsPasswordToggleBtn"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowDoubaoAppId((v) => !v);
-                    }}
-                    title={showDoubaoAppId ? t("隐藏", "Hide") : t("显示", "Show")}
-                  >
-                    {showDoubaoAppId ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+                <SecretInput
+                  value={settings.settingsDoubaoAppId || ""}
+                  onChange={settings.onDoubaoAppIdChange}
+                  placeholder={t("火山引擎「豆包语音」控制台概览页的 APP ID", "APP ID from the Volcengine Doubao Voice console overview page")}
+                  section="api_keys"
+                  secretKey="doubao_app_id"
+                />
                 <span className="vsFieldHint">
                   {t(
                     "实时语音无需填写此项。仅 TTS 语音合成需要：与旧版控制台的 Access Token 成对使用（概览页可查）。",
@@ -343,28 +297,13 @@ export default function ProviderSettingsSection({ settings }: Props) {
               </label>
               <label className="vsField">
                 <span className="vsFieldLabel">{t("融合信息搜索 API Key（可选，开启联网）", "Web Search API Key (optional, enables online search)")}</span>
-                <div className="vsPasswordFieldWrap">
-                  <input
-                    className="vsInput"
-                    type={showDoubaoWebsearchKey ? "text" : "password"}
-                    value={settings.settingsDoubaoWebsearchKey || ""}
-                    onChange={(e) => settings.onDoubaoWebsearchKeyChange(e.target.value)}
-                    placeholder={t("火山引擎「融合信息搜索」服务的 API Key", "API Key of the Volcengine fused web search service")}
-                  />
-                  <button
-                    type="button"
-                    className="vsPasswordToggleBtn"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowDoubaoWebsearchKey((v) => !v);
-                    }}
-                    title={showDoubaoWebsearchKey ? t("隐藏", "Hide") : t("显示", "Show")}
-                  >
-                    {showDoubaoWebsearchKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+                <SecretInput
+                  value={settings.settingsDoubaoWebsearchKey || ""}
+                  onChange={settings.onDoubaoWebsearchKeyChange}
+                  placeholder={t("火山引擎「融合信息搜索」服务的 API Key", "API Key of the Volcengine fused web search service")}
+                  section="api_keys"
+                  secretKey="doubao_websearch_api_key"
+                />
                 <span className="vsFieldHint">
                   {t(
                     "不填则模型无法联网，天气/新闻等实时问题会凭空编造；填写后自动开启内置联网搜索。",

@@ -1794,6 +1794,30 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertEqual(r_put_masked.status_code, 200)
                 stored = json.loads(config_path.read_text(encoding="utf-8"))
                 self.assertEqual(stored["api_keys"]["dashscope_api_key"], "test-key")
+
+                # The eye-toggle reveal endpoint hands back the real credential
+                # on explicit request but refuses non-secret fields.
+                r_reveal = self._request(
+                    "POST",
+                    "/api/settings/reveal-secret",
+                    json={"section": "api_keys", "key": "dashscope_api_key"},
+                )
+                self.assertEqual(r_reveal.status_code, 200)
+                self.assertEqual(r_reveal.json()["value"], "test-key")
+
+                r_reveal_unknown_field = self._request(
+                    "POST",
+                    "/api/settings/reveal-secret",
+                    json={"section": "api_keys", "key": "default_model"},
+                )
+                self.assertEqual(r_reveal_unknown_field.status_code, 404)
+
+                r_reveal_unknown_provider = self._request(
+                    "POST",
+                    "/api/settings/reveal-secret",
+                    json={"section": "custom_providers", "provider_id": "missing_id"},
+                )
+                self.assertEqual(r_reveal_unknown_provider.status_code, 404)
             finally:
                 settings_router.settings_service = original_service
 

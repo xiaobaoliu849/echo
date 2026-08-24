@@ -415,6 +415,29 @@ class SettingsService:
                 existing = stored_by_id.get(str(item.get("id", "")))
                 item["api_key"] = str((existing or {}).get("api_key", "") or "")
 
+    def reveal_secret(self, section: str, key: str = "", provider_id: str = "") -> str:
+        """Return the real credential hidden behind a MASKED_SECRET placeholder.
+
+        Only fields recognized by ``_is_secret_field`` (or a custom provider
+        matched by id) may be revealed; anything else raises ``KeyError`` so
+        the endpoint can never be abused as a generic config reader.
+        """
+        self.config.reload()
+        data = self.config.get_all()
+        if section == "custom_providers":
+            providers = data.get("custom_providers")
+            if isinstance(providers, list):
+                for item in providers:
+                    if isinstance(item, dict) and str(item.get("id", "")) == provider_id:
+                        return str(item.get("api_key", "") or "")
+            raise KeyError(f"unknown custom provider id: {provider_id!r}")
+        if not _is_secret_field(section, key):
+            raise KeyError(f"not a secret field: {section}.{key}")
+        node = data.get(section)
+        if not isinstance(node, dict):
+            return ""
+        return str(node.get(key, "") or "")
+
     def get_settings(self) -> dict[str, Any]:
         self.config.reload()
         return self._build_settings_response(self.config.get_all())

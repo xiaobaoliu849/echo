@@ -1,4 +1,5 @@
 import type { UseSettingsResult } from "../../hooks/useSettings";
+import SecretInput from "./SecretInput";
 import { useI18n } from "../../i18n";
 
 type Props = {
@@ -96,12 +97,12 @@ export default function TranscriptionSettingsSection({ settings }: Props) {
             </label>
             <label className="vsField">
               <span className="vsFieldLabel">{t("访问私钥 (Secret Key)", "Secret Access Key")}</span>
-              <input
-                className="vsInput"
-                type="password"
+              <SecretInput
                 value={settings.transcriptionS3SecretAccessKey}
-                onChange={(e) => settings.onTranscriptionS3SecretAccessKeyChange(e.target.value)}
+                onChange={settings.onTranscriptionS3SecretAccessKeyChange}
                 placeholder={t("输入 Secret Access Key", "Enter Secret Access Key")}
+                section="transcription_settings"
+                secretKey="s3_secret_access_key"
               />
             </label>
           </div>
