@@ -50,6 +50,7 @@ import {
   isQwenAudioModel,
   isRealtimeVoiceModel,
   isTranscriptContinuation,
+  appendAssistantDelta,
   mergeAssistantText,
   normalizeVoiceCaptureError,
   resolveDefaultModel,
@@ -945,10 +946,9 @@ export default function useVoiceChat({
         if (voiceChatLiveTranslate) {
           currentTurnIdRef.current = event.turn_id || currentTurnIdRef.current;
           liveTranslateLastTargetActivityAtRef.current = Date.now();
-          liveTranslateTargetStreamRef.current = mergeAssistantText(
-            liveTranslateTargetStreamRef.current,
-            event.text
-          );
+          liveTranslateTargetStreamRef.current = event.cumulative
+            ? mergeAssistantText(liveTranslateTargetStreamRef.current, event.text)
+            : appendAssistantDelta(liveTranslateTargetStreamRef.current, event.text);
           // Clear the speculative preview — confirmed text has arrived and
           // the preview is incorporated into the confirmed stream above.
           liveTranslatePreviewRef.current = "";
@@ -968,7 +968,9 @@ export default function useVoiceChat({
           setVoiceChatAssistantInterrupted(false);
           setAssistantPlaybackGain(1);
         }
-        currentAssistantTurnRef.current = mergeAssistantText(currentAssistantTurnRef.current, event.text);
+        currentAssistantTurnRef.current = event.cumulative
+          ? mergeAssistantText(currentAssistantTurnRef.current, event.text)
+          : appendAssistantDelta(currentAssistantTurnRef.current, event.text);
         setVoiceChatReply(currentAssistantTurnRef.current);
         setVoiceChatStatus(t("助手正在说话…", "Assistant speaking…"));
         return;

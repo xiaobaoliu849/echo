@@ -190,7 +190,7 @@ class QwenAudioRealtimeMixin:
                     )
                 _pending_ai_output.clear()
 
-        async def _emit_held_family_delta(response_id: str, state: dict[str, str] | None) -> None:
+        async def _emit_held_family_delta(response_id: str, state: dict[str, Any] | None) -> None:
             """Force the family decision for a response still holding its first
             audio_transcript delta and emit the held text. audio_transcript wins
             by default when no text.delta ever arrived for the response."""
@@ -199,6 +199,12 @@ class QwenAudioRealtimeMixin:
             state["decided"] = "audio_transcript"
             held = state["held_audio"]
             state["held_audio"] = ""
+            # The held delta is the opening fragment of the response, so drop any
+            # stray leading pad — mirrors appendAssistantDelta on the frontend.
+            held = held.lstrip()
+            if not held:
+                return
+            state["accumulated_text"] = held
             payload = {
                 "type": "assistant_text",
                 "text": held,
@@ -248,7 +254,7 @@ class QwenAudioRealtimeMixin:
         # is held back for one event so a near-simultaneous text.delta can claim
         # the response; a second audio_transcript delta (or response.done / loop
         # exit) locks the response to audio_transcript and replays the held delta.
-        response_delta_family_state: dict[str, dict[str, str]] = {}
+        response_delta_family_state: dict[str, dict[str, Any]] = {}
         # Marks whether the current response contains function_call(s); such a response
         # is an intermediate round and must NOT finalize the turn on response.done.
         current_response_has_function_call = False
@@ -646,12 +652,29 @@ class QwenAudioRealtimeMixin:
                 if gated_tool_turn_id or not delta:
                     continue
                 state = response_delta_family_state.setdefault(
-                    response_id, {"decided": "", "held_audio": "", "accumulated_text": ""}
+                    response_id,
+                    {
+                        "decided": "",
+                        "held_audio": "",
+                        "accumulated_text": "",
+                        # Chunks this response already published from the family
+                        # that does NOT own it, awaiting their duplicate from the
+                        # owning family (see the emit loop below).
+                        "injected": [],
+                    },
                 )
                 if family == "audio_transcript":
                     delta = _clean_transcript_text(delta)
                 decided_family = state["decided"]
                 deltas_to_emit: list[str] = []
+                # Both Qwen-Audio families stream clean, non-overlapping token
+                # deltas whose whitespace is authoritative (" world" opens a new
+                # word, "ful" continues the current one), so every delta is
+                # forwarded verbatim.  _merge_streaming_text is consulted only as
+                # a novelty *predicate* for cross-family duplicates — never for
+                # its merged output, which trims and re-spaces what it is given
+                # (":" + " 1." -> ":1.", "wonder" + "ful" -> "wonder ful").
+                cross_family = False
                 if decided_family:
                     if family == decided_family:
                         deltas_to_emit = [delta]
@@ -660,10 +683,10 @@ class QwenAudioRealtimeMixin:
                         # streaming, allow audio_transcript delta if it contains novel text.
                         acc = state.get("accumulated_text", "")
                         _, novel = _merge_streaming_text(acc, delta)
-                        if novel:
-                            deltas_to_emit = [novel]
-                        else:
+                        if not novel:
                             continue
+                        deltas_to_emit = [delta]
+                        cross_family = True
                 elif family == "text":
                     # Clean LLM text claims the response immediately; any held
                     # audio_transcript delta is discarded.
@@ -685,13 +708,26 @@ class QwenAudioRealtimeMixin:
                     if not emit_delta:
                         continue
                     acc = state.get("accumulated_text", "")
-                    new_acc, novel = _merge_streaming_text(acc, emit_delta)
-                    if not novel:
+                    # Mirrors appendAssistantDelta on the frontend: only the
+                    # opening fragment of a response may carry a stray leading
+                    # pad, because there is nothing before it to bound.
+                    emit_text = emit_delta.lstrip() if not acc else emit_delta
+                    if not emit_text:
                         continue
-                    state["accumulated_text"] = new_acc
+                    injected: list[str] = state["injected"]
+                    if not cross_family and emit_text in injected:
+                        # The other family already supplied this exact chunk while
+                        # this one was silent (both stream the same sentence when
+                        # modalities are [text, audio]); publishing it again would
+                        # duplicate the sentence on screen.
+                        injected.remove(emit_text)
+                        continue
+                    state["accumulated_text"] = f"{acc}{emit_text}"
+                    if cross_family:
+                        injected.append(emit_text)
                     payload = {
                         "type": "assistant_text",
-                        "text": novel,
+                        "text": emit_text,
                         "response_id": response_id,
                     }
                     if not _user_transcript_emitted:

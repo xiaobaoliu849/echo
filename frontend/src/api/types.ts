@@ -620,7 +620,11 @@ export type VoiceChatServerEvent =
     }
   | { type: "user_transcript"; text: string; turn_id?: string; tentative?: string; final?: boolean; interim?: boolean }
   | { type: "translation_preview"; text?: string; tentative?: string; turn_id?: string }
-  | { type: "assistant_text"; text: string; turn_id?: string }
+  // `cumulative` marks a whole-transcript snapshot (or a final canonical
+  // correction) that replaces what was streamed so far. Without it, `text` is a
+  // verbatim delta and must be appended exactly as received — see
+  // appendAssistantDelta in hooks/useVoiceChatHelpers.ts.
+  | { type: "assistant_text"; text: string; turn_id?: string; cumulative?: boolean }
   | {
       type: "assistant_audio";
       audio: string;

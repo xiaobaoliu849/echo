@@ -36,26 +36,39 @@ def _resolve_pending_cache_path() -> Path:
     return fallback_dir / "realtime_pending_memory.json"
 
 
-def _merge_memory_text(previous: str, incoming: str) -> str:
-    next_text = str(incoming or "").strip()
-    if not next_text:
+def _merge_memory_text(previous: str, incoming: str, *, cumulative: bool = False) -> str:
+    """Accumulate streamed transcript text without corrupting word boundaries.
+
+    ``incoming`` is a verbatim streaming delta unless ``cumulative`` is set, in
+    which case it is a whole-transcript snapshot that supersedes ``previous``
+    (DashScope's ``response.*.done`` canonical correction).
+
+    Deltas are sub-word BPE tokens carrying their own whitespace (" world" for a
+    new word, "ful" for a continuation), so they are concatenated exactly as
+    received.  Trimming a delta or inserting a word-boundary space splits words
+    ("wonder" + "ful" -> "wonder ful") and makes the persisted transcript
+    disagree with both the spoken audio and the verbatim delta that the turn row
+    is built from (``_pending_assistant_delta`` in
+    realtime_session_recorder.py).  Deltas are likewise never deduplicated: an
+    ordered transport does not re-deliver them, whereas speech genuinely repeats
+    fragments ("ha" + "ha").
+    """
+    text = str(incoming or "")
+    if not text.strip():
         return previous
     if not previous:
-        return next_text
-    if next_text.startswith(previous):
-        return next_text
-    if previous.endswith(next_text):
+        return text.lstrip()
+    if not cumulative:
+        return f"{previous}{text}"
+
+    # Cumulative snapshot: compare against the accumulated text ignoring the
+    # trailing padding a delta may have contributed, so a clean extension is
+    # still recognised as one rather than appended twice.
+    base = previous.rstrip()
+    snapshot = text.strip()
+    if base.endswith(snapshot):
         return previous
-    # Insert a word-boundary space between Latin tokens so memory text
-    # doesn't run words together (e.g. "Hello" + "world" → "Hello world").
-    if previous[-1:].isalnum() and next_text[:1].isalnum():
-        # Only add space when the boundary looks like Latin script;
-        # CJK tokens join directly without spaces.
-        last = previous[-1]
-        first = next_text[0]
-        if (last.isascii() and last.isalpha()) or (first.isascii() and first.isalpha()):
-            return f"{previous} {next_text}"
-    return f"{previous}{next_text}"
+    return snapshot
 
 
 class RealtimeMemorySession:
@@ -270,8 +283,10 @@ class RealtimeMemorySession:
             self._last_retrieve_attempted = False
         self._current_user_text = cleaned
 
-    def note_assistant_text(self, text: str) -> None:
-        self._current_assistant_text = _merge_memory_text(self._current_assistant_text, text)
+    def note_assistant_text(self, text: str, *, cumulative: bool = False) -> None:
+        self._current_assistant_text = _merge_memory_text(
+            self._current_assistant_text, text, cumulative=cumulative
+        )
 
     def discard_turn(self) -> None:
         """Drop an interrupted turn without writing partial content to long-term memory."""

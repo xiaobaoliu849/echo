@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
 from services.evermem_service import EverMemService
+from services.realtime_memory_session import _merge_memory_text
 from services.realtime_voice_service import (
     RealtimeMemorySession,
     RealtimeVoiceService,
@@ -627,6 +628,41 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         turn_complete_events = [e for e in websocket.events if e.get("type") == "turn_complete"]
         self.assertEqual(len(turn_complete_events), 1)
         self.assertEqual(turn_complete_events[0]["turn_id"], "turn-123")
+
+
+class MergeMemoryTextTests(unittest.TestCase):
+    """``_merge_memory_text`` accumulates the transcript that gets saved to
+    memory; corrupting word boundaries here desyncs it from the audio."""
+
+    def test_delta_is_appended_verbatim(self):
+        self.assertEqual(_merge_memory_text("That is", " wonder"), "That is wonder")
+
+    def test_subword_continuation_delta_carries_no_space(self):
+        self.assertEqual(_merge_memory_text("That is wonder", "ful"), "That is wonderful")
+
+    def test_first_fragment_drops_only_its_leading_pad(self):
+        self.assertEqual(_merge_memory_text("", " Hello"), "Hello")
+
+    def test_coincidental_overlap_never_eats_a_character(self):
+        self.assertEqual(_merge_memory_text("Hel", "lo"), "Hello")
+
+    def test_repeated_fragments_are_kept(self):
+        self.assertEqual(_merge_memory_text("ha", "ha"), "haha")
+
+    def test_blank_delta_is_ignored(self):
+        self.assertEqual(_merge_memory_text("done", "   "), "done")
+
+    def test_cumulative_snapshot_supersedes_the_accumulated_text(self):
+        self.assertEqual(
+            _merge_memory_text("这是一段回", "这是一段回复。", cumulative=True),
+            "这是一段回复。",
+        )
+
+    def test_cumulative_snapshot_equal_to_accumulated_is_a_noop(self):
+        self.assertEqual(
+            _merge_memory_text("完整回复。", "完整回复。", cumulative=True),
+            "完整回复。",
+        )
 
 
 if __name__ == "__main__":

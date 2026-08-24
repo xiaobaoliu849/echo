@@ -83,7 +83,7 @@ class FakeMemorySession:
     def note_user_transcript(self, text: str) -> None:
         self.user_texts.append(text)
 
-    def note_assistant_text(self, text: str) -> None:
+    def note_assistant_text(self, text: str, *, cumulative: bool = False) -> None:
         self.assistant_texts.append(text)
 
     async def retrieve_memory_context(self) -> dict:
@@ -1335,6 +1335,107 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Here are latest news:", full_text)
         self.assertIn("1. OpenAI model escaped sandbox.", full_text)
         self.assertIn("2. Google released Cyber Defender.", full_text)
+
+    # ---- sub-word token streaming (reported bug: "一个单词被分开了") ----------
+
+    async def test_subword_token_deltas_are_not_split_into_separate_words(self):
+        """A word streamed as several BPE tokens must not gain a space.
+
+        The model tokenises "wonderful" as "wonder" + "ful"; neither fragment
+        carries a leading space because they continue the same word.  Trimming a
+        delta and re-inserting a word-boundary space between two Latin
+        alphanumerics turns it into "wonder ful", which is what the user sees on
+        screen while the audio says "wonderful".
+        """
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "That is"},
+            {"type": "response.text.delta", "response_id": "r1", "delta": " wonder"},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "ful"},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "!"},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        assistant_texts = [e.get("text", "") for e in ws.events
+                           if e.get("type") == "assistant_text"]
+        self.assertEqual("".join(assistant_texts), "That is wonderful!")
+
+    async def test_partial_overlap_between_deltas_does_not_eat_characters(self):
+        """A coincidental suffix/prefix overlap must not drop a character.
+
+        "Hel" ends with "l" and "lo" starts with "l"; treating that as a repeated
+        fragment and dropping it yields "Helo".  An ordered WebSocket never
+        re-delivers a delta, so every byte it sends is real.
+        """
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "Hel"},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "lo"},
+            {"type": "response.text.delta", "response_id": "r1", "delta": " there"},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        assistant_texts = [e.get("text", "") for e in ws.events
+                           if e.get("type") == "assistant_text"]
+        self.assertEqual("".join(assistant_texts), "Hello there")
+
+    async def test_repeated_fragment_is_not_deduplicated_away(self):
+        """Speech genuinely repeats fragments, so identical consecutive deltas
+        from the owning family must both survive."""
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "ha"},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "ha"},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "ha"},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        assistant_texts = [e.get("text", "") for e in ws.events
+                           if e.get("type") == "assistant_text"]
+        self.assertEqual("".join(assistant_texts), "hahaha")
+
+    async def test_cross_family_continuation_preserves_the_word_boundary_space(self):
+        """The novel cross-family delta is forwarded verbatim.
+
+        Its leading space is the boundary against the preamble; deriving the
+        emitted text from an overlap merge instead drops it whenever the
+        preceding character is punctuation ("news:" + " 1." -> "news:1.").
+        """
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.text.delta", "response_id": "r1",
+             "delta": "Here are latest news:"},
+            {"type": "response.audio_transcript.delta", "response_id": "r1",
+             "delta": " 1. OpenAI model escaped sandbox."},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        assistant_texts = [e.get("text", "") for e in ws.events
+                           if e.get("type") == "assistant_text"]
+        self.assertEqual(
+            "".join(assistant_texts),
+            "Here are latest news: 1. OpenAI model escaped sandbox.",
+        )
 
 
 if __name__ == "__main__":

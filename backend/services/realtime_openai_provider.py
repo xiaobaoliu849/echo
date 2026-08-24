@@ -15,7 +15,6 @@ from fastapi import WebSocket, WebSocketDisconnect
 from .realtime_constants import (
     DEFAULT_OPENAI_REALTIME_MODEL,
     DEFAULT_OPENAI_REALTIME_VOICE,
-    _merge_streaming_text,
 )
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
 from .realtime_memory_session import RealtimeMemorySession

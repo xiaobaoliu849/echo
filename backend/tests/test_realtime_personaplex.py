@@ -123,7 +123,7 @@ class FakeMemorySession:
     def configure(self, payload) -> None:
         self.configured.append(payload)
 
-    def note_assistant_text(self, text: str) -> None:
+    def note_assistant_text(self, text: str, *, cumulative: bool = False) -> None:
         self.assistant_texts.append(text)
 
     async def flush_turn(self) -> dict:

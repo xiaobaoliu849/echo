@@ -699,6 +699,40 @@ export function decodeBase64Pcm(base64Audio: string): Int16Array {
   return new Int16Array(bytes.buffer);
 }
 
+/**
+ * Append one streaming text delta to the accumulated assistant reply.
+ *
+ * Realtime providers stream sub-word (BPE) token deltas whose whitespace is
+ * authoritative: a new word arrives carrying its own leading space (" world"),
+ * while a continuation of the current word arrives without one ("ful"). The
+ * backend already treats a delta stream as a verbatim concatenation — see
+ * `"".join(assistant_parts)` in realtime_cartesia_provider.py and
+ * `ai_acc + content` in realtime_doubao_provider.py — so the on-screen text
+ * must be built the same way to stay in sync with the spoken audio and the
+ * persisted transcript.
+ *
+ * Never trim a delta and never invent a separator. Trimming destroys the
+ * provider's own word-boundary signal, and re-inserting a space by script
+ * heuristic splits words that were streamed as several tokens
+ * ("wonder" + "ful" -> "wonder ful"). For the same reason there is no
+ * duplicate/overlap suppression here: an ordered WebSocket never re-delivers a
+ * delta, whereas natural language genuinely repeats fragments ("ha" + "ha").
+ *
+ * Cumulative snapshots (a provider re-sending the whole transcript so far, or
+ * a final canonical correction) are NOT deltas — route those through
+ * {@link mergeAssistantText} instead.
+ */
+export function appendAssistantDelta(previous: string, delta: string): string {
+  if (!delta) {
+    return previous;
+  }
+  if (!previous) {
+    // Only the very first fragment of a turn may carry a stray leading space.
+    return delta.replace(/^\s+/, "");
+  }
+  return `${previous}${delta}`;
+}
+
 export function mergeAssistantText(previous: string, incoming: string): string {
   const next = incoming.trim();
   if (!next) {

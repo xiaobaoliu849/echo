@@ -64,7 +64,7 @@ class FakeMemorySession:
     def note_user_transcript(self, text: str) -> None:
         self.user_texts.append(text)
 
-    def note_assistant_text(self, text: str) -> None:
+    def note_assistant_text(self, text: str, *, cumulative: bool = False) -> None:
         self.assistant_texts.append(text)
 
     async def retrieve_memory_context(self) -> dict:
@@ -818,6 +818,65 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
             event.get("text") for event in websocket.events if event["type"] == "assistant_text"
         ]
         self.assertEqual(assistant_texts, ["Fallback answer."])
+
+    async def test_google_response_text_subword_deltas_are_not_split_into_separate_words(self) -> None:
+        """``response.text`` is a clean LLM token delta, not an ASR hypothesis.
+
+        Overlap-merging it invents word breaks ("wonder" + "ful" -> "wonder ful")
+        and eats characters when neighbouring deltas happen to share an edge
+        ("Hel" + "lo" -> "Helo"), so the fallback emitted at ``turn_complete``
+        must be the verbatim concatenation of the deltas.
+        """
+        websocket = CollectingWebSocket()
+        memory = FakeMemorySession()
+        tools = RecordingToolSession(active=False)
+        recorder = await self._recorder("Google")
+        deltas = ["Hel", "lo", "!", " That", " is", " wonder", "ful", "."]
+        session = FakeGoogleSession(
+            [
+                *[
+                    [SimpleNamespace(data=None, text=delta, server_content=None)]
+                    for delta in deltas
+                ],
+                [google_response(turn_complete=True)],
+            ]
+        )
+
+        with self.assertRaises(ReplayComplete):
+            await self.service._google_to_client_loop(
+                websocket, session, memory, tools, recorder
+            )
+
+        assistant_texts = [
+            event.get("text") for event in websocket.events if event["type"] == "assistant_text"
+        ]
+        self.assertEqual(assistant_texts, ["Hello! That is wonderful."])
+
+    async def test_google_response_text_repeated_fragment_is_not_deduplicated_away(self) -> None:
+        """Speech genuinely repeats fragments; an ordered transport never re-sends."""
+        websocket = CollectingWebSocket()
+        memory = FakeMemorySession()
+        tools = RecordingToolSession(active=False)
+        recorder = await self._recorder("Google")
+        session = FakeGoogleSession(
+            [
+                *[
+                    [SimpleNamespace(data=None, text=delta, server_content=None)]
+                    for delta in ("ha", "ha", "ha")
+                ],
+                [google_response(turn_complete=True)],
+            ]
+        )
+
+        with self.assertRaises(ReplayComplete):
+            await self.service._google_to_client_loop(
+                websocket, session, memory, tools, recorder
+            )
+
+        assistant_texts = [
+            event.get("text") for event in websocket.events if event["type"] == "assistant_text"
+        ]
+        self.assertEqual(assistant_texts, ["hahaha"])
 
     async def test_google_output_transcription_emits_only_novel_overlapping_text(self) -> None:
         websocket = CollectingWebSocket()

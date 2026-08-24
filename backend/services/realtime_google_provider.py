@@ -686,7 +686,10 @@ class GoogleRealtimeMixin:
                             live_translate_has_content = True
                         if not is_live_translate:
                             await finalize_user_transcript_if_needed(clear_transcript=True)
-                        pending_google_response_text, _ = _merge_streaming_text(
+                        # ``response.text`` is a clean LLM token delta (whitespace
+                        # authoritative), not an ASR hypothesis, so it is appended
+                        # verbatim rather than overlap-merged.
+                        pending_google_response_text = _merge_memory_text(
                             pending_google_response_text,
                             str(response_text),
                         )

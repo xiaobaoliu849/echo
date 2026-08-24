@@ -754,6 +754,10 @@ describe("useVoiceChat", () => {
         mode: "live_translate",
       });
       socket.emitMessage({ type: "user_transcript", text: "Hello, can you hear me?" });
+      // The Google backend emits assistant transcripts as verbatim deltas (see
+      // _merge_streaming_text in realtime_google_provider.py and the replay test
+      // test_google_output_transcription_emits_only_novel_overlapping_text). The
+      // user side, by contrast, is sent cumulatively.
       socket.emitMessage({ type: "assistant_text", text: "もしもし、聞こえますか？" });
       vi.advanceTimersByTime(900);
     });
@@ -767,7 +771,7 @@ describe("useVoiceChat", () => {
       });
       socket.emitMessage({
         type: "assistant_text",
-        text: "もしもし、聞こえますか？あの、お名前を教えていただけますか？",
+        text: "あの、お名前を教えていただけますか？",
       });
       vi.advanceTimersByTime(900);
     });
@@ -779,7 +783,7 @@ describe("useVoiceChat", () => {
       });
       socket.emitMessage({
         type: "assistant_text",
-        text: "もしもし、聞こえますか？あの、お名前を教えていただけますか？寝たいんです。",
+        text: "寝たいんです。",
       });
       vi.advanceTimersByTime(900);
     });

@@ -339,12 +339,21 @@ class VoiceAgentSessionRepository:
         *,
         user_text: str | None = None,
         assistant_text: str | None = None,
+        replace_assistant_text: bool = False,
         memory_payload: dict[str, Any] | None = None,
         completed: bool = False,
         interrupted: bool | None = None,
         completion_status: str | None = None,
         fetch_turn: bool = True,
     ) -> dict[str, Any]:
+        """Create or update a turn row.
+
+        ``assistant_text`` is *appended* to whatever the row already holds, so
+        streaming deltas can be flushed incrementally.  Set
+        ``replace_assistant_text`` when writing a whole-transcript correction
+        that is not an extension of what already streamed — appending it would
+        duplicate the earlier prefix.
+        """
         clean_turn_id = str(turn_id or "").strip()
         if not clean_turn_id:
             raise ValueError("turn_id is required.")
@@ -372,7 +381,10 @@ class VoiceAgentSessionRepository:
                     END,
                     assistant_text = CASE
                         WHEN excluded.assistant_text IS NOT NULL AND excluded.assistant_text != '' THEN
-                            COALESCE(voice_agent_turns.assistant_text, '') || excluded.assistant_text
+                            CASE
+                                WHEN ? THEN excluded.assistant_text
+                                ELSE COALESCE(voice_agent_turns.assistant_text, '') || excluded.assistant_text
+                            END
                         ELSE voice_agent_turns.assistant_text
                     END,
                     memory_json = CASE
@@ -406,6 +418,7 @@ class VoiceAgentSessionRepository:
                     1 if interrupted else 0,
                     str(effective_completion_status or "pending"),
                     1 if completed else 0,
+                    1 if replace_assistant_text else 0,
                     None if interrupted is None else 1,
                     1 if interrupted else 0,
                     effective_completion_status,

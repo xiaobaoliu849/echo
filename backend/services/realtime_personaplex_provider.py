@@ -226,15 +226,30 @@ class PersonaPlexRealtimeMixin:
         # that stream is therefore the turn boundary, and the frontend needs a
         # turn_complete to commit the transcript.
         turn_open = False
+        # The first flushed chunk of a turn drops its leading pad; later chunks
+        # keep theirs as the word boundary against the previous chunk.
+        turn_text_started = False
         idle_task: asyncio.Task[None] | None = None
 
         async def flush_text() -> None:
+            nonlocal turn_text_started
             if not pending_text:
                 return
-            text = "".join(pending_text).strip()
+            # Keep the joined chunk verbatim: its leading whitespace is the word
+            # boundary against the previously flushed chunk, and the frontend
+            # appends deltas exactly as received (appendAssistantDelta).
+            # Stripping here would run sentences together ("...there.How...").
+            text = "".join(pending_text)
             pending_text.clear()
-            if not text:
+            if not text.strip():
                 return
+            if not turn_text_started:
+                # First chunk of the turn: moshi space-prefixes every word, so
+                # the leading space is a tokenizer artifact with nothing before
+                # it to bound.  Mirrors appendAssistantDelta's first-fragment
+                # lstrip on the frontend.
+                text = text.lstrip()
+                turn_text_started = True
             # Delivered directly rather than through _emit_assistant_output:
             # there is no InterruptionDecisionCoordinator in this mode.
             await self._deliver_assistant_output(
@@ -245,12 +260,13 @@ class PersonaPlexRealtimeMixin:
             )
 
         async def close_turn() -> None:
-            nonlocal turn_open
+            nonlocal turn_open, turn_text_started
             if not turn_open:
                 return
             turn_open = False
             await flush_text()
             await self._finalize_realtime_turn(websocket, memory_session, recorder)
+            turn_text_started = False
 
         async def close_turn_when_idle() -> None:
             try:

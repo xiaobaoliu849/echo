@@ -160,15 +160,28 @@ class RealtimeGlm4VoiceMixin:
         np = _numpy()
         pending_text: list[str] = []
         turn_open = False
+        # The first flushed chunk of a turn drops its leading pad; later chunks
+        # keep theirs as the word boundary against the previous chunk.
+        turn_text_started = False
         idle_task: asyncio.Task[None] | None = None
 
         async def flush_text() -> None:
+            nonlocal turn_text_started
             if not pending_text:
                 return
-            text = "".join(pending_text).strip()
+            # Keep the joined chunk verbatim: its leading whitespace is the word
+            # boundary against the previously flushed chunk, and the frontend
+            # appends deltas exactly as received (appendAssistantDelta).
+            # Stripping here would run sentences together ("...there.How...").
+            text = "".join(pending_text)
             pending_text.clear()
-            if not text:
+            if not text.strip():
                 return
+            if not turn_text_started:
+                # First chunk of the turn: drop leading pad with nothing before
+                # it to bound.  Mirrors appendAssistantDelta on the frontend.
+                text = text.lstrip()
+                turn_text_started = True
             await self._deliver_assistant_output(
                 websocket,
                 {"type": "assistant_text", "text": text},
@@ -177,12 +190,13 @@ class RealtimeGlm4VoiceMixin:
             )
 
         async def close_turn() -> None:
-            nonlocal turn_open
+            nonlocal turn_open, turn_text_started
             if not turn_open:
                 return
             turn_open = False
             await flush_text()
             await self._finalize_realtime_turn(websocket, memory_session, recorder)
+            turn_text_started = False
 
         async def close_turn_when_idle() -> None:
             try:

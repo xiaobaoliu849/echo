@@ -319,7 +319,30 @@ def _clean_transcript_text(text: str) -> str:
 
 
 def _merge_streaming_text(previous: str, incoming: str) -> tuple[str, str]:
-    """Return canonical stream text and only the novel suffix to publish."""
+    """Return canonical stream text and only the novel suffix to publish.
+
+    ``incoming`` must be a *cumulative* value — an ASR hypothesis or a growing
+    confirmed prefix — whose whitespace is NOT authoritative.  The overlap
+    detection and word-boundary separator below exist for exactly that shape.
+    The three callers are:
+
+    * Gemini Live ``output_transcription`` (realtime_google_provider.py) — the
+      ASR of the model's own TTS, which re-sends overlapping partial words as
+      the transcript is revised.
+    * DashScope LiveTranslate ``response.*.text`` (realtime_dashscope_provider.py)
+      — ``confirmed`` is a monotonically growing prefix of the translation.
+    * Qwen-Audio cross-family arbitration (realtime_qwen_audio_provider.py) —
+      uses the returned suffix as a novelty *predicate* only, never as text.
+
+    Do NOT route clean BPE token deltas through this function (Doubao, Cartesia,
+    OpenAI, GLM4Voice, PersonaPlex, Qwen-Audio ``response.*.delta``, Gemini
+    ``response.text``).  Those carry their own whitespace, so stripping and
+    re-spacing them splits words ("wonder" + "ful" -> "wonder ful"), eats
+    characters on a coincidental edge ("Hel" + "lo" -> "Helo") and drops genuine
+    repeats ("ha" x3 -> "ha").  Append them verbatim instead — see
+    ``_merge_memory_text`` (realtime_memory_session.py) and appendAssistantDelta
+    (frontend/src/hooks/useVoiceChatHelpers.ts).
+    """
     before = str(previous or "").strip()
     next_text = str(incoming or "").strip()
     if not next_text:

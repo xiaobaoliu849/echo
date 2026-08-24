@@ -439,6 +439,94 @@ class VoiceAgentSessionRecorderCoalescingTests(unittest.IsolatedAsyncioTestCase)
                 await recorder.note_assistant_audio()
         self.assertEqual(spy.call_count, 0)
 
+    async def test_subword_deltas_persist_without_invented_word_breaks(self) -> None:
+        """A word streamed as several BPE tokens must persist as one word.
+
+        The deltas carry their own whitespace, so trimming them and re-inserting
+        a boundary space stores "That is wonder ful!" — disagreeing with both the
+        spoken audio and what the client rendered.
+        """
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("say something nice")
+        for delta in ["That is", " wonder", "ful", "!"]:
+            await recorder.note_assistant_text(delta)
+        self.assertEqual(recorder.current_assistant_text, "That is wonderful!")
+        await recorder.complete_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], "That is wonderful!")
+
+    async def test_stored_row_matches_the_in_memory_text_byte_for_byte(self) -> None:
+        """The turn row is append-only, so the coalesced deltas must reproduce
+        ``current_assistant_text`` exactly — including the dropped leading pad on
+        the opening fragment, which must not reach the row either."""
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("hi")
+        for delta in [" Hello", " there", "."]:
+            await recorder.note_assistant_text(delta)
+        expected = recorder.current_assistant_text
+        self.assertEqual(expected, "Hello there.")
+        await recorder.complete_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], expected)
+
+    async def test_cumulative_correction_appends_only_the_novel_suffix(self) -> None:
+        """DashScope's ``response.*.done`` re-sends the whole canonical transcript
+        after deltas already streamed.  Because the column is append-only
+        (``COALESCE(assistant_text,'') || excluded``), appending the full snapshot
+        would store everything twice."""
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("问题")
+        for delta in ["这是", "一段回"]:
+            await recorder.note_assistant_text(delta)
+        # Canonical whole-turn correction, longer than what streamed.
+        await recorder.note_assistant_text("这是一段回复。", cumulative=True)
+        self.assertEqual(recorder.current_assistant_text, "这是一段回复。")
+        await recorder.complete_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], "这是一段回复。")
+
+    async def test_cumulative_correction_matching_the_stream_is_a_noop(self) -> None:
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("问题")
+        await recorder.note_assistant_text("完整回复。")
+        await recorder.note_assistant_text("完整回复。", cumulative=True)
+        await recorder.complete_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], "完整回复。")
+
+    async def test_divergent_cumulative_correction_rewrites_instead_of_appending(self) -> None:
+        """A canonical correction that revises text mid-string is not an extension
+        of what streamed, so the append-only column would end up holding the stale
+        prefix followed by the whole corrected text.  The row must be rewritten."""
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("问题")
+        for delta in ["你好", "世界"]:
+            await recorder.note_assistant_text(delta)
+        # DashScope's done event inserts punctuation the deltas never carried, so
+        # the snapshot diverges from "你好世界" rather than extending it.
+        await recorder.note_assistant_text("你好，世界！你还好吗？", cumulative=True)
+        self.assertEqual(recorder.current_assistant_text, "你好，世界！你还好吗？")
+        await recorder.complete_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], "你好，世界！你还好吗？")
+
+    async def test_divergent_correction_survives_an_unflushed_delta_buffer(self) -> None:
+        """The rewrite must also discard deltas still sitting in the coalescing
+        buffer — flushing them after the rewrite would re-append stale text."""
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("问题")
+        await recorder.note_assistant_text("Helo wrld")
+        await recorder.note_assistant_text("Hello world!", cumulative=True)
+        await recorder.complete_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], "Hello world!")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -106,7 +106,6 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     _is_dashscope_omni_realtime_model,
     _is_google_live_translate_model,
     _is_google_public_rest_base_url,
-    _merge_streaming_text,
     _normalize_dashscope_realtime_voice,
     normalize_qwen_translate_language,
 )
@@ -364,12 +363,27 @@ class RealtimeVoiceService(
         event_type = str(event.get("type", ""))
         if event_type == "assistant_text":
             text = str(event.get("text", ""))
-            # Strip Markdown symbols to prevent TTS from reading them aloud
-            text = re.sub(r"[\*#`]", "", text)
+            # Strip Markdown symbols to prevent TTS from reading them aloud.
+            # Only drop a '#' that heads a Markdown ATX heading (followed by
+            # whitespace or another '#') so language names like "C#"/"F#"
+            # survive intact.
+            text = re.sub(r"[\*`]", "", text)
+            text = re.sub(r"#(?=\s|#)", "", text)
+            # A cumulative event carries the whole transcript so far (or a final
+            # canonical correction) and supersedes what was streamed; anything
+            # else is a verbatim delta that must be appended exactly as sent.
+            cumulative = bool(event.get("cumulative") or event.get("final"))
             if record_memory:
-                memory_session.note_assistant_text(text)
-            turn_id = await recorder.note_assistant_text(text) if recorder is not None else ""
-            await self._send_event(websocket, "assistant_text", text=text, turn_id=turn_id)
+                memory_session.note_assistant_text(text, cumulative=cumulative)
+            turn_id = (
+                await recorder.note_assistant_text(text, cumulative=cumulative)
+                if recorder is not None
+                else ""
+            )
+            payload: dict[str, Any] = {"text": text, "turn_id": turn_id}
+            if cumulative:
+                payload["cumulative"] = True
+            await self._send_event(websocket, "assistant_text", **payload)
             return
         if event_type == "assistant_audio":
             turn_id = ""

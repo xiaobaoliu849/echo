@@ -174,15 +174,45 @@ class VoiceAgentSessionRecorder:
         )
         return self._current_turn_id
 
-    async def note_assistant_text(self, text: str) -> str:
+    async def note_assistant_text(self, text: str, *, cumulative: bool = False) -> str:
         clean_text = str(text or "")
         if not clean_text.strip():
             return ""
         turn_id = await self._ensure_turn()
-        self._current_assistant_text = _merge_memory_text(self._current_assistant_text, clean_text)
-        # Coalesce streaming deltas and flush them in one delayed write
-        # instead of hitting SQLite once per delta.
-        self._pending_assistant_delta += clean_text
+        # Writes to the turn row append by default (``COALESCE(assistant_text,'')
+        # || excluded.assistant_text``), so persist only the part of the merged
+        # text that has not been written yet.  Deriving the suffix from the merge
+        # — rather than appending ``clean_text`` verbatim — keeps the stored row
+        # byte-identical to ``_current_assistant_text``: a verbatim delta whose
+        # leading pad the merge dropped (first fragment of a turn) must not reach
+        # the row with that pad, and a cumulative correction (e.g. DashScope
+        # ``response.*.done``) must not re-append what already streamed.
+        already = self._current_assistant_text
+        merged = _merge_memory_text(already, clean_text, cumulative=cumulative)
+        self._current_assistant_text = merged
+        if not merged.startswith(already):
+            # A cumulative correction that is NOT an extension of what streamed
+            # (the model revised text mid-string, e.g. inserted punctuation).
+            # Appending its suffix would leave the row holding the stale prefix
+            # twice, so drop the un-flushed deltas, let any in-flight write
+            # land, and rewrite the row with the canonical text.
+            self._pending_assistant_delta = ""
+            await self._flush_pending_assistant_text()
+            await self._call_repository(
+                "upsert_turn",
+                self.session_id,
+                turn_id,
+                assistant_text=merged,
+                replace_assistant_text=True,
+                fetch_turn=False,
+            )
+            return turn_id
+        suffix = merged[len(already):]
+        if not suffix:
+            return turn_id
+        # Coalesce streaming deltas and flush them in one delayed write instead
+        # of hitting SQLite once per delta.
+        self._pending_assistant_delta += suffix
         self._schedule_assistant_flush()
         return turn_id
 
