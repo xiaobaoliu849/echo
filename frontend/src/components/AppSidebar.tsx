@@ -249,7 +249,6 @@ function AppSidebar({
             </div>
             <div className="vsBrandCopy">
               <h1>Echo</h1>
-              <span className="vsBrandTagline">{t("智能语音助手", "AI Voice Assistant")}</span>
             </div>
           </div>
           <button

@@ -634,7 +634,7 @@ export default function ChatPage({
               </div>
               <div>
                 <h1 className="vsWelcomeHeroTitle">{t("Echo · 回声", "Echo")}</h1>
-                <p className="vsWelcomeHeroSubtitle">{t("全双工实时语音与 AI 智能助理", "Full-duplex realtime voice & AI assistant")}</p>
+                <p className="vsWelcomeHeroSubtitle">{t("开箱即用的实时语音 AI 助手", "Out-of-the-box realtime voice AI assistant")}</p>
               </div>
             </div>
 
