@@ -175,7 +175,7 @@ textarea {
   gap: 12px;
   flex: 1;
   min-width: 0;
-  height: 42px;
+  min-height: 42px;
   transition: gap var(--sidebar-transition);
 }
 
@@ -213,7 +213,6 @@ textarea {
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-  overflow: hidden;
   transition:
     opacity 0.2s ease,
     max-width var(--sidebar-transition),
@@ -227,16 +226,16 @@ textarea {
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--sidebar-text-strong);
-  line-height: 1;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
 .vsBrandTagline {
-  margin-top: 3px;
+  margin-top: 2px;
   font-size: 11px;
   font-weight: 500;
-  color: var(--text-muted, #8a9990);
-  line-height: 1.15;
+  color: var(--sidebar-text, #708477);
+  line-height: 1.25;
   white-space: nowrap;
   letter-spacing: 0.01em;
 }
@@ -1638,16 +1637,18 @@ button:focus-visible {
 }
 
 .vsWelcomeHeroIcon {
-  width: 68px;
-  height: 68px;
-  border-radius: 24px;
-  background: linear-gradient(145deg, var(--brand-soft), color-mix(in oklab, var(--brand-soft) 85%, white));
-  border: 1px solid color-mix(in oklab, var(--brand) 18%, transparent);
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background:
+    linear-gradient(160deg, color-mix(in oklab, var(--brand) 74%, white), color-mix(in oklab, var(--brand-dark) 78%, var(--brand)));
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 12px 28px color-mix(in oklab, var(--brand-dark) 10%, transparent),
-              inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 12px 28px color-mix(in oklab, var(--brand-dark) 24%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 65%, transparent);
 }
 
 .vsWelcomeHeroTitle {
