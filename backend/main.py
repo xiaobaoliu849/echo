@@ -27,8 +27,8 @@ error_logger = logging.getLogger("voicespirit.error")
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="VoiceSpirit API",
-        description="VoiceSpirit migration backend (Phase B audio overview synthesis)",
+        title="Echo API",
+        description="Echo — local-first realtime voice AI assistant backend",
         version="0.1.0",
     )
 
@@ -351,10 +351,9 @@ def create_app() -> FastAPI:
     @app.get("/")
     async def root() -> dict:
         return {
-            "name": "VoiceSpirit API",
+            "name": "Echo API",
             "version": "0.1.0",
             "status": "running",
-            "phase": "B-audio-overview-synthesis",
             "auth_enabled": is_auth_enabled(),
             "auth_mode": "user-or-token-write-auth",
         }

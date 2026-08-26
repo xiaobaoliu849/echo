@@ -444,7 +444,7 @@ describe("App interactions", () => {
     await waitFor(() => {
       expect(mockedFetchSpeakAudio).toHaveBeenCalledWith(
         expect.objectContaining({
-          text: "你好，这是 VoiceSpirit Web 迁移阶段的语音测试。",
+          text: "你好，这是 Echo 的语音测试。",
           rate: "+0%"
         })
       );

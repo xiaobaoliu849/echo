@@ -40,8 +40,8 @@ export const PROVIDERS = [
 
 export function getDefaultText(t: TranslatePair): string {
   return t(
-    "你好，这是 VoiceSpirit Web 迁移阶段的语音测试。",
-    "Hello, this is a VoiceSpirit speech test for the web migration build."
+    "你好，这是 Echo 的语音测试。",
+    "Hello, this is an Echo speech test."
   );
 }
 
