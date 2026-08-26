@@ -78,8 +78,8 @@ export default function useVoiceManagement({
   );
   const [designPreviewText, setDesignPreviewText] = useState(
     t(
-      "你好，我是 VoiceSpirit 新创建的音色，很高兴为你服务。",
-      "Hello, I am a new voice created with VoiceSpirit. Glad to speak with you."
+      "你好，我是 Echo 新创建的音色，很高兴为你服务。",
+      "Hello, I am a new voice created with Echo. Glad to speak with you."
     )
   );
   const [designName, setDesignName] = useState("voice_design_demo");

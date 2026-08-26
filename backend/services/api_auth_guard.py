@@ -38,14 +38,20 @@ def _read_token_from_config() -> str:
 
 
 def resolve_api_token() -> str:
-    env_token = os.getenv("VOICESPIRIT_API_TOKEN", "").strip()
+    env_token = (
+        os.getenv("ECHO_API_TOKEN", "").strip()
+        or os.getenv("VOICESPIRIT_API_TOKEN", "").strip()
+    )
     if env_token:
         return env_token
     return _read_token_from_config()
 
 
 def resolve_admin_token() -> str:
-    env_token = os.getenv("VOICESPIRIT_ADMIN_TOKEN", "").strip()
+    env_token = (
+        os.getenv("ECHO_ADMIN_TOKEN", "").strip()
+        or os.getenv("VOICESPIRIT_ADMIN_TOKEN", "").strip()
+    )
     if env_token:
         return env_token
     try:

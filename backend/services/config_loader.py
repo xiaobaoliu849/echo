@@ -12,14 +12,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def get_data_dir() -> Path:
-    """Return the application data directory for VoiceSpirit."""
-    explicit_data_dir = os.environ.get("VOICESPIRIT_DATA_DIR", "").strip()
+    """Return the application data directory for Echo."""
+    explicit_data_dir = (
+        os.environ.get("ECHO_DATA_DIR", "").strip()
+        or os.environ.get("VOICESPIRIT_DATA_DIR", "").strip()
+    )
     if explicit_data_dir:
         data_dir = Path(explicit_data_dir)
         data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir
 
-    app_name = "VoiceSpirit"
+    app_name = "Echo"
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", str(Path.cwd())))
     else:

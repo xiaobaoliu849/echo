@@ -225,11 +225,11 @@ class AudioOverviewService:
         )
         if language == "en":
             return (
-                f"VoiceSpirit podcast draft created. Topic: {topic}. "
+                f"Echo podcast draft created. Topic: {topic}. "
                 f"Language: English. Key dialogue preview: {preview}"
             ).strip()
         return (
-            f"VoiceSpirit 播客草稿已生成。主题：{topic}。"
+            f"Echo 播客草稿已生成。主题：{topic}。"
             f"语言：中文。关键对话预览：{preview}"
         ).strip()
 
@@ -563,7 +563,7 @@ class AudioOverviewService:
                     ),
                     user_id=memory_scope,
                     sender=f"{memory_scope}_podcast",
-                    sender_name="VoiceSpirit Podcast",
+                    sender_name="Echo Podcast",
                 )
                 memory_saved = saved is not None
             except Exception:

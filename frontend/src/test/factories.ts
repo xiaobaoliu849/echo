@@ -277,7 +277,7 @@ export function createSettingsController(
     evermemRememberPodcast: true,
     evermemRememberTts: true,
     evermemStoreTranscript: false,
-    backendRuntimeRaw: '{\n  "name": "VoiceSpirit"\n}',
+    backendRuntimeRaw: '{\n  "name": "Echo"\n}',
     backendRuntimeOpen: false,
     runtimeCopyStatus: "idle",
     desktopRememberWindowPosition: true,

@@ -1186,7 +1186,7 @@ class VoiceAgentToolService:
                 run_id = str(artifact.get("run_id", "")).strip()
                 status = str(artifact.get("status", "")).strip()
             return (
-                "An application action has completed inside VoiceSpirit. Continue the live voice conversation "
+                "An application action has completed inside Echo. Continue the live voice conversation "
                 "naturally and tell the user what was created and what they can do next. Keep it brief.\n\n"
                 f"Action: create_audio_agent_run\nTopic: {query}\nRun ID: {run_id}\nStatus: {status}\n\n"
                 f"Tool summary:\n{answer}"
@@ -1199,7 +1199,7 @@ class VoiceAgentToolService:
                 translated_text = str(artifact.get("translated_text", "")).strip()
                 target_language = str(artifact.get("target_language", "")).strip()
             return (
-                "A translation action has completed inside VoiceSpirit. Continue the live voice conversation "
+                "A translation action has completed inside Echo. Continue the live voice conversation "
                 "naturally. Read the translated text if it is short; otherwise summarize that the translation is ready.\n\n"
                 f"Source text: {query}\nTarget language: {target_language}\nTranslated text: {translated_text}\n\n"
                 f"Tool summary:\n{answer}"
@@ -1210,7 +1210,7 @@ class VoiceAgentToolService:
             if isinstance(artifact, dict):
                 summary = str(artifact.get("summary", "")).strip()
             return (
-                "A transcript summarization action has completed inside VoiceSpirit. Continue the live voice "
+                "A transcript summarization action has completed inside Echo. Continue the live voice "
                 "conversation naturally and read the summary briefly.\n\n"
                 f"Transcript excerpt: {query}\nSummary:\n{summary}\n\n"
                 f"Tool summary:\n{answer}"
@@ -1223,7 +1223,7 @@ class VoiceAgentToolService:
                 audio_path = str(artifact.get("audio_path", "")).strip()
                 voice = str(artifact.get("voice", "")).strip()
             return (
-                "A TTS generation action has completed inside VoiceSpirit. Continue the live voice conversation "
+                "A TTS generation action has completed inside Echo. Continue the live voice conversation "
                 "naturally and tell the user the audio file is ready. Do not attempt to play the generated file "
                 "through the realtime model; the application will expose it as an artifact.\n\n"
                 f"Text: {query}\nAudio path: {audio_path}\nVoice: {voice}\n\n"

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_pending_cache_path() -> Path:
-    app_name = "VoiceSpirit"
+    app_name = "Echo"
     if os.name == "nt":
         base_dir = Path(os.environ.get("APPDATA", str(Path.cwd())))
         preferred_dir = base_dir / app_name
@@ -25,7 +25,7 @@ def _resolve_pending_cache_path() -> Path:
         base_dir = Path(xdg_state_home) if xdg_state_home else Path.home() / ".local" / "state"
         preferred_dir = base_dir / app_name
 
-    fallback_dir = Path.cwd() / ".voicespirit-state" / app_name
+    fallback_dir = Path.cwd() / ".echo-state" / app_name
     for candidate in (preferred_dir, fallback_dir):
         try:
             candidate.mkdir(parents=True, exist_ok=True)

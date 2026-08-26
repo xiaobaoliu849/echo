@@ -239,7 +239,7 @@ class DashScopeAudioRealtimeConversation:
             ws_url,
             additional_headers={
                 'Authorization': f'Bearer {self.api_key}',
-                'user-agent': 'VoiceSpirit/Realtime',
+                'user-agent': 'Echo/Realtime',
             },
             max_size=16777216,
             # Keepalive pings: without them a half-open TCP connection (VPN

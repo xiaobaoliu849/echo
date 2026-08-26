@@ -122,7 +122,7 @@ export default function ErrorNotice({ message, scope = "", context }: ErrorNotic
       ? contextEntries.map((item) => `- ${item}`).join("\n")
       : "- N/A";
     return [
-      t("## VoiceSpirit 错误报告", "## VoiceSpirit Error Report"),
+      t("## Echo 错误报告", "## Echo Error Report"),
       t(`- 生成时间: ${generatedAt}`, `- Generated At: ${generatedAt}`),
       t(`- 模块: ${scopeLabel}`, `- Scope: ${scopeLabel}`),
       t(`- 页面路径: ${pathname}`, `- Path: ${pathname}`),

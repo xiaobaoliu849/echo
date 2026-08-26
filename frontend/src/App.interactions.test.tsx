@@ -104,7 +104,7 @@ describe("App interactions", () => {
       auth_enabled: false,
       version: "test",
       raw: {
-        name: "VoiceSpirit",
+        name: "Echo",
         status: "ok",
         auth_mode: "write-only-with-admin-settings"
       }
@@ -510,7 +510,7 @@ describe("App interactions", () => {
     await waitFor(() => {
       const runtimeDetails = document.querySelector("pre.runtimeDetails");
       expect(runtimeDetails).not.toBeNull();
-      expect(runtimeDetails?.textContent).toContain('"name": "VoiceSpirit"');
+      expect(runtimeDetails?.textContent).toContain('"name": "Echo"');
     });
 
     fireEvent.click(screen.getByRole("button", { name: "复制运行时信息" }));
@@ -519,7 +519,7 @@ describe("App interactions", () => {
       expect(writeText).toHaveBeenCalledWith(
         JSON.stringify(
           {
-            name: "VoiceSpirit",
+            name: "Echo",
             status: "ok",
             auth_mode: "write-only-with-admin-settings"
           },

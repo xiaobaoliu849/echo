@@ -1721,10 +1721,10 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 payload = response.json()
                 self.assertEqual(payload["voice"], "gpt_sovits_bad_name")
-                voices_dir = Path(tmp_dir) / "VoiceSpirit" / "gpt_sovits_voices"
+                voices_dir = Path(tmp_dir) / "Echo" / "gpt_sovits_voices"
                 self.assertTrue((voices_dir / "bad_name.mp3").is_file())
                 self.assertEqual((voices_dir / "bad_name.txt").read_text(encoding="utf-8"), "hello prompt")
-                self.assertFalse((Path(tmp_dir) / "VoiceSpirit" / "bad name.wav").exists())
+                self.assertFalse((Path(tmp_dir) / "Echo" / "bad name.wav").exists())
 
     def test_gpt_sovits_voice_design_is_rejected(self) -> None:
         response = self._request(
@@ -2025,7 +2025,7 @@ class ApiSmokeTests(unittest.TestCase):
 
     def test_desktop_status_endpoint_returns_preflight_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            runtime_dir = Path(tmp_dir) / "VoiceSpirit"
+            runtime_dir = Path(tmp_dir) / "Echo"
             diagnostics_dir = runtime_dir / "diagnostics"
             diagnostics_dir.mkdir(parents=True, exist_ok=True)
             (diagnostics_dir / "desktop_preflight_latest.json").write_text(

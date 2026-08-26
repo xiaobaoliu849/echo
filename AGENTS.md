@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file describes the current, tracked VoiceSpirit architecture and the verification expected for repository changes.
+This file describes the current, tracked Echo architecture and the verification expected for repository changes.
 
 ## Project overview
 
-VoiceSpirit is a local-first voice and AI desktop application. The maintained application is a React/TypeScript frontend backed by FastAPI. The desktop shell is PyWebView and serves the same built frontend through the FastAPI process.
+Echo is a local-first voice and AI desktop application. The maintained application is a React/TypeScript frontend backed by FastAPI. The desktop shell is PyWebView and serves the same built frontend through the FastAPI process.
 
 The old PySide6 application may still exist in local, ignored folders on some workstations, but it is not part of the tracked application and must not be treated as the current architecture.
 

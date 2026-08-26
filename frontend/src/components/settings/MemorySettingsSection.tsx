@@ -15,7 +15,7 @@ export default function MemorySettingsSection({ settings }: Props) {
       <div className="vsMemoryHero">
         <EvermindBadge variant="light" className="vsMemoryHeroBadge" />
         <div className="vsMemoryHeroCopy">
-          <strong>{t("VoiceSpirit × EverMind", "VoiceSpirit × EverMind")}</strong>
+          <strong>{t("Echo × EverMind", "Echo × EverMind")}</strong>
           <p>
             {t(
               "把品牌放在记忆中心最合适，因为这里是用户真正配置、理解并启用 EverMem 的地方；侧边栏则保留一个运行时状态入口。",

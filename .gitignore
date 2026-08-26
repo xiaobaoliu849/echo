@@ -74,10 +74,19 @@ tests/__pycache__/
 *apiKey*.csv
 *.pem
 *.key
+*apikey*.txt
+*apiKey*.txt
 
-# Local reference docs / tool dirs
+# Local reference docs / tool dirs / archives
 .zcode/
 .freebuff/
 *.log
 全模态.txt
 时时语音对话.txt
+端到端实时语音*.txt
+python3.7_duplex_demo*
+node_modules/
+.echo-state/
+.echo-desktop/
+echo.db
+echo.log

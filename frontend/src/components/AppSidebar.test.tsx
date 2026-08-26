@@ -29,7 +29,7 @@ describe('AppSidebar', () => {
                 chatHistoryItems={[]}
             />
         );
-        expect(screen.getByText('VoiceSpirit')).toBeInTheDocument();
+        expect(screen.getByText('Echo')).toBeInTheDocument();
         expect(screen.getByText('新建对话')).toBeInTheDocument();
         expect(screen.queryByText('聊天')).not.toBeInTheDocument();
         expect(screen.queryByText('最近对话')).not.toBeInTheDocument();

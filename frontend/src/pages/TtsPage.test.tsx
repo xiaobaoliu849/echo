@@ -165,7 +165,7 @@ describe('TtsPage', () => {
         await waitFor(() => expect(saveAudio).toHaveBeenCalledTimes(1));
         expect(saveAudio).toHaveBeenCalledWith(
             expect.objectContaining({
-                filename: 'voicespirit_tts.wav',
+                filename: 'echo_tts.wav',
                 mime_type: 'audio/wav',
                 data_base64: expect.any(String)
             })

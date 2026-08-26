@@ -29,8 +29,8 @@ export default function EvermindBadge({
         {compact ? null : (
           <p>
             {t(
-              "为 VoiceSpirit 的跨会话记忆与上下文延续提供底层能力。",
-              "Powers VoiceSpirit with cross-session memory and context continuity.",
+              "为 Echo 的跨会话记忆与上下文延续提供底层能力。",
+              "Powers Echo with cross-session memory and context continuity.",
             )}
           </p>
         )}

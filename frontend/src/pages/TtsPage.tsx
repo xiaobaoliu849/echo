@@ -59,7 +59,7 @@ function getAudioExportMeta(blob: Blob): { filename: string; mimeType: string } 
   } else if (lowerType.includes("mp4") || lowerType.includes("aac")) {
     extension = "m4a";
   }
-  return { filename: `voicespirit_tts.${extension}`, mimeType };
+  return { filename: `echo_tts.${extension}`, mimeType };
 }
 
 export default function TtsPage({ tts, errorRuntimeContext }: Props) {
@@ -341,7 +341,7 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                 className="vsTtsEditor custom-scrollbar"
                 value={tts.dialogueText}
                 onChange={(e) => tts.onDialogueTextChange(e.target.value)}
-                placeholder={t("A: 你好，欢迎来到今天的节目。\nB: 今天我们来聊聊 VoiceSpirit 的语音工作流。", "A: Hello, welcome to today's show.\nB: Today we're talking about VoiceSpirit's speech workflow.")}
+                placeholder={t("A: 你好，欢迎来到今天的节目。\nB: 今天我们来聊聊 Echo 的语音工作流。", "A: Hello, welcome to today's show.\nB: Today we're talking about Echo's speech workflow.")}
               />
             ) : null}
             {tts.ttsMode === "pdf" ? (

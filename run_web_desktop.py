@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch VoiceSpirit Web inside a native desktop window (PyWebView)."""
+"""Launch Echo Web inside a native desktop window (PyWebView)."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, Optional
 
-APP_NAME = "VoiceSpirit"
+APP_NAME = "Echo"
 PROJECT_ROOT = Path(__file__).resolve().parent
 BACKEND_DIR = PROJECT_ROOT / "backend"
 FRONTEND_DIST_INDEX = PROJECT_ROOT / "frontend" / "dist" / "index.html"
@@ -853,7 +853,7 @@ class DesktopJsApi:
             extension = ".mp3"
         return self._save_bytes_via_dialog(
             payload=payload,
-            default_name=f"voicespirit_audio{extension}",
+            default_name=f"echo_audio{extension}",
             extension=extension,
             file_types=(self._MEDIA_FILE_TYPES[extension], "All files (*.*)"),
             empty_message="Audio data is empty.",
@@ -880,7 +880,7 @@ class DesktopJsApi:
             extension = ".txt"
         return self._save_bytes_via_dialog(
             payload=payload,
-            default_name=f"voicespirit_export{extension}",
+            default_name=f"echo_export{extension}",
             extension=extension,
             file_types=(self._TEXT_FILE_TYPES[extension], "All files (*.*)"),
             empty_message="Export content is empty.",
@@ -990,7 +990,7 @@ def main() -> int:
     save_window_state(window_state)
     controller = DesktopController(window_state)
     window = webview.create_window(
-        title="VoiceSpirit",
+        title="Echo · 回声",
         url=controller.app_url,
         width=window_state["width"],
         height=window_state["height"],

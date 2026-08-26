@@ -1,7 +1,7 @@
-# GEMINI.md - Voice Spirit 2.0 Project Context
+# GEMINI.md - Echo 2.0 Project Context
 
 ## Project Overview
-Voice Spirit 2.0 is a comprehensive AI-powered audio and text assistant. It exists in two forms: a high-performance **PySide6 Desktop Application** and a modern **FastAPI + React Web Application**. The project focuses on multi-engine Text-to-Speech (TTS), LLM-based Chat/Translation, and advanced Voice Design/Cloning.
+Echo 2.0 is a comprehensive AI-powered audio and text assistant. It is a modern **FastAPI + React Web/Desktop Application** (with desktop PyWebView shell). The project focuses on multi-engine Text-to-Speech (TTS), LLM-based Chat/Translation, and advanced Voice Design/Cloning.
 
 ### Key Features
 - **Multi-Engine TTS:** Supports Edge TTS, Google TTS, and Qwen TTS with fine-grained control over voice, rate, and caching.

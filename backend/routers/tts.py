@@ -160,7 +160,7 @@ async def speak(
     if evermem_service:
         snippet = text.strip().replace("\n", " ")[:180]
         memory_text = (
-            f"VoiceSpirit 语音合成已生成。音色：{result.voice}。语速：{rate}。"
+            f"Echo 语音合成已生成。音色：{result.voice}。语速：{rate}。"
             f"文本摘要：{snippet}"
         )
         try:
@@ -168,7 +168,7 @@ async def speak(
                 content=memory_text,
                 user_id=evermem_config.memory_scope,
                 sender=f"{evermem_config.memory_scope}_tts",
-                sender_name="VoiceSpirit TTS",
+                sender_name="Echo TTS",
             )
             memory_saved = saved is not None
         except Exception:

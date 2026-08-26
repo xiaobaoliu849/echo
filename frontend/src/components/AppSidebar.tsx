@@ -238,9 +238,18 @@ function AppSidebar({
       <aside className={`vsSidebar ${isCollapsed ? "collapsed" : ""}`}>
         <div className="vsSidebarHeader">
           <div className="vsBrand">
-            <div className="vsBrandIcon">VS</div>
+            <div className="vsBrandIcon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v18" />
+                <path d="M8 6v12" />
+                <path d="M16 6v12" />
+                <path d="M4 10v4" />
+                <path d="M20 10v4" />
+              </svg>
+            </div>
             <div className="vsBrandCopy">
-              <h1>VoiceSpirit</h1>
+              <h1>Echo</h1>
+              <span className="vsBrandTagline">{t("智能语音助手", "AI Voice Assistant")}</span>
             </div>
           </div>
           <button

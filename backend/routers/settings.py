@@ -557,8 +557,8 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
         else:
             headers["Authorization"] = f"Bearer {api_key}"
         if provider == "OpenRouter":
-            headers["HTTP-Referer"] = "https://voicespirit.local"
-            headers["X-Title"] = "VoiceSpirit"
+            headers["HTTP-Referer"] = "https://echo.local"
+            headers["X-Title"] = "Echo"
 
     import httpx
     try:

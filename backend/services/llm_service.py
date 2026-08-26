@@ -167,8 +167,8 @@ class LLMService:
             "Content-Type": "application/json",
         }
         if provider == "OpenRouter":
-            headers["HTTP-Referer"] = "https://voicespirit.local"
-            headers["X-Title"] = "VoiceSpirit"
+            headers["HTTP-Referer"] = "https://echo.local"
+            headers["X-Title"] = "Echo"
         return headers
 
     @staticmethod

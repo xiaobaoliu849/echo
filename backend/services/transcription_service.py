@@ -1580,7 +1580,7 @@ class TranscriptionService:
             content=memory_text,
             user_id=evermem_config.memory_scope,
             sender=f"{evermem_config.memory_scope}_{source}",
-            sender_name="VoiceSpirit Transcription",
+            sender_name="Echo Transcription",
         )
         if saved is None:
             logger.error("EverMind add_memory returned None.")
@@ -1768,7 +1768,7 @@ class TranscriptionService:
                 snippet += compact[i]
         else:
             snippet = compact
-        return f"VoiceSpirit 转写完成。关键信息摘要：{snippet}"
+        return f"Echo 转写完成。关键信息摘要：{snippet}"
 
     @staticmethod
     def _map_remote_status(payload: dict[str, Any]) -> str:

@@ -22,7 +22,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /记忆/i }));
     expect(screen.getByText("EverMem 长期记忆中心")).toBeInTheDocument();
     expect(screen.getByText("启用长期记忆支持")).toBeInTheDocument();
-    expect(screen.getByText("VoiceSpirit × EverMind")).toBeInTheDocument();
+    expect(screen.getByText("Echo × EverMind")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /转写/i }));
     expect(screen.getByText("文件转写与上传配置")).toBeInTheDocument();

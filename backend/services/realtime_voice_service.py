@@ -285,7 +285,7 @@ class RealtimeVoiceService(
         # LiveTranslate models do not support native tools; skip the tool check for them.
         if not _is_dashscope_live_translate_model(resolved_model) and not dashscope_supports_native_tools(resolved_model):
             raise RuntimeError(
-                "VoiceSpirit 实时语音仅支持具备原生 Function Calling 的 "
+                "Echo 实时语音仅支持具备原生 Function Calling 的 "
                 "qwen3.5-omni-plus-realtime、qwen3.5-omni-flash-realtime，或 qwen-audio-3.0-realtime-plus/flash；请在设置中升级模型。"
             )
         realtime_base_url = (

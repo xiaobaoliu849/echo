@@ -26,7 +26,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     // Keep the stack in the console for debugging; no telemetry yet.
-    console.error("VoiceSpirit render error:", error, info.componentStack);
+    console.error("Echo render error:", error, info.componentStack);
   }
 
   private handleRetry = (): void => {

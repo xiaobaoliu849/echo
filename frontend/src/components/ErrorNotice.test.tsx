@@ -165,7 +165,7 @@ describe("ErrorNotice", () => {
 
     expect(writeText).toHaveBeenCalledTimes(1);
     const payload = writeText.mock.calls[0][0] as string;
-    expect(payload).toContain("## VoiceSpirit 错误报告");
+    expect(payload).toContain("## Echo 错误报告");
     expect(payload).toContain("- 生成时间: 2026-03-05T15:16:17.000Z");
     expect(payload).toContain("- 模块: chat");
     expect(payload).toContain("- 页面路径: /");
