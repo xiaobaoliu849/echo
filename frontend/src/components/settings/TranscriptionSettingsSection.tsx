@@ -49,7 +49,7 @@ export default function TranscriptionSettingsSection({ settings }: Props) {
                 className="vsInput"
                 value={settings.transcriptionS3Bucket}
                 onChange={(e) => settings.onTranscriptionS3BucketChange(e.target.value)}
-                placeholder={t("例如: voicespirit-assets", "For example: voicespirit-assets")}
+                placeholder={t("例如: echo-assets", "For example: echo-assets")}
               />
             </label>
             <label className="vsField">

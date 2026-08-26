@@ -623,10 +623,18 @@ export default function ChatPage({
           /* ═══ EMPTY STATE ═══ */
           <div className="vsChatCentered">
             <div className="vsWelcomeHero">
-              <div className="vsWelcomeHeroIcon">✨</div>
+              <div className="vsWelcomeHeroIcon" aria-hidden="true">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--brand-dark, #245840)" }}>
+                  <path d="M12 3v18" />
+                  <path d="M7 7v10" />
+                  <path d="M17 7v10" />
+                  <path d="M3 11v2" />
+                  <path d="M21 11v2" />
+                </svg>
+              </div>
               <div>
-                <h1 className="vsWelcomeHeroTitle">{t("声之灵", "Voice Spirit")}</h1>
-                <p className="vsWelcomeHeroSubtitle">{t("双向实时语音与 AI 智能助理", "Realtime two-way voice & AI assistant")}</p>
+                <h1 className="vsWelcomeHeroTitle">{t("Echo · 回声", "Echo")}</h1>
+                <p className="vsWelcomeHeroSubtitle">{t("全双工实时语音与 AI 智能助理", "Full-duplex realtime voice & AI assistant")}</p>
               </div>
             </div>
 

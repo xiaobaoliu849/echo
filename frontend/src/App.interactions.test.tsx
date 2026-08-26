@@ -652,8 +652,8 @@ describe("App interactions", () => {
     fireEvent.change(screen.getByTestId("transcription-upload-mode"), {
       target: { value: "s3" }
     });
-    fireEvent.change(screen.getByPlaceholderText("例如: voicespirit-assets"), {
-      target: { value: "voicespirit-assets" }
+    fireEvent.change(screen.getByPlaceholderText("例如: echo-assets"), {
+      target: { value: "echo-assets" }
     });
     fireEvent.change(screen.getByPlaceholderText("例如: us-east-1"), {
       target: { value: "us-east-1" }
