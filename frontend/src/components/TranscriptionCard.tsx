@@ -46,8 +46,11 @@ function getFileExtension(name: string): string {
 
 function getTitleStem(name: string): string {
   const dot = name.lastIndexOf(".");
-  // Keep dots that are part of the name itself (e.g. "v1.2 会议").
-  if (dot <= 0 || dot < name.length - 6) return name;
+  if (dot <= 0) return name;
+  const ext = name.slice(dot + 1);
+  // A trailing token is only an extension when it looks like one: short and
+  // whitespace-free (keeps "v1.2 会议" intact while stripping ".wav").
+  if (ext.length > 5 || /\s/.test(ext)) return name;
   return name.slice(0, dot);
 }
 

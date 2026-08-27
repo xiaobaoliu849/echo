@@ -603,7 +603,7 @@ class TranscriptionService:
         return self._write_job(job)
 
     def rename_job(self, job_id: str, file_name: str) -> TranscriptionJob:
-        """Set a user-facing display name; falls back are untouched elsewhere."""
+        """Set a user-facing display name for a transcription record."""
         cleaned = str(file_name or "").strip()
         if not cleaned:
             raise ValueError("file_name must not be empty.")

@@ -42,6 +42,18 @@ describe("TranscriptionCard", () => {
     expect(screen.getByText(/我们开始本周的例会/)).toBeInTheDocument();
   });
 
+  it("keeps version-style dots in titles that have no real extension", () => {
+    render(
+      <TranscriptionCard
+        item={makeItem({ file_name: "v1.2 产品评审" })}
+        onClick={() => {}}
+        onDelete={() => {}}
+      />
+    );
+
+    expect(screen.getByText("v1.2 产品评审")).toBeInTheDocument();
+  });
+
   it("falls back to a friendly title for legacy synthetic storage names", () => {
     render(
       <TranscriptionCard
