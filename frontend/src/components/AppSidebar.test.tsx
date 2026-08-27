@@ -171,4 +171,39 @@ describe('AppSidebar', () => {
 
         expect(screen.getByRole('button', { name: /收起侧边栏/ })).toHaveAttribute('aria-expanded', 'true');
     });
+
+    it('renders the collapsed rail with the logo toggle, and hovering never auto-expands', () => {
+        localStorage.setItem('vs_sidebar_collapsed', 'true');
+        const { container } = render(
+            <AppSidebar
+                {...baseProps}
+                chatHistoryItems={[]}
+            />
+        );
+
+        const aside = container.querySelector('.vsSidebar') as HTMLElement;
+        expect(aside).toHaveClass('collapsed');
+
+        const logoToggle = screen.getByRole('button', { name: /展开侧边栏/ });
+        expect(logoToggle).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.mouseEnter(logoToggle.closest('.vsSidebarHeader') as HTMLElement);
+        expect(container.querySelector('.vsSidebar')).toHaveClass('collapsed');
+    });
+
+    it('pins the sidebar open when clicking the collapsed logo toggle', () => {
+        localStorage.setItem('vs_sidebar_collapsed', 'true');
+        const { container } = render(
+            <AppSidebar
+                {...baseProps}
+                chatHistoryItems={[]}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /展开侧边栏/ }));
+
+        expect(container.querySelector('.vsSidebar')).not.toHaveClass('collapsed');
+        expect(screen.getByRole('button', { name: /收起侧边栏/ })).toHaveAttribute('aria-expanded', 'true');
+        expect(localStorage.getItem('vs_sidebar_collapsed')).toBe('false');
+    });
 });

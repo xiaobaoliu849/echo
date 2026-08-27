@@ -16,7 +16,6 @@ import {
   FileAudio,
   Settings,
   PanelLeftClose,
-  PanelLeftOpen,
   MessageSquarePlus,
   MoreHorizontal,
   Pencil,
@@ -33,6 +32,16 @@ const IconMap: Record<string, React.ElementType> = {
   FileAudio,
   Settings
 };
+
+const brandMark = (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3v18" />
+    <path d="M8 6v12" />
+    <path d="M16 6v12" />
+    <path d="M4 10v4" />
+    <path d="M20 10v4" />
+  </svg>
+);
 
 type Props = {
   activeTab: ActiveTab;
@@ -239,13 +248,7 @@ function AppSidebar({
         <div className="vsSidebarHeader">
           <div className="vsBrand">
             <div className="vsBrandIcon" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3v18" />
-                <path d="M8 6v12" />
-                <path d="M16 6v12" />
-                <path d="M4 10v4" />
-                <path d="M20 10v4" />
-              </svg>
+              {brandMark}
             </div>
             <div className="vsBrandCopy">
               <h1>Echo</h1>
@@ -254,12 +257,18 @@ function AppSidebar({
           <button
             type="button"
             className="vsSidebarToggleBtn"
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={() => setIsCollapsed((prev) => !prev)}
             aria-label={toggleLabel}
             aria-expanded={!isCollapsed}
             title={toggleLabel}
           >
-            {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            {isCollapsed ? (
+              <span className="vsBrandIcon" aria-hidden="true">
+                {brandMark}
+              </span>
+            ) : (
+              <PanelLeftClose size={18} />
+            )}
           </button>
         </div>
 
