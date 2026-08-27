@@ -15,6 +15,7 @@ import TranscriptionTable from "../components/transcription/TranscriptionTable";
 import RealtimeTranscriptionPanel from "../components/transcription/RealtimeTranscriptionPanel";
 import { useTranscriptionHistory, type HistoryItem } from "../hooks/useTranscriptionHistory";
 import { useI18n } from "../i18n";
+import { AudioDropZone } from "../components/AudioDropZone";
 import { generateSrt, generateVtt } from "../utils/subtitleGenerator";
 import { exportTextFile } from "../utils/desktopFileSave";
 
@@ -71,11 +72,13 @@ function getJobStatusMessage(
   }
 }
 
+export type PageTab = "realtime" | "file" | "remote" | "library";
+
 export function TranscriptionPage({ onSendToChat }: Props) {
   const { t, language } = useI18n();
 
   const [viewMode, setViewMode] = useState<ViewMode>("library");
-  const [pageTab, setPageTab] = useState<"realtime" | "library">("library");
+  const [pageTab, setPageTab] = useState<PageTab>("library");
   const [job, setJob] = useState<TranscriptionJobResponse | null>(null);
   const [transcript, setTranscript] = useState("");
   const [words, setWords] = useState<WordTimestamp[]>([]);
@@ -88,9 +91,15 @@ export function TranscriptionPage({ onSendToChat }: Props) {
 
   const [error, setError] = useState<Error | null>(null);
   const [infoMessage, setInfoMessage] = useState("");
-  const [modalError, setModalError] = useState<Error | null>(null);
-  const [showNewModal, setShowNewModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // File upload state in Studio File mode
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileAsrProvider, setFileAsrProvider] = useState<string>("auto");
+
+  // Remote URL state in Studio Remote mode
+  const [remoteUrl, setRemoteUrl] = useState("");
+  const [asyncModel, setAsyncModel] = useState<string>("qwen-filetrans");
 
   const {
     history,
@@ -144,8 +153,6 @@ export function TranscriptionPage({ onSendToChat }: Props) {
           setTranscript(nextJob.transcript || "");
           setMemorySaved(Boolean(nextJob.memory_saved));
           setError(null);
-          // Fetch word-level timestamps persisted for the async job so the
-          // detail drawer can export precision-aligned SRT/VTT.
           void loadJobWords(nextJob.job_id);
         } else if (nextJob.status === "failed") {
           setError(
@@ -175,13 +182,9 @@ export function TranscriptionPage({ onSendToChat }: Props) {
   }, [activePollingJobId, addOrUpdateJob, t]);
 
   async function handleLocalTranscription(file: File, provider?: string) {
-    setModalError(null);
     setError(null);
     setInfoMessage("");
 
-    // Large files (typically long recordings or video files) would block the
-    // sync request for many minutes; route them to the background chunked
-    // pipeline and follow progress through job polling instead.
     if (file.size > LOCAL_ASYNC_THRESHOLD_BYTES) {
       setIsAsyncBusy(true);
       try {
@@ -193,10 +196,8 @@ export function TranscriptionPage({ onSendToChat }: Props) {
         setStatusMessage(getJobStatusMessage(newJob, t));
         addOrUpdateJob(newJob);
         setViewMode("detail");
-        setShowNewModal(false);
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
-        setModalError(e);
         setError(e);
       } finally {
         setIsAsyncBusy(false);
@@ -231,10 +232,8 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       setStatusMessage(getJobStatusMessage(localJob, t));
       addOrUpdateJob(localJob);
       setViewMode("detail");
-      setShowNewModal(false);
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
-      setModalError(e);
       setError(e);
     } finally {
       setIsSyncBusy(false);
@@ -242,7 +241,6 @@ export function TranscriptionPage({ onSendToChat }: Props) {
   }
 
   async function handleRemoteJobStart(url: string, provider?: string) {
-    setModalError(null);
     setError(null);
     setInfoMessage("");
     setIsAsyncBusy(true);
@@ -256,31 +254,25 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       setStatusMessage(getJobStatusMessage(newJob, t));
       addOrUpdateJob(newJob);
       setViewMode("detail");
-      setShowNewModal(false);
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
-      setModalError(e);
       setError(e);
     } finally {
       setIsAsyncBusy(false);
     }
   }
 
-  function handleRealtimeComplete(job: TranscriptionJobResponse, words?: WordTimestamp[]) {
-    setJob(job);
-    setTranscript(job.transcript || "");
-    setWords(words || []);
-    setMemorySaved(Boolean(job.memory_saved));
-    setStatusMessage(getJobStatusMessage(job, t));
-    addOrUpdateJob(job);
+  function handleRealtimeComplete(completedJob: TranscriptionJobResponse, jobWords?: WordTimestamp[]) {
+    setJob(completedJob);
+    setTranscript(completedJob.transcript || "");
+    setWords(jobWords || []);
+    setMemorySaved(Boolean(completedJob.memory_saved));
+    setStatusMessage(getJobStatusMessage(completedJob, t));
+    addOrUpdateJob(completedJob);
     setError(null);
     setViewMode("detail");
-    setShowNewModal(false);
   }
 
-  // Load word-level timestamps for a completed job (async local/URL jobs store
-  // them separately). 404 / missing words fall back to an empty list so the
-  // drawer still exports evenly-split SRT for providers without timestamps.
   async function loadJobWords(jobId?: string | null) {
     if (!jobId) return;
     try {
@@ -306,7 +298,6 @@ export function TranscriptionPage({ onSendToChat }: Props) {
         void loadJobWords(fullJob.job_id);
       }
     } catch {
-      // Fallback to local history item info if server fetch fails
       const fallbackJob: TranscriptionJobResponse = {
         job_id: item.job_id,
         remote_job_id: item.remote_job_id,
@@ -342,8 +333,6 @@ export function TranscriptionPage({ onSendToChat }: Props) {
   const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function showInfo(message: string) {
-    // Replace any pending auto-clear so a quick second action isn't wiped by
-    // the first action's timer.
     if (infoTimerRef.current) clearTimeout(infoTimerRef.current);
     setInfoMessage(message);
     infoTimerRef.current = setTimeout(() => setInfoMessage(""), 3000);
@@ -369,15 +358,12 @@ export function TranscriptionPage({ onSendToChat }: Props) {
       content = JSON.stringify({ transcript, words, job }, null, 2);
       mimeType = "application/json";
     } else if (format === "srt") {
-      // BOM keeps CJK subtitles readable in legacy Windows players (ANSI default).
       content = "\uFEFF" + generateSrt(transcript, audioDuration, words);
     } else if (format === "vtt") {
       content = generateVtt(transcript, audioDuration, words);
     }
     if (!content) return;
 
-    // Desktop (pywebview) swallows blob-anchor downloads, so this goes through
-    // the native save dialog there and falls back to an anchor in browsers.
     const outcome = await exportTextFile(`${baseName}.${extension}`, content, mimeType);
     if (outcome.kind === "saved-desktop") {
       showInfo(
@@ -407,7 +393,6 @@ export function TranscriptionPage({ onSendToChat }: Props) {
   function toggleManageMode() {
     setManageMode((prev) => {
       const next = !prev;
-      // Leaving manage mode drops any pending selection.
       if (!next) setSelectedIds(new Set());
       return next;
     });
@@ -531,7 +516,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
         overflowY: "auto",
       }}
     >
-      {/* Top Level Mode Tabs */}
+      {/* Studio Top Level Mode Tabs */}
       <div
         style={{
           display: "flex",
@@ -540,20 +525,22 @@ export function TranscriptionPage({ onSendToChat }: Props) {
           borderBottom: "1px solid var(--border-color)",
           paddingBottom: "12px",
           flexShrink: 0,
+          flexWrap: "wrap",
+          gap: "10px",
         }}
       >
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           <button
             type="button"
             onClick={() => setPageTab("realtime")}
             style={{
-              padding: "8px 18px",
+              padding: "8px 16px",
               borderRadius: "10px",
               fontSize: "14px",
               fontWeight: 600,
               display: "inline-flex",
               alignItems: "center",
-              gap: "8px",
+              gap: "6px",
               background: pageTab === "realtime" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
               color: pageTab === "realtime" ? "#fff" : "var(--text)",
               border: "none",
@@ -561,19 +548,62 @@ export function TranscriptionPage({ onSendToChat }: Props) {
               transition: "all 0.15s ease",
             }}
           >
-            🎙️ {t("实时录音转写工作台", "Realtime Live Studio")}
+            <span aria-hidden="true">🎙️</span>
+            {t("实时录音", "Realtime Live")}
           </button>
           <button
             type="button"
-            onClick={() => setPageTab("library")}
+            onClick={() => setPageTab("file")}
             style={{
-              padding: "8px 18px",
+              padding: "8px 16px",
               borderRadius: "10px",
               fontSize: "14px",
               fontWeight: 600,
               display: "inline-flex",
               alignItems: "center",
-              gap: "8px",
+              gap: "6px",
+              background: pageTab === "file" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
+              color: pageTab === "file" ? "#fff" : "var(--text)",
+              border: "none",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <span aria-hidden="true">📁</span>
+            {t("本地音频", "Local Audio")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("remote")}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "10px",
+              fontSize: "14px",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: pageTab === "remote" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
+              color: pageTab === "remote" ? "#fff" : "var(--text)",
+              border: "none",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <span aria-hidden="true">🔗</span>
+            {t("链式转写", "Link Pipeline")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("library")}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "10px",
+              fontSize: "14px",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
               background: pageTab === "library" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
               color: pageTab === "library" ? "#fff" : "var(--text)",
               border: "none",
@@ -581,12 +611,13 @@ export function TranscriptionPage({ onSendToChat }: Props) {
               transition: "all 0.15s ease",
             }}
           >
-            📚 {t("转写历史库与文件", "Transcription Library & Files")}
+            <span aria-hidden="true">📚</span>
+            {t("转写历史库", "Library & History")}
           </button>
         </div>
 
         {infoMessage && (
-          <span style={{ fontSize: "12px", color: "var(--primary, #6366f1)", fontWeight: 500 }}>
+          <span style={{ fontSize: "13px", color: "var(--primary, #6366f1)", fontWeight: 500 }}>
             {infoMessage}
           </span>
         )}
@@ -594,12 +625,247 @@ export function TranscriptionPage({ onSendToChat }: Props) {
 
       {/* Tab Content */}
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        {pageTab === "realtime" ? (
+        {/* MODE 1: Realtime Live Studio */}
+        {pageTab === "realtime" && (
           <RealtimeTranscriptionPanel
             onComplete={handleRealtimeComplete}
             onSwitchToLibrary={() => setPageTab("library")}
           />
-        ) : (
+        )}
+
+        {/* MODE 2: File & Media Transcription Studio */}
+        {pageTab === "file" && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "20px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "16px",
+              padding: "28px 32px",
+              maxWidth: "860px",
+              margin: "0 auto",
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
+            <div>
+              <h2 style={{ margin: "0 0 6px 0", fontSize: "18px", fontWeight: 700, color: "var(--text)" }}>
+                📁 {t("本地音视频文件转写", "Local Audio & Video Transcription")}
+              </h2>
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)", lineHeight: 1.5 }}>
+                {t(
+                  "支持各类常见音频与视频文件（MP3/WAV/M4A/FLAC/AAC/OGG/MP4/MKV/MOV/AVI 等，视频将自动抽取音轨）。长音频与大文件自动分段后台转写，无 5 分钟上限。",
+                  "Supports all audio and video formats. Video files have audio tracks extracted automatically. Large files (>25MB) are chunked in the background with no duration limits."
+                )}
+              </p>
+            </div>
+
+            <AudioDropZone
+              onFileDrop={(file) => setSelectedFile(file)}
+              selectedFile={selectedFile}
+              isProcessing={isBusy}
+              inputLabel={t("选择转写音频或视频", "Choose audio or video to transcribe")}
+              readyText={t("已选中，可开始转写", "Selected. Ready for transcription")}
+              subText={t(
+                "点击或拖拽文件至此区域 (MP3, WAV, M4A, FLAC, MP4, MKV, MOV 等)",
+                "Click or drag file here (MP3, WAV, M4A, FLAC, MP4, MKV, MOV, etc.)"
+              )}
+            />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
+                {t("语音识别引擎", "Speech Recognition Engine")}
+              </label>
+              <select
+                value={fileAsrProvider}
+                onChange={(e) => setFileAsrProvider(e.target.value)}
+                disabled={isBusy}
+                className="vsSelect"
+                style={{
+                  width: "100%",
+                  height: "44px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                }}
+              >
+                <option value="auto">{t("自动选择 (推荐)", "Auto (Recommended)")}</option>
+                <optgroup label={t("精准字级时间戳引擎", "Word-level Timestamps Engines")}>
+                  <option value="google">Google Gemini 3.5 Transcribe</option>
+                  <option value="dashscope">Qwen-Audio 3.0 ASR Flash (阿里云)</option>
+                  <option value="deepgram">Deepgram Nova-3</option>
+                  <option value="openai">OpenAI Whisper</option>
+                  <option value="assemblyai">AssemblyAI</option>
+                  <option value="doubao">豆包 ASR 2.0 (火山引擎)</option>
+                </optgroup>
+                <optgroup label={t("纯文本引擎", "Text-only Engines")}>
+                  <option value="xiaomi">小米 MiMo</option>
+                  <option value="qwen-legacy">Qwen3 ASR Flash (旧版)</option>
+                </optgroup>
+              </select>
+            </div>
+
+            {error && (
+              <div style={{ marginTop: "4px" }}>
+                <span style={{ fontSize: "13px", color: "var(--danger, #e5484d)", fontWeight: 500 }}>
+                  {error.message}
+                </span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedFile) {
+                  const provider = fileAsrProvider === "auto" ? undefined : fileAsrProvider;
+                  handleLocalTranscription(selectedFile, provider);
+                }
+              }}
+              disabled={isBusy || !selectedFile}
+              className="vsBtnPrimary"
+              style={{
+                width: "100%",
+                height: "46px",
+                fontSize: "15px",
+                borderRadius: "12px",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                marginTop: "6px",
+              }}
+            >
+              {isSyncBusy ? (
+                <>
+                  <span className="spinner-mini" /> {t("正在上传并转写…", "Transcribing…")}
+                </>
+              ) : isAsyncBusy ? (
+                <>
+                  <span className="spinner-mini" /> {t("正在提交后台分段转写…", "Submitting background task…")}
+                </>
+              ) : (
+                t("开始转写", "Start Transcription")
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* MODE 3: Remote Link Pipeline Studio */}
+        {pageTab === "remote" && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "20px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "16px",
+              padding: "28px 32px",
+              maxWidth: "860px",
+              margin: "0 auto",
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
+            <div>
+              <h2 style={{ margin: "0 0 6px 0", fontSize: "18px", fontWeight: 700, color: "var(--text)" }}>
+                {t("链式与网络音视频转写", "Async Link & Remote Media Pipeline")}
+              </h2>
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)", lineHeight: 1.5 }}>
+                {t(
+                  "支持输入在线音视频直链或播客链接，由云端异步转写引擎自动下载并生成带时间戳字幕。",
+                  "Enter a direct audio/video URL or podcast link. The cloud async pipeline will download and transcribe it."
+                )}
+              </p>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
+                {t("音视频网络链接 (URL)", "Media URL")}
+              </label>
+              <input
+                type="url"
+                value={remoteUrl}
+                onChange={(e) => setRemoteUrl(e.target.value)}
+                placeholder="https://example.com/meeting.wav"
+                disabled={isBusy}
+                className="vsInput"
+                style={{
+                  width: "100%",
+                  height: "44px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  padding: "0 14px",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
+                {t("异步转写模型", "Async ASR Model")}
+              </label>
+              <select
+                value={asyncModel}
+                onChange={(e) => setAsyncModel(e.target.value)}
+                disabled={isBusy}
+                className="vsSelect"
+                style={{
+                  width: "100%",
+                  height: "44px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                }}
+              >
+                <option value="qwen-filetrans">Qwen FileTrans (DashScope 录音文件识别)</option>
+              </select>
+            </div>
+
+            {error && (
+              <div style={{ marginTop: "4px" }}>
+                <span style={{ fontSize: "13px", color: "var(--danger, #e5484d)", fontWeight: 500 }}>
+                  {error.message}
+                </span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                const url = remoteUrl.trim();
+                if (url) {
+                  handleRemoteJobStart(url, asyncModel);
+                }
+              }}
+              disabled={isBusy || !remoteUrl.trim()}
+              className="vsBtnPrimary"
+              style={{
+                width: "100%",
+                height: "46px",
+                fontSize: "15px",
+                borderRadius: "12px",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                marginTop: "6px",
+              }}
+            >
+              {isAsyncBusy ? (
+                <>
+                  <span className="spinner-mini" /> {t("正在提交异步任务…", "Submitting async task…")}
+                </>
+              ) : (
+                t("提交异步任务", "Submit Async Pipeline")
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* MODE 4: Transcripts & Document Library */}
+        {pageTab === "library" && (
           <TranscriptionTable
             history={history}
             filteredHistory={filteredHistory}
@@ -608,29 +874,13 @@ export function TranscriptionPage({ onSendToChat }: Props) {
             historyBusy={historyBusy}
             activeJobId={job?.job_id}
             error={error}
-            modalError={modalError}
-            showNewModal={showNewModal}
-            isBusy={isBusy}
-            isSyncBusy={isSyncBusy}
-            isAsyncBusy={isAsyncBusy}
             onSearchChange={setSearchQuery}
             onFilterChange={handleFilterChange}
             onRefresh={refreshHistory}
-            onOpenNewModal={() => {
-              setModalError(null);
-              setShowNewModal(true);
-            }}
-            onCloseNewModal={() => setShowNewModal(false)}
+            onOpenNewModal={() => setPageTab("file")}
             onCardClick={handleCardClick}
             onDeleteJob={removeJob}
             onRetryJob={(id) => retryJob(id).catch(() => {})}
-            onLocalTranscribe={handleLocalTranscription}
-            onRemoteSubmit={handleRemoteJobStart}
-            onRealtimeComplete={handleRealtimeComplete}
-            onSwitchToRealtimeStudio={() => {
-              setShowNewModal(false);
-              setPageTab("realtime");
-            }}
             manageMode={manageMode}
             selectedIds={selectedIds}
             batchDeleting={batchDeleting}
@@ -647,3 +897,4 @@ export function TranscriptionPage({ onSendToChat }: Props) {
 }
 
 export default TranscriptionPage;
+

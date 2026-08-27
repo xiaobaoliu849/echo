@@ -1,8 +1,6 @@
 import type { HistoryItem } from "../../hooks/useTranscriptionHistory";
-import type { TranscriptionJobResponse } from "../../api";
 import { TranscriptionCard } from "../TranscriptionCard";
 import ErrorNotice from "../ErrorNotice";
-import { NewTranscriptionModal } from "../NewTranscriptionModal";
 import { useI18n } from "../../i18n";
 
 type FilterType = "all" | "completed" | "running" | "failed";
@@ -15,23 +13,13 @@ type Props = {
   historyBusy: boolean;
   activeJobId?: string;
   error: Error | null;
-  modalError: Error | null;
-  showNewModal: boolean;
-  isBusy: boolean;
-  isSyncBusy: boolean;
-  isAsyncBusy: boolean;
   onSearchChange: (q: string) => void;
   onFilterChange: (f: FilterType) => void;
   onRefresh: () => void;
   onOpenNewModal: () => void;
-  onCloseNewModal: () => void;
   onCardClick: (item: HistoryItem) => void;
   onDeleteJob: (jobId: string) => void;
   onRetryJob: (jobId: string) => void;
-  onLocalTranscribe: (file: File, provider?: string) => Promise<void>;
-  onRemoteSubmit: (url: string) => Promise<void>;
-  onRealtimeComplete: (job: TranscriptionJobResponse) => void;
-  onSwitchToRealtimeStudio?: () => void;
   /** Manage (batch) mode */
   manageMode: boolean;
   selectedIds: Set<string>;
@@ -51,23 +39,13 @@ export default function TranscriptionTable({
   history,
   activeJobId,
   error,
-  modalError,
-  showNewModal,
-  isBusy,
-  isSyncBusy,
-  isAsyncBusy,
   onSearchChange,
   onFilterChange,
   onRefresh,
   onOpenNewModal,
-  onCloseNewModal,
   onCardClick,
   onDeleteJob,
   onRetryJob,
-  onLocalTranscribe,
-  onRemoteSubmit,
-  onRealtimeComplete,
-  onSwitchToRealtimeStudio,
   manageMode,
   selectedIds,
   batchDeleting,
@@ -287,26 +265,10 @@ export default function TranscriptionTable({
       </div>
 
       {/* Error Notices */}
-      {error && !modalError && (
+      {error && (
         <div style={{ margin: "0 24px 16px 24px" }}>
           <ErrorNotice message={error.message} scope="transcription" />
         </div>
-      )}
-
-      {/* Modal */}
-      {showNewModal && (
-        <NewTranscriptionModal
-          open={showNewModal}
-          error={modalError}
-          isBusy={isBusy}
-          isSyncBusy={isSyncBusy}
-          isAsyncBusy={isAsyncBusy}
-          onClose={onCloseNewModal}
-          onLocalTranscribe={onLocalTranscribe}
-          onRemoteSubmit={onRemoteSubmit}
-          onRealtimeComplete={onRealtimeComplete}
-          onSwitchToRealtimeStudio={onSwitchToRealtimeStudio}
-        />
       )}
     </section>
   );
