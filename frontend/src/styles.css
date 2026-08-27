@@ -7359,6 +7359,14 @@ button.vsPasswordToggleBtn:focus-visible {
   margin-top: 2px;
 }
 
+/* Status label inside the detail meta row; must not flex-grow (unlike the banner's vsTranscribeStatusText). */
+.vsTranscribeDetailStatus {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .vsTranscribeBadgeSuccess {
   display: inline-flex;
   align-items: center;
@@ -7594,6 +7602,15 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsFullscreenBtn:hover {
   background: rgba(10, 8, 20, 0.8);
+}
+
+/* Fullscreen stage: fill the screen edge-to-edge without panel gutters. */
+.vsMediaStage:fullscreen {
+  border-radius: 0;
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
 }
 
 /* Audio card: warm paper stage with a soft brand halo, equalizer + karaoke */

@@ -100,22 +100,10 @@ export default function TranscriptionDetailDrawer({
               </span>
             )}
             {statusMessage && (
-              <span className="vsTranscribeStatusText" style={{ marginLeft: 8 }}>
-                {statusMessage}
-              </span>
+              <span className="vsTranscribeDetailStatus">{statusMessage}</span>
             )}
             {memorySaved && (
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  background: "#10b981",
-                  color: "#fff",
-                  padding: "1px 6px",
-                  borderRadius: 999,
-                  marginLeft: 6,
-                }}
-              >
+              <span className="vsTranscribeBadgeSuccess">
                 {t("已入记忆", "Saved to memory")}
               </span>
             )}

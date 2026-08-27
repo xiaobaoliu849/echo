@@ -12,6 +12,7 @@ import {
   Loader2,
   LocateFixed,
   Maximize,
+  Minimize,
   Pause,
   Play,
   RotateCcw,
@@ -544,6 +545,10 @@ export default function TranscriptionSubtitlePlayer({
   // Right Panel Tabs: Subtitles vs AI Insights
   const [panelTab, setPanelTab] = useState<"subtitles" | "ai">("subtitles");
 
+  // Tracks whether the media stage is currently the document's fullscreen element,
+  // so the fullscreen button can toggle (and stays in sync when exited via Esc).
+  const [stageFullscreen, setStageFullscreen] = useState(false);
+
   const video = isVideoFile(fileName);
   const hasMedia = Boolean(audioSourceUrl) && !mediaError;
   const mediaFailed = Boolean(audioSourceUrl) && mediaError;
@@ -747,9 +752,23 @@ export default function TranscriptionSubtitlePlayer({
     }
   }
 
-  function enterFullscreen() {
-    void stageRef.current?.requestFullscreen?.().catch(() => {});
+  function toggleStageFullscreen() {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (document.fullscreenElement === stage) {
+      void document.exitFullscreen?.().catch(() => {});
+    } else {
+      void stage.requestFullscreen?.().catch(() => {});
+    }
   }
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setStageFullscreen(document.fullscreenElement === stageRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
 
   const handleMediaLoaded = (e: React.SyntheticEvent<HTMLMediaElement>) => {
     const d = (e.target as HTMLMediaElement).duration;
@@ -891,11 +910,11 @@ export default function TranscriptionSubtitlePlayer({
               <button
                 type="button"
                 className="vsIconBtn vsFullscreenBtn"
-                onClick={enterFullscreen}
-                title={t("全屏", "Fullscreen")}
-                aria-label={t("全屏", "Fullscreen")}
+                onClick={toggleStageFullscreen}
+                title={stageFullscreen ? t("退出全屏", "Exit fullscreen") : t("全屏", "Fullscreen")}
+                aria-label={stageFullscreen ? t("退出全屏", "Exit fullscreen") : t("全屏", "Fullscreen")}
               >
-                <Maximize size={18} />
+                {stageFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
               </button>
             </div>
           ) : (
