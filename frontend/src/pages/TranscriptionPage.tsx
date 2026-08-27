@@ -128,6 +128,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
     removeJob,
     removeJobs,
     retryJob,
+    renameJob,
   } = useTranscriptionHistory();
 
   const [manageMode, setManageMode] = useState(false);
@@ -135,13 +136,14 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [memorySaving, setMemorySaving] = useState(false);
 
-  // Filter history by search term
+  // Filter history by search term (title, transcript preview, or job id)
   const filteredHistory = useMemo(() => {
     if (!searchQuery.trim()) return history;
     const q = searchQuery.toLowerCase();
     return history.filter(
       (item) =>
         (item.file_name && item.file_name.toLowerCase().includes(q)) ||
+        (item.transcript_preview && item.transcript_preview.toLowerCase().includes(q)) ||
         (item.job_id && item.job_id.toLowerCase().includes(q))
     );
   }, [history, searchQuery]);
@@ -252,6 +254,8 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
         provider: resp.provider ?? null,
         source_url: resp.source_url || (resp.job_id ? `/api/transcription/jobs/${resp.job_id}/audio` : undefined),
         updated_at: new Date().toISOString(),
+        origin: "upload",
+        duration_seconds: resp.duration_seconds ?? null,
       };
 
       setJob(localJob);
@@ -447,6 +451,17 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
 
   function handleFilterChange(filter: "all" | "completed" | "running" | "failed") {
     setActiveFilter(filter);
+  }
+
+  async function handleRenameJob(jobId: string, fileName: string) {
+    setError(null);
+    try {
+      await renameJob(jobId, fileName);
+      showInfo(t("已重命名。", "Renamed."));
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      setError(e);
+    }
   }
 
   function toggleManageMode() {
@@ -946,6 +961,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
                 if (isJobNotFoundError(err)) markMissingJob(id);
               })
             }
+            onRenameJob={handleRenameJob}
             manageMode={manageMode}
             selectedIds={selectedIds}
             batchDeleting={batchDeleting}

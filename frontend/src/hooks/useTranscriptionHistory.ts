@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   listTranscriptionJobs,
+  renameTranscriptionJob,
   retryTranscriptionJob,
   deleteTranscriptionJob,
   batchDeleteTranscriptionJobs,
@@ -8,7 +9,7 @@ import {
 } from "../api";
 
 const STORAGE_KEY = "vs_transcription_history";
-const MAX_HISTORY = 50;
+const MAX_HISTORY = 100;
 
 export type TranscriptionHistoryFilter = "all" | "completed" | "running" | "failed";
 
@@ -23,6 +24,11 @@ export type HistoryItem = Pick<
   | "memory_saved"
   | "source_url"
   | "error"
+  | "mode"
+  | "progress"
+  | "duration_seconds"
+  | "origin"
+  | "transcript_preview"
 > & {
   timestamp: number;
 };
@@ -60,6 +66,11 @@ function mapJobToHistoryItem(job: TranscriptionJobResponse): HistoryItem {
     memory_saved: Boolean(job.memory_saved),
     source_url: job.source_url,
     error: job.error,
+    mode: job.mode,
+    progress: job.progress,
+    duration_seconds: job.duration_seconds ?? null,
+    origin: job.origin ?? null,
+    transcript_preview: job.transcript_preview ?? null,
     timestamp: Date.now(),
   };
 }
@@ -84,6 +95,19 @@ function mergeHistory(
     .slice(0, MAX_HISTORY);
 }
 
+/** The unfiltered server listing is the source of truth: cached entries the
+ * server no longer knows about (evicted, deleted on another surface, or left
+ * by an older app version with missing fields) would otherwise sit in the
+ * library forever as "未知文件 / 未知时间" zombies. */
+function pruneMissingEntries(
+  incomingJobs: TranscriptionJobResponse[],
+  existingHistory: HistoryItem[],
+): HistoryItem[] {
+  const serverIds = new Set(incomingJobs.map((job) => job.job_id));
+  const surviving = existingHistory.filter((item) => serverIds.has(item.job_id));
+  return mergeHistory(incomingJobs, surviving);
+}
+
 export function useTranscriptionHistory() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyBusy, setHistoryBusy] = useState(true);
@@ -102,7 +126,12 @@ export function useTranscriptionHistory() {
       const statuses = filter === "all" ? undefined : [filter];
       const response = await listTranscriptionJobs({ statuses, limit: MAX_HISTORY });
       setHistory((prev) => {
-        const next = mergeHistory(response.jobs, prev);
+        // Only the unfiltered listing may prune: a status-filtered response is
+        // partial by design and would wipe every non-matching local entry.
+        const next =
+          filter === "all"
+            ? pruneMissingEntries(response.jobs, prev)
+            : mergeHistory(response.jobs, prev);
         safeSaveHistory(next);
         return next;
       });
@@ -155,11 +184,17 @@ export function useTranscriptionHistory() {
     return retried;
   };
 
+  const renameJob = async (jobId: string, fileName: string) => {
+    const renamed = await renameTranscriptionJob(jobId, fileName);
+    addOrUpdateJob(renamed);
+    return renamed;
+  };
+
   const clearHistory = () => {
     setHistory([]);
     safeSaveHistory([]);
   };
-  
+
   const removeJob = async (jobId: string) => {
     // Remove from server first
     try {
@@ -202,6 +237,7 @@ export function useTranscriptionHistory() {
     addOrUpdateJob,
     markMissingJob,
     retryJob,
+    renameJob,
     clearHistory,
     removeJob,
     removeJobs,

@@ -19,6 +19,7 @@ type Props = {
   onCardClick: (item: HistoryItem) => void;
   onDeleteJob: (jobId: string) => void;
   onRetryJob: (jobId: string) => void;
+  onRenameJob?: (jobId: string, fileName: string) => Promise<void> | void;
   /** Manage (batch) mode */
   manageMode: boolean;
   selectedIds: Set<string>;
@@ -29,6 +30,44 @@ type Props = {
   onClearSelection: () => void;
   onBatchDelete: () => void;
 };
+
+type HistoryGroup = {
+  key: string;
+  label: string;
+  items: HistoryItem[];
+};
+
+function entryTimeMs(item: HistoryItem): number {
+  return Date.parse(item.updated_at || "") || item.timestamp || 0;
+}
+
+/** Bucket records into scannable recency groups (今天 / 昨天 / 7 天内 / …).
+ * The input is already sorted newest-first, so groups come out in order. */
+function groupHistoryByDate(
+  items: HistoryItem[],
+  t: (zh: string, en: string) => string
+): HistoryGroup[] {
+  const buckets: { key: string; label: string; maxAgeMs: number }[] = [
+    { key: "today", label: t("今天", "Today"), maxAgeMs: 1 * 24 * 3600_000 },
+    { key: "yesterday", label: t("昨天", "Yesterday"), maxAgeMs: 2 * 24 * 3600_000 },
+    { key: "week", label: t("7 天内", "Last 7 days"), maxAgeMs: 7 * 24 * 3600_000 },
+    { key: "month", label: t("30 天内", "Last 30 days"), maxAgeMs: 30 * 24 * 3600_000 },
+    { key: "earlier", label: t("更早", "Earlier"), maxAgeMs: Number.POSITIVE_INFINITY },
+  ];
+  const now = Date.now();
+  const groups = new Map<string, HistoryGroup>();
+  for (const item of items) {
+    const age = Math.max(0, now - entryTimeMs(item));
+    const bucket = buckets.find((b) => age < b.maxAgeMs) ?? buckets[buckets.length - 1];
+    let group = groups.get(bucket.key);
+    if (!group) {
+      group = { key: bucket.key, label: bucket.label, items: [] };
+      groups.set(bucket.key, group);
+    }
+    group.items.push(item);
+  }
+  return buckets.map((b) => groups.get(b.key)).filter((g): g is HistoryGroup => Boolean(g));
+}
 
 export default function TranscriptionTable({
   filteredHistory,
@@ -44,6 +83,7 @@ export default function TranscriptionTable({
   onCardClick,
   onDeleteJob,
   onRetryJob,
+  onRenameJob,
   manageMode,
   selectedIds,
   batchDeleting,
@@ -66,6 +106,49 @@ export default function TranscriptionTable({
     filteredHistory.length > 0 &&
     filteredHistory.every((item) => selectedIds.has(item.job_id));
 
+  const groups = groupHistoryByDate(filteredHistory, t);
+
+  const renderCard = (item: HistoryItem) => (
+    <TranscriptionCard
+      key={item.job_id}
+      item={item}
+      isActive={activeJobId === item.job_id}
+      onClick={() => onCardClick(item)}
+      onDelete={(e) => {
+        e.stopPropagation();
+        if (
+          confirm(
+            t(
+              "确定要删除这条记录吗？",
+              "Are you sure you want to delete this record?"
+            )
+          )
+        ) {
+          onDeleteJob(item.job_id);
+        }
+      }}
+      onRetry={item.status === "failed" ? (e) => {
+        e.stopPropagation();
+        onRetryJob(item.job_id);
+      } : undefined}
+      onRename={
+        onRenameJob
+          ? (jobId, fileName) => {
+              Promise.resolve(onRenameJob(jobId, fileName)).catch(() => {
+                /* Errors surface through the shared error notice in the page. */
+              });
+            }
+          : undefined
+      }
+      selectable={manageMode}
+      selected={selectedIds.has(item.job_id)}
+      onToggleSelect={(e) => {
+        e.stopPropagation();
+        onToggleSelect(item.job_id);
+      }}
+    />
+  );
+
   return (
     <section className="vsTranscribeLibrary">
       {/* Toolbar */}
@@ -77,7 +160,7 @@ export default function TranscriptionTable({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t("搜索转写记录…", "Search transcriptions...")}
+            placeholder={t("搜索标题或转写内容…", "Search titles or transcripts...")}
           />
         </div>
 
@@ -198,39 +281,12 @@ export default function TranscriptionTable({
             </p>
           </div>
         ) : (
-          <div className="vsTranscribeGrid">
-            {filteredHistory.map((item) => (
-              <TranscriptionCard
-                key={item.job_id}
-                item={item}
-                isActive={activeJobId === item.job_id}
-                onClick={() => onCardClick(item)}
-                onDelete={(e) => {
-                  e.stopPropagation();
-                  if (
-                    confirm(
-                      t(
-                        "确定要删除这条记录吗？",
-                        "Are you sure you want to delete this record?"
-                      )
-                    )
-                  ) {
-                    onDeleteJob(item.job_id);
-                  }
-                }}
-                onRetry={item.status === "failed" ? (e) => {
-                  e.stopPropagation();
-                  onRetryJob(item.job_id);
-                } : undefined}
-                selectable={manageMode}
-                selected={selectedIds.has(item.job_id)}
-                onToggleSelect={(e) => {
-                  e.stopPropagation();
-                  onToggleSelect(item.job_id);
-                }}
-              />
-            ))}
-          </div>
+          groups.map((group) => (
+            <div key={group.key} className="vsTranscribeGroup">
+              <div className="vsTranscribeGroupLabel">{group.label}</div>
+              <div className="vsTranscribeGrid">{group.items.map(renderCard)}</div>
+            </div>
+          ))
         )}
       </div>
 

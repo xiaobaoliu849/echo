@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import type { HistoryItem } from "../hooks/useTranscriptionHistory";
 import { useI18n } from "../i18n";
 
@@ -8,6 +8,7 @@ type Props = {
   onClick: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onRetry?: (e: React.MouseEvent) => void;
+  onRename?: (jobId: string, fileName: string) => void;
   /** Manage mode: card click toggles selection instead of opening detail. */
   selectable?: boolean;
   selected?: boolean;
@@ -43,9 +44,28 @@ function getFileExtension(name: string): string {
   return name.slice(dot + 1).toUpperCase();
 }
 
-function formatRelativeTime(dateStr: string | null | undefined, t: (zh: string, en: string) => string): string {
+function getTitleStem(name: string): string {
+  const dot = name.lastIndexOf(".");
+  // Keep dots that are part of the name itself (e.g. "v1.2 会议").
+  if (dot <= 0 || dot < name.length - 6) return name;
+  return name.slice(0, dot);
+}
+
+/** Server-side storage names leaked by old records — the original name is
+ * unrecoverable, so present them as untitled instead of a raw uuid. */
+const SYNTHETIC_NAME_PATTERN = /^upload_[0-9a-f]{6,}\.\w+$|^sync_upload$|^realtime_mic$/i;
+
+function isSyntheticName(name: string): boolean {
+  return SYNTHETIC_NAME_PATTERN.test(name.trim());
+}
+
+function formatRelativeTime(
+  dateStr: string | null | undefined,
+  t: (zh: string, en: string) => string
+): string {
   if (!dateStr) return t("未知时间", "Unknown");
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return t("未知时间", "Unknown");
   const now = Date.now();
   const diffMs = now - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
@@ -60,9 +80,19 @@ function formatRelativeTime(dateStr: string | null | undefined, t: (zh: string, 
   return t(`${Math.floor(diffMon / 12)} 年前`, `${Math.floor(diffMon / 12)}y ago`);
 }
 
-/* SVG wave bars for the card cover */
-function WaveBars({ color }: { color: string }) {
-  const bars = 24;
+function formatDuration(seconds: number | null | undefined): string {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return "";
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+/* Small SVG wave bars for the card thumbnail */
+function WaveBars({ color, bars }: { color: string; bars: number }) {
   return (
     <svg className="vsTranscribeCardWave" viewBox={`0 0 ${bars * 6} 48`} preserveAspectRatio="none">
       {Array.from({ length: bars }, (_, i) => {
@@ -89,24 +119,72 @@ export const TranscriptionCard: React.FC<Props> = ({
   onClick,
   onDelete,
   onRetry,
+  onRename,
   selectable,
   selected,
   onToggleSelect,
 }) => {
   const { t } = useI18n();
-  const fileName = item.file_name || t("未知文件", "Unknown file");
-  const ext = getFileExtension(fileName);
-  const hash = useMemo(() => hashStr(fileName), [fileName]);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+
+  const rawName = item.file_name || "";
+  const untitled = t("未命名录音", "Untitled recording");
+  const displayName = !rawName || isSyntheticName(rawName) ? untitled : getTitleStem(rawName);
+  const ext = useMemo(() => getFileExtension(rawName || ""), [rawName]);
+  const hash = useMemo(() => hashStr(rawName || item.job_id), [rawName, item.job_id]);
   const palette = COVER_GRADIENTS[hash % COVER_GRADIENTS.length];
 
-  const statusClass =
-    item.status === "completed"
-      ? ""
-      : item.status === "failed"
-      ? "failed"
-      : item.status === "submitted"
-      ? "submitted"
-      : "running";
+  const isActiveJob =
+    item.status === "running" ||
+    item.status === "submitted" ||
+    item.status === "queued" ||
+    item.status === "uploaded";
+  const isFailed = item.status === "failed";
+  const isCompleted = item.status === "completed";
+  const statusClass = isCompleted ? "" : isFailed ? "failed" : item.status === "submitted" ? "submitted" : "running";
+
+  const statusLabel = isCompleted
+    ? t("已完成", "Completed")
+    : isFailed
+    ? t("转写失败", "Failed")
+    : item.status === "submitted" || item.status === "queued"
+    ? t("排队中", "Queued")
+    : t("转写中", "Transcribing");
+
+  const originInfo = (() => {
+    if (item.origin === "realtime") return { icon: "🎙️", label: t("实时录音", "Realtime") };
+    if (item.origin === "url") return { icon: "🔗", label: t("链接转写", "Link") };
+    if (item.origin === "upload") return { icon: "📁", label: t("本地文件", "Local file") };
+    return null;
+  })();
+
+  const durationText = formatDuration(item.duration_seconds);
+
+  const previewText = (() => {
+    if (isFailed) return item.error || t("转写失败", "Transcription failed");
+    if (isActiveJob) return item.progress || t("正在转写中…", "Transcribing...");
+    if (isCompleted) {
+      if (item.transcript_preview) return item.transcript_preview;
+      if (item.has_transcript) return t("点击查看转写内容", "Click to view transcript");
+      return t("暂无转写内容", "No transcript content");
+    }
+    return t("处理中…", "Processing...");
+  })();
+
+  const startRename = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRenameValue(rawName && !isSyntheticName(rawName) ? rawName : displayName);
+    setIsRenaming(true);
+  };
+
+  const commitRename = () => {
+    setIsRenaming(false);
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== rawName && onRename) {
+      onRename(item.job_id, trimmed);
+    }
+  };
 
   const handleActivate = (e: React.MouseEvent) => {
     if (selectable && onToggleSelect) {
@@ -118,7 +196,7 @@ export const TranscriptionCard: React.FC<Props> = ({
 
   return (
     <div
-      className={`vsTranscribeCard ${statusClass} ${isActive ? "active" : ""} ${
+      className={`vsTranscribeCard vsTranscribeCardCompact ${statusClass} ${isActive ? "active" : ""} ${
         selectable ? "selectable" : ""
       } ${selected ? "selected" : ""}`}
       onClick={handleActivate}
@@ -150,68 +228,98 @@ export const TranscriptionCard: React.FC<Props> = ({
         </button>
       )}
 
-      {/* Cover */}
-      <div className="vsTranscribeCardCover">
+      {/* Head: thumbnail + title + meta */}
+      <div className="vsTranscribeCardMain">
         <div
-          className="vsTranscribeCardCoverBg"
+          className="vsTranscribeCardThumb"
           style={{
             background: `linear-gradient(135deg, ${palette[0]}, ${palette[1]} 60%, ${palette[2]})`,
           }}
-        />
-        <WaveBars color="rgba(255,255,255,0.6)" />
-        <button
-          className="vsTranscribeCardPlayBtn"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick();
-          }}
-          aria-label={t("查看详情", "View details")}
+          aria-hidden="true"
         >
-          ▶
-        </button>
-        {ext && <span className="vsTranscribeCardFormatBadge">{ext}</span>}
-        <span className={`vsTranscribeCardStatusDot ${statusClass}`} />
-      </div>
-
-      {/* Meta */}
-      <div className="vsTranscribeCardMeta">
-        <div className="vsTranscribeCardMetaTop">
-          <span className="vsTranscribeCardTime">
-            {formatRelativeTime(item.updated_at, t)}
-          </span>
+          <WaveBars color="rgba(255,255,255,0.55)" bars={8} />
+          {ext && <span className="vsTranscribeCardFormatBadge">{ext}</span>}
+          <span className={`vsTranscribeCardStatusDot ${statusClass}`} />
         </div>
-        <h4 className="vsTranscribeCardTitle" title={fileName}>
-          {fileName}
-        </h4>
-        <p className="vsTranscribeCardPreview">
-          {item.status === "completed" && item.has_transcript
-            ? t("点击查看转写内容", "Click to view transcript")
-            : item.status === "failed"
-            ? item.error || t("转写失败", "Transcription failed")
-            : item.status === "completed"
-            ? t("已完成", "Completed")
-            : t("处理中…", "Processing...")}
-        </p>
+
+        <div className="vsTranscribeCardHead">
+          {isRenaming ? (
+            <input
+              className="vsTranscribeCardRenameInput"
+              value={renameValue}
+              autoFocus
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") setIsRenaming(false);
+              }}
+              onBlur={commitRename}
+              aria-label={t("重命名转写记录", "Rename transcription")}
+            />
+          ) : (
+            <div className="vsTranscribeCardTitleRow">
+              <h4 className="vsTranscribeCardTitle" title={rawName || displayName}>
+                {displayName}
+              </h4>
+              {item.memory_saved && (
+                <span className="vsTranscribeCardMemoryBadge">{t("已入记忆", "In Memory")}</span>
+              )}
+            </div>
+          )}
+          <div className="vsTranscribeCardSub">
+            <span className="vsTranscribeCardTime">{formatRelativeTime(item.updated_at, t)}</span>
+            {originInfo && (
+              <>
+                <span className="vsTranscribeCardSubSep">·</span>
+                <span className="vsTranscribeCardOrigin">
+                  {originInfo.icon} {originInfo.label}
+                </span>
+              </>
+            )}
+            {durationText && (
+              <>
+                <span className="vsTranscribeCardSubSep">·</span>
+                <span className="vsTranscribeCardDuration" title={t("音频时长", "Audio duration")}>
+                  {durationText}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Footer */}
+      {/* Preview: transcript head / progress / error */}
+      <p className={`vsTranscribeCardPreview ${isFailed ? "error" : ""}`} title={previewText}>
+        {previewText}
+      </p>
+
+      {/* Footer: status chip + hover actions */}
       <div className="vsTranscribeCardFooter">
-        {item.memory_saved ? (
-          <span className="vsTranscribeCardMemoryBadge">
-            {t("已入记忆", "In Memory")}
-          </span>
-        ) : (
-          <span />
-        )}
+        <span className={`vsTranscribeCardStatusChip ${statusClass}`}>
+          <span className="vsTranscribeCardStatusChipDot" />
+          {statusLabel}
+        </span>
         {!selectable && (
           <div className="vsTranscribeCardActions">
-            {item.status === "failed" && onRetry && (
+            {isFailed && onRetry && (
               <button
                 className="vsTranscribeCardRetryBtn"
                 onClick={onRetry}
                 title={t("重试转写", "Retry transcription")}
               >
                 {t("重试", "Retry")}
+              </button>
+            )}
+            {onRename && (
+              <button
+                className="vsTranscribeCardRenameBtn"
+                onClick={startRename}
+                title={t("重命名", "Rename")}
+              >
+                {t("重命名", "Rename")}
               </button>
             )}
             <button

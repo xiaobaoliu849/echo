@@ -174,6 +174,16 @@ class TranscriptionJobResponse(BaseModel):
     memory_saved: bool = False
     provider: str | None = None
     progress: str | None = None
+    duration_seconds: float | None = None
+    # Where the recording came from: "upload" | "url" | "realtime".
+    origin: str | None = None
+    # Short head of the transcript so the library can preview content
+    # without fetching the full text for every record.
+    transcript_preview: str | None = None
+
+
+class TranscriptionJobRenameRequest(BaseModel):
+    file_name: str = Field(..., min_length=1, max_length=200)
 
 
 class TranscriptionJobListResponse(BaseModel):
@@ -221,12 +231,24 @@ def _validate_upload(file: UploadFile) -> str:
     return suffix
 
 
+def _extract_transcript_preview(path: Path, limit: int = 160) -> str | None:
+    """Read just the head of a transcript file for list-view previews."""
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            raw = handle.read(2048)
+    except Exception:
+        return None
+    cleaned = " ".join(raw.split())
+    return cleaned[:limit] or None
+
+
 async def _job_to_response(
     job: TranscriptionJob, *, include_transcript: bool = True
 ) -> TranscriptionJobResponse:
     transcript = None
     has_transcript = False
     transcript_download_url = None
+    transcript_preview = None
     if job.transcript_path:
         path = Path(str(job.transcript_path))
         if path.is_file():
@@ -240,8 +262,13 @@ async def _job_to_response(
                     transcript = await asyncio.to_thread(
                         lambda: path.read_text(encoding="utf-8")
                     )
+                    transcript_preview = " ".join(transcript.split())[:160] or None
                 except Exception:
                     transcript = None
+            else:
+                transcript_preview = await asyncio.to_thread(
+                    _extract_transcript_preview, path
+                )
     
     # Use dictionary unpacking to avoid "unexpected keyword" IDE errors if inheritance is broken
     # Always prefer the local proxy endpoint when the file exists locally,
@@ -270,6 +297,9 @@ async def _job_to_response(
         "memory_saved": bool(job.memory_saved),
         "provider": job.provider,
         "progress": job.progress,
+        "duration_seconds": job.duration_seconds,
+        "origin": job.origin,
+        "transcript_preview": transcript_preview,
     }
     return TranscriptionJobResponse(**data)
 
@@ -426,7 +456,9 @@ async def transcribe_audio(
         job = await transcription_service.create_completed_sync_job(
             file_path=str(upload_path),
             original_filename=file.filename or "sync_upload",
-            transcript=transcript
+            transcript=transcript,
+            duration_seconds=duration_seconds,
+            origin="upload",
         )
         if result.get("provider"):
             transcription_service.update_job(job.job_id or "", provider=result.get("provider"))
@@ -720,6 +752,39 @@ async def retry_transcription_job(job_id: str) -> TranscriptionJobResponse:
         raise HTTPException(
             status_code=500,
             detail=_error("TRANSCRIPTION_JOB_RETRY_FAILED", str(exc)),
+        ) from exc
+
+
+@router.patch( # type: ignore
+    "/jobs/{job_id}",
+    response_model=TranscriptionJobResponse,
+    responses={
+        404: {"description": "Transcription job not found.", "model": StructuredErrorResponse},
+        400: {"description": "Invalid rename request.", "model": StructuredErrorResponse},
+        500: {"description": "Failed to rename transcription job.", "model": StructuredErrorResponse},
+    },
+)
+async def rename_transcription_job(
+    job_id: str, payload: TranscriptionJobRenameRequest
+) -> TranscriptionJobResponse:
+    """Rename a transcription record's display name."""
+    try:
+        job = transcription_service.rename_job(job_id, payload.file_name)
+        return await _job_to_response(job, include_transcript=False)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=_error("TRANSCRIPTION_JOB_NOT_FOUND", str(exc)),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=_error("TRANSCRIPTION_JOB_BAD_REQUEST", str(exc)),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_error("TRANSCRIPTION_JOB_RENAME_FAILED", str(exc)),
         ) from exc
 
 
@@ -1282,6 +1347,7 @@ async def save_transcription_text(payload: TranscriptionTextSaveRequest) -> Tran
             file_path="realtime_mic",
             original_filename=(payload.file_name or "").strip() or "实时转写",
             transcript=transcript,
+            origin="realtime",
         )
         if payload.words:
             await asyncio.to_thread(

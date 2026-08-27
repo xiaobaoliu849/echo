@@ -597,6 +597,12 @@ export type TranscriptionJobResponse = {
   provider?: string | null;
   /** Progress line for local chunked jobs, e.g. "正在转写第 3/12 段…". */
   progress?: string | null;
+  /** Audio duration in seconds, persisted when the job completes. */
+  duration_seconds?: number | null;
+  /** Where the recording came from: "upload" | "url" | "realtime". */
+  origin?: string | null;
+  /** Short head of the transcript for library previews. */
+  transcript_preview?: string | null;
 };
 
 export type TranscriptionJobListResponse = {

@@ -127,7 +127,8 @@ describe("TranscriptionPage", () => {
 
     render(<TranscriptionPage initialTab="library" />);
 
-    const card = await screen.findByText("历史录音.m4a");
+    // Titles render without their extension (the format badge shows it).
+    const card = await screen.findByText("历史录音");
     fireEvent.click(card);
 
     await waitFor(() => {
@@ -332,7 +333,8 @@ describe("TranscriptionPage", () => {
 
     render(<TranscriptionPage initialTab="library" />);
 
-    const card = await screen.findByText("丢失的会议.mp4");
+    // Titles render without their extension (the format badge shows it).
+    const card = await screen.findByText("丢失的会议");
     fireEvent.click(card);
 
     // Terminal failed state, never the stale "任务排队中" spinner.

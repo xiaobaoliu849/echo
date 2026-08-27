@@ -177,6 +177,11 @@ class TranscriptionJob:
     provider: str | None = None
     # Human-readable progress line for local chunked jobs (e.g. "第 3/12 段转写中").
     progress: str | None = None
+    # Audio duration in seconds, persisted when a job completes so the library
+    # can show it without re-probing the media file.
+    duration_seconds: float | None = None
+    # Where the recording came from: "upload" | "url" | "realtime".
+    origin: str | None = None
 
 
 class TranscriptionService:
@@ -307,6 +312,8 @@ class TranscriptionService:
             "original_filename": job.original_filename,
             "provider": job.provider,
             "progress": job.progress,
+            "duration_seconds": job.duration_seconds,
+            "origin": job.origin,
         }
         self._job_path(job_id_str).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -418,6 +425,8 @@ class TranscriptionService:
                 original_filename=payload.get("original_filename"),
                 provider=payload.get("provider"),
                 progress=payload.get("progress"),
+                duration_seconds=payload.get("duration_seconds"),
+                origin=payload.get("origin"),
             )
         except Exception:
             return None
@@ -453,6 +462,8 @@ class TranscriptionService:
                     original_filename=payload.get("original_filename"),
                     provider=payload.get("provider"),
                     progress=payload.get("progress"),
+                    duration_seconds=payload.get("duration_seconds"),
+                    origin=payload.get("origin"),
                 )
             except Exception:
                 continue
@@ -562,6 +573,8 @@ class TranscriptionService:
         memory_saved: bool | None = None,
         provider: str | None = None,
         progress: str | None = None,
+        duration_seconds: float | None = None,
+        original_filename: str | None = None,
     ) -> TranscriptionJob:
         job = self.get_job(job_id)
         if job is None:
@@ -582,8 +595,21 @@ class TranscriptionService:
             job.provider = provider
         if progress is not None:
             job.progress = progress
+        if duration_seconds is not None:
+            job.duration_seconds = duration_seconds
+        if original_filename is not None:
+            job.original_filename = original_filename
         job.updated_at = self._now_iso()
         return self._write_job(job)
+
+    def rename_job(self, job_id: str, file_name: str) -> TranscriptionJob:
+        """Set a user-facing display name; falls back are untouched elsewhere."""
+        cleaned = str(file_name or "").strip()
+        if not cleaned:
+            raise ValueError("file_name must not be empty.")
+        if len(cleaned) > 200:
+            raise ValueError("file_name is too long (max 200 characters).")
+        return self.update_job(job_id, original_filename=cleaned)
 
     async def transcribe_media(
         self,
@@ -833,6 +859,9 @@ class TranscriptionService:
                 "error": "",
                 "progress": "转写完成",
             }
+            result_duration = result.get("duration_seconds")
+            if isinstance(result_duration, (int, float)) and result_duration > 0:
+                update_fields["duration_seconds"] = float(result_duration)
             final_provider = str(result.get("provider") or provider or "").strip()
             if final_provider:
                 update_fields["provider"] = final_provider
@@ -1727,7 +1756,14 @@ class TranscriptionService:
                     except Exception:
                         pass
 
-    async def create_completed_sync_job(self, file_path: str, original_filename: str, transcript: str) -> TranscriptionJob:
+    async def create_completed_sync_job(
+        self,
+        file_path: str,
+        original_filename: str,
+        transcript: str,
+        duration_seconds: float | None = None,
+        origin: str | None = "upload",
+    ) -> TranscriptionJob:
         """
         Creates a completed job record for a synchronous transcription result.
         This allows sync jobs to appear in the recent records list and be reloadable.
@@ -1737,12 +1773,12 @@ class TranscriptionService:
         raw_uuid = str(uuid.uuid4().hex)
         job_id_part = str(raw_uuid[:16]) # type: ignore
         job_id = f"tx_sync_{job_id_part}"
-        
+
         # Save transcript to file (off the event loop)
         transcript_path = await asyncio.to_thread(
             self._persist_transcript, job_id, transcript
         )
-        
+
         # Explicit initialization with type ignores
         job = TranscriptionJob(
             job_id=str(job_id), # type: ignore
@@ -1756,6 +1792,9 @@ class TranscriptionService:
             remote_job_id=None, # type: ignore
             source_url=None, # type: ignore
             memory_saved=False, # type: ignore
+            original_filename=original_filename, # type: ignore
+            duration_seconds=duration_seconds, # type: ignore
+            origin=origin, # type: ignore
         )
         return self._write_job(job)
 
@@ -1776,6 +1815,7 @@ class TranscriptionService:
             created_at=timestamp,
             updated_at=timestamp,
             original_filename=original_filename,
+            origin="upload",
         )
         return self._write_job(job)
 
@@ -1799,6 +1839,7 @@ class TranscriptionService:
             updated_at=timestamp,
             source_url=normalized_url,
             original_filename=original_filename,
+            origin="url",
         )
         job.provider = provider or "qwen-filetrans"
         return self._write_job(job)

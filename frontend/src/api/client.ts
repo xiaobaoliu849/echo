@@ -1359,6 +1359,28 @@ export async function deleteTranscriptionJob(jobId: string): Promise<void> {
   }
 }
 
+export async function renameTranscriptionJob(
+  jobId: string,
+  fileName: string
+): Promise<TranscriptionJobResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/transcription/jobs/${encodeURIComponent(jobId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildEverMemHeaders(true, "transcription"),
+      },
+      body: JSON.stringify({ file_name: fileName }),
+    }
+  );
+
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
 export function buildRealtimeTranscriptionWebSocketUrl(): string {
   const httpUrl = new URL(API_BASE_URL);
   const protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
