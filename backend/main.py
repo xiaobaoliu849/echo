@@ -186,8 +186,11 @@ def create_app() -> FastAPI:
         path = request.url.path
         if should_enforce_auth(request.method, request.url.path):
             try:
+                auth_header = request.headers.get("Authorization")
+                if not auth_header and request.query_params.get("token"):
+                    auth_header = f"Bearer {request.query_params.get('token')}"
                 validate_auth_header(
-                    request.headers.get("Authorization"),
+                    auth_header,
                     require_admin=should_require_admin_auth(request.method, request.url.path),
                 )
             except HTTPException as exc:
