@@ -2,10 +2,13 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ALargeSmall,
   Captions,
+  Check,
   ChevronDown,
   ChevronUp,
   Download,
+  Edit2,
   FileText,
+  Globe,
   Loader2,
   LocateFixed,
   Maximize,
@@ -14,17 +17,31 @@ import {
   RotateCcw,
   RotateCw,
   Search,
+  Sparkles,
   TriangleAlert,
   Volume2,
   VolumeX,
   X,
 } from "lucide-react";
-import type { WordTimestamp } from "../../api";
+import {
+  burnTranscriptionVideo,
+  fetchTranscriptionTranslation,
+  translateTranscriptionCues,
+  type WordTimestamp,
+} from "../../api";
 import { useI18n } from "../../i18n";
-import { downloadBinaryFile } from "../../utils/desktopFileSave";
-import { buildCues, normalizeWords, type SubtitleCue } from "../../utils/subtitleGenerator";
+import { downloadBinaryFile, exportTextFile } from "../../utils/desktopFileSave";
+import {
+  buildCues,
+  generateBilingualSrt,
+  generateBilingualVtt,
+  normalizeWords,
+  type SubtitleCue,
+} from "../../utils/subtitleGenerator";
+import TranscriptionAiAssistant from "./TranscriptionAiAssistant";
 
 type Props = {
+  jobId?: string;
   transcript: string;
   words: WordTimestamp[];
   audioSourceUrl?: string;
@@ -39,6 +56,18 @@ const VIDEO_EXTS = new Set([
 
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
 const FONT_SIZES = [13, 15, 17];
+
+const SUPPORTED_TRANSLATE_LANGUAGES = [
+  { code: "zh-CN", label: "简体中文 (Simplified Chinese)" },
+  { code: "zh-TW", label: "繁體中文 (Traditional Chinese)" },
+  { code: "en", label: "English (英语)" },
+  { code: "ja", label: "日本語 (日语)" },
+  { code: "ko", label: "한국어 (韩语)" },
+  { code: "fr", label: "Français (法语)" },
+  { code: "de", label: "Deutsch (德语)" },
+  { code: "es", label: "Español (西班牙语)" },
+  { code: "ru", label: "Русский (俄语)" },
+];
 
 function isVideoFile(name?: string | null): boolean {
   if (!name) return false;
@@ -73,11 +102,7 @@ function findCueIndex(cues: SubtitleCue[], time: number): number {
   return ans;
 }
 
-/**
- * Component-local media clock: follows the media element via timeupdate/seeked
- * events.  The browser fires timeupdate ~4 Hz which is plenty for slider
- * position and word-level karaoke — no rAF loop needed.
- */
+/** Component-local media clock */
 function useMediaClock(mediaEl: HTMLMediaElement | null): number {
   const [time, setTime] = useState(0);
   useEffect(() => {
@@ -124,17 +149,20 @@ type CueRowProps = {
   index: number;
   cue: SubtitleCue;
   active: boolean;
-  matchState: 0 | 1 | 2; // 0 = no match, 1 = match, 2 = current match
+  matchState: 0 | 1 | 2;
   seekable: boolean;
   showTime: boolean;
   fontSize: number;
   query: string;
+  langView: "bilingual" | "source" | "target";
+  isEditing: boolean;
   onSeek: (start: number) => void;
-  register: (index: number, el: HTMLButtonElement | null) => void;
+  onStartEdit: (index: number) => void;
+  onSaveEdit: (index: number, text: string, translation?: string) => void;
+  onCancelEdit: () => void;
+  register: (index: number, el: HTMLElement | null) => void;
 };
 
-/** Memoized so a change of the active cue only re-renders the two rows that
- * actually changed state, not the whole (potentially multi-thousand-row) list. */
 const CueRow = memo(function CueRow({
   index,
   cue,
@@ -144,9 +172,76 @@ const CueRow = memo(function CueRow({
   showTime,
   fontSize,
   query,
+  langView,
+  isEditing,
   onSeek,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
   register,
 }: CueRowProps) {
+  const { t } = useI18n();
+  const [editText, setEditText] = useState(cue.text);
+  const [editTrans, setEditTrans] = useState(cue.translation || "");
+
+  useEffect(() => {
+    setEditText(cue.text);
+    setEditTrans(cue.translation || "");
+  }, [cue, isEditing]);
+
+  const showSource = langView !== "target";
+  const showTarget = langView !== "source" && Boolean(cue.translation);
+
+  if (isEditing) {
+    return (
+      <div
+        ref={(el) => register(index, el)}
+        className="vsCueEditContainer"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brand)" }}>
+            ⏱ {formatClock(cue.start)} - {formatClock(cue.end)}
+          </span>
+          <span style={{ fontSize: 11, color: "var(--muted)" }}>{t("编辑字幕", "Edit Subtitle")}</span>
+        </div>
+        <input
+          type="text"
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          placeholder={t("原文字幕内容…", "Source subtitle text…")}
+          className="vsCueEditInput"
+          autoFocus
+        />
+        <input
+          type="text"
+          value={editTrans}
+          onChange={(e) => setEditTrans(e.target.value)}
+          placeholder={t("翻译字幕内容 (可选)…", "Translated text (optional)…")}
+          className="vsCueEditInput"
+        />
+        <div className="vsCueEditActions">
+          <button
+            type="button"
+            className="vsBtnGhost"
+            style={{ fontSize: 12, padding: "4px 10px" }}
+            onClick={onCancelEdit}
+          >
+            {t("取消", "Cancel")}
+          </button>
+          <button
+            type="button"
+            className="vsBtnPrimary"
+            style={{ fontSize: 12, padding: "4px 12px" }}
+            onClick={() => onSaveEdit(index, editText, editTrans || undefined)}
+          >
+            {t("保存", "Save")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -156,8 +251,6 @@ const CueRow = memo(function CueRow({
       }`}
       onClick={(e) => {
         onSeek(cue.start);
-        // Drop focus so the global Space/arrow shortcuts are not swallowed by
-        // this button re-activating on the next keypress.
         e.currentTarget.blur();
       }}
       disabled={!seekable}
@@ -166,7 +259,23 @@ const CueRow = memo(function CueRow({
         <span className="vsSubtitleCueTime">{formatClock(cue.start)}</span>
       )}
       <span className="vsSubtitleCueText" style={{ fontSize }}>
-        {highlightText(cue.text, query)}
+        {showSource && highlightText(cue.text, query)}
+        {showTarget && (
+          <span className="vsSubtitleCueTranslation" style={{ display: "block", fontSize: Math.max(12, fontSize - 1) }}>
+            {highlightText(cue.translation || "", query)}
+          </span>
+        )}
+      </span>
+      <span
+        className="vsIconBtn vsCueRowEditBtn"
+        style={{ opacity: 0, transition: "opacity 0.15s ease", width: 26, height: 26, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onStartEdit(index);
+        }}
+        title={t("编辑该句字幕", "Edit cue")}
+      >
+        <Edit2 size={13} />
       </span>
     </button>
   );
@@ -188,16 +297,11 @@ type TransportBarProps = {
   onVolumeChange: (v: number) => void;
 };
 
-/** `--vs-fill` drives the played-portion gradient on the range tracks; WebKit
- * (and therefore the WebView2 desktop shell) has no `::-moz-range-progress`
- * equivalent, so without this the seek bar shows no progress at all. */
 function fillStyle(value: number, max: number): React.CSSProperties {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
   return { ["--vs-fill" as string]: `${pct}%` };
 }
 
-/** Custom transport: play/pause, ±10s skip, seek slider, speed, volume,
- * download. Keeps its own clock so the 20 Hz slider updates stay local. */
 function TransportBar({
   mediaEl,
   duration,
@@ -215,9 +319,6 @@ function TransportBar({
 }: TransportBarProps) {
   const { t } = useI18n();
   const time = useMediaClock(mediaEl);
-  // While dragging, show the thumb where the pointer is rather than where the
-  // media clock is: seeking a range-request stream lags, and snapping the thumb
-  // back to the stale currentTime on every render makes the bar fight the drag.
   const [scrub, setScrub] = useState<number | null>(null);
   const shownTime = scrub ?? Math.min(time, duration || time);
   const effectiveVolume = muted ? 0 : volume;
@@ -254,39 +355,35 @@ function TransportBar({
         <span className="vsTransportSkipLabel">10</span>
       </button>
 
-      <span className="vsTransportDivider" aria-hidden />
+      <span className="vsTransportTime" aria-label={t("播放进度", "Playback time")}>
+        {formatClock(shownTime)} / {formatClock(duration)}
+      </span>
 
-      <span className="vsTimeLabel current">{formatClock(shownTime)}</span>
       <input
         type="range"
         className="vsSeek"
         min={0}
-        max={duration > 0 ? duration : 0}
+        max={duration || 1}
         step={0.1}
         value={shownTime}
-        style={fillStyle(shownTime, duration)}
-        disabled={duration <= 0}
+        style={fillStyle(shownTime, duration || 1)}
+        onPointerDown={(e) => setScrub(Number((e.target as HTMLInputElement).value))}
         onChange={(e) => {
-          const next = Number(e.target.value);
-          setScrub(next);
-          if (mediaEl) mediaEl.currentTime = next;
+          const v = Number(e.target.value);
+          setScrub(v);
+          if (mediaEl) mediaEl.currentTime = v;
         }}
         onPointerUp={() => setScrub(null)}
-        onBlur={() => setScrub(null)}
-        onKeyUp={() => setScrub(null)}
-        aria-label={t("播放进度", "Seek")}
+        aria-label={t("跳转时间", "Seek position")}
       />
-      <span className="vsTimeLabel">{formatClock(duration)}</span>
-
-      <span className="vsTransportDivider" aria-hidden />
 
       <button
         type="button"
-        className="vsIconBtn vsTransportBtn vsRateBtn"
+        className="vsTransportRate"
         onClick={onCycleRate}
-        title={t("播放速度", "Playback speed")}
+        title={t(`播放速度 ${rate}x`, `Speed ${rate}x`)}
       >
-        {rate}×
+        {rate}x
       </button>
 
       <button
@@ -294,7 +391,6 @@ function TransportBar({
         className="vsIconBtn vsTransportBtn"
         onClick={onToggleMute}
         title={muted ? t("取消静音", "Unmute") : t("静音", "Mute")}
-        aria-label={muted ? t("取消静音", "Unmute") : t("静音", "Mute")}
       >
         {muted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
       </button>
@@ -328,9 +424,6 @@ function TransportBar({
   );
 }
 
-/** Max words to render with word-level karaoke.  Beyond this we degrade to
- * plain cue text to avoid flooding the DOM with <span> elements when a
- * provider returns giant single-token cues. */
 const KARAOKE_WORD_CAP = 80;
 
 type NowLineProps = {
@@ -338,11 +431,11 @@ type NowLineProps = {
   cue: SubtitleCue | null;
   cueWords: WordTimestamp[];
   variant: "card" | "overlay";
+  langView: "bilingual" | "source" | "target";
 };
 
-/** Karaoke-style current line: highlights words as they are spoken when
- * word-level timestamps exist, otherwise shows the cue text as-is. */
-function NowLine({ mediaEl, cue, cueWords, variant }: NowLineProps) {
+/** Karaoke-style on-video caption overlay */
+function NowLine({ mediaEl, cue, cueWords, variant, langView }: NowLineProps) {
   const { t } = useI18n();
   const time = useMediaClock(mediaEl);
 
@@ -357,33 +450,37 @@ function NowLine({ mediaEl, cue, cueWords, variant }: NowLineProps) {
     );
   }
 
+  const showSource = langView !== "target";
+  const showTarget = langView !== "source" && Boolean(cue.translation);
+
   return (
     <div className={`vsNowLine ${variant}`}>
-      <span className="vsNowLineText">
-        {cueWords.length > 0 && cueWords.length <= KARAOKE_WORD_CAP
-          ? cueWords.map((w, i) => (
-              <span
-                key={i}
-                className={`vsNowWord ${w.end <= time ? "spoken" : ""}`}
-              >
-                {w.text}
-                {/[A-Za-z0-9]$/.test(w.text) ? " " : ""}
-              </span>
-            ))
-          : cue.text}
-      </span>
+      {showSource && (
+        <span className="vsNowLineText">
+          {cueWords.length > 0 && cueWords.length <= KARAOKE_WORD_CAP
+            ? cueWords.map((w, i) => (
+                <span
+                  key={i}
+                  className={`vsNowWord ${w.end <= time ? "spoken" : ""}`}
+                >
+                  {w.text}
+                  {/[A-Za-z0-9]$/.test(w.text) ? " " : ""}
+                </span>
+              ))
+            : cue.text}
+        </span>
+      )}
+      {showTarget && (
+        <span className="vsNowLineTranslation">
+          {cue.translation}
+        </span>
+      )}
     </div>
   );
 }
 
-/**
- * Memo-style transcription player: media stage (video or audio card) with a
- * custom transport on the left, a scrolling synced subtitle panel with small
- * tool buttons (search / follow / locate / paragraph mode / font size) on the
- * right. Degrades to a plain transcript column when there is no playable media
- * (e.g. realtime mic transcriptions).
- */
 export default function TranscriptionSubtitlePlayer({
+  jobId,
   transcript,
   words,
   audioSourceUrl,
@@ -395,18 +492,12 @@ export default function TranscriptionSubtitlePlayer({
   const [mediaEl, setMediaEl] = useState<HTMLMediaElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const rowEls = useRef<Array<HTMLButtonElement | null>>([]);
+  const rowEls = useRef<Array<HTMLElement | null>>([]);
   const userScrollingRef = useRef(false);
-  // Timestamp of our last follow-mode scrollTo, not a boolean flag: scrollTo is
-  // a no-op when the target offset already matches, so a flag set before the
-  // call would never be cleared and would swallow the user's next real scroll.
   const programmaticScrollAtRef = useRef(0);
   const userScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Bumped to re-run the match-scroll effect even when the target row index is
-  // unchanged (single-match queries, or re-pressing Enter after scrolling away).
   const [scrollTick, setScrollTick] = useState(0);
-
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [mediaDuration, setMediaDuration] = useState(audioDuration);
@@ -425,35 +516,71 @@ export default function TranscriptionSubtitlePlayer({
   const [query, setQuery] = useState("");
   const [matchCursor, setMatchCursor] = useState(0);
 
+  // Translation & View mode
+  const [langView, setLangView] = useState<"bilingual" | "source" | "target">("bilingual");
+  const [translateModalOpen, setTranslateModalOpen] = useState(false);
+  const [targetLang, setTargetLang] = useState("zh-CN");
+  const [translateModel, setTranslateModel] = useState("DeepSeek");
+  const [isTranslating, setIsTranslating] = useState(false);
+
+  // Inline Cue Editing
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  // Video Burning (FFmpeg)
+  const [burnVideoLoading, setBurnVideoLoading] = useState(false);
+  const [burnVideoSuccess, setBurnVideoSuccess] = useState("");
+
+  // Export Popover Menu
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+
   const video = isVideoFile(fileName);
   const hasMedia = Boolean(audioSourceUrl) && !mediaError;
-  // A job that has a source URL but whose media failed to load: distinguish it
-  // from a job with no media at all (realtime mic) so the panel can say why the
-  // player disappeared instead of silently collapsing to a transcript column.
   const mediaFailed = Boolean(audioSourceUrl) && mediaError;
   const fontSize = FONT_SIZES[fontSizeIdx];
 
-  // Normalize once here too: the karaoke lookup below binary-searches this
-  // list, which requires ascending starts.  buildCues() cleans its own copy,
-  // so without this the two would disagree on indices.
   const safeWords = useMemo(() => normalizeWords(words), [words]);
-
-  // buildCues only consults the duration on the no-word-timestamps fallback
-  // path.  Feeding it 0 when words exist keeps this memo stable across the
-  // loadedmetadata -> onAudioDurationChange update that fires as playback
-  // starts — otherwise every play click rebuilt the whole cue list.
   const durationForCues = safeWords.length > 0 ? 0 : audioDuration;
-  const cues = useMemo<SubtitleCue[]>(
+
+  const initialCues = useMemo<SubtitleCue[]>(
     () => buildCues(transcript, durationForCues, safeWords),
     [transcript, durationForCues, safeWords]
   );
+
+  const [cues, setCues] = useState<SubtitleCue[]>(initialCues);
+
+  // Sync cues with initialCues when transcript or duration updates
+  useEffect(() => {
+    setCues(initialCues);
+  }, [initialCues]);
+
+  // Load existing translation from backend if available
+  useEffect(() => {
+    if (!jobId) return;
+    let cancelled = false;
+    fetchTranscriptionTranslation(jobId)
+      .then((res) => {
+        if (cancelled || !res || !res.cues || res.cues.length === 0) return;
+        setCues((prev) => {
+          return prev.map((c, i) => {
+            const match = res.cues[i];
+            return match && match.translation ? { ...c, translation: match.translation } : c;
+          });
+        });
+        setLangView("bilingual");
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
     const out: number[] = [];
     for (let i = 0; i < cues.length; i++) {
-      if (cues[i].text.toLowerCase().includes(q)) out.push(i);
+      const matchText = cues[i].text.toLowerCase().includes(q) || (cues[i].translation || "").toLowerCase().includes(q);
+      if (matchText) out.push(i);
     }
     return out;
   }, [cues, query]);
@@ -464,15 +591,12 @@ export default function TranscriptionSubtitlePlayer({
 
   const activeCue = activeIndex >= 0 ? cues[activeIndex] : null;
 
-  // Binary-search for the word range within the current cue instead of
-  // scanning the entire words[] array with .filter() on every cue change.
   const activeCueWords = useMemo(() => {
     if (activeIndex < 0 || safeWords.length === 0) return [];
     const cue = cues[activeIndex];
     if (!cue) return [];
     const lo = cue.start - 0.1;
     const hi = cue.end + 0.1;
-    // Binary search for the first word with start >= lo
     let left = 0;
     let right = safeWords.length;
     while (left < right) {
@@ -480,7 +604,6 @@ export default function TranscriptionSubtitlePlayer({
       if (safeWords[mid].start < lo) left = mid + 1;
       else right = mid;
     }
-    // Collect words until start > hi
     const result: WordTimestamp[] = [];
     for (let i = left; i < safeWords.length && safeWords[i].start <= hi; i++) {
       result.push(safeWords[i]);
@@ -489,42 +612,27 @@ export default function TranscriptionSubtitlePlayer({
   }, [activeIndex, cues, safeWords]);
 
   const registerRow = useCallback(
-    (index: number, el: HTMLButtonElement | null) => {
+    (index: number, el: HTMLElement | null) => {
       rowEls.current[index] = el;
     },
     []
   );
 
-  // Reset per-media state when the drawer swaps in another job. Without this a
-  // job whose audio 404s latches mediaError for every job opened afterwards,
-  // and the previous job's duration / play state / active cue bleed through.
-  // Deliberately does NOT clear rowEls: effects run after refs are attached, so
-  // wiping it here would discard the refs the new rows just registered. React
-  // calls each ref with null on unmount, which already clears stale entries.
   useEffect(() => {
     setMediaError(false);
     setIsPlaying(false);
     setActiveIndex(-1);
     setDownloadError("");
-    // Seed from the parent (sync jobs know the duration up front); the media
-    // element overwrites this on loadedmetadata.
     setMediaDuration(audioDuration > 0 ? audioDuration : 0);
     userScrollingRef.current = false;
-    // audioDuration is intentionally not a dependency — this is a reset keyed
-    // on the media source, and the effect below tracks later duration updates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioSourceUrl]);
 
-  // Adopt a duration that arrives after mount, until the media element reports
-  // its own (which is authoritative and set via loadedmetadata).
   useEffect(() => {
     if (audioDuration > 0) {
       setMediaDuration((prev) => (prev > 0 ? prev : audioDuration));
     }
   }, [audioDuration]);
 
-  // Re-apply transport settings to a freshly mounted media element: <audio>/
-  // <video> are remounted on job change and reset to rate 1 / volume 1.
   useEffect(() => {
     if (!mediaEl) return;
     mediaEl.playbackRate = rate;
@@ -532,10 +640,6 @@ export default function TranscriptionSubtitlePlayer({
     mediaEl.muted = muted;
   }, [mediaEl, rate, volume, muted]);
 
-  // Track the active cue via timeupdate/seeked events (no rAF loop).
-  // timeupdate fires ~4 Hz which is more than sufficient since cue changes
-  // happen every 3–7 seconds.  setState bails out when the index is unchanged,
-  // so this only re-renders on cue boundaries.
   useEffect(() => {
     if (!mediaEl) return;
     const update = () => {
@@ -551,29 +655,18 @@ export default function TranscriptionSubtitlePlayer({
     };
   }, [cues, mediaEl]);
 
-  /** Scroll a cue row to the middle of the list. Assigns scrollTop rather than
-   * calling scrollTo: the jump is instant either way, and scrollTo would also
-   * scroll ancestors (below 1080px the player grid itself scrolls). */
   const scrollRowToCenter = useCallback((index: number) => {
     const el = rowEls.current[index];
     const container = listRef.current;
     if (!el || !container) return;
-    // Stamp the upcoming scroll event as ours so handleListScroll does not
-    // mistake it for a manual scroll and suspend follow mode.
     programmaticScrollAtRef.current = performance.now();
     container.scrollTop =
       el.offsetTop - container.clientHeight / 2 + el.offsetHeight / 2;
   }, []);
 
-  // Keep the active cue in view while playing: one scroll per cue change
-  // (not per timeupdate), suppressed briefly after manual scrolling.
-  // Use behavior: "auto" instead of "smooth" to prevent Chromium layout
-  // thrashing while media timeupdates fire.
   useEffect(() => {
     if (!follow || !isPlaying || activeIndex < 0 || userScrollingRef.current)
       return;
-    // An active search owns the viewport: yanking the list back to the playhead
-    // would fight the user reading through matches.
     if (currentMatchIndex >= 0) return;
     const el = rowEls.current[activeIndex];
     const container = listRef.current;
@@ -586,72 +679,26 @@ export default function TranscriptionSubtitlePlayer({
     }
   }, [activeIndex, follow, isPlaying, currentMatchIndex]);
 
-  // Reveal the current search match. An effect (rather than a call inside
-  // jumpMatch) so that it also fires for the very first match as the user
-  // types, and so row refs exist after a paragraph -> cues switch.
   useEffect(() => {
     if (mode !== "cues" || currentMatchIndex < 0) return;
     scrollRowToCenter(currentMatchIndex);
   }, [currentMatchIndex, mode, scrollTick, cues, scrollRowToCenter]);
 
-  useEffect(() => {
-    return () => {
-      if (userScrollTimerRef.current) clearTimeout(userScrollTimerRef.current);
-    };
-  }, []);
-
-  // Keyboard shortcuts: space = play/pause, ←/→ = ∓5s.
-  useEffect(() => {
-    if (!hasMedia || !mediaEl) return;
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      )
-        return;
-      // A focused control owns Space/arrows: preventDefault here would otherwise
-      // swallow the activation of whichever toolbar button the user just
-      // tabbed to. Cue rows blur themselves on pointer click so that clicking a
-      // line and then pressing Space still toggles playback.
-      if (target?.closest("button, a, [role='button']")) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        if (mediaEl.paused) void mediaEl.play().catch(() => {});
-        else mediaEl.pause();
-      } else if (e.code === "ArrowLeft") {
-        e.preventDefault();
-        mediaEl.currentTime = Math.max(0, mediaEl.currentTime - 5);
-      } else if (e.code === "ArrowRight") {
-        e.preventDefault();
-        mediaEl.currentTime = Math.min(mediaEl.duration || Infinity, mediaEl.currentTime + 5);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [hasMedia, mediaEl]);
-
   function handleListScroll() {
-    // Ignore the scroll event our own follow-mode scrollTo just produced.
-    // The window self-expires, so a scrollTo that turned out to be a no-op
-    // cannot leave the guard armed against the user's next real scroll.
-    if (performance.now() - programmaticScrollAtRef.current < 150) return;
+    const now = performance.now();
+    if (now - programmaticScrollAtRef.current < 250) return;
     userScrollingRef.current = true;
     if (userScrollTimerRef.current) clearTimeout(userScrollTimerRef.current);
     userScrollTimerRef.current = setTimeout(() => {
       userScrollingRef.current = false;
-    }, 2500);
+    }, 1500);
   }
 
-  const seekTo = useCallback(
+  const handleSeek = useCallback(
     (start: number) => {
       if (!mediaEl) return;
       mediaEl.currentTime = start;
-      void mediaEl.play().catch(() => {
-        /* autoplay may be blocked; the cue still highlights on manual play */
-      });
+      void mediaEl.play().catch(() => {});
     },
     [mediaEl]
   );
@@ -671,8 +718,6 @@ export default function TranscriptionSubtitlePlayer({
       matches.length;
     setMatchCursor(next);
     setMode("cues");
-    // The scroll itself is handled by the match effect; bump the tick so it
-    // re-runs even when `next` lands on the row it is already showing.
     setScrollTick((n) => n + 1);
     userScrollingRef.current = false;
   }
@@ -681,10 +726,6 @@ export default function TranscriptionSubtitlePlayer({
     if (!audioSourceUrl || downloading) return;
     setDownloading(true);
     setDownloadError("");
-    // Force an attachment disposition so browsers save rather than navigate,
-    // and give the file the job's original name instead of the job id.
-    // No auth header needed: the endpoint has to stay reachable without one
-    // because the <audio>/<video> element cannot send headers either.
     const url = `${audioSourceUrl}${audioSourceUrl.includes("?") ? "&" : "?"}download=1`;
     const outcome = await downloadBinaryFile(url, fileName || "audio");
     setDownloading(false);
@@ -696,9 +737,6 @@ export default function TranscriptionSubtitlePlayer({
   }
 
   function enterFullscreen() {
-    // requestFullscreen rejects rather than throwing synchronously; an
-    // unhandled rejection here shows up as a console error in Chromium and
-    // pywebview when the gesture is not recognised as user-activated.
     void stageRef.current?.requestFullscreen?.().catch(() => {});
   }
 
@@ -718,10 +756,102 @@ export default function TranscriptionSubtitlePlayer({
     onError: () => setMediaError(true),
   };
 
+  // AI One-Click Translation Handler
+  async function handleStartTranslate() {
+    if (!jobId || isTranslating) return;
+    setIsTranslating(true);
+    try {
+      const res = await translateTranscriptionCues(
+        jobId,
+        targetLang,
+        cues,
+        translateModel
+      );
+      if (res && res.cues) {
+        setCues(res.cues);
+        setLangView("bilingual");
+        setTranslateModalOpen(false);
+      }
+    } catch (err: any) {
+      alert(t(`翻译失败: ${err.message}`, `Translation failed: ${err.message}`));
+    } finally {
+      setIsTranslating(false);
+    }
+  }
+
+  // Inline Cue Editing Save
+  function handleSaveCueEdit(index: number, newText: string, newTrans?: string) {
+    setCues((prev) => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = {
+          ...next[index],
+          text: newText,
+          translation: newTrans,
+        };
+      }
+      return next;
+    });
+    setEditingIndex(null);
+  }
+
+  // Export handlers
+  async function handleExportFile(type: "bilingual_srt" | "source_srt" | "target_srt" | "bilingual_vtt" | "txt" | "json") {
+    setExportMenuOpen(false);
+    const base = (fileName || "transcription").replace(/\.[^/.]+$/, "");
+    let content = "";
+    let ext = "srt";
+    let mime = "text/plain";
+
+    if (type === "bilingual_srt") {
+      content = "\uFEFF" + generateBilingualSrt(cues, "bilingual");
+      ext = "bilingual.srt";
+    } else if (type === "source_srt") {
+      content = "\uFEFF" + generateBilingualSrt(cues, "source");
+      ext = "source.srt";
+    } else if (type === "target_srt") {
+      content = "\uFEFF" + generateBilingualSrt(cues, "target");
+      ext = "translated.srt";
+    } else if (type === "bilingual_vtt") {
+      content = generateBilingualVtt(cues, "bilingual");
+      ext = "vtt";
+    } else if (type === "txt") {
+      content = cues.map((c) => c.text + (c.translation ? `\n${c.translation}` : "")).join("\n\n");
+      ext = "txt";
+    } else if (type === "json") {
+      content = JSON.stringify(cues, null, 2);
+      ext = "json";
+      mime = "application/json";
+    }
+
+    await exportTextFile(`${base}.${ext}`, content, mime);
+  }
+
+  // Burn Video Handler
+  async function handleBurnVideo() {
+    if (!jobId || burnVideoLoading) return;
+    setExportMenuOpen(false);
+    setBurnVideoLoading(true);
+    setBurnVideoSuccess("");
+    try {
+      const srt = generateBilingualSrt(cues, "bilingual");
+      const resp = await burnTranscriptionVideo(jobId, srt, targetLang, true);
+      const downloadUrl = `${resp.download_url}${resp.download_url.includes("?") ? "&" : "?"}download=1`;
+      await downloadBinaryFile(downloadUrl, `${(fileName || "video").replace(/\.[^/.]+$/, "")}_双语字幕.mp4`);
+      setBurnVideoSuccess(t("双语字幕视频压制并导出成功！", "Subtitled video exported successfully!"));
+      setTimeout(() => setBurnVideoSuccess(""), 4000);
+    } catch (err: any) {
+      alert(t(`压制视频失败: ${err.message}`, `Failed to burn video: ${err.message}`));
+    } finally {
+      setBurnVideoLoading(false);
+    }
+  }
+
   return (
     <div className={`vsPlayerGrid ${hasMedia ? "" : "no-media"}`}>
+      {/* LEFT COLUMN: Media Player + AI Assistant */}
       {hasMedia && (
-        <div className="vsMediaPanel">
+        <div className="vsMediaPanel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {video ? (
             <div className="vsMediaStage" ref={stageRef}>
               <video
@@ -732,11 +862,13 @@ export default function TranscriptionSubtitlePlayer({
                 aria-label={t("转写视频播放器", "Transcription video player")}
                 {...mediaEvents}
               />
+              {/* Memo-style On-Video Subtitle Overlay */}
               <NowLine
                 mediaEl={mediaEl}
                 cue={activeCue}
                 cueWords={activeCueWords}
                 variant="overlay"
+                langView={langView}
               />
               <button
                 type="button"
@@ -750,6 +882,14 @@ export default function TranscriptionSubtitlePlayer({
             </div>
           ) : (
             <div className="vsAudioCard">
+              <audio
+                ref={setMediaEl}
+                src={audioSourceUrl}
+                preload="metadata"
+                aria-label={t("转写音频播放器", "Transcription audio player")}
+                {...mediaEvents}
+                style={{ display: "none" }}
+              />
               <div className={`vsEq ${isPlaying ? "playing" : ""}`} aria-hidden>
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span key={i} className="vsEqBar" style={{ animationDelay: `${i * 0.12}s` }} />
@@ -763,18 +903,12 @@ export default function TranscriptionSubtitlePlayer({
                 cue={activeCue}
                 cueWords={activeCueWords}
                 variant="card"
-              />
-              {/* Hidden media element: all playback goes through the custom transport. */}
-              <audio
-                ref={setMediaEl}
-                src={audioSourceUrl}
-                preload="metadata"
-                aria-label={t("转写音频播放器", "Transcription audio player")}
-                {...mediaEvents}
+                langView={langView}
               />
             </div>
           )}
 
+          {/* Transport Bar */}
           <TransportBar
             mediaEl={mediaEl}
             duration={mediaDuration}
@@ -786,18 +920,20 @@ export default function TranscriptionSubtitlePlayer({
             onDownload={handleDownloadSource}
             onTogglePlay={() => {
               if (!mediaEl) return;
-              if (mediaEl.paused) {
-                void mediaEl.play().then(() => setIsPlaying(true)).catch(() => {});
-              } else {
+              if (isPlaying) {
                 mediaEl.pause();
-                setIsPlaying(false);
+              } else {
+                void mediaEl.play().catch(() => {});
               }
             }}
             onSkip={(delta) => {
               if (!mediaEl) return;
-              mediaEl.currentTime = Math.min(
-                Math.max(0, mediaEl.currentTime + delta),
-                mediaEl.duration || Infinity
+              mediaEl.currentTime = Math.max(
+                0,
+                Math.min(
+                  mediaEl.currentTime + delta,
+                  mediaEl.duration || Infinity
+                )
               );
             }}
             onCycleRate={() => {
@@ -825,19 +961,33 @@ export default function TranscriptionSubtitlePlayer({
             <div className="vsPlayerAlert" role="alert">
               <TriangleAlert size={14} />
               <span>{downloadError}</span>
-              <button
-                type="button"
-                className="vsIconBtn vsPlayerAlertClose"
-                onClick={() => setDownloadError("")}
-                aria-label={t("关闭", "Dismiss")}
-              >
-                <X size={14} />
-              </button>
             </div>
           )}
+
+          {burnVideoLoading && (
+            <div className="vsPlayerAlert" style={{ background: "#e0e7ff", color: "#4338ca", borderColor: "#c7d2fe" }}>
+              <Loader2 size={15} className="vsSpin" />
+              <span>{t("FFmpeg 正在后台压制双语高清视频，请稍候…", "FFmpeg is burning bilingual subtitles into video…")}</span>
+            </div>
+          )}
+
+          {burnVideoSuccess && (
+            <div className="vsPlayerAlert" style={{ background: "#ecfdf5", color: "#065f46", borderColor: "#a7f3d0" }}>
+              <Check size={15} color="#10b981" />
+              <span>{burnVideoSuccess}</span>
+            </div>
+          )}
+
+          {/* Memo-style Bottom AI Assistant (Summary / MindMap / Q&A) */}
+          <TranscriptionAiAssistant
+            transcript={transcript}
+            fileName={fileName}
+            jobId={jobId}
+          />
         </div>
       )}
 
+      {/* RIGHT COLUMN: Subtitle / Transcript Workspace */}
       <div className="vsSubtitlePanel">
         {mediaFailed && (
           <div className="vsPlayerAlert vsPlayerAlertTop" role="alert">
@@ -850,7 +1000,46 @@ export default function TranscriptionSubtitlePlayer({
             </span>
           </div>
         )}
-        <div className="vsSubtitleToolbar">
+
+        {/* Subtitle Workspace Toolbar */}
+        <div className="vsSubtitleToolbar" style={{ flexWrap: "wrap", gap: 8 }}>
+          {/* Language View Switcher */}
+          <div className="vsLangSwitcher">
+            <button
+              type="button"
+              className={`vsLangSwitcherBtn ${langView === "bilingual" ? "active" : ""}`}
+              onClick={() => setLangView("bilingual")}
+            >
+              {t("双语对照", "Bilingual")}
+            </button>
+            <button
+              type="button"
+              className={`vsLangSwitcherBtn ${langView === "source" ? "active" : ""}`}
+              onClick={() => setLangView("source")}
+            >
+              {t("仅原文", "Source")}
+            </button>
+            <button
+              type="button"
+              className={`vsLangSwitcherBtn ${langView === "target" ? "active" : ""}`}
+              onClick={() => setLangView("target")}
+            >
+              {t("仅译文", "Target")}
+            </button>
+          </div>
+
+          {/* AI One-Click Translate Button */}
+          <button
+            type="button"
+            className="vsBtnSecondary"
+            style={{ height: 32, fontSize: 12, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 5 }}
+            onClick={() => setTranslateModalOpen(true)}
+          >
+            <Globe size={14} />
+            {t("一键 AI 翻译", "AI Translate")}
+          </button>
+
+          {/* Right Tools Group */}
           <div className="vsSubtitleTools">
             <button
               type="button"
@@ -868,6 +1057,7 @@ export default function TranscriptionSubtitlePlayer({
             >
               {searchOpen ? <X size={18} /> : <Search size={18} />}
             </button>
+
             {hasMedia && (
               <>
                 <button
@@ -893,6 +1083,7 @@ export default function TranscriptionSubtitlePlayer({
                 </button>
               </>
             )}
+
             <button
               type="button"
               className={`vsIconBtn vsToolBtn ${mode === "paragraph" ? "active" : ""}`}
@@ -908,6 +1099,7 @@ export default function TranscriptionSubtitlePlayer({
             >
               {mode === "cues" ? <FileText size={18} /> : <Captions size={18} />}
             </button>
+
             <button
               type="button"
               className={`vsIconBtn vsToolBtn ${showTime ? "active" : ""}`}
@@ -918,6 +1110,7 @@ export default function TranscriptionSubtitlePlayer({
             >
               <span className="vsToolBtnClock">00:00</span>
             </button>
+
             <button
               type="button"
               className="vsIconBtn vsToolBtn"
@@ -927,12 +1120,197 @@ export default function TranscriptionSubtitlePlayer({
             >
               <ALargeSmall size={18} />
             </button>
+
+            {/* Export Dropdown Popover */}
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                className="vsBtnPrimary"
+                style={{ height: 32, fontSize: 12, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 4 }}
+                onClick={() => setExportMenuOpen((v) => !v)}
+                title={t("保存与导出字幕文稿", "Save and export subtitles")}
+                aria-label={t("保存字幕", "Save Subtitles")}
+              >
+                <Download size={14} />
+                {t("保存字幕", "Save Subtitles")}
+                <ChevronDown size={13} />
+              </button>
+
+              {exportMenuOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    right: 0,
+                    marginTop: 6,
+                    width: 220,
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: 10,
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
+                    zIndex: 100,
+                    display: "flex",
+                    flexDirection: "column",
+                    padding: "6px 0",
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="vsMenuItem"
+                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
+                    onClick={() => handleExportFile("bilingual_srt")}
+                  >
+                    📝 {t("导出双语字幕 (SRT)", "Export Bilingual SRT")}
+                  </button>
+                  <button
+                    type="button"
+                    className="vsMenuItem"
+                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
+                    onClick={() => handleExportFile("source_srt")}
+                  >
+                    📄 {t("导出原文字幕 (SRT)", "Export Source SRT")}
+                  </button>
+                  <button
+                    type="button"
+                    className="vsMenuItem"
+                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
+                    onClick={() => handleExportFile("target_srt")}
+                  >
+                    🌐 {t("导出译文字幕 (SRT)", "Export Translated SRT")}
+                  </button>
+                  <button
+                    type="button"
+                    className="vsMenuItem"
+                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
+                    onClick={() => handleExportFile("bilingual_vtt")}
+                  >
+                    📑 {t("导出双语 WebVTT", "Export Bilingual VTT")}
+                  </button>
+                  <div style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />
+                  <button
+                    type="button"
+                    className="vsMenuItem"
+                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
+                    onClick={() => handleExportFile("txt")}
+                  >
+                    📃 {t("导出文稿纯文本 (TXT)", "Export Plain Text (TXT)")}
+                  </button>
+                  <button
+                    type="button"
+                    className="vsMenuItem"
+                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
+                    onClick={() => handleExportFile("json")}
+                  >
+                    📦 {t("导出分句数据 (JSON)", "Export JSON Data")}
+                  </button>
+                  {video && (
+                    <>
+                      <div style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />
+                      <button
+                        type="button"
+                        className="vsMenuItem"
+                        style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", color: "var(--brand)" }}
+                        onClick={handleBurnVideo}
+                      >
+                        🎬 {t("压制并导出双语视频 (MP4)", "Burn-in Bilingual Subtitles Video")}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Own row rather than sharing the toolbar line: at the panel's
-         * minmax(340px, 1fr) width the input was squeezed to a few pixels
-         * between the five tool buttons and became untypeable. */}
+        {/* Translation Modal / Popover */}
+        {translateModalOpen && (
+          <div
+            style={{
+              position: "absolute",
+              top: 50,
+              left: 16,
+              right: 16,
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-color)",
+              borderRadius: 12,
+              padding: "16px 20px",
+              boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+              zIndex: 90,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 15 }}>
+                <Globe size={18} color="var(--brand)" />
+                {t("AI 一键全片双语翻译", "AI Bilingual Translation")}
+              </div>
+              <button
+                type="button"
+                className="vsIconBtn"
+                onClick={() => setTranslateModalOpen(false)}
+                style={{ width: 28, height: 28 }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("目标语言", "Target Language")}</label>
+                <select
+                  value={targetLang}
+                  onChange={(e) => setTargetLang(e.target.value)}
+                  className="vsSelect"
+                  style={{ height: 38, borderRadius: 8, fontSize: 13 }}
+                >
+                  {SUPPORTED_TRANSLATE_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>{l.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("翻译大模型", "Translation Engine")}</label>
+                <select
+                  value={translateModel}
+                  onChange={(e) => setTranslateModel(e.target.value)}
+                  className="vsSelect"
+                  style={{ height: 38, borderRadius: 8, fontSize: 13 }}
+                >
+                  <option value="DeepSeek">DeepSeek V3 / R1 (推荐)</option>
+                  <option value="DashScope">Qwen-Max (通义千问)</option>
+                  <option value="Google">Google Gemini 2.5 Flash</option>
+                  <option value="OpenRouter">OpenRouter</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+              <button
+                type="button"
+                className="vsBtnGhost"
+                onClick={() => setTranslateModalOpen(false)}
+                disabled={isTranslating}
+              >
+                {t("取消", "Cancel")}
+              </button>
+              <button
+                type="button"
+                className="vsBtnPrimary"
+                onClick={handleStartTranslate}
+                disabled={isTranslating}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {isTranslating ? <Loader2 size={14} className="vsSpin" /> : <Sparkles size={14} />}
+                {isTranslating ? t("正在全速翻译中…", "Translating…") : t("开始翻译", "Start Translating")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Search Bar Row */}
         {searchOpen && (
           <div className="vsSubtitleSearchRow">
             <div className="vsSubtitleSearch">
@@ -947,37 +1325,34 @@ export default function TranscriptionSubtitlePlayer({
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    // Match 1 is already revealed by the match effect as the
-                    // user types, so Enter advances — same as find-in-page.
                     e.preventDefault();
                     jumpMatch(e.shiftKey ? -1 : 1);
-                  }
-                  if (e.key === "Escape") {
+                  } else if (e.key === "Escape") {
                     e.preventDefault();
+                    setSearchOpen(false);
                     setQuery("");
                     setMatchCursor(0);
-                    setSearchOpen(false);
                   }
                 }}
               />
-              {query && (
-                <span
-                  className={`vsSubtitleSearchCount ${
-                    matches.length === 0 ? "empty" : ""
-                  }`}
-                >
-                  {matches.length > 0
-                    ? `${Math.min(matchCursor + 1, matches.length)}/${matches.length}`
-                    : t("无结果", "No results")}
-                </span>
-              )}
+              <span
+                className={`vsSubtitleSearchCount ${
+                  query && matches.length === 0 ? "empty" : ""
+                }`}
+              >
+                {query
+                  ? matches.length > 0
+                    ? `${matchCursor + 1}/${matches.length}`
+                    : t("无结果", "No matches")
+                  : ""}
+              </span>
             </div>
             <button
               type="button"
               className="vsIconBtn vsSearchNavBtn"
-              onClick={() => jumpMatch(-1)}
               disabled={matches.length === 0}
-              title={t("上一个匹配", "Previous match")}
+              onClick={() => jumpMatch(-1)}
+              title={t("上一个匹配 (Shift+Enter)", "Previous match (Shift+Enter)")}
               aria-label={t("上一个匹配", "Previous match")}
             >
               <ChevronUp size={16} />
@@ -985,9 +1360,9 @@ export default function TranscriptionSubtitlePlayer({
             <button
               type="button"
               className="vsIconBtn vsSearchNavBtn"
-              onClick={() => jumpMatch(1)}
               disabled={matches.length === 0}
-              title={t("下一个匹配", "Next match")}
+              onClick={() => jumpMatch(1)}
+              title={t("下一个匹配 (Enter)", "Next match (Enter)")}
               aria-label={t("下一个匹配", "Next match")}
             >
               <ChevronDown size={16} />
@@ -995,9 +1370,19 @@ export default function TranscriptionSubtitlePlayer({
           </div>
         )}
 
+        {/* Subtitle Cue List / Paragraph View */}
         {mode === "paragraph" ? (
-          <div className="vsTranscriptParagraph custom-scrollbar" style={{ fontSize }}>
-            {highlightText(transcript, query.trim())}
+          <div className="vsTranscriptParagraph" style={{ fontSize }}>
+            {cues.map((c, i) => (
+              <p key={i} style={{ margin: "0 0 12px 0" }}>
+                <span>{c.text}</span>
+                {c.translation && (
+                  <span style={{ display: "block", color: "var(--brand)", fontSize: "0.9em", marginTop: 2 }}>
+                    {c.translation}
+                  </span>
+                )}
+              </p>
+            ))}
           </div>
         ) : (
           <div
@@ -1005,23 +1390,31 @@ export default function TranscriptionSubtitlePlayer({
             ref={listRef}
             onScroll={handleListScroll}
           >
-            {cues.map((cue, i) => (
-              <CueRow
-                key={i}
-                index={i}
-                cue={cue}
-                active={i === activeIndex}
-                matchState={
-                  i === currentMatchIndex ? 2 : matchSet.has(i) ? 1 : 0
-                }
-                seekable={hasMedia}
-                showTime={showTime && hasMedia}
-                fontSize={fontSize}
-                query={query.trim()}
-                onSeek={seekTo}
-                register={registerRow}
-              />
-            ))}
+            {cues.map((cue, index) => {
+              const isMatch = matchSet.has(index);
+              const matchState: 0 | 1 | 2 =
+                currentMatchIndex === index ? 2 : isMatch ? 1 : 0;
+              return (
+                <CueRow
+                  key={index}
+                  index={index}
+                  cue={cue}
+                  active={activeIndex === index}
+                  matchState={matchState}
+                  seekable={hasMedia}
+                  showTime={showTime}
+                  fontSize={fontSize}
+                  query={query}
+                  langView={langView}
+                  isEditing={editingIndex === index}
+                  onSeek={handleSeek}
+                  onStartEdit={(idx) => setEditingIndex(idx)}
+                  onSaveEdit={handleSaveCueEdit}
+                  onCancelEdit={() => setEditingIndex(null)}
+                  register={registerRow}
+                />
+              );
+            })}
           </div>
         )}
       </div>

@@ -16,6 +16,7 @@ import type {
   AudioOverviewSynthesizeResponse,
   AuthSessionResponse,
   AuthUser,
+  BurnVideoResponse,
   ChatRequest,
   ChatResponse,
   CustomVoiceListResponse,
@@ -23,10 +24,12 @@ import type {
   EverMemConversationMetaResponse,
   SettingsResponse,
   StreamEventHandlers,
+  SubtitleCueItem,
   TranscriptionBatchDeleteResponse,
   TranscriptionJobListResponse,
   TranscriptionJobResponse,
   TranscriptionResponse,
+  TranslateJobResponse,
   TranslateRequest,
   WordTimestamp,
   TranslateResponse,
@@ -1414,6 +1417,77 @@ export async function batchDeleteTranscriptionJobs(
     },
     body: JSON.stringify({ job_ids: jobIds }),
   });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function translateTranscriptionCues(
+  jobId: string,
+  targetLanguage: string,
+  cues?: SubtitleCueItem[],
+  provider?: string,
+  model?: string
+): Promise<TranslateJobResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/transcription/jobs/${encodeURIComponent(jobId)}/translate`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildEverMemHeaders(true, "transcription"),
+      },
+      body: JSON.stringify({
+        target_language: targetLanguage,
+        provider,
+        model,
+        cues: cues || [],
+      }),
+    }
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function fetchTranscriptionTranslation(
+  jobId: string
+): Promise<TranslateJobResponse | null> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/transcription/jobs/${encodeURIComponent(jobId)}/translation`,
+    {
+      headers: buildEverMemHeaders(true, "transcription"),
+    }
+  );
+  if (!response.ok) {
+    return null;
+  }
+  return response.json();
+}
+
+export async function burnTranscriptionVideo(
+  jobId: string,
+  srtContent: string,
+  targetLanguage?: string,
+  bilingual: boolean = true
+): Promise<BurnVideoResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/transcription/jobs/${encodeURIComponent(jobId)}/burn-video`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildEverMemHeaders(true, "transcription"),
+      },
+      body: JSON.stringify({
+        srt_content: srtContent,
+        target_language: targetLanguage,
+        bilingual,
+      }),
+    }
+  );
   if (!response.ok) {
     await throwApiError(response);
   }

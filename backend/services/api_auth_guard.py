@@ -76,7 +76,10 @@ def should_enforce_auth(method: str, path: str) -> bool:
         return False
     # Media stream and static download endpoints for HTML5 <audio>/<video> elements cannot send Authorization headers
     if path.startswith("/api/transcription/jobs/") and (
-        path.endswith("/audio") or path.endswith("/transcript.txt")
+        path.endswith("/audio")
+        or path.endswith("/burned-video")
+        or path.endswith("/transcript.txt")
+        or path.endswith("/translation")
     ):
         return False
     if (

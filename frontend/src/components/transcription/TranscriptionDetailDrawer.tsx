@@ -207,6 +207,7 @@ export default function TranscriptionDetailDrawer({
         </div>
       ) : transcript ? (
         <TranscriptionSubtitlePlayer
+          jobId={job?.job_id}
           transcript={transcript}
           words={words || []}
           audioSourceUrl={audioSourceUrl}

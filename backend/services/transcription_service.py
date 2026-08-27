@@ -2077,6 +2077,162 @@ class TranscriptionService:
         )
         return str(words_path)
 
+    def _persist_translation(
+        self, job_id: str, translation_data: dict[str, Any]
+    ) -> str:
+        path = self.jobs_dir / f"{job_id}_translation.json"
+        path.write_text(
+            json.dumps(translation_data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return str(path)
+
+    def get_job_translation(self, job_id: str) -> dict[str, Any] | None:
+        path = self.jobs_dir / f"{job_id}_translation.json"
+        if not path.is_file():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+    async def translate_cues(
+        self,
+        cues: list[dict[str, Any]],
+        target_language: str = "zh-CN",
+        provider: str | None = None,
+        model: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Translate a list of subtitle cues preserving timing."""
+        if not cues:
+            return []
+
+        texts = [str(c.get("text", "")).strip() for c in cues]
+        chunk_size = 35
+        translated_all: list[str] = []
+
+        lang_names = {
+            "zh": "简体中文 (Simplified Chinese)",
+            "zh-CN": "简体中文 (Simplified Chinese)",
+            "zh-TW": "繁体中文 (Traditional Chinese)",
+            "en": "English",
+            "ja": "日本語 (Japanese)",
+            "ko": "한국어 (Korean)",
+            "fr": "Français (French)",
+            "de": "Deutsch (German)",
+            "es": "Español (Spanish)",
+            "ru": "Русский (Russian)",
+        }
+        target_name = lang_names.get(target_language, target_language)
+
+        for i in range(0, len(texts), chunk_size):
+            chunk = texts[i : i + chunk_size]
+            prompt = (
+                f"You are a professional video subtitle translator.\n"
+                f"Translate each of the following subtitle lines into {target_name}.\n"
+                f"Rules:\n"
+                f"1. Keep translations concise, natural, and accurately matched to video context.\n"
+                f"2. Return ONLY a valid JSON array of strings with EXACTLY {len(chunk)} elements matching the input index order.\n"
+                f"3. Do not add explanations or conversational filler.\n\n"
+                f"Input JSON:\n{json.dumps(chunk, ensure_ascii=False)}"
+            )
+
+            resolved_provider = provider or "DeepSeek"
+            p_settings = self.config.get_provider_settings(resolved_provider)
+            if not p_settings.get("api_key"):
+                for fallback_p in ["DashScope", "Google", "OpenRouter", "SiliconFlow"]:
+                    if self.config.get_provider_settings(fallback_p).get("api_key"):
+                        resolved_provider = fallback_p
+                        break
+
+            try:
+                result = await self.llm_service.chat_completion(
+                    provider=resolved_provider,
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "You are a specialized subtitle translation engine. Output valid JSON arrays only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=2048,
+                    use_memory=False,
+                )
+                reply = result.get("reply", "").strip()
+                if "```json" in reply:
+                    reply = reply.split("```json")[1].split("```")[0].strip()
+                elif "```" in reply:
+                    reply = reply.split("```")[1].split("```")[0].strip()
+                parsed = json.loads(reply)
+                if isinstance(parsed, list):
+                    for trans_text in parsed:
+                        translated_all.append(str(trans_text))
+                    while len(translated_all) < i + len(chunk):
+                        idx_missing = len(translated_all) - i
+                        translated_all.append(chunk[idx_missing] if idx_missing < len(chunk) else "")
+                else:
+                    raise ValueError("LLM returned non-list JSON")
+            except Exception as exc:
+                logger.warning("Subtitle chunk translation failed (%s); fallback to original", exc)
+                translated_all.extend(chunk)
+
+        result_cues: list[dict[str, Any]] = []
+        for idx, cue in enumerate(cues):
+            trans = translated_all[idx] if idx < len(translated_all) else ""
+            result_cues.append({
+                **cue,
+                "translation": trans,
+            })
+        return result_cues
+
+    async def burn_subtitles_to_video(
+        self,
+        job_id: str,
+        srt_content: str,
+    ) -> Path:
+        job = self.get_job(job_id)
+        if not job or not job.file_path:
+            raise FileNotFoundError(f"Job or video file not found: {job_id}")
+        video_path = Path(str(job.file_path))
+        if not video_path.is_file():
+            raise FileNotFoundError(f"Video file does not exist: {video_path}")
+
+        srt_path = self.jobs_dir / f"{job_id}_burn.srt"
+        srt_path.write_text(srt_content.strip(), encoding="utf-8")
+
+        output_path = self.jobs_dir / f"{job_id}_subtitled.mp4"
+        escaped_srt = str(srt_path.resolve()).replace("\\", "/").replace(":", "\\:")
+        vf_filter = f"subtitles='{escaped_srt}':force_style='FontSize=19,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=1.2,Shadow=0,MarginV=26,Alignment=2'"
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_path.resolve()),
+            "-vf",
+            vf_filter,
+            "-c:a",
+            "copy",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "22",
+            str(output_path.resolve()),
+        ]
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            err_msg = stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(f"Video subtitle burn failed: {err_msg[-400:]}")
+
+        return output_path
+
     @staticmethod
     def _build_transcript_memory_entry(transcript_text: str) -> str:
         compact = " ".join(str(transcript_text or "").split()).strip()

@@ -550,6 +550,26 @@ export type WordTimestamp = {
   end: number;
 };
 
+export type SubtitleCueItem = {
+  start: number;
+  end: number;
+  text: string;
+  translation?: string;
+  speaker?: string;
+};
+
+export type TranslateJobResponse = {
+  job_id: string;
+  target_language: string;
+  cues: SubtitleCueItem[];
+};
+
+export type BurnVideoResponse = {
+  job_id: string;
+  download_url: string;
+  message: string;
+};
+
 export type TranscriptionResponse = {
   transcript: string;
   job_id?: string;

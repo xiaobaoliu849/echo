@@ -50,7 +50,13 @@ export function splitTranscriptToSegments(text: string): string[] {
   return segments.filter((s) => s.length > 0);
 }
 
-export type SubtitleCue = { start: number; end: number; text: string };
+export type SubtitleCue = {
+  start: number;
+  end: number;
+  text: string;
+  translation?: string;
+  speaker?: string;
+};
 
 /**
  * Join word tokens into a display string. ASR word lists for CJK audio carry
@@ -361,3 +367,41 @@ export function generateVtt(text: string, durationSec: number, words?: WordTimes
 
   return `WEBVTT\n\n${cues}\n`;
 }
+
+export function generateBilingualSrt(
+  cues: SubtitleCue[],
+  mode: "bilingual" | "source" | "target" = "bilingual"
+): string {
+  if (!cues || cues.length === 0) return "";
+  return cues
+    .map((cue, i) => {
+      let content = cue.text;
+      if (mode === "target") {
+        content = cue.translation || cue.text;
+      } else if (mode === "bilingual") {
+        content = cue.translation ? `${cue.text}\n${cue.translation}` : cue.text;
+      }
+      return `${i + 1}\n${formatSrtTime(cue.start)} --> ${formatSrtTime(cue.end)}\n${content}`;
+    })
+    .join("\n\n");
+}
+
+export function generateBilingualVtt(
+  cues: SubtitleCue[],
+  mode: "bilingual" | "source" | "target" = "bilingual"
+): string {
+  if (!cues || cues.length === 0) return "WEBVTT\n";
+  const body = cues
+    .map((cue) => {
+      let content = cue.text;
+      if (mode === "target") {
+        content = cue.translation || cue.text;
+      } else if (mode === "bilingual") {
+        content = cue.translation ? `${cue.text}\n${cue.translation}` : cue.text;
+      }
+      return `${formatVttTime(cue.start)} --> ${formatVttTime(cue.end)}\n${content}`;
+    })
+    .join("\n\n");
+  return `WEBVTT\n\n${body}\n`;
+}
+

@@ -1052,6 +1052,212 @@ class TranscriptionTextSaveRequest(BaseModel):
     words: list[WordTimestamp] = Field(default_factory=list)
 
 
+class CueItem(BaseModel):
+    start: float
+    end: float
+    text: str
+    translation: str | None = None
+    speaker: str | None = None
+
+
+class TranslateJobRequest(BaseModel):
+    target_language: str = Field(default="zh-CN")
+    provider: str | None = None
+    model: str | None = None
+    cues: list[CueItem] = Field(default_factory=list)
+
+
+class TranslateJobResponse(BaseModel):
+    job_id: str
+    target_language: str
+    cues: list[CueItem]
+
+
+class BurnVideoRequest(BaseModel):
+    srt_content: str = Field(..., min_length=1)
+    target_language: str | None = None
+    bilingual: bool = True
+
+
+class BurnVideoResponse(BaseModel):
+    job_id: str
+    download_url: str
+    message: str
+
+
+@router.post( # type: ignore
+    "/jobs/{job_id}/translate",
+    response_model=TranslateJobResponse,
+    responses={
+        404: {"description": "Transcription job not found.", "model": StructuredErrorResponse},
+        500: {"description": "Failed to translate cues.", "model": StructuredErrorResponse},
+    },
+)
+async def translate_transcription_job(job_id: str, payload: TranslateJobRequest) -> TranslateJobResponse:
+    job = transcription_service.get_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail=_error("TRANSCRIPTION_JOB_NOT_FOUND", f"Transcription job not found: {job_id}"),
+        )
+    try:
+        cues_to_translate = [c.model_dump() if hasattr(c, "model_dump") else dict(c) for c in payload.cues]
+        if not cues_to_translate:
+            transcript_path = Path(job.transcript_path or "")
+            if transcript_path.is_file():
+                text = transcript_path.read_text(encoding="utf-8")
+                lines = [line.strip() for line in text.split("\n") if line.strip()]
+                cues_to_translate = [{"start": float(i * 4), "end": float((i + 1) * 4), "text": line} for i, line in enumerate(lines)]
+
+        translated_cues = await transcription_service.translate_cues(
+            cues_to_translate,
+            target_language=payload.target_language,
+            provider=payload.provider,
+            model=payload.model,
+        )
+
+        trans_data = {
+            "job_id": job_id,
+            "target_language": payload.target_language,
+            "cues": translated_cues,
+        }
+        await asyncio.to_thread(transcription_service._persist_translation, job_id, trans_data)
+
+        return TranslateJobResponse(
+            job_id=job_id,
+            target_language=payload.target_language,
+            cues=[CueItem(**c) for c in translated_cues],
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_error("TRANSCRIPTION_TRANSLATE_FAILED", str(exc)),
+        ) from exc
+
+
+@router.get( # type: ignore
+    "/jobs/{job_id}/translation",
+)
+async def get_transcription_job_translation(job_id: str) -> Any:
+    data = transcription_service.get_job_translation(job_id)
+    if not data:
+        return {"job_id": job_id, "target_language": "", "cues": []}
+    return data
+
+
+@router.post( # type: ignore
+    "/jobs/{job_id}/burn-video",
+    response_model=BurnVideoResponse,
+    responses={
+        404: {"description": "Job or video file not found.", "model": StructuredErrorResponse},
+        500: {"description": "Video burn failed.", "model": StructuredErrorResponse},
+    },
+)
+async def burn_transcription_video(job_id: str, payload: BurnVideoRequest) -> BurnVideoResponse:
+    job = transcription_service.get_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail=_error("TRANSCRIPTION_JOB_NOT_FOUND", f"Transcription job not found: {job_id}"),
+        )
+    try:
+        await transcription_service.burn_subtitles_to_video(
+            job_id,
+            payload.srt_content,
+        )
+        return BurnVideoResponse(
+            job_id=job_id,
+            download_url=f"/api/transcription/jobs/{job_id}/burned-video",
+            message="Subtitles successfully burned into video.",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_error("TRANSCRIPTION_BURN_FAILED", str(exc)),
+        ) from exc
+
+
+@router.get( # type: ignore
+    "/jobs/{job_id}/burned-video",
+    responses={
+        404: {"description": "Burned video not found.", "model": StructuredErrorResponse},
+    },
+)
+async def download_burned_video(request: Request, job_id: str, download: bool = False):
+    import anyio
+    from fastapi.responses import FileResponse, StreamingResponse
+    video_path = transcription_service.jobs_dir / f"{job_id}_subtitled.mp4"
+    if not video_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=_error("TRANSCRIPTION_VIDEO_NOT_FOUND", f"Subtitled video not found for job: {job_id}"),
+        )
+
+    filename = f"{job_id}_subtitled.mp4"
+    job = transcription_service.get_job(job_id)
+    if job and job.original_filename:
+        stem = Path(job.original_filename).stem
+        filename = f"{stem}_双语字幕.mp4"
+
+    media_type = "video/mp4"
+    file_size = video_path.stat().st_size
+    range_header = request.headers.get("range")
+
+    ascii_name = unicodedata.normalize("NFKD", filename).encode("ascii", "ignore").decode("ascii")
+    ascii_name = ascii_name.replace('"', "").replace("\\", "").strip()
+    if not ascii_name or ascii_name.startswith("."):
+        ascii_name = "subtitled.mp4"
+    disposition_type = "attachment" if download else "inline"
+    disposition = f'{disposition_type}; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(filename)}'
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Type": media_type,
+        "Content-Disposition": disposition,
+    }
+
+    if range_header and range_header.startswith("bytes="):
+        try:
+            range_val = range_header.replace("bytes=", "").strip()
+            parts = range_val.split("-")
+            start = int(parts[0]) if parts[0] else 0
+            end = int(parts[1]) if len(parts) > 1 and parts[1] else file_size - 1
+            end = min(end, file_size - 1)
+
+            if start > end or start >= file_size:
+                return Response(status_code=416, headers={"Content-Range": f"bytes */{file_size}"})
+
+            content_length = end - start + 1
+            range_headers = dict(headers)
+            range_headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            range_headers["Content-Length"] = str(content_length)
+
+            async def iter_file():
+                chunk_size = 256 * 1024
+                async with await anyio.open_file(video_path, "rb") as f:
+                    await f.seek(start)
+                    remaining = content_length
+                    while remaining > 0:
+                        data = await f.read(min(chunk_size, remaining))
+                        if not data:
+                            break
+                        remaining -= len(data)
+                        yield data
+
+            return StreamingResponse(
+                iter_file(),
+                status_code=206,
+                headers=range_headers,
+                media_type=media_type,
+            )
+        except Exception:
+            pass
+
+    headers["Content-Length"] = str(file_size)
+    return FileResponse(path=str(video_path), media_type=media_type, headers=headers)
+
+
+
 @router.post( # type: ignore
     "/jobs/save-text",
     response_model=TranscriptionJobResponse,
