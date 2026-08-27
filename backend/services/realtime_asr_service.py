@@ -276,6 +276,33 @@ class QwenAudioStreamingAsrSession:
                 pass
 
 
+def _is_cjk_char(ch: str) -> bool:
+    if not ch:
+        return False
+    cp = ord(ch[0])
+    return (
+        0x3000 <= cp <= 0x303F
+        or 0x4E00 <= cp <= 0x9FFF
+        or 0x3400 <= cp <= 0x4DBF
+        or 0x20000 <= cp <= 0x2A6DF
+        or 0xAC00 <= cp <= 0xD7AF
+        or 0xFF00 <= cp <= 0xFFEF
+    )
+
+
+def _merge_streaming_delta(current: str, delta: str) -> str:
+    """Merge a streaming delta into accumulated text with language-aware spacing."""
+    if not delta:
+        return current
+    if not current:
+        return delta
+    if current[-1].isspace() or delta[0].isspace():
+        return current + delta
+    if _is_cjk_char(current[-1]) or _is_cjk_char(delta[0]):
+        return current + delta
+    return current + " " + delta
+
+
 class GoogleStreamingAsrSession:
     """One duplex session against Google Gemini 3.5 Transcribe Live."""
 
@@ -302,6 +329,7 @@ class GoogleStreamingAsrSession:
         self._receive_task: asyncio.Task | None = None
         self._closed = False
         self._finished = False
+        self._accumulated_text = ""
 
     async def start(self) -> None:
         """Connect to Google Gemini Live API."""
@@ -351,23 +379,40 @@ class GoogleStreamingAsrSession:
                                     break
 
                         response_text = getattr(response, "text", "") or ""
-                        text = (transcript_chunk or response_text).strip()
-                        if text:
+                        delta = transcript_chunk or response_text
+                        if delta:
+                            self._accumulated_text = _merge_streaming_delta(self._accumulated_text, delta)
                             is_end = bool(
                                 getattr(server_content, "turn_complete", False)
                                 or getattr(getattr(server_content, "input_transcription", None), "finished", False)
                             )
+                            if is_end:
+                                sentence = RealtimeAsrSentence(
+                                    text=self._accumulated_text.strip(),
+                                    sentence_end=True,
+                                )
+                                self._accumulated_text = ""
+                                await self._task_queue.put(sentence)
+                            else:
+                                sentence = RealtimeAsrSentence(
+                                    text=self._accumulated_text.strip(),
+                                    sentence_end=False,
+                                )
+                                await self._task_queue.put(sentence)
+                        elif getattr(server_content, "turn_complete", False) and self._accumulated_text.strip():
                             sentence = RealtimeAsrSentence(
-                                text=text,
-                                sentence_end=is_end,
+                                text=self._accumulated_text.strip(),
+                                sentence_end=True,
                             )
+                            self._accumulated_text = ""
                             await self._task_queue.put(sentence)
                     else:
                         response_text = getattr(response, "text", "") or ""
-                        if response_text.strip():
+                        if response_text:
+                            self._accumulated_text = _merge_streaming_delta(self._accumulated_text, response_text)
                             await self._task_queue.put(
                                 RealtimeAsrSentence(
-                                    text=response_text.strip(),
+                                    text=self._accumulated_text.strip(),
                                     sentence_end=False,
                                 )
                             )
@@ -378,6 +423,17 @@ class GoogleStreamingAsrSession:
         except Exception as exc:
             logger.warning("Google Gemini Live stream receive exception: %s", exc)
         finally:
+            if self._accumulated_text.strip():
+                try:
+                    await self._task_queue.put(
+                        RealtimeAsrSentence(
+                            text=self._accumulated_text.strip(),
+                            sentence_end=True,
+                        )
+                    )
+                    self._accumulated_text = ""
+                except Exception:
+                    pass
             await self._task_queue.put(None)
 
     async def send_audio(self, chunk: bytes) -> None:
@@ -419,6 +475,17 @@ class GoogleStreamingAsrSession:
                 pass
             self._session_ctx = None
             self._session = None
+        if self._accumulated_text.strip():
+            try:
+                await self._task_queue.put(
+                    RealtimeAsrSentence(
+                        text=self._accumulated_text.strip(),
+                        sentence_end=True,
+                    )
+                )
+                self._accumulated_text = ""
+            except Exception:
+                pass
         await self._task_queue.put(None)
 
 
