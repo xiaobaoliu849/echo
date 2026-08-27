@@ -14,7 +14,7 @@ import { useI18n } from "../../i18n";
 
 type Phase = "idle" | "connecting" | "listening" | "finishing" | "done";
 
-type ViewMode = "transcript" | "timeline" | "banner";
+type ViewMode = "transcript" | "timeline" | "teleprompter";
 
 export type SentenceSegment = {
   id: string;
@@ -39,16 +39,17 @@ type RealtimeServerMessage =
 
 type Props = {
   onComplete: (job: TranscriptionJobResponse, words?: WordTimestamp[]) => void;
+  onSwitchToLibrary?: () => void;
 };
 
 const LANGUAGE_OPTIONS: { value: string; hints?: string[]; zh: string; en: string }[] = [
   { value: "auto", zh: "自动检测 (85+ 语种)", en: "Auto detect (85+ languages)" },
-  { value: "zh", hints: ["zh"], zh: "中文", en: "Chinese" },
-  { value: "en", hints: ["en"], zh: "英文", en: "English" },
-  { value: "zh-en", hints: ["zh", "en"], zh: "中英混合", en: "Chinese + English" },
-  { value: "ja", hints: ["ja"], zh: "日语", en: "Japanese" },
-  { value: "ko", hints: ["ko"], zh: "韩语", en: "Korean" },
-  { value: "yue", hints: ["yue"], zh: "粤语", en: "Cantonese" },
+  { value: "zh", hints: ["zh"], zh: "中文 (普通话)", en: "Chinese (Mandarin)" },
+  { value: "en", hints: ["en"], zh: "英语 (English)", en: "English" },
+  { value: "zh-en", hints: ["zh", "en"], zh: "中英混合 (Bilingual)", en: "Chinese + English" },
+  { value: "ja", hints: ["ja"], zh: "日语 (日本語)", en: "Japanese" },
+  { value: "ko", hints: ["ko"], zh: "韩语 (한국어)", en: "Korean" },
+  { value: "yue", hints: ["yue"], zh: "粤语 (Cantonese)", en: "Cantonese" },
 ];
 
 function isCjk(ch: string): boolean {
@@ -91,13 +92,14 @@ export function formatTimestampDisplay(sec: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function RealtimeTranscriptionPanel({ onComplete }: Props) {
+export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary }: Props) {
   const { t } = useI18n();
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [language, setLanguage] = useState("auto");
   const [model, setModel] = useState(REALTIME_ASR_MODELS[0].id);
-  const [viewMode, setViewMode] = useState<ViewMode>("transcript");
+  const [viewMode, setViewMode] = useState<ViewMode>("teleprompter");
+  const [fontSizeLevel, setFontSizeLevel] = useState<"normal" | "large" | "xlarge">("large");
 
   const [segments, setSegments] = useState<SentenceSegment[]>([]);
   const [finalized, setFinalized] = useState<string[]>([]);
@@ -133,6 +135,8 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
   const finishTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptBoxRef = useRef<HTMLDivElement | null>(null);
   const timelineBoxRef = useRef<HTMLDivElement | null>(null);
+  const teleprompterBoxRef = useRef<HTMLDivElement | null>(null);
+  const teleprompterActiveRef = useRef<HTMLDivElement | null>(null);
   const aliveRef = useRef(true);
 
   languageRef.current = language;
@@ -295,7 +299,7 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
     [clearFinishTimeout, stopTimer, flushInterimToFinalized, t]
   );
 
-  // Auto-scroll transcript box
+  // Auto-scroll transcript & teleprompter boxes
   useEffect(() => {
     const box = transcriptBoxRef.current;
     if (box) {
@@ -305,7 +309,18 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
     if (tBox) {
       tBox.scrollTop = tBox.scrollHeight;
     }
-  }, [finalized, interim, segments]);
+    const teleBox = teleprompterBoxRef.current;
+    if (teleBox) {
+      if (typeof teleBox.scrollTo === "function") {
+        teleBox.scrollTo({
+          top: teleBox.scrollHeight,
+          behavior: "smooth",
+        });
+      } else {
+        teleBox.scrollTop = teleBox.scrollHeight;
+      }
+    }
+  }, [finalized, interim, segments, viewMode]);
 
   // Audio level monitoring
   const updateAudioVisualizer = useCallback(() => {
@@ -564,7 +579,7 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
     let md = `# 实时转写纪要\n\n`;
     md += `- **录制时间**：${dateStr}\n`;
     md += `- **转写时长**：${durationStr}\n`;
-    md += `- **识别模型**：${modelName}\n`;
+    md += `- **识别引擎**：${modelName}\n`;
     md += `- **总字数**：${wordCount} 字\n\n`;
     md += `## 完整文稿\n\n${displayTranscript}\n\n`;
 
@@ -635,12 +650,12 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
 
       const job = await saveTranscriptionText(
         text,
-        t(`实时转写_${new Date().toLocaleTimeString()}`, `Realtime_${new Date().toLocaleTimeString()}`),
+        t(`实时录音_${new Date().toLocaleTimeString()}`, `Realtime_${new Date().toLocaleTimeString()}`),
         finalWords
       );
       onComplete(job, finalWords);
-      setInfo(t("已成功保存至转写库！", "Saved to transcription library!"));
-      setTimeout(() => setInfo(""), 3000);
+      setInfo(t("已成功存入转写历史库！", "Saved to transcription library!"));
+      setTimeout(() => setInfo(""), 3500);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
@@ -680,358 +695,529 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
 
   const running = phase === "connecting" || phase === "listening" || phase === "finishing";
 
+  const getFontSizePx = () => {
+    switch (fontSizeLevel) {
+      case "normal":
+        return "18px";
+      case "large":
+        return "24px";
+      case "xlarge":
+        return "30px";
+      default:
+        return "24px";
+    }
+  };
+
   const statusText = (() => {
     switch (phase) {
       case "connecting":
-        return t("正在连接模型服务…", "Connecting to recognition model…");
+        return t("正在建立流式连接…", "Connecting…");
       case "listening":
-        return t("正在实时收音，请开始说话…", "Listening in real-time, start speaking…");
+        return t("正在实时收音，请开始说话…", "Listening live, start speaking…");
       case "finishing":
-        return t("正在处理并整理剩余语音…", "Finalizing remaining speech…");
+        return t("正在整理最后的内容…", "Wrapping up…");
       case "done":
-        return t("转写已完成，你可以复制、导出字幕或存入转写库。", "Completed. You can copy, export subtitles, or save to library.");
+        return t("录音转写已完成", "Session completed");
       default:
-        return t("点击下方按钮开启实时流式转写。", "Click start to begin streaming speech-to-text.");
+        return t("准备就绪", "Ready");
     }
   })();
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Model & Language Controls */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div className="vsField" style={{ gap: "6px" }}>
-          <label className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
-            {t("识别引擎", "ASR Model")}
-          </label>
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            disabled={running}
-            className="vsSelect"
-            style={{ width: "100%", height: "40px", borderRadius: "8px", fontSize: "13px" }}
-          >
-            {REALTIME_ASR_MODELS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {t(option.zh, option.en)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="vsField" style={{ gap: "6px" }}>
-          <label className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
-            {t("识别语种", "Language")}
-          </label>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            disabled={running}
-            className="vsSelect"
-            style={{ width: "100%", height: "40px", borderRadius: "8px", fontSize: "13px" }}
-          >
-            {LANGUAGE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {t(option.zh, option.en)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Model Note */}
-      <div style={{ marginTop: "-8px" }}>
-        <span style={{ fontSize: "12px", color: "var(--muted)", lineHeight: 1.4 }}>
-          {(() => {
-            const selected = REALTIME_ASR_MODELS.find((option) => option.id === model);
-            return selected ? t(selected.noteZh, selected.noteEn) : "";
-          })()}
-        </span>
-      </div>
-
-      {/* View Switcher Tabs & Live Stats Header */}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "14px",
+        width: "100%",
+        height: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* Top Controls Ribbon */}
       <div
         style={{
           display: "flex",
+          flexWrap: "wrap",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingBottom: "4px",
-          borderBottom: "1px solid var(--border-color)",
+          gap: "12px",
+          padding: "12px 16px",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "14px",
         }}
       >
-        <div style={{ display: "flex", gap: "6px" }}>
+        {/* Left: Model & Language Selectors */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted)" }}>
+              {t("模型", "Model")}:
+            </span>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={running}
+              className="vsSelect"
+              style={{ height: "34px", padding: "0 10px", borderRadius: "8px", fontSize: "13px" }}
+            >
+              {REALTIME_ASR_MODELS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {t(option.zh, option.en)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted)" }}>
+              {t("语种", "Lang")}:
+            </span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              disabled={running}
+              className="vsSelect"
+              style={{ height: "34px", padding: "0 10px", borderRadius: "8px", fontSize: "13px" }}
+            >
+              {LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(option.zh, option.en)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Center: View Switcher Tabs */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            background: "var(--bg-subtle, rgba(0,0,0,0.04))",
+            padding: "3px",
+            borderRadius: "8px",
+            gap: "2px",
+          }}
+        >
           <button
             type="button"
-            onClick={() => setViewMode("transcript")}
+            onClick={() => setViewMode("teleprompter")}
             style={{
-              padding: "4px 10px",
+              padding: "5px 12px",
               borderRadius: "6px",
               fontSize: "12px",
-              fontWeight: viewMode === "transcript" ? 600 : 400,
-              background: viewMode === "transcript" ? "var(--primary-bg, rgba(99,102,241,0.12))" : "transparent",
-              color: viewMode === "transcript" ? "var(--primary, #6366f1)" : "var(--muted)",
+              fontWeight: viewMode === "teleprompter" ? 600 : 500,
+              background: viewMode === "teleprompter" ? "var(--bg-card, #fff)" : "transparent",
+              color: viewMode === "teleprompter" ? "var(--primary, #6366f1)" : "var(--muted)",
+              boxShadow: viewMode === "teleprompter" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
               border: "none",
               cursor: "pointer",
             }}
           >
-            {t("文稿模式", "Transcript")}
+            📺 {t("大字提词器", "Teleprompter")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("transcript")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              fontSize: "12px",
+              fontWeight: viewMode === "transcript" ? 600 : 500,
+              background: viewMode === "transcript" ? "var(--bg-card, #fff)" : "transparent",
+              color: viewMode === "transcript" ? "var(--primary, #6366f1)" : "var(--muted)",
+              boxShadow: viewMode === "transcript" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            📝 {t("文稿模式", "Transcript")}
           </button>
           <button
             type="button"
             onClick={() => setViewMode("timeline")}
             style={{
-              padding: "4px 10px",
+              padding: "5px 12px",
               borderRadius: "6px",
               fontSize: "12px",
-              fontWeight: viewMode === "timeline" ? 600 : 400,
-              background: viewMode === "timeline" ? "var(--primary-bg, rgba(99,102,241,0.12))" : "transparent",
+              fontWeight: viewMode === "timeline" ? 600 : 500,
+              background: viewMode === "timeline" ? "var(--bg-card, #fff)" : "transparent",
               color: viewMode === "timeline" ? "var(--primary, #6366f1)" : "var(--muted)",
+              boxShadow: viewMode === "timeline" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
               border: "none",
               cursor: "pointer",
             }}
           >
-            {t("字幕时间轴", "Timeline Cues")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("banner")}
-            style={{
-              padding: "4px 10px",
-              borderRadius: "6px",
-              fontSize: "12px",
-              fontWeight: viewMode === "banner" ? 600 : 400,
-              background: viewMode === "banner" ? "var(--primary-bg, rgba(99,102,241,0.12))" : "transparent",
-              color: viewMode === "banner" ? "var(--primary, #6366f1)" : "var(--muted)",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            {t("大字实时字幕", "Live Subtitle")}
+            ⏱️ {t("字幕时间轴", "Timeline Cues")}
           </button>
         </div>
 
-        {/* Live Counters */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "12px", color: "var(--muted)" }}>
-          <span>{t(`字数: ${wordCount}`, `Chars: ${wordCount}`)}</span>
-          <span>{t(`句子: ${segments.length + (interim ? 1 : 0)}`, `Segments: ${segments.length + (interim ? 1 : 0)}`)}</span>
-          <span>{formatElapsed(elapsed)}</span>
+        {/* Right: Teleprompter Font Size & Live Stats */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {viewMode === "teleprompter" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ fontSize: "11px", color: "var(--muted)" }}>{t("字号", "Size")}:</span>
+              {(["normal", "large", "xlarge"] as const).map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => setFontSizeLevel(lvl)}
+                  style={{
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    fontSize: lvl === "normal" ? "11px" : lvl === "large" ? "13px" : "15px",
+                    fontWeight: fontSizeLevel === lvl ? 700 : 400,
+                    background: fontSizeLevel === lvl ? "var(--primary-bg, rgba(99,102,241,0.12))" : "transparent",
+                    color: fontSizeLevel === lvl ? "var(--primary, #6366f1)" : "var(--muted)",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  A{lvl === "normal" ? "" : lvl === "large" ? "+" : "++"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Audio level indicator */}
+          {phase === "listening" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "14px" }}>
+              {[0.2, 0.6, 0.9, 0.7, 0.4].map((factor, idx) => {
+                const h = Math.max(3, Math.min(14, audioLevel * factor * 22));
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      width: "3px",
+                      height: `${h}px`,
+                      borderRadius: "2px",
+                      background: "#e5484d",
+                      transition: "height 0.08s ease",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          {/* Status Badge */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "4px 10px",
+              borderRadius: "999px",
+              fontSize: "12px",
+              fontWeight: 600,
+              background: phase === "listening" ? "rgba(229, 72, 77, 0.1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
+              color: phase === "listening" ? "#e5484d" : "var(--muted)",
+            }}
+          >
+            {phase === "listening" && (
+              <span
+                style={{
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  background: "#e5484d",
+                  display: "inline-block",
+                }}
+              />
+            )}
+            <span>{phase === "listening" ? "LIVE ON AIR" : statusText}</span>
+            <span style={{ fontFamily: "monospace" }}>{formatElapsed(elapsed)}</span>
+          </div>
+
+          {onSwitchToLibrary && (
+            <button
+              type="button"
+              onClick={onSwitchToLibrary}
+              className="vsBtnGhost"
+              style={{
+                height: "32px",
+                padding: "0 10px",
+                fontSize: "12px",
+                borderRadius: "8px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+              title={t("切换至转写历史库", "Switch to Transcription Library")}
+            >
+              📚 {t("历史库", "Library")}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Main Content Area Based on View Mode */}
-      {viewMode === "transcript" && (
-        <div
-          ref={transcriptBoxRef}
-          style={{
-            minHeight: "180px",
-            maxHeight: "280px",
-            overflowY: "auto",
-            padding: "14px",
-            borderRadius: "12px",
-            border: "1px solid var(--border-color)",
-            background: "var(--bg-card)",
-            fontSize: "15px",
-            lineHeight: 1.7,
-            color: "var(--text)",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {displayTranscript ? (
-            <>
-              <span>{finalizedText}</span>
-              {interim && <span style={{ color: "var(--primary, #6366f1)", fontWeight: 500 }}>{interimPart}</span>}
-            </>
-          ) : (
-            <span style={{ color: "var(--muted)" }}>
-              {t("转写文字将在此实时呈现…", "Live streaming transcript will appear here…")}
-            </span>
-          )}
-        </div>
-      )}
-
-      {viewMode === "timeline" && (
-        <div
-          ref={timelineBoxRef}
-          style={{
-            minHeight: "180px",
-            maxHeight: "280px",
-            overflowY: "auto",
-            padding: "10px",
-            borderRadius: "12px",
-            border: "1px solid var(--border-color)",
-            background: "var(--bg-card)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px",
-          }}
-        >
-          {segments.length === 0 && !interim ? (
-            <span style={{ color: "var(--muted)", padding: "8px", fontSize: "13px" }}>
-              {t("暂无字幕段落，开始说话后将按时间生成分段…", "No timeline cues yet. Speak to generate timestamped segments…")}
-            </span>
-          ) : (
-            <>
-              {segments.map((seg, idx) => (
-                <div
-                  key={seg.id || idx}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    background: "var(--bg-subtle, rgba(0,0,0,0.03))",
-                    border: "1px solid var(--border-color)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)" }}>
-                    <span style={{ fontFamily: "monospace" }}>
-                      #{idx + 1} [{formatTimestampDisplay(seg.startSec)} - {formatTimestampDisplay(seg.endSec)}]
-                    </span>
-                  </div>
-                  <div style={{ fontSize: "14px", color: "var(--text)", lineHeight: 1.5 }}>
-                    {seg.text}
-                  </div>
-                </div>
-              ))}
-              {interim && (
-                <div
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    background: "var(--primary-bg, rgba(99,102,241,0.08))",
-                    border: "1px dashed var(--primary, #6366f1)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", color: "var(--primary, #6366f1)", fontWeight: 600 }}>
-                    {t("正在说话…", "Speaking now…")} [{formatTimestampDisplay(interimStartSecRef.current)} - {formatTimestampDisplay(elapsed)}]
-                  </div>
-                  <div style={{ fontSize: "14px", color: "var(--primary, #6366f1)", fontWeight: 500, lineHeight: 1.5 }}>
-                    {interim}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {viewMode === "banner" && (
-        <div
-          style={{
-            minHeight: "180px",
-            maxHeight: "280px",
-            borderRadius: "12px",
-            border: "1px solid var(--border-color)",
-            background: "linear-gradient(180deg, var(--bg-card) 0%, var(--bg-subtle, rgba(0,0,0,0.02)) 100%)",
-            padding: "20px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            textAlign: "center",
-            gap: "12px",
-          }}
-        >
-          <div style={{ fontSize: "12px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "1px" }}>
-            {t("实时大字字幕提词", "Live Subtitle Banner")}
-          </div>
+      {/* Main Workspace */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: "340px",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "16px",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        {/* VIEW 1: Teleprompter Mode (上下平滑滚动与高亮聚焦) */}
+        {viewMode === "teleprompter" && (
           <div
+            ref={teleprompterBoxRef}
             style={{
-              fontSize: "20px",
-              fontWeight: 600,
-              color: interim ? "var(--primary, #6366f1)" : "var(--text)",
-              lineHeight: 1.5,
-              maxWidth: "90%",
-              minHeight: "60px",
+              flex: 1,
+              overflowY: "auto",
+              padding: "28px 32px",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              flexDirection: "column",
+              gap: "20px",
+              scrollBehavior: "smooth",
             }}
           >
-            {interim || (segments.length > 0 ? segments[segments.length - 1].text : t("等待说话输入…", "Waiting for speech…"))}
-          </div>
-          {phase === "listening" && (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#e5484d" }}>
-              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#e5484d", display: "inline-block" }} />
-              <span>LIVE ON AIR</span>
-            </div>
-          )}
-        </div>
-      )}
+            {segments.length === 0 && !interim ? (
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--muted)",
+                  gap: "8px",
+                  padding: "40px 0",
+                }}
+              >
+                <div style={{ fontSize: "36px" }}>🎙️</div>
+                <div style={{ fontSize: "16px", fontWeight: 600 }}>
+                  {t("大字提词器已准备就绪", "Teleprompter Ready")}
+                </div>
+                <div style={{ fontSize: "13px", opacity: 0.8 }}>
+                  {t("点击下方按钮开始说话，文字将随着您的语速自动向上平滑滚动…", "Start speaking below. Sentences will smoothly scroll up as you talk…")}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Past finalized sentences (subdued, elegant) */}
+                {segments.map((seg, idx) => (
+                  <div
+                    key={seg.id || idx}
+                    style={{
+                      fontSize: `calc(${getFontSizePx()} * 0.82)`,
+                      lineHeight: 1.6,
+                      color: "var(--text)",
+                      opacity: 0.65,
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <span style={{ fontSize: "12px", color: "var(--muted)", marginRight: "8px", fontFamily: "monospace" }}>
+                      [{formatTimestampDisplay(seg.startSec)}]
+                    </span>
+                    {seg.text}
+                  </div>
+                ))}
 
-      {/* Audio Waveform & Status Indicator */}
+                {/* Current speaking sentence (Large, High-Contrast, Focused) */}
+                {interim && (
+                  <div
+                    ref={teleprompterActiveRef}
+                    style={{
+                      fontSize: getFontSizePx(),
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                      color: "var(--primary, #6366f1)",
+                      background: "var(--primary-bg, rgba(99,102,241,0.06))",
+                      padding: "12px 16px",
+                      borderRadius: "12px",
+                      borderLeft: "4px solid var(--primary, #6366f1)",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "8px",
+                      boxShadow: "0 4px 16px rgba(99,102,241,0.08)",
+                      animation: "fadeIn 0.2s ease",
+                    }}
+                  >
+                    <span style={{ flex: 1 }}>{interim}</span>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "3px",
+                        height: "1.2em",
+                        background: "var(--primary, #6366f1)",
+                        animation: "pulse 1s infinite",
+                        marginLeft: "4px",
+                      }}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* VIEW 2: Transcript Mode (整篇连贯文稿) */}
+        {viewMode === "transcript" && (
+          <div
+            ref={transcriptBoxRef}
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "24px 28px",
+              fontSize: "16px",
+              lineHeight: 1.8,
+              color: "var(--text)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {displayTranscript ? (
+              <>
+                <span>{finalizedText}</span>
+                {interim && <span style={{ color: "var(--primary, #6366f1)", fontWeight: 600 }}>{interimPart}</span>}
+              </>
+            ) : (
+              <span style={{ color: "var(--muted)" }}>
+                {t("转写文稿将实时流式呈现在此…", "Streaming transcript will appear here in real-time…")}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* VIEW 3: Timeline Cues Mode (时间轴字幕分段卡片) */}
+        {viewMode === "timeline" && (
+          <div
+            ref={timelineBoxRef}
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "16px 20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            {segments.length === 0 && !interim ? (
+              <span style={{ color: "var(--muted)", padding: "16px", fontSize: "14px" }}>
+                {t("暂无字幕段落，开始说话后将自动按时间切分生成字幕条…", "No timeline cues yet. Speak to generate timestamped segments…")}
+              </span>
+            ) : (
+              <>
+                {segments.map((seg, idx) => (
+                  <div
+                    key={seg.id || idx}
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      background: "var(--bg-subtle, rgba(0,0,0,0.02))",
+                      border: "1px solid var(--border-color)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--muted)" }}>
+                      <span style={{ fontFamily: "monospace", fontWeight: 600 }}>
+                        #{idx + 1} [{formatTimestampDisplay(seg.startSec)} ➔ {formatTimestampDisplay(seg.endSec)}]
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "15px", color: "var(--text)", lineHeight: 1.5 }}>
+                      {seg.text}
+                    </div>
+                  </div>
+                ))}
+                {interim && (
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      background: "var(--primary-bg, rgba(99,102,241,0.08))",
+                      border: "1px dashed var(--primary, #6366f1)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
+                    <div style={{ fontSize: "12px", color: "var(--primary, #6366f1)", fontWeight: 600 }}>
+                      {t("正在说话…", "Speaking now…")} [{formatTimestampDisplay(interimStartSecRef.current)} ➔ {formatTimestampDisplay(elapsed)}]
+                    </div>
+                    <div style={{ fontSize: "15px", color: "var(--primary, #6366f1)", fontWeight: 600, lineHeight: 1.5 }}>
+                      {interim}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Live Metrics Bottom Footer Bar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "8px 18px",
+            background: "var(--bg-subtle, rgba(0,0,0,0.02))",
+            borderTop: "1px solid var(--border-color)",
+            fontSize: "12px",
+            color: "var(--muted)",
+          }}
+        >
+          <div style={{ display: "flex", gap: "16px" }}>
+            <span>{t(`字数统计: ${wordCount}`, `Words/Chars: ${wordCount}`)}</span>
+            <span>{t(`分段句子: ${segments.length + (interim ? 1 : 0)}`, `Segments: ${segments.length + (interim ? 1 : 0)}`)}</span>
+          </div>
+          <div>
+            <span>{t(`录制时长: ${formatElapsed(elapsed)}`, `Duration: ${formatElapsed(elapsed)}`)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Action Controls Bar */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
+          gap: "12px",
           justifyContent: "space-between",
-          fontSize: "13px",
-          color: "var(--muted)",
+          padding: "4px 0",
         }}
       >
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-          {phase === "listening" && (
-            <span
-              style={{
-                width: "9px",
-                height: "9px",
-                borderRadius: "50%",
-                background: "#e5484d",
-                display: "inline-block",
-              }}
-            />
-          )}
-          {statusText}
-        </span>
-
-        {/* Dynamic Voice Level Visualizer */}
-        {phase === "listening" && (
-          <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "16px" }}>
-            {[0.2, 0.5, 0.8, 0.6, 0.3].map((factor, idx) => {
-              const h = Math.max(3, Math.min(16, audioLevel * factor * 24));
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    width: "3px",
-                    height: `${h}px`,
-                    borderRadius: "2px",
-                    background: "var(--primary, #6366f1)",
-                    transition: "height 0.08s ease",
-                  }}
-                />
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Action Controls */}
-      {phase === "done" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <div style={{ display: "flex", gap: "8px", position: "relative" }}>
+        {phase === "done" ? (
+          <div style={{ display: "flex", gap: "10px", width: "100%", position: "relative" }}>
             {/* Save to Library */}
             <button
               onClick={handleSave}
               disabled={!displayTranscript.trim() || saving}
               className="vsBtnPrimary"
-              style={{ flex: 2, height: "42px", fontSize: "14px", borderRadius: "8px", fontWeight: 600 }}
+              style={{
+                flex: 2,
+                height: "46px",
+                fontSize: "15px",
+                borderRadius: "12px",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+              }}
             >
               {saving ? (
                 <>
                   <span className="spinner-mini" /> {t("保存中…", "Saving…")}
                 </>
               ) : (
-                t("保存到转写库", "Save to library")
+                <>💾 {t("存入转写历史库", "Save to Library")}</>
               )}
             </button>
 
-            {/* Export Menu Dropdown */}
-            <div style={{ position: "relative", flex: 1 }}>
+            {/* Export Dropdown */}
+            <div style={{ position: "relative", flex: 1.2 }}>
               <button
                 type="button"
                 onClick={() => {
@@ -1040,34 +1226,44 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
                 }}
                 disabled={!displayTranscript.trim()}
                 className="vsBtnSecondary"
-                style={{ width: "100%", height: "42px", fontSize: "14px", borderRadius: "8px", fontWeight: 600 }}
+                style={{
+                  width: "100%",
+                  height: "46px",
+                  fontSize: "14px",
+                  borderRadius: "12px",
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                }}
               >
-                {t("导出 ▼", "Export ▼")}
+                🎬 {t("导出字幕/文稿 ▼", "Export ▼")}
               </button>
 
               {showExportMenu && (
                 <div
                   style={{
                     position: "absolute",
-                    bottom: "48px",
+                    bottom: "54px",
                     left: 0,
                     right: 0,
-                    minWidth: "160px",
+                    minWidth: "180px",
                     background: "var(--bg-card)",
                     border: "1px solid var(--border-color)",
-                    borderRadius: "8px",
-                    boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-                    zIndex: 20,
+                    borderRadius: "10px",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
+                    zIndex: 30,
                     display: "flex",
                     flexDirection: "column",
-                    padding: "4px",
+                    padding: "6px",
                   }}
                 >
                   <button
                     type="button"
                     onClick={() => handleExport("srt")}
                     style={{
-                      padding: "8px 12px",
+                      padding: "10px 12px",
                       textAlign: "left",
                       border: "none",
                       background: "transparent",
@@ -1077,13 +1273,13 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
                       cursor: "pointer",
                     }}
                   >
-                    🎬 {t("导出 SRT 字幕文件", "Export SRT Subtitle")}
+                    🎬 {t("导出 SRT 字幕 (.srt)", "Export SRT Subtitles")}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleExport("vtt")}
                     style={{
-                      padding: "8px 12px",
+                      padding: "10px 12px",
                       textAlign: "left",
                       border: "none",
                       background: "transparent",
@@ -1093,13 +1289,13 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
                       cursor: "pointer",
                     }}
                   >
-                    🌐 {t("导出 WebVTT 字幕", "Export WebVTT")}
+                    🌐 {t("导出 WebVTT 字幕 (.vtt)", "Export WebVTT")}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleExport("txt")}
                     style={{
-                      padding: "8px 12px",
+                      padding: "10px 12px",
                       textAlign: "left",
                       border: "none",
                       background: "transparent",
@@ -1109,13 +1305,13 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
                       cursor: "pointer",
                     }}
                   >
-                    📄 {t("导出纯文本 TXT", "Export Text (.txt)")}
+                    📄 {t("导出纯文本 (.txt)", "Export Text (.txt)")}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleExport("md")}
                     style={{
-                      padding: "8px 12px",
+                      padding: "10px 12px",
                       textAlign: "left",
                       border: "none",
                       background: "transparent",
@@ -1125,13 +1321,13 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
                       cursor: "pointer",
                     }}
                   >
-                    📝 {t("导出 Markdown 纪要", "Export Markdown (.md)")}
+                    📝 {t("导出 Markdown 纪要 (.md)", "Export Markdown (.md)")}
                   </button>
                 </div>
               )}
             </div>
 
-            {/* Copy Menu Dropdown */}
+            {/* Copy Dropdown */}
             <div style={{ position: "relative", flex: 1 }}>
               <button
                 type="button"
@@ -1141,34 +1337,44 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
                 }}
                 disabled={!displayTranscript.trim()}
                 className="vsBtnSecondary"
-                style={{ width: "100%", height: "42px", fontSize: "14px", borderRadius: "8px", fontWeight: 600 }}
+                style={{
+                  width: "100%",
+                  height: "46px",
+                  fontSize: "14px",
+                  borderRadius: "12px",
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                }}
               >
-                {t("复制 ▼", "Copy ▼")}
+                📋 {t("复制 ▼", "Copy ▼")}
               </button>
 
               {showCopyMenu && (
                 <div
                   style={{
                     position: "absolute",
-                    bottom: "48px",
+                    bottom: "54px",
                     left: 0,
                     right: 0,
-                    minWidth: "150px",
+                    minWidth: "160px",
                     background: "var(--bg-card)",
                     border: "1px solid var(--border-color)",
-                    borderRadius: "8px",
-                    boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-                    zIndex: 20,
+                    borderRadius: "10px",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
+                    zIndex: 30,
                     display: "flex",
                     flexDirection: "column",
-                    padding: "4px",
+                    padding: "6px",
                   }}
                 >
                   <button
                     type="button"
                     onClick={handleCopyPlainText}
                     style={{
-                      padding: "8px 12px",
+                      padding: "10px 12px",
                       textAlign: "left",
                       border: "none",
                       background: "transparent",
@@ -1178,13 +1384,13 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
                       cursor: "pointer",
                     }}
                   >
-                    📋 {t("复制纯文字文稿", "Copy Plain Text")}
+                    📄 {t("复制纯文字文稿", "Copy Plain Text")}
                   </button>
                   <button
                     type="button"
                     onClick={handleCopyTimelineText}
                     style={{
-                      padding: "8px 12px",
+                      padding: "10px 12px",
                       textAlign: "left",
                       border: "none",
                       background: "transparent",
@@ -1194,7 +1400,7 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
                       cursor: "pointer",
                     }}
                   >
-                    ⏱️ {t("复制带时间轴字幕", "Copy Timestamped")}
+                    ⏱️ {t("复制带时间轴字幕", "Copy Timestamped Cues")}
                   </button>
                 </div>
               )}
@@ -1205,36 +1411,63 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
               type="button"
               onClick={reset}
               className="vsBtnGhost"
-              style={{ height: "42px", padding: "0 14px", fontSize: "13px", borderRadius: "8px" }}
+              style={{
+                height: "46px",
+                padding: "0 18px",
+                fontSize: "14px",
+                borderRadius: "12px",
+                fontWeight: 600,
+              }}
             >
-              {t("重开", "Reset")}
+              🔄 {t("重新开始", "New Session")}
             </button>
           </div>
-        </div>
-      ) : (
-        <button
-          onClick={phase === "idle" ? start : stop}
-          disabled={phase === "connecting" || phase === "finishing"}
-          className="vsBtnPrimary"
-          style={{ width: "100%", height: "44px", fontSize: "14px", borderRadius: "10px", fontWeight: 600 }}
-        >
-          {phase === "connecting" && (
-            <>
-              <span className="spinner-mini" /> {t("连接中…", "Connecting…")}
-            </>
-          )}
-          {phase === "listening" && t("结束录音并整理", "Stop Recording & Finish")}
-          {phase === "finishing" && (
-            <>
-              <span className="spinner-mini" /> {t("正在整理…", "Wrapping up…")}
-            </>
-          )}
-          {phase === "idle" && t("开始实时流式转写", "Start Realtime Transcription")}
-        </button>
-      )}
+        ) : (
+          <button
+            onClick={phase === "idle" ? start : stop}
+            disabled={phase === "connecting" || phase === "finishing"}
+            className="vsBtnPrimary"
+            style={{
+              width: "100%",
+              height: "48px",
+              fontSize: "15px",
+              borderRadius: "12px",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              background: phase === "listening" ? "#e5484d" : undefined,
+              borderColor: phase === "listening" ? "#e5484d" : undefined,
+            }}
+          >
+            {phase === "connecting" && (
+              <>
+                <span className="spinner-mini" /> {t("正在建立实时连接…", "Connecting…")}
+              </>
+            )}
+            {phase === "listening" && (
+              <>
+                <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#fff", display: "inline-block" }} />
+                {t("结束实时录音并整理", "Stop Recording & Finish")}
+              </>
+            )}
+            {phase === "finishing" && (
+              <>
+                <span className="spinner-mini" /> {t("正在整理最后的内容…", "Wrapping up…")}
+              </>
+            )}
+            {phase === "idle" && (
+              <>
+                <span>🔴</span> {t("开始实时流式转写", "Start Realtime Transcription")}
+              </>
+            )}
+          </button>
+        )}
+      </div>
 
       {info && (
-        <span style={{ fontSize: "12px", color: "var(--primary, #6366f1)", textAlign: "center", fontWeight: 500 }}>
+        <span style={{ fontSize: "13px", color: "var(--primary, #6366f1)", textAlign: "center", fontWeight: 500 }}>
           {info}
         </span>
       )}
@@ -1244,3 +1477,4 @@ export function RealtimeTranscriptionPanel({ onComplete }: Props) {
 }
 
 export default RealtimeTranscriptionPanel;
+

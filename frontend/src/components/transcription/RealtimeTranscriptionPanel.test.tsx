@@ -40,27 +40,27 @@ describe("RealtimeTranscriptionPanel component", () => {
 
   it("renders initial controls, model list and view mode switchers", () => {
     render(<RealtimeTranscriptionPanel onComplete={onComplete} />);
-    expect(screen.getByText(/识别引擎/i)).toBeInTheDocument();
-    expect(screen.getByText(/识别语种/i)).toBeInTheDocument();
-    expect(screen.getByText(/文稿模式/i)).toBeInTheDocument();
-    expect(screen.getByText(/字幕时间轴/i)).toBeInTheDocument();
-    expect(screen.getByText(/大字实时字幕/i)).toBeInTheDocument();
-    expect(screen.getByText(/开始实时流式转写/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/模型/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/语种/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /文稿模式/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /字幕时间轴/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /大字提词器/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /开始实时流式转写/i })).toBeInTheDocument();
   });
 
   it("switches between view modes smoothly", () => {
     render(<RealtimeTranscriptionPanel onComplete={onComplete} />);
 
     // Switch to Timeline Cues
-    fireEvent.click(screen.getByText(/字幕时间轴/i));
+    fireEvent.click(screen.getByRole("button", { name: /字幕时间轴/i }));
     expect(screen.getByText(/暂无字幕段落/i)).toBeInTheDocument();
 
-    // Switch to Live Banner
-    fireEvent.click(screen.getByText(/大字实时字幕/i));
-    expect(screen.getByText(/实时大字字幕提词/i)).toBeInTheDocument();
+    // Switch to Teleprompter
+    fireEvent.click(screen.getByRole("button", { name: /大字提词器/i }));
+    expect(screen.getByText(/大字提词器已准备就绪/i)).toBeInTheDocument();
 
     // Switch back to Transcript
-    fireEvent.click(screen.getByText(/文稿模式/i));
-    expect(screen.getByText(/转写文字将在此实时呈现/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /文稿模式/i }));
+    expect(screen.getByText(/转写文稿将实时流式呈现在此/i)).toBeInTheDocument();
   });
 });

@@ -31,6 +31,7 @@ type Props = {
   onLocalTranscribe: (file: File, provider?: string) => Promise<void>;
   onRemoteSubmit: (url: string) => Promise<void>;
   onRealtimeComplete: (job: TranscriptionJobResponse) => void;
+  onSwitchToRealtimeStudio?: () => void;
   /** Manage (batch) mode */
   manageMode: boolean;
   selectedIds: Set<string>;
@@ -66,6 +67,7 @@ export default function TranscriptionTable({
   onLocalTranscribe,
   onRemoteSubmit,
   onRealtimeComplete,
+  onSwitchToRealtimeStudio,
   manageMode,
   selectedIds,
   batchDeleting,
@@ -303,6 +305,7 @@ export default function TranscriptionTable({
           onLocalTranscribe={onLocalTranscribe}
           onRemoteSubmit={onRemoteSubmit}
           onRealtimeComplete={onRealtimeComplete}
+          onSwitchToRealtimeStudio={onSwitchToRealtimeStudio}
         />
       )}
     </section>

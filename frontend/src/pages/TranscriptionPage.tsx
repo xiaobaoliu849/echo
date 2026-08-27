@@ -12,6 +12,7 @@ import {
 } from "../api";
 import TranscriptionDetailDrawer from "../components/transcription/TranscriptionDetailDrawer";
 import TranscriptionTable from "../components/transcription/TranscriptionTable";
+import RealtimeTranscriptionPanel from "../components/transcription/RealtimeTranscriptionPanel";
 import { useTranscriptionHistory, type HistoryItem } from "../hooks/useTranscriptionHistory";
 import { useI18n } from "../i18n";
 import { generateSrt, generateVtt } from "../utils/subtitleGenerator";
@@ -74,6 +75,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
   const { t, language } = useI18n();
 
   const [viewMode, setViewMode] = useState<ViewMode>("library");
+  const [pageTab, setPageTab] = useState<"realtime" | "library">("library");
   const [job, setJob] = useState<TranscriptionJobResponse | null>(null);
   const [transcript, setTranscript] = useState("");
   const [words, setWords] = useState<WordTimestamp[]>([]);
@@ -517,42 +519,130 @@ export function TranscriptionPage({ onSendToChat }: Props) {
   }
 
   return (
-    <TranscriptionTable
-      history={history}
-      filteredHistory={filteredHistory}
-      activeFilter={activeFilter}
-      searchQuery={searchQuery}
-      historyBusy={historyBusy}
-      activeJobId={job?.job_id}
-      error={error}
-      modalError={modalError}
-      showNewModal={showNewModal}
-      isBusy={isBusy}
-      isSyncBusy={isSyncBusy}
-      isAsyncBusy={isAsyncBusy}
-      onSearchChange={setSearchQuery}
-      onFilterChange={handleFilterChange}
-      onRefresh={refreshHistory}
-      onOpenNewModal={() => {
-        setModalError(null);
-        setShowNewModal(true);
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        width: "100%",
+        gap: "14px",
+        padding: "16px 24px",
+        boxSizing: "border-box",
+        overflowY: "auto",
       }}
-      onCloseNewModal={() => setShowNewModal(false)}
-      onCardClick={handleCardClick}
-      onDeleteJob={removeJob}
-      onRetryJob={(id) => retryJob(id).catch(() => {})}
-      onLocalTranscribe={handleLocalTranscription}
-      onRemoteSubmit={handleRemoteJobStart}
-      onRealtimeComplete={handleRealtimeComplete}
-      manageMode={manageMode}
-      selectedIds={selectedIds}
-      batchDeleting={batchDeleting}
-      onToggleManageMode={toggleManageMode}
-      onToggleSelect={toggleSelect}
-      onSelectAllVisible={selectAllVisible}
-      onClearSelection={clearSelection}
-      onBatchDelete={handleBatchDelete}
-    />
+    >
+      {/* Top Level Mode Tabs */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: "1px solid var(--border-color)",
+          paddingBottom: "12px",
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button
+            type="button"
+            onClick={() => setPageTab("realtime")}
+            style={{
+              padding: "8px 18px",
+              borderRadius: "10px",
+              fontSize: "14px",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              background: pageTab === "realtime" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
+              color: pageTab === "realtime" ? "#fff" : "var(--text)",
+              border: "none",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            🎙️ {t("实时录音转写工作台", "Realtime Live Studio")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("library")}
+            style={{
+              padding: "8px 18px",
+              borderRadius: "10px",
+              fontSize: "14px",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              background: pageTab === "library" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
+              color: pageTab === "library" ? "#fff" : "var(--text)",
+              border: "none",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            📚 {t("转写历史库与文件", "Transcription Library & Files")}
+          </button>
+        </div>
+
+        {infoMessage && (
+          <span style={{ fontSize: "12px", color: "var(--primary, #6366f1)", fontWeight: 500 }}>
+            {infoMessage}
+          </span>
+        )}
+      </div>
+
+      {/* Tab Content */}
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        {pageTab === "realtime" ? (
+          <RealtimeTranscriptionPanel
+            onComplete={handleRealtimeComplete}
+            onSwitchToLibrary={() => setPageTab("library")}
+          />
+        ) : (
+          <TranscriptionTable
+            history={history}
+            filteredHistory={filteredHistory}
+            activeFilter={activeFilter}
+            searchQuery={searchQuery}
+            historyBusy={historyBusy}
+            activeJobId={job?.job_id}
+            error={error}
+            modalError={modalError}
+            showNewModal={showNewModal}
+            isBusy={isBusy}
+            isSyncBusy={isSyncBusy}
+            isAsyncBusy={isAsyncBusy}
+            onSearchChange={setSearchQuery}
+            onFilterChange={handleFilterChange}
+            onRefresh={refreshHistory}
+            onOpenNewModal={() => {
+              setModalError(null);
+              setShowNewModal(true);
+            }}
+            onCloseNewModal={() => setShowNewModal(false)}
+            onCardClick={handleCardClick}
+            onDeleteJob={removeJob}
+            onRetryJob={(id) => retryJob(id).catch(() => {})}
+            onLocalTranscribe={handleLocalTranscription}
+            onRemoteSubmit={handleRemoteJobStart}
+            onRealtimeComplete={handleRealtimeComplete}
+            onSwitchToRealtimeStudio={() => {
+              setShowNewModal(false);
+              setPageTab("realtime");
+            }}
+            manageMode={manageMode}
+            selectedIds={selectedIds}
+            batchDeleting={batchDeleting}
+            onToggleManageMode={toggleManageMode}
+            onToggleSelect={toggleSelect}
+            onSelectAllVisible={selectAllVisible}
+            onClearSelection={clearSelection}
+            onBatchDelete={handleBatchDelete}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 

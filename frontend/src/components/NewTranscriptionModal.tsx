@@ -12,6 +12,7 @@ type Props = {
   onLocalTranscribe: (file: File, provider?: string) => void;
   onRemoteSubmit: (url: string, provider?: string) => void;
   onRealtimeComplete: (job: TranscriptionJobResponse, words?: WordTimestamp[]) => void;
+  onSwitchToRealtimeStudio?: () => void;
   isBusy: boolean;
   isSyncBusy: boolean;
   isAsyncBusy: boolean;
@@ -24,6 +25,7 @@ export const NewTranscriptionModal: React.FC<Props> = ({
   onLocalTranscribe,
   onRemoteSubmit,
   onRealtimeComplete,
+  onSwitchToRealtimeStudio,
   isBusy,
   isSyncBusy,
   isAsyncBusy,
@@ -61,7 +63,11 @@ export const NewTranscriptionModal: React.FC<Props> = ({
         if (e.target === e.currentTarget && !isBusy) onClose();
       }}
     >
-      <div className="vsTranscribeModal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="vsTranscribeModal"
+        style={inputMode === "realtime" ? { maxWidth: "780px" } : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="vsTranscribeModalHeader">
           <h2 className="vsTranscribeModalTitle">
@@ -101,16 +107,22 @@ export const NewTranscriptionModal: React.FC<Props> = ({
           <button
             type="button"
             className={`vsTranscribeFilterTab ${inputMode === "realtime" ? "active" : ""}`}
-            onClick={() => setInputMode("realtime")}
+            onClick={() => {
+              if (onSwitchToRealtimeStudio) {
+                onSwitchToRealtimeStudio();
+              } else {
+                setInputMode("realtime");
+              }
+            }}
             style={{ flex: 1, justifyContent: "center" }}
           >
-            {t("实时转写", "Realtime")}
+            {t("🎙️ 实时录音转写", "🎙️ Realtime Studio")}
           </button>
         </div>
 
         {/* Content */}
         {inputMode === "realtime" ? (
-          <RealtimeTranscriptionPanel onComplete={onRealtimeComplete} />
+          <RealtimeTranscriptionPanel onComplete={onRealtimeComplete} onSwitchToLibrary={onClose} />
         ) : inputMode === "local" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <AudioDropZone
