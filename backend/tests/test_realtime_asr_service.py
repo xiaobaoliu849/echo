@@ -17,12 +17,15 @@ from unittest.mock import patch
 
 from routers.transcription import _parse_realtime_config, transcription_realtime_ws
 from services.realtime_asr_service import (
+    GEMINI_TRANSCRIBE_LIVE_MODEL,
+    GoogleStreamingAsrSession,
     QWEN_AUDIO_ASR_STREAMING_MODEL,
     QwenAudioStreamingAsrSession,
     RealtimeAsrError,
     RealtimeAsrSentence,
     build_finish_task_event,
     build_run_task_event,
+    build_streaming_asr_session,
     parse_sentence,
 )
 
@@ -244,10 +247,141 @@ class ParseRealtimeConfigTests(unittest.TestCase):
         self.assertTrue(config["semantic_punctuation"])
         self.assertEqual(config["max_sentence_silence"], 800)
 
+    def test_model_selection_in_config(self):
+        config = _parse_realtime_config({"model": GEMINI_TRANSCRIBE_LIVE_MODEL})
+        self.assertEqual(config.get("model"), GEMINI_TRANSCRIBE_LIVE_MODEL)
+        config_qwen = _parse_realtime_config({"model": QWEN_AUDIO_ASR_STREAMING_MODEL})
+        self.assertEqual(config_qwen.get("model"), QWEN_AUDIO_ASR_STREAMING_MODEL)
+
     def test_garbage_config_returns_empty(self):
         self.assertEqual(_parse_realtime_config("junk"), {})
         self.assertEqual(_parse_realtime_config({"language_hints": "zh"}), {})
         self.assertEqual(_parse_realtime_config({"max_sentence_silence": 99999}), {})
+
+
+class GoogleStreamingAsrSessionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_api_key_raises(self):
+        session = GoogleStreamingAsrSession("")
+        with self.assertRaises(ValueError) as ctx:
+            await session.start()
+        self.assertIn("Google API key", str(ctx.exception))
+
+    async def test_session_lifecycle_with_mock_sdk(self):
+        class MockLiveSession:
+            def __init__(self):
+                self.sent_realtime_inputs = []
+                self.sent_turns = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+            async def send_realtime_input(self, audio=None):
+                self.sent_realtime_inputs.append(audio)
+
+            async def send(self, **kwargs):
+                self.sent_turns.append(kwargs)
+
+            def receive(self):
+                class AsyncIter:
+                    def __init__(self):
+                        self.yielded = False
+
+                    def __aiter__(self):
+                        return self
+
+                    async def __anext__(self):
+                        if not self.yielded:
+                            self.yielded = True
+                            # Return simulated server response with transcription
+                            resp = type("MockResponse", (), {
+                                "server_content": type("MockServerContent", (), {
+                                    "turn_complete": True,
+                                    "input_transcription": type("MockTranscript", (), {
+                                        "text": "Hello Gemini Live",
+                                        "finished": True,
+                                    })(),
+                                })(),
+                                "text": "Hello Gemini Live",
+                            })()
+                            return resp
+                        raise StopAsyncIteration
+
+                return AsyncIter()
+
+        mock_live_session = MockLiveSession()
+        mock_client = type("MockClient", (), {
+            "aio": type("MockAio", (), {
+                "live": type("MockLive", (), {
+                    "connect": lambda *a, **kw: mock_live_session,
+                })(),
+            })(),
+        })()
+
+        session = GoogleStreamingAsrSession(
+            "fake-google-key",
+            model=GEMINI_TRANSCRIBE_LIVE_MODEL,
+        )
+
+        with patch("services.realtime_asr_service.genai", type("MockGenai", (), {"Client": lambda **kw: mock_client})), \
+             patch("services.realtime_asr_service.types", type("MockTypes", (), {
+                 "LiveConnectConfig": lambda **kw: kw,
+                 "AudioTranscriptionConfig": lambda **kw: kw,
+                 "Blob": lambda data, mime_type: type("MockBlob", (), {"data": data, "mime_type": mime_type})(),
+             })):
+            await session.start()
+            await session.send_audio(b"\x00\x01\x02")
+            await session.finish()
+
+            sentences = []
+            async for sentence in session.events():
+                sentences.append(sentence)
+                break
+
+            await session.close()
+
+        self.assertEqual(len(sentences), 1)
+        self.assertEqual(sentences[0].text, "Hello Gemini Live")
+        self.assertTrue(sentences[0].sentence_end)
+        self.assertEqual(len(mock_live_session.sent_realtime_inputs), 1)
+        self.assertEqual(mock_live_session.sent_realtime_inputs[0].data, b"\x00\x01\x02")
+
+
+class BuildStreamingAsrSessionTests(unittest.TestCase):
+    def test_build_google_session_success(self):
+        cfg = type("MockConfig", (), {
+            "reload": lambda self: None,
+            "get_all": lambda self: {"api_keys": {"google_api_key": "goog-key"}},
+            "get_provider_settings": lambda self, name: {"base_url": "https://custom.goog.api"},
+        })()
+        session = build_streaming_asr_session(cfg, model=GEMINI_TRANSCRIBE_LIVE_MODEL)
+        self.assertIsInstance(session, GoogleStreamingAsrSession)
+        self.assertEqual(session._api_key, "goog-key")
+        self.assertEqual(session._base_url, "https://custom.goog.api")
+        self.assertEqual(session._model, GEMINI_TRANSCRIBE_LIVE_MODEL)
+
+    def test_build_google_session_missing_key_raises(self):
+        cfg = type("MockConfig", (), {
+            "reload": lambda self: None,
+            "get_all": lambda self: {"api_keys": {}},
+            "get_provider_settings": lambda self, name: {},
+        })()
+        with self.assertRaises(ValueError) as ctx:
+            build_streaming_asr_session(cfg, model=GEMINI_TRANSCRIBE_LIVE_MODEL)
+        self.assertIn("Google API key not configured", str(ctx.exception))
+
+    def test_build_dashscope_session_success(self):
+        cfg = type("MockConfig", (), {
+            "reload": lambda self: None,
+            "get_all": lambda self: {"api_keys": {"dashscope_api_key": "dash-key"}},
+            "get_provider_settings": lambda self, name: {"base_url": "https://dashscope.aliyuncs.com/api/v1"},
+        })()
+        session = build_streaming_asr_session(cfg, model=QWEN_AUDIO_ASR_STREAMING_MODEL)
+        self.assertIsInstance(session, QwenAudioStreamingAsrSession)
+        self.assertEqual(session._api_key, "dash-key")
+        self.assertEqual(session._model, QWEN_AUDIO_ASR_STREAMING_MODEL)
 
 
 class _FakeClientWs:
@@ -395,6 +529,28 @@ class RealtimeWsHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(types[0], "started")
         self.assertIn("finished", types)
         self.assertEqual(client.close_code, 1000)
+
+    async def test_google_gemini_streaming_ws_flow(self):
+        client = _FakeClientWs([
+            {"text": json.dumps({"type": "config", "model": GEMINI_TRANSCRIBE_LIVE_MODEL})},
+            {"bytes": b"\x10\x20"},
+            {"text": json.dumps({"type": "finish"})},
+        ])
+        fake_session = _FakeSession([
+            RealtimeAsrSentence(text="Live Google STT", sentence_end=True),
+        ])
+
+        with patch(
+            "routers.transcription.build_streaming_asr_session",
+            return_value=fake_session,
+        ) as factory:
+            await transcription_realtime_ws(client)
+
+        factory.assert_called_once()
+        self.assertEqual(factory.call_args.kwargs.get("model"), GEMINI_TRANSCRIBE_LIVE_MODEL)
+        self.assertEqual(fake_session.audio, [b"\x10\x20"])
+        sentence_msgs = [m for m in client.sent if m["type"] == "sentence"]
+        self.assertEqual(sentence_msgs[-1]["text"], "Live Google STT")
 
 
 if __name__ == "__main__":

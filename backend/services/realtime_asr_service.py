@@ -18,10 +18,18 @@ from typing import Any, AsyncIterator
 
 import websockets
 
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:  # pragma: no cover
+    genai = None
+    types = None
+
 from .config_loader import BackendConfig
 
 logger = logging.getLogger(__name__)
 
+GEMINI_TRANSCRIBE_LIVE_MODEL = "gemini-3.5-transcribe-live"
 QWEN_AUDIO_ASR_STREAMING_MODEL = "qwen-audio-3.0-asr-flash-streaming"
 FUN_ASR_REALTIME_MODEL = "fun-asr-realtime"
 DEFAULT_STREAMING_WS_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
@@ -30,10 +38,9 @@ STREAMING_MAX_LANGUAGE_HINTS = 4
 TASK_STARTED_TIMEOUT = 15.0
 
 # Realtime streaming models selectable from the transcription UI, mapped to the
-# max language_hints each accepts. The default Qwen-Audio streaming model also
-# supports instant hotwords; the Fun-ASR-Realtime family accepts a single hint
-# and no instant hotwords.
+# max language_hints each accepts.
 STREAMING_MODEL_LANGUAGE_HINT_CAPS = {
+    GEMINI_TRANSCRIBE_LIVE_MODEL: 4,
     QWEN_AUDIO_ASR_STREAMING_MODEL: 4,
     FUN_ASR_REALTIME_MODEL: 1,
 }
@@ -269,6 +276,157 @@ class QwenAudioStreamingAsrSession:
                 pass
 
 
+class GoogleStreamingAsrSession:
+    """One duplex session against Google Gemini 3.5 Transcribe Live."""
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        base_url: str = "",
+        model: str = GEMINI_TRANSCRIBE_LIVE_MODEL,
+        sample_rate: int = 16000,
+        language_hints: list[str] | None = None,
+        vocabulary: dict[str, int] | None = None,
+    ) -> None:
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+        self._sample_rate = sample_rate
+        self._language_hints = language_hints
+        self._vocabulary = vocabulary
+        self._client: Any = None
+        self._session_ctx: Any = None
+        self._session: Any = None
+        self._task_queue: asyncio.Queue[RealtimeAsrSentence | None] = asyncio.Queue()
+        self._receive_task: asyncio.Task | None = None
+        self._closed = False
+        self._finished = False
+
+    async def start(self) -> None:
+        """Connect to Google Gemini Live API."""
+        if genai is None or types is None:
+            raise RealtimeAsrError("Google GenAI SDK (google-genai) is not installed.")
+        if not self._api_key:
+            raise ValueError("Google API key not configured. Set google_api_key in Settings.")
+
+        http_options: dict[str, str] = {"api_version": "v1beta"}
+        if self._base_url and self._base_url != "https://generativelanguage.googleapis.com/v1beta":
+            http_options["base_url"] = self._base_url
+
+        self._client = genai.Client(api_key=self._api_key, http_options=http_options)
+        live_config = types.LiveConnectConfig(
+            response_modalities=["TEXT"],
+            input_audio_transcription=types.AudioTranscriptionConfig(),
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+        )
+
+        try:
+            self._session_ctx = self._client.aio.live.connect(model=self._model, config=live_config)
+            self._session = await self._session_ctx.__aenter__()
+        except Exception as exc:
+            await self.close()
+            raise RealtimeAsrError(f"Google Gemini Transcribe Live session failed to start: {exc}") from exc
+
+        self._receive_task = asyncio.create_task(self._listen_upstream())
+
+    async def _listen_upstream(self) -> None:
+        try:
+            while not self._closed and self._session is not None:
+                turn = self._session.receive()
+                async for response in turn:
+                    server_content = getattr(response, "server_content", None)
+                    if server_content is not None:
+                        transcript_chunk = ""
+                        for field_name in ("input_transcription", "input_audio_transcription", "transcription"):
+                            if hasattr(server_content, field_name):
+                                val = getattr(server_content, field_name)
+                                if val is not None:
+                                    if isinstance(val, str):
+                                        transcript_chunk = val
+                                    elif hasattr(val, "text") and getattr(val, "text"):
+                                        transcript_chunk = str(getattr(val, "text"))
+                                    elif isinstance(val, dict) and val.get("text"):
+                                        transcript_chunk = str(val.get("text"))
+                                    break
+
+                        response_text = getattr(response, "text", "") or ""
+                        text = (transcript_chunk or response_text).strip()
+                        if text:
+                            is_end = bool(
+                                getattr(server_content, "turn_complete", False)
+                                or getattr(getattr(server_content, "input_transcription", None), "finished", False)
+                            )
+                            sentence = RealtimeAsrSentence(
+                                text=text,
+                                sentence_end=is_end,
+                            )
+                            await self._task_queue.put(sentence)
+                    else:
+                        response_text = getattr(response, "text", "") or ""
+                        if response_text.strip():
+                            await self._task_queue.put(
+                                RealtimeAsrSentence(
+                                    text=response_text.strip(),
+                                    sentence_end=False,
+                                )
+                            )
+                if self._finished:
+                    break
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.warning("Google Gemini Live stream receive exception: %s", exc)
+        finally:
+            await self._task_queue.put(None)
+
+    async def send_audio(self, chunk: bytes) -> None:
+        """Send one binary PCM frame (mono, configured sample rate)."""
+        if self._session is None or self._closed:
+            raise RealtimeAsrError("Realtime ASR session not started.")
+        if chunk and types is not None:
+            await self._session.send_realtime_input(
+                audio=types.Blob(data=chunk, mime_type=f"audio/pcm;rate={self._sample_rate}")
+            )
+
+    async def finish(self) -> None:
+        """Signal finish/end of audio."""
+        self._finished = True
+        if self._session is not None and not self._closed:
+            try:
+                if hasattr(self._session, "send"):
+                    await self._session.send(end_of_turn=True)
+            except Exception:
+                pass
+
+    async def events(self) -> AsyncIterator[RealtimeAsrSentence]:
+        """Yield sentences until the session completes or errors."""
+        while True:
+            item = await self._task_queue.get()
+            if item is None:
+                break
+            yield item
+
+    async def close(self) -> None:
+        self._closed = True
+        if self._receive_task is not None:
+            self._receive_task.cancel()
+            self._receive_task = None
+        if self._session_ctx is not None:
+            try:
+                await self._session_ctx.__aexit__(None, None, None)
+            except Exception:
+                pass
+            self._session_ctx = None
+            self._session = None
+        await self._task_queue.put(None)
+
+
+def _is_google_streaming_asr_model(model: str | None) -> bool:
+    m = str(model or "").strip().lower()
+    return m == GEMINI_TRANSCRIBE_LIVE_MODEL.lower() or m.startswith("gemini-") or m in {"google", "gemini"}
+
+
 def build_streaming_asr_session(
     config: BackendConfig,
     *,
@@ -277,10 +435,29 @@ def build_streaming_asr_session(
     semantic_punctuation: bool | None = None,
     max_sentence_silence: int | None = None,
     model: str | None = None,
-) -> QwenAudioStreamingAsrSession:
+) -> QwenAudioStreamingAsrSession | GoogleStreamingAsrSession:
     """Factory: resolve API key + WS URL from config and build a session."""
     config.reload()
     api_keys = config.get_all().get("api_keys", {})
+    resolved_model = model or QWEN_AUDIO_ASR_STREAMING_MODEL
+
+    if _is_google_streaming_asr_model(resolved_model):
+        api_key = str(api_keys.get("google_api_key", "")).strip()
+        if not api_key:
+            raise ValueError("Google API key not configured. Set google_api_key in Settings.")
+        base_url = config.get_provider_settings("Google").get("base_url", "").strip()
+        hint_cap = STREAMING_MODEL_LANGUAGE_HINT_CAPS.get(resolved_model, STREAMING_MAX_LANGUAGE_HINTS)
+        if language_hints:
+            language_hints = language_hints[:hint_cap]
+        return GoogleStreamingAsrSession(
+            api_key,
+            base_url=base_url,
+            model=resolved_model if resolved_model not in {"google", "gemini"} else GEMINI_TRANSCRIBE_LIVE_MODEL,
+            language_hints=language_hints,
+            vocabulary=vocabulary,
+        )
+
+    # DashScope / Qwen path
     api_key = str(api_keys.get("dashscope_api_key", "")).strip()
     if not api_key:
         raise ValueError("DashScope API key not configured.")
@@ -298,7 +475,6 @@ def build_streaming_asr_session(
             ws_url = f"wss://{host}/api-ws/v1/inference"
 
     # Cap language hints per the selected streaming model's limits.
-    resolved_model = model or QWEN_AUDIO_ASR_STREAMING_MODEL
     hint_cap = STREAMING_MODEL_LANGUAGE_HINT_CAPS.get(resolved_model, STREAMING_MAX_LANGUAGE_HINTS)
     if language_hints:
         language_hints = language_hints[:hint_cap]

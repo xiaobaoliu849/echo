@@ -1888,6 +1888,8 @@ class ApiSmokeTests(unittest.TestCase):
                         "gemini-3.5-flash",
                         "gemini-3.5-live-translate-preview",
                         "gemini-3.5-pro",
+                        "gemini-3.5-transcribe",
+                        "gemini-3.5-transcribe-live",
                         "gemini-3.7-flash",
                     ],
                 )

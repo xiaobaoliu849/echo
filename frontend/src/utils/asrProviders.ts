@@ -132,11 +132,18 @@ export type RealtimeAsrModel = {
 
 export const REALTIME_ASR_MODELS: RealtimeAsrModel[] = [
   {
+    id: "gemini-3.5-transcribe-live",
+    zh: "Google Gemini 3.5 Transcribe Live（推荐）",
+    en: "Google Gemini 3.5 Transcribe Live (Recommended)",
+    noteZh: "Google 最新实时流式转写，低延迟高准确率，支持 85+ 语种智能识别与语气词过滤。",
+    noteEn: "Google's latest low-latency streaming transcription with 85+ languages and smart formatting.",
+  },
+  {
     id: "qwen-audio-3.0-asr-flash-streaming",
-    zh: "Qwen-Audio 3.0 ASR Streaming（默认）",
-    en: "Qwen-Audio 3.0 ASR Streaming (Default)",
-    noteZh: "实时流式识别，支持即时热词与最多 4 个语种提示。",
-    noteEn: "Realtime streaming with instant hotwords and up to 4 language hints.",
+    zh: "Qwen-Audio 3.0 ASR Streaming",
+    en: "Qwen-Audio 3.0 ASR Streaming",
+    noteZh: "阿里云实时流式识别，支持即时热词与最多 4 个语种提示。中文场景推荐。",
+    noteEn: "Realtime streaming with instant hotwords and up to 4 language hints. Recommended for Chinese.",
   },
   {
     id: "fun-asr-realtime",

@@ -220,6 +220,9 @@ GOOGLE_MODEL_LIST_SUPPLEMENTS = [
     # Realtime voice and live translation models
     "gemini-3.1-flash-live-preview",
     "gemini-3.5-live-translate-preview",
+    # Audio transcription models (Interactions API / Live API)
+    "gemini-3.5-transcribe",
+    "gemini-3.5-transcribe-live",
 ]
 DASHSCOPE_MODEL_LIST_SUPPLEMENTS = [
     # TTS synthesis models (current generation only)
