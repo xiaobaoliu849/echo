@@ -52,6 +52,9 @@ QWEN_AUDIO_ASR_MAX_LANGUAGE_HINTS = 4
 MIMO_ASR_MODEL = "mimo-v2.5-asr"
 MIMO_DEFAULT_CHAT_URL = "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions"
 
+# Google Gemini 3.5 Transcribe ASR
+GEMINI_TRANSCRIBE_MODEL = "gemini-3.5-transcribe"
+
 # Deepgram ASR
 DEEPGRAM_API_URL = "https://api.deepgram.com/v1/listen"
 DEEPGRAM_DEFAULT_MODEL = "nova-3"
@@ -184,6 +187,22 @@ class TranscriptionService:
     def _deepgram_key(self) -> str:
         self.config.reload()
         return str(self.config.peek_setting("deepgram_api_key", "")).strip()
+
+    def _google_key(self) -> str:
+        if hasattr(self, "config") and self.config is not None:
+            self.config.reload()
+            key = str(self.config.peek_setting("google_api_key", "")).strip()
+            if key:
+                return key
+        import os
+        return (os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")).strip()
+
+    def _google_interactions_base_url(self) -> str:
+        if hasattr(self, "config") and self.config is not None:
+            base_url = self.config.get_provider_settings("Google").get("base_url", "").strip()
+            if base_url:
+                return base_url.rstrip("/")
+        return "https://generativelanguage.googleapis.com/v1beta"
 
     def _openai_key(self) -> str:
         self.config.reload()
@@ -820,6 +839,17 @@ class TranscriptionService:
                     path, api_key, self._mimo_chat_url(), MIMO_ASR_MODEL, "MiMo"
                 )
                 provider = "xiaomi"
+            elif provider in {"google", "gemini", "gemini-3.5-transcribe", "google-transcribe"}:
+                api_key = self._google_key()
+                if not api_key:
+                    raise ValueError("Google API key not configured. Set google_api_key in Settings.")
+                result = await self._transcribe_with_google_gemini(
+                    path,
+                    api_key,
+                    language_hints=language_hints,
+                    vocabulary=vocabulary,
+                )
+                provider = "google"
             elif provider == "assemblyai":
                 api_key = self._assemblyai_key()
                 if not api_key:
@@ -838,11 +868,22 @@ class TranscriptionService:
             return result
 
         # Auto-select: try providers in priority order
-        # Deepgram, OpenAI Whisper, and AssemblyAI support word-level timestamps
+        # Deepgram, Google Gemini, OpenAI Whisper, and AssemblyAI support word-level timestamps
         deepgram_key = self._deepgram_key()
         if deepgram_key:
             result = await self._transcribe_with_deepgram(path, deepgram_key)
             result["provider"] = "deepgram"
+            return result
+
+        google_key = self._google_key()
+        if google_key:
+            result = await self._transcribe_with_google_gemini(
+                path,
+                google_key,
+                language_hints=language_hints,
+                vocabulary=vocabulary,
+            )
+            result["provider"] = "google"
             return result
 
         openai_key = self._openai_key()
@@ -885,7 +926,7 @@ class TranscriptionService:
             result["provider"] = "xiaomi"
             return result
 
-        raise ValueError("No ASR API key configured. Set deepgram_api_key, openai_api_key, assemblyai_api_key, dashscope_api_key, or xiaomi_api_key.")
+        raise ValueError("No ASR API key configured. Set deepgram_api_key, google_api_key, openai_api_key, assemblyai_api_key, doubao_access_token, dashscope_api_key, or xiaomi_api_key.")
 
     async def _transcribe_with_openai_asr(
         self, path: Path, api_key: str, url: str, model: str, provider_name: str
@@ -1352,6 +1393,197 @@ class TranscriptionService:
             app_id=app_id_val,
         )
         return result
+
+    @staticmethod
+    def _parse_time_offset(val: Any) -> float | None:
+        if val is None:
+            return None
+        if isinstance(val, (int, float)):
+            return float(val)
+        if isinstance(val, str):
+            val_clean = val.strip().rstrip("sS")
+            try:
+                return float(val_clean)
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _get_first_present_field(d: dict[str, Any], *keys: str) -> Any:
+        for k in keys:
+            if k in d and d[k] is not None:
+                return d[k]
+        return None
+
+    @classmethod
+    def _extract_google_words(cls, data: dict[str, Any] | list[Any]) -> list[dict[str, Any]] | None:
+        """Extract word-level timestamps from Gemini 3.5 Transcribe response payload."""
+        words: list[dict[str, Any]] = []
+
+        def _traverse(node: Any) -> None:
+            if isinstance(node, dict):
+                # Check if this dict itself is a word entry
+                text = str(node.get("text") or node.get("word") or "").strip()
+                start_val = cls._get_first_present_field(node, "start_time", "start", "begin_time", "start_offset")
+                end_val = cls._get_first_present_field(node, "end_time", "end", "end_offset")
+                start = cls._parse_time_offset(start_val)
+                end = cls._parse_time_offset(end_val)
+                if text and start is not None and end is not None and "words" not in node:
+                    words.append({"text": text, "start": start, "end": end})
+                    return
+
+                # Otherwise inspect nested structures
+                for key, val in node.items():
+                    if key in {"words", "tokens", "segments", "chunks", "sentences", "items"} or isinstance(val, (dict, list)):
+                        _traverse(val)
+            elif isinstance(node, list):
+                for item in node:
+                    _traverse(item)
+
+        _traverse(data)
+        return words if words else None
+
+    async def _transcribe_with_google_gemini(
+        self,
+        path: Path,
+        api_key: str,
+        *,
+        language_hints: list[str] | None = None,
+        vocabulary: dict[str, int] | None = None,
+    ) -> dict:
+        """Transcribe audio using Google Gemini 3.5 Transcribe (Interactions / REST API).
+
+        Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}.
+        """
+        audio_b64 = await asyncio.to_thread(_read_file_base64, path)
+        extension = path.suffix.lower().lstrip(".") or "wav"
+        if extension in {"mp3", "mpga"}:
+            mime_type = "audio/mpeg"
+        elif extension == "wav":
+            mime_type = "audio/wav"
+        elif extension == "m4a":
+            mime_type = "audio/mp4"
+        elif extension == "ogg":
+            mime_type = "audio/ogg"
+        elif extension == "flac":
+            mime_type = "audio/flac"
+        elif extension == "aac":
+            mime_type = "audio/aac"
+        else:
+            mime_type = f"audio/{extension}"
+
+        base_url = self._google_interactions_base_url()
+        headers = {
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        }
+
+        # Try Interactions API first: POST {base_url}/interactions
+        interactions_url = f"{base_url}/interactions"
+        interaction_input = [
+            {
+                "type": "audio",
+                "data": audio_b64,
+                "mime_type": mime_type,
+            }
+        ]
+        interaction_config: dict[str, Any] = {
+            "type": "verbatim",
+            "timestamp_granularities": ["word"],
+        }
+        if language_hints:
+            interaction_config["language_hints"] = language_hints
+        if vocabulary:
+            interaction_config["vocabulary"] = list(vocabulary.keys())
+
+        payload = {
+            "model": GEMINI_TRANSCRIBE_MODEL,
+            "input": interaction_input,
+            "config": interaction_config,
+        }
+
+        response_json: dict[str, Any] | None = None
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            resp = await client.post(interactions_url, headers=headers, json=payload)
+            if resp.status_code < 400:
+                response_json = resp.json()
+            elif resp.status_code in {400, 404}:
+                # Fallback to generateContent endpoint if interactions is not yet routed on custom proxy
+                gen_content_url = f"{base_url}/models/{GEMINI_TRANSCRIBE_MODEL}:generateContent"
+                gen_payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [
+                                {
+                                    "inline_data": {
+                                        "mime_type": mime_type,
+                                        "data": audio_b64,
+                                    }
+                                },
+                                {
+                                    "text": "Transcribe this audio verbatim with word timestamps."
+                                },
+                            ],
+                        }
+                    ]
+                }
+                gen_resp = await client.post(gen_content_url, headers=headers, json=gen_payload)
+                try:
+                    gen_resp.raise_for_status()
+                    response_json = gen_resp.json()
+                except httpx.HTTPStatusError as exc:
+                    detail = exc.response.text.strip()
+                    raise RuntimeError(f"Google Gemini Transcribe request failed: {detail}") from exc
+            else:
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    detail = exc.response.text.strip()
+                    raise RuntimeError(f"Google Gemini Transcribe request failed: {detail}") from exc
+
+        if not response_json:
+            raise RuntimeError("Google Gemini Transcribe returned empty response.")
+
+        # Extract transcript text
+        transcript = ""
+        if isinstance(response_json.get("output_text"), str):
+            transcript = str(response_json.get("output_text", "")).strip()
+        elif isinstance(response_json.get("text"), str):
+            transcript = str(response_json.get("text", "")).strip()
+        elif isinstance(response_json.get("transcript"), str):
+            transcript = str(response_json.get("transcript", "")).strip()
+        elif isinstance(response_json.get("output"), dict):
+            out = response_json["output"]
+            transcript = str(out.get("text") or out.get("transcript") or out.get("output_text") or "").strip()
+        elif isinstance(response_json.get("candidates"), list):
+            candidates = response_json["candidates"]
+            if candidates:
+                content = candidates[0].get("content", {})
+                parts = content.get("parts", [])
+                transcript = "".join(
+                    str(p.get("text", "")) for p in parts if isinstance(p, dict)
+                ).strip()
+
+        if not transcript:
+            raise RuntimeError(f"Google Gemini Transcribe returned empty transcript: {response_json}")
+
+        # Extract word timestamps
+        words = self._extract_google_words(response_json)
+
+        # Extract duration
+        duration_seconds = self._parse_time_offset(
+            response_json.get("duration")
+            or response_json.get("duration_seconds")
+            or response_json.get("usage", {}).get("duration_seconds")
+            or response_json.get("metadata", {}).get("duration")
+        )
+
+        return {
+            "text": transcript,
+            "duration_seconds": duration_seconds,
+            "words": words,
+        }
 
     async def create_completed_sync_job(self, file_path: str, original_filename: str, transcript: str) -> TranscriptionJob:
         """

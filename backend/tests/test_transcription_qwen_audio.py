@@ -231,7 +231,7 @@ class WordExtractionTests(unittest.TestCase):
 class ProviderRoutingTests(unittest.IsolatedAsyncioTestCase):
     def _service_with_keys(self, keys: dict[str, str]) -> TranscriptionService:
         service = _make_service()
-        for name in ("deepgram", "openai", "assemblyai", "doubao", "xiaomi", "dashscope"):
+        for name in ("deepgram", "google", "openai", "assemblyai", "doubao", "xiaomi", "dashscope"):
             key = keys.get(name, "")
             setattr(service, f"_{name}_key", lambda k=key: k)
         return service

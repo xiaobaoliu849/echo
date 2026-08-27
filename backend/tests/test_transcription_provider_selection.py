@@ -34,7 +34,7 @@ def _make_service() -> TranscriptionService:
 
 def _service_with_keys(keys: dict[str, str]) -> TranscriptionService:
     service = _make_service()
-    for name in ("deepgram", "openai", "assemblyai", "doubao", "xiaomi", "dashscope"):
+    for name in ("deepgram", "google", "openai", "assemblyai", "doubao", "xiaomi", "dashscope"):
         key = keys.get(name, "")
         setattr(service, f"_{name}_key", lambda k=key: k)
     return service
@@ -122,6 +122,14 @@ class ProviderEchoTests(unittest.IsolatedAsyncioTestCase):
             {"openai": "sk"},
         )
         self.assertEqual(result["provider"], "openai")
+
+    async def test_explicit_google_echoes_google(self):
+        result = await self._run(
+            "google",
+            {"_transcribe_with_google_gemini": {"text": "ok", "duration_seconds": None, "words": None}},
+            {"google": "sk"},
+        )
+        self.assertEqual(result["provider"], "google")
 
     async def test_auto_xiaomi_only_echoes_xiaomi(self):
         service = _service_with_keys({"xiaomi": "sk"})

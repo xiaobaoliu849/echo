@@ -25,8 +25,16 @@ export const ASR_ENGINES: AsrEngine[] = [
     group: "auto",
     zh: "自动选择",
     en: "Auto",
-    noteZh: "按你已配置的密钥依次尝试（Deepgram → OpenAI → AssemblyAI → 豆包 → Qwen → MiMo），选第一个可用的。",
-    noteEn: "Tries your configured keys in order (Deepgram → OpenAI → AssemblyAI → Doubao → Qwen → MiMo) and uses the first available.",
+    noteZh: "按你已配置的密钥依次尝试（Deepgram → Google → OpenAI → AssemblyAI → 豆包 → Qwen → MiMo），选第一个可用的。",
+    noteEn: "Tries your configured keys in order (Deepgram → Google → OpenAI → AssemblyAI → Doubao → Qwen → MiMo) and uses the first available.",
+  },
+  {
+    id: "google",
+    group: "timestamps",
+    zh: "Google Gemini 3.5 Transcribe",
+    en: "Google Gemini 3.5 Transcribe",
+    noteZh: "字级时间戳，可导出精确字幕；85+ 语种智能识别、去除语气词与说话人分离。",
+    noteEn: "Word-level timestamps for precise subtitles; 85+ languages, smart formatting, and speaker diarization.",
   },
   {
     id: "dashscope",
