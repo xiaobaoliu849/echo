@@ -5410,6 +5410,27 @@ button.danger:focus-visible {
   cursor: not-allowed;
 }
 
+/* Saved-to-memory confirmation state: the button stays in place but reads as
+   a success chip, not a grayed-out dead control. */
+.vsBtnMemorySaved,
+.vsBtnMemorySaved:disabled {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  opacity: 1;
+  cursor: default;
+  box-shadow: none;
+}
+
+.vsTranscribeDetailActions .spinner-mini {
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: vsSpin 0.8s linear infinite;
+}
+
 .vsBtnGhost {
   background: transparent;
   color: var(--brand);
@@ -7335,20 +7356,20 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-shrink: 0;
 }
 
+/* Icon-only circular ghost back button shared by the transcription and podcast
+   detail headers: quiet next to the title, unlike the bordered action buttons. */
 .vsTranscribeBackBtn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 32px;
   height: 32px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
-  background: var(--bg-card, #ffffff);
-  color: var(--text, #1e293b);
-  font-size: 13px;
-  font-weight: 600;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted, #64748b);
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: all 0.15s ease;
   flex-shrink: 0;
 }
@@ -7360,9 +7381,8 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsTranscribeBackBtn:hover {
   background: color-mix(in oklab, var(--brand-soft) 85%, transparent);
-  border-color: color-mix(in oklab, var(--brand) 40%, transparent);
   color: var(--brand-dark, var(--brand));
-  box-shadow: 0 2px 6px color-mix(in oklab, var(--brand) 18%, transparent);
+  transform: translateX(-2px);
 }
 
 .vsTranscribeDetailInfo {
@@ -7396,20 +7416,6 @@ button.vsPasswordToggleBtn:focus-visible {
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
-}
-
-.vsTranscribeBadgeSuccess {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  background: #ecfdf5;
-  color: #059669;
-  border: 1px solid #a7f3d0;
-  padding: 1px 8px;
-  border-radius: 999px;
-  margin-left: 4px;
 }
 
 .vsTranscribeDetailActions {

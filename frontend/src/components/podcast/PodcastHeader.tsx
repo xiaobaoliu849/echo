@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import type { UseAudioOverviewResult } from "../../hooks/useAudioOverview";
 import { useI18n } from "../../i18n";
 
@@ -41,8 +42,9 @@ export default function PodcastHeader({
             className="vsTranscribeBackBtn"
             onClick={onBackToLibrary}
             title={t("返回列表", "Back to list")}
+            aria-label={t("返回列表", "Back to list")}
           >
-            ←
+            <ArrowLeft size={18} strokeWidth={2.2} />
           </button>
         )}
         <div className="vsPodcastHeaderCopy">

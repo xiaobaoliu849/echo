@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Brain, Check } from "lucide-react";
 import type { TranscriptionJobResponse, WordTimestamp } from "../../api";
 import ErrorNotice from "../ErrorNotice";
 import { useI18n } from "../../i18n";
@@ -74,11 +74,10 @@ export default function TranscriptionDetailDrawer({
           type="button"
           className="vsTranscribeBackBtn"
           onClick={onBack}
-          title={t("返回转写列表", "Back to transcription list")}
-          aria-label={t("返回转写列表", "Back to transcription list")}
+          title={t("返回列表", "Back to list")}
+          aria-label={t("返回列表", "Back to list")}
         >
-          <ArrowLeft size={16} strokeWidth={2.2} />
-          <span>{t("返回列表", "Back")}</span>
+          <ArrowLeft size={18} strokeWidth={2.2} />
         </button>
 
         <div className="vsTranscribeDetailInfo">
@@ -102,26 +101,32 @@ export default function TranscriptionDetailDrawer({
             {statusMessage && (
               <span className="vsTranscribeDetailStatus">{statusMessage}</span>
             )}
-            {memorySaved && (
-              <span className="vsTranscribeBadgeSuccess">
-                {t("已入记忆", "Saved to memory")}
-              </span>
-            )}
           </div>
         </div>
         <div className="vsTranscribeDetailActions">
           <button
             onClick={onSaveMemory}
             disabled={!transcript || memorySaving || memorySaved}
-            className="vsBtnSecondary"
+            className={memorySaved ? "vsBtnSecondary vsBtnMemorySaved" : "vsBtnSecondary"}
             title={t("把这段转写存入长期记忆", "Save this transcript to long-term memory")}
             style={{ height: 34, fontSize: 13, padding: "0 14px" }}
           >
-            {memorySaved
-              ? t("✓ 已入记忆", "✓ In memory")
-              : memorySaving
-              ? t("存入中…", "Saving…")
-              : t("🧠 存入记忆", "🧠 Save to memory")}
+            {memorySaved ? (
+              <>
+                <Check size={15} strokeWidth={2.5} />
+                {t("已入记忆", "In memory")}
+              </>
+            ) : memorySaving ? (
+              <>
+                <span className="spinner-mini" />
+                {t("存入中…", "Saving…")}
+              </>
+            ) : (
+              <>
+                <Brain size={15} />
+                {t("存入记忆", "Save to memory")}
+              </>
+            )}
           </button>
           <button
             onClick={onCopy}
