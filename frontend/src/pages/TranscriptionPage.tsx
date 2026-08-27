@@ -215,7 +215,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
         has_transcript: true,
         memory_saved: resp.memory_saved,
         provider: resp.provider ?? null,
-        source_url: resp.source_url,
+        source_url: resp.source_url || (resp.job_id ? `/api/transcription/jobs/${resp.job_id}/audio` : undefined),
         updated_at: new Date().toISOString(),
       };
 

@@ -155,6 +155,7 @@ class TranscriptionSyncResponse(BaseModel):
     duration_seconds: float | None = None
     words: list[WordTimestamp] | None = None
     provider: str | None = None
+    source_url: str | None = None
 
 
 class TranscriptionJobResponse(BaseModel):
@@ -454,6 +455,7 @@ async def transcribe_audio(
                 "duration_seconds": duration_seconds,
                 "words": words,
                 "provider": result.get("provider"),
+                "source_url": f"/api/transcription/jobs/{job.job_id}/audio" if job.job_id else None,
             }
         )
     except HTTPException:
