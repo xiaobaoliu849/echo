@@ -125,7 +125,7 @@ describe("TranscriptionPage", () => {
       source_url: "/api/transcription/jobs/tx_hist_001/audio",
     } as unknown as Awaited<ReturnType<typeof api.fetchTranscriptionJob>>);
 
-    render(<TranscriptionPage />);
+    render(<TranscriptionPage initialTab="library" />);
 
     const card = await screen.findByText("历史录音.m4a");
     fireEvent.click(card);

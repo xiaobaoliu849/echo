@@ -16,7 +16,6 @@ type Props = {
   onSearchChange: (q: string) => void;
   onFilterChange: (f: FilterType) => void;
   onRefresh: () => void;
-  onOpenNewModal: () => void;
   onCardClick: (item: HistoryItem) => void;
   onDeleteJob: (jobId: string) => void;
   onRetryJob: (jobId: string) => void;
@@ -42,7 +41,6 @@ export default function TranscriptionTable({
   onSearchChange,
   onFilterChange,
   onRefresh,
-  onOpenNewModal,
   onCardClick,
   onDeleteJob,
   onRetryJob,
@@ -114,19 +112,6 @@ export default function TranscriptionTable({
             title={t("刷新", "Refresh")}
           >
             ↻ {t("刷新", "Refresh")}
-          </button>
-          <button
-            onClick={onOpenNewModal}
-            className="vsBtnPrimary"
-            style={{
-              height: 36,
-              fontSize: 13,
-              padding: "0 18px",
-              borderRadius: 10,
-              fontWeight: 600,
-            }}
-          >
-            ✨ {t("新建转写", "New Transcription")}
           </button>
         </div>
       </div>
@@ -207,25 +192,10 @@ export default function TranscriptionTable({
                     "Try adjusting your search or filter criteria."
                   )
                 : t(
-                    "点击「新建转写」上传音频文件或输入远程 URL，开始你的第一次转写。",
-                    "Click 'New Transcription' to upload audio or enter a remote URL and start your first transcription."
+                    "暂无转写记录。您可以切换至上方「本地音频」或「实时录音」随时开始转写。",
+                    "No transcriptions yet. Switch to 'Local Audio' or 'Realtime Live' above to start transcribing."
                   )}
             </p>
-            {!searchQuery && activeFilter === "all" && (
-              <button
-                onClick={onOpenNewModal}
-                className="vsBtnPrimary"
-                style={{
-                  height: 40,
-                  fontSize: 14,
-                  padding: "0 24px",
-                  borderRadius: 10,
-                  marginTop: 8,
-                }}
-              >
-                ✨ {t("新建转写", "New Transcription")}
-              </button>
-            )}
           </div>
         ) : (
           <div className="vsTranscribeGrid">

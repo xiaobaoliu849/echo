@@ -23,6 +23,7 @@ type ViewMode = "library" | "detail";
 
 type Props = {
   onSendToChat?: (text: string) => void;
+  initialTab?: PageTab;
 };
 
 function isPollingStatus(status?: string): boolean {
@@ -74,11 +75,11 @@ function getJobStatusMessage(
 
 export type PageTab = "realtime" | "file" | "remote" | "library";
 
-export function TranscriptionPage({ onSendToChat }: Props) {
+export function TranscriptionPage({ onSendToChat, initialTab = "file" }: Props) {
   const { t, language } = useI18n();
 
   const [viewMode, setViewMode] = useState<ViewMode>("library");
-  const [pageTab, setPageTab] = useState<PageTab>("library");
+  const [pageTab, setPageTab] = useState<PageTab>(initialTab);
   const [job, setJob] = useState<TranscriptionJobResponse | null>(null);
   const [transcript, setTranscript] = useState("");
   const [words, setWords] = useState<WordTimestamp[]>([]);
@@ -554,6 +555,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
           <button
             type="button"
             onClick={() => setPageTab("file")}
+            aria-label={t("新建转写 / 本地音频", "New Transcription / Local Audio")}
             style={{
               padding: "8px 16px",
               borderRadius: "10px",
@@ -652,7 +654,7 @@ export function TranscriptionPage({ onSendToChat }: Props) {
           >
             <div>
               <h2 style={{ margin: "0 0 6px 0", fontSize: "18px", fontWeight: 700, color: "var(--text)" }}>
-                📁 {t("本地音视频文件转写", "Local Audio & Video Transcription")}
+                {t("本地音视频文件转写", "Local Audio & Video Transcription")}
               </h2>
               <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)", lineHeight: 1.5 }}>
                 {t(
@@ -877,7 +879,6 @@ export function TranscriptionPage({ onSendToChat }: Props) {
             onSearchChange={setSearchQuery}
             onFilterChange={handleFilterChange}
             onRefresh={refreshHistory}
-            onOpenNewModal={() => setPageTab("file")}
             onCardClick={handleCardClick}
             onDeleteJob={removeJob}
             onRetryJob={(id) => retryJob(id).catch(() => {})}
