@@ -15,6 +15,11 @@ from urllib.parse import urlparse
 import httpx  # type: ignore
 import logging
 
+try:
+    from google import genai
+except ImportError:
+    genai = None
+
 logger = logging.getLogger(__name__)
 
 from .config_loader import BackendConfig
@@ -1451,11 +1456,10 @@ class TranscriptionService:
         language_hints: list[str] | None = None,
         vocabulary: dict[str, int] | None = None,
     ) -> dict:
-        """Transcribe audio using Google Gemini 3.5 Transcribe (Interactions / REST API).
+        """Transcribe audio using Google Gemini 3.5 Transcribe (Files API + Interactions API).
 
         Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}.
         """
-        audio_b64 = await asyncio.to_thread(_read_file_base64, path)
         extension = path.suffix.lower().lstrip(".") or "wav"
         if extension in {"mp3", "mpga"}:
             mime_type = "audio/mpeg"
@@ -1473,117 +1477,202 @@ class TranscriptionService:
             mime_type = f"audio/{extension}"
 
         base_url = self._google_interactions_base_url()
+
+        # 1. Primary path: Use official google.genai SDK
+        if genai is not None:
+            http_options: dict[str, Any] = {"api_version": "v1beta"}
+            if base_url and base_url != "https://generativelanguage.googleapis.com/v1beta":
+                http_options["base_url"] = base_url
+
+            client = genai.Client(api_key=api_key, http_options=http_options)
+            audio_file = await asyncio.to_thread(client.files.upload, file=str(path))
+            try:
+                interaction_input = [
+                    {
+                        "type": "audio",
+                        "uri": audio_file.uri,
+                        "mime_type": audio_file.mime_type or mime_type,
+                    }
+                ]
+                kwargs: dict[str, Any] = {
+                    "model": GEMINI_TRANSCRIBE_MODEL,
+                    "input": interaction_input,
+                }
+                gen_config: dict[str, Any] = {}
+                if vocabulary:
+                    gen_config["custom_vocabulary"] = list(vocabulary.keys())
+                if language_hints:
+                    gen_config["language_hints"] = language_hints
+                if gen_config:
+                    kwargs["generation_config"] = {"transcription_config": gen_config}
+
+                interaction = await asyncio.to_thread(
+                    lambda: client.interactions.create(**kwargs)
+                )
+
+                # Extract text
+                transcript = ""
+                if hasattr(interaction, "output_text") and interaction.output_text:
+                    transcript = str(interaction.output_text).strip()
+                elif hasattr(interaction, "steps") and interaction.steps:
+                    texts: list[str] = []
+                    for step in interaction.steps:
+                        content = getattr(step, "content", None)
+                        if isinstance(content, str) and content.strip():
+                            texts.append(content.strip())
+                        elif isinstance(content, list):
+                            for part in content:
+                                if isinstance(part, str) and part.strip():
+                                    texts.append(part.strip())
+                                elif hasattr(part, "text") and part.text:
+                                    texts.append(str(part.text).strip())
+                                elif isinstance(part, dict) and part.get("text"):
+                                    texts.append(str(part["text"]).strip())
+                        elif isinstance(content, dict) and content.get("text"):
+                            texts.append(str(content["text"]).strip())
+                    transcript = "".join(texts).strip()
+
+                interaction_dict: dict[str, Any] = {}
+                if hasattr(interaction, "to_dict"):
+                    try:
+                        interaction_dict = interaction.to_dict()
+                    except Exception:
+                        interaction_dict = {}
+
+                if not transcript and isinstance(interaction_dict, dict):
+                    transcript = str(
+                        interaction_dict.get("output_text")
+                        or interaction_dict.get("text")
+                        or interaction_dict.get("output", {}).get("text")
+                        or ""
+                    ).strip()
+
+                if not transcript:
+                    raise RuntimeError(f"Google Gemini Transcribe returned empty transcript: {interaction_dict or interaction}")
+
+                words = self._extract_google_words(interaction_dict) if interaction_dict else None
+
+                duration_seconds = None
+                usage = getattr(interaction, "usage", None) or interaction_dict.get("usage")
+                if usage is not None:
+                    if hasattr(usage, "duration_seconds"):
+                        duration_seconds = self._parse_time_offset(usage.duration_seconds)
+                    elif isinstance(usage, dict):
+                        duration_seconds = self._parse_time_offset(usage.get("duration_seconds") or usage.get("duration"))
+
+                return {
+                    "text": transcript,
+                    "duration_seconds": duration_seconds,
+                    "words": words,
+                }
+            finally:
+                try:
+                    if hasattr(client.files, "delete") and hasattr(audio_file, "name"):
+                        await asyncio.to_thread(client.files.delete, name=audio_file.name)
+                except Exception:
+                    pass
+
+        # 2. REST HTTP fallback
         headers = {
             "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
         }
+        audio_bytes = await asyncio.to_thread(path.read_bytes)
+        upload_base = base_url.replace("/v1beta", "")
+        upload_url = f"{upload_base}/upload/v1beta/files"
+        file_name = ""
+        file_uri = ""
 
-        # Try Interactions API first: POST {base_url}/interactions
-        interactions_url = f"{base_url}/interactions"
-        interaction_input = [
-            {
-                "type": "audio",
-                "data": audio_b64,
-                "mime_type": mime_type,
+        async with httpx.AsyncClient(timeout=180.0) as http_client:
+            upload_files = {
+                "metadata": (None, json.dumps({"file": {"display_name": path.name}}), "application/json; charset=UTF-8"),
+                "file": (path.name, audio_bytes, mime_type),
             }
-        ]
-        interaction_config: dict[str, Any] = {
-            "type": "verbatim",
-            "timestamp_granularities": ["word"],
-        }
-        if language_hints:
-            interaction_config["language_hints"] = language_hints
-        if vocabulary:
-            interaction_config["vocabulary"] = list(vocabulary.keys())
+            upload_resp = await http_client.post(
+                upload_url,
+                headers={"x-goog-api-key": api_key, "X-Goog-Upload-Protocol": "multipart"},
+                files=upload_files,
+            )
+            upload_resp.raise_for_status()
+            file_data = upload_resp.json().get("file", {})
+            file_name = file_data.get("name", "")
+            file_uri = file_data.get("uri", "")
 
-        payload = {
-            "model": GEMINI_TRANSCRIBE_MODEL,
-            "input": interaction_input,
-            "config": interaction_config,
-        }
-
-        response_json: dict[str, Any] | None = None
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            resp = await client.post(interactions_url, headers=headers, json=payload)
-            if resp.status_code < 400:
-                response_json = resp.json()
-            elif resp.status_code in {400, 404}:
-                # Fallback to generateContent endpoint if interactions is not yet routed on custom proxy
-                gen_content_url = f"{base_url}/models/{GEMINI_TRANSCRIBE_MODEL}:generateContent"
-                gen_payload = {
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [
-                                {
-                                    "inline_data": {
-                                        "mime_type": mime_type,
-                                        "data": audio_b64,
-                                    }
-                                },
-                                {
-                                    "text": "Transcribe this audio verbatim with word timestamps."
-                                },
-                            ],
-                        }
-                    ]
+            try:
+                interactions_url = f"{base_url}/interactions"
+                interaction_input = [
+                    {
+                        "type": "audio",
+                        "uri": file_uri,
+                        "mime_type": mime_type,
+                    }
+                ]
+                interaction_config: dict[str, Any] = {
+                    "type": "verbatim",
+                    "timestamp_granularities": ["word"],
                 }
-                gen_resp = await client.post(gen_content_url, headers=headers, json=gen_payload)
-                try:
-                    gen_resp.raise_for_status()
-                    response_json = gen_resp.json()
-                except httpx.HTTPStatusError as exc:
-                    detail = exc.response.text.strip()
-                    raise RuntimeError(f"Google Gemini Transcribe request failed: {detail}") from exc
-            else:
-                try:
-                    resp.raise_for_status()
-                except httpx.HTTPStatusError as exc:
-                    detail = exc.response.text.strip()
-                    raise RuntimeError(f"Google Gemini Transcribe request failed: {detail}") from exc
+                if language_hints:
+                    interaction_config["language_hints"] = language_hints
+                if vocabulary:
+                    interaction_config["vocabulary"] = list(vocabulary.keys())
 
-        if not response_json:
-            raise RuntimeError("Google Gemini Transcribe returned empty response.")
+                payload = {
+                    "model": GEMINI_TRANSCRIBE_MODEL,
+                    "input": interaction_input,
+                    "config": interaction_config,
+                }
+                resp = await http_client.post(
+                    interactions_url,
+                    headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                    json=payload,
+                )
+                resp.raise_for_status()
+                response_json = resp.json()
 
-        # Extract transcript text
-        transcript = ""
-        if isinstance(response_json.get("output_text"), str):
-            transcript = str(response_json.get("output_text", "")).strip()
-        elif isinstance(response_json.get("text"), str):
-            transcript = str(response_json.get("text", "")).strip()
-        elif isinstance(response_json.get("transcript"), str):
-            transcript = str(response_json.get("transcript", "")).strip()
-        elif isinstance(response_json.get("output"), dict):
-            out = response_json["output"]
-            transcript = str(out.get("text") or out.get("transcript") or out.get("output_text") or "").strip()
-        elif isinstance(response_json.get("candidates"), list):
-            candidates = response_json["candidates"]
-            if candidates:
-                content = candidates[0].get("content", {})
-                parts = content.get("parts", [])
-                transcript = "".join(
-                    str(p.get("text", "")) for p in parts if isinstance(p, dict)
-                ).strip()
+                transcript = ""
+                if isinstance(response_json.get("output_text"), str):
+                    transcript = str(response_json.get("output_text", "")).strip()
+                elif isinstance(response_json.get("text"), str):
+                    transcript = str(response_json.get("text", "")).strip()
+                elif isinstance(response_json.get("output"), dict):
+                    out = response_json["output"]
+                    transcript = str(out.get("text") or out.get("transcript") or out.get("output_text") or "").strip()
+                elif isinstance(response_json.get("steps"), list):
+                    texts = []
+                    for step in response_json["steps"]:
+                        if isinstance(step, dict):
+                            content = step.get("content")
+                            if isinstance(content, str):
+                                texts.append(content)
+                            elif isinstance(content, list):
+                                for p in content:
+                                    if isinstance(p, dict) and p.get("text"):
+                                        texts.append(p["text"])
+                                    elif isinstance(p, str):
+                                        texts.append(p)
+                    transcript = "".join(texts).strip()
 
-        if not transcript:
-            raise RuntimeError(f"Google Gemini Transcribe returned empty transcript: {response_json}")
+                if not transcript:
+                    raise RuntimeError(f"Google Gemini Transcribe returned empty transcript: {response_json}")
 
-        # Extract word timestamps
-        words = self._extract_google_words(response_json)
+                words = self._extract_google_words(response_json)
+                duration_seconds = self._parse_time_offset(
+                    response_json.get("duration")
+                    or response_json.get("duration_seconds")
+                    or response_json.get("usage", {}).get("duration_seconds")
+                )
 
-        # Extract duration
-        duration_seconds = self._parse_time_offset(
-            response_json.get("duration")
-            or response_json.get("duration_seconds")
-            or response_json.get("usage", {}).get("duration_seconds")
-            or response_json.get("metadata", {}).get("duration")
-        )
-
-        return {
-            "text": transcript,
-            "duration_seconds": duration_seconds,
-            "words": words,
-        }
+                return {
+                    "text": transcript,
+                    "duration_seconds": duration_seconds,
+                    "words": words,
+                }
+            finally:
+                if file_name:
+                    try:
+                        delete_url = f"{base_url}/{file_name}"
+                        await http_client.delete(delete_url, headers={"x-goog-api-key": api_key})
+                    except Exception:
+                        pass
 
     async def create_completed_sync_job(self, file_path: str, original_filename: str, transcript: str) -> TranscriptionJob:
         """

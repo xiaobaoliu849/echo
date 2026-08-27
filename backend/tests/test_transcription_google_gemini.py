@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -33,28 +34,13 @@ class _FakeResponse:
         return self._payload
 
 
-class _FakeClient:
-    def __init__(self, response):
-        self.response = response
-        self.requests = []
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *a):
-        return False
-
-    async def post(self, url, headers=None, json=None, **kw):
-        self.requests.append({"url": url, "headers": headers, "json": json})
-        return self.response
-
-
+@contextmanager
 def _file_guards():
-    return (
-        patch("services.transcription_service.Path.is_file", return_value=True),
-        patch("services.transcription_service.Path.stat", return_value=SimpleNamespace(st_size=10)),
-        patch("services.transcription_service._read_file_base64", return_value="bW9jayBhZGlv"),
-    )
+    with patch("services.transcription_service.Path.is_file", return_value=True), \
+         patch("services.transcription_service.Path.stat", return_value=SimpleNamespace(st_size=10)), \
+         patch("services.transcription_service.Path.read_bytes", return_value=b"mock audio bytes"), \
+         patch("services.transcription_service._read_file_base64", return_value="bW9jayBhZGlv"):
+        yield
 
 
 class GoogleGeminiTranscribeTests(unittest.IsolatedAsyncioTestCase):
@@ -83,47 +69,64 @@ class GoogleGeminiTranscribeTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_transcribe_with_google_gemini_interactions_success(self):
+    async def test_transcribe_with_google_gemini_sdk_success(self):
         service = _make_service()
         service.config = SimpleNamespace(
             get_provider_settings=lambda name: {"base_url": "https://generativelanguage.googleapis.com/v1beta"}
         )
-        fake_response = _FakeResponse({
-            "output_text": "Hello Gemini transcribe.",
-            "duration": 5.5,
-            "words": [
-                {"text": "Hello", "start_time": 0.0, "end_time": 0.4},
-                {"text": "Gemini", "start_time": 0.5, "end_time": 1.2},
-                {"text": "transcribe.", "start_time": 1.3, "end_time": 2.0},
-            ],
-        })
-        fake_client = _FakeClient(fake_response)
-        with patch("services.transcription_service.httpx.AsyncClient", return_value=fake_client), \
-             _file_guards()[0], _file_guards()[1], _file_guards()[2]:
+
+        mock_audio_file = SimpleNamespace(
+            uri="https://generativelanguage.googleapis.com/v1beta/files/test1234",
+            mime_type="audio/wav",
+            name="files/test1234",
+        )
+        mock_step = SimpleNamespace(
+            type="model_output",
+            content="Hello Gemini transcribe via SDK.",
+        )
+        mock_interaction = SimpleNamespace(
+            output_text="Hello Gemini transcribe via SDK.",
+            steps=[mock_step],
+            to_dict=lambda: {
+                "output": {
+                    "words": [
+                        {"text": "Hello", "start_time": 0.0, "end_time": 0.4},
+                        {"text": "Gemini", "start_time": 0.5, "end_time": 1.2},
+                    ]
+                },
+                "usage": {"duration_seconds": 2.5},
+            },
+        )
+
+        mock_client = SimpleNamespace(
+            files=SimpleNamespace(
+                upload=lambda file: mock_audio_file,
+                delete=lambda name: True,
+            ),
+            interactions=SimpleNamespace(
+                create=lambda **kw: mock_interaction,
+            ),
+        )
+
+        with patch("services.transcription_service.genai", SimpleNamespace(Client=lambda **kw: mock_client)), \
+             _file_guards():
             result = await service._transcribe_with_google_gemini(Path("sample.wav"), api_key="sk-goog")
 
-        self.assertEqual(result["text"], "Hello Gemini transcribe.")
-        self.assertEqual(result["duration_seconds"], 5.5)
-        self.assertEqual(len(result["words"]), 3)
+        self.assertEqual(result["text"], "Hello Gemini transcribe via SDK.")
+        self.assertEqual(result["duration_seconds"], 2.5)
+        self.assertEqual(len(result["words"]), 2)
         self.assertEqual(result["words"][0]["text"], "Hello")
         self.assertEqual(result["words"][0]["start"], 0.0)
 
-        # Check payload
-        self.assertEqual(len(fake_client.requests), 1)
-        req = fake_client.requests[0]
-        self.assertIn("interactions", req["url"])
-        self.assertEqual(req["json"]["model"], GEMINI_TRANSCRIBE_MODEL)
-        self.assertEqual(req["headers"]["x-goog-api-key"], "sk-goog")
-
-    async def test_transcribe_with_google_gemini_generate_content_fallback(self):
+    async def test_transcribe_with_google_gemini_rest_fallback(self):
         service = _make_service()
         service.config = SimpleNamespace(
-            get_provider_settings=lambda name: {}
+            get_provider_settings=lambda name: {"base_url": "https://generativelanguage.googleapis.com/v1beta"}
         )
-        # First call (interactions) returns 404, second (generateContent) succeeds
-        class FallbackClient:
+
+        class RestClient:
             def __init__(self):
-                self.calls = 0
+                self.calls = []
 
             async def __aenter__(self):
                 return self
@@ -131,23 +134,29 @@ class GoogleGeminiTranscribeTests(unittest.IsolatedAsyncioTestCase):
             async def __aexit__(self, *a):
                 return False
 
-            async def post(self, url, headers=None, json=None, **kw):
-                self.calls += 1
-                if "interactions" in url:
-                    return _FakeResponse({}, status_code=404, text="Not Found")
-                return _FakeResponse({
-                    "candidates": [
-                        {"content": {"parts": [{"text": "Transcribed fallback text"}]}}
-                    ],
-                    "usage": {"duration_seconds": 3.0},
-                })
+            async def post(self, url, headers=None, json=None, files=None, **kw):
+                self.calls.append(url)
+                if "/upload/" in url:
+                    return _FakeResponse({"file": {"name": "files/rest123", "uri": "https://gen/files/rest123"}})
+                if "/interactions" in url:
+                    return _FakeResponse({
+                        "output_text": "Transcribed via REST fallback",
+                        "duration": 4.0,
+                        "words": [{"text": "Transcribed", "start_time": 0.0, "end_time": 1.0}],
+                    })
+                return _FakeResponse({}, status_code=404)
 
-        with patch("services.transcription_service.httpx.AsyncClient", return_value=FallbackClient()), \
-             _file_guards()[0], _file_guards()[1], _file_guards()[2]:
+            async def delete(self, url, headers=None, **kw):
+                self.calls.append(url)
+                return _FakeResponse({})
+
+        with patch("services.transcription_service.genai", None), \
+             patch("services.transcription_service.httpx.AsyncClient", return_value=RestClient()), \
+             _file_guards():
             result = await service._transcribe_with_google_gemini(Path("sample.mp3"), api_key="sk-goog")
 
-        self.assertEqual(result["text"], "Transcribed fallback text")
-        self.assertEqual(result["duration_seconds"], 3.0)
+        self.assertEqual(result["text"], "Transcribed via REST fallback")
+        self.assertEqual(result["duration_seconds"], 4.0)
 
     async def test_transcribe_file_explicit_google_provider(self):
         service = _make_service()
@@ -156,7 +165,7 @@ class GoogleGeminiTranscribeTests(unittest.IsolatedAsyncioTestCase):
             return_value={"text": "Google STT", "duration_seconds": 4.2, "words": None}
         )
 
-        with _file_guards()[0], _file_guards()[1]:
+        with _file_guards():
             for p in ["google", "gemini", "gemini-3.5-transcribe", "google-transcribe"]:
                 res = await service.transcribe_file("audio.wav", provider=p)
                 self.assertEqual(res["provider"], "google")
@@ -166,7 +175,7 @@ class GoogleGeminiTranscribeTests(unittest.IsolatedAsyncioTestCase):
         service = _make_service()
         service._google_key = lambda: ""
 
-        with _file_guards()[0], _file_guards()[1]:
+        with _file_guards():
             with self.assertRaises(ValueError) as ctx:
                 await service.transcribe_file("audio.wav", provider="google")
             self.assertIn("Google API key not configured", str(ctx.exception))
@@ -180,7 +189,7 @@ class GoogleGeminiTranscribeTests(unittest.IsolatedAsyncioTestCase):
             return_value={"text": "Auto Google STT", "duration_seconds": 2.0, "words": None}
         )
 
-        with _file_guards()[0], _file_guards()[1]:
+        with _file_guards():
             res = await service.transcribe_file("audio.wav")
             self.assertEqual(res["provider"], "google")
             self.assertEqual(res["text"], "Auto Google STT")
