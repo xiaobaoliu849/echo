@@ -247,24 +247,15 @@ textarea {
   cursor: pointer;
   border: 1px solid transparent;
   flex-shrink: 0;
-  /* ZCode-style dynamic reveal: hidden until the header (logo area) is
-     hovered or the button receives keyboard focus. */
-  opacity: 0;
-  pointer-events: none;
+  /* Mirrored interaction: the same header button is permanently visible in
+     both states — PanelLeftClose when expanded, the Echo logo when collapsed.
+     Hover-only reveal made the two directions inconsistent. */
   transition:
     background 0.2s ease,
     color 0.2s ease,
     border-color 0.2s ease,
     box-shadow 0.2s ease,
-    transform 0.15s ease,
-    opacity 0.2s ease;
-}
-
-.vsSidebarHeader:hover .vsSidebarToggleBtn,
-.vsSidebarHeader:focus-within .vsSidebarToggleBtn,
-.vsSidebar.collapsed .vsSidebarToggleBtn {
-  opacity: 1;
-  pointer-events: auto;
+    transform 0.15s ease;
 }
 
 .vsSidebarToggleBtn:hover {
