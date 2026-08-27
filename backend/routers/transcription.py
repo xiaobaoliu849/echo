@@ -630,6 +630,9 @@ async def get_transcription_job(
             status_code=404,
             detail=_error("TRANSCRIPTION_JOB_NOT_FOUND", f"Transcription job not found: {job_id}"),
         )
+    # Self-heal records whose local pipeline died with a previous process so
+    # the detail view reports an interrupt error instead of polling forever.
+    job = transcription_service.reap_stale_active_job(job)
 
     try:
         if refresh and job.remote_job_id and job.status not in {"completed", "failed"}:

@@ -133,4 +133,30 @@ describe("useTranscriptionHistory", () => {
       });
     });
   });
+
+  it("marks a cached entry failed when the backend reports it missing", async () => {
+    const { result } = renderHook(() => useTranscriptionHistory());
+
+    await waitFor(() => {
+      expect(result.current.historyBusy).toBe(false);
+    });
+
+    act(() => {
+      result.current.markMissingJob("tx_001");
+      result.current.markMissingJob("tx_unknown");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history[0]?.status).toBe("failed");
+    });
+
+    // Unknown ids leave the cache untouched.
+    expect(result.current.history).toHaveLength(1);
+
+    const stored = JSON.parse(localStorage.getItem("vs_transcription_history") || "[]");
+    expect(stored).toHaveLength(1);
+    expect(stored[0].job_id).toBe("tx_001");
+    expect(stored[0].status).toBe("failed");
+    expect(String(stored[0].error)).toContain("转写记录已失效");
+  });
 });

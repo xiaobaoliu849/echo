@@ -147,6 +147,18 @@ def _read_qwen_audio_base64(path: Path) -> str:
 # re-reads the whole directory each call.
 MAX_TRANSCRIPTION_JOBS = 500
 
+# A local chunked job (no remote_job_id) is only "queued"/"running" while its
+# in-process asyncio task is alive. When the process dies, nothing resumes it,
+# so a record left in a transient state for this long is treated as
+# interrupted instead of polling forever as "排队中". Remote DashScope jobs are
+# exempt: their status stays resolvable via refresh_long_transcription_job.
+INTERRUPTED_JOB_STALE_SECONDS = 300
+TRANSIENT_JOB_STATUSES = {"queued", "running", "submitted", "uploaded"}
+JOB_INTERRUPTED_MESSAGE = (
+    "转写任务因应用退出或重启而中断，请重试。 "
+    "(The transcription task was interrupted because the app exited or restarted. Retry to run it again.)"
+)
+
 
 @dataclass(slots=True)
 class TranscriptionJob:
@@ -307,14 +319,20 @@ class TranscriptionService:
         """Remove oldest job records (and sidecar files) beyond the cap.
 
         Oldest-first by mtime; in-flight jobs are always the newest so they
-        are never evicted here. Files under published/ are untouched.
+        are never evicted here. Word-timestamp and translation sidecars are
+        not job records — counting them would evict real jobs early, so they
+        are skipped (they die with their owning job instead). Files under
+        published/ are untouched.
         """
         try:
             paths = sorted(
                 (
                     p
                     for p in self.jobs_dir.glob("tx_*.json")
-                    if not p.stem.endswith("_words")  # word-timestamp sidecar, not a job
+                    if not (
+                        p.stem.endswith("_words")  # word-timestamp sidecar, not a job
+                        or p.stem.endswith("_translation")  # cue-translation sidecar
+                    )
                 ),
                 key=lambda p: p.stat().st_mtime,
             )
@@ -351,6 +369,33 @@ class TranscriptionService:
                     artifact.unlink(missing_ok=True)
                 except OSError:
                     continue
+
+    def reap_stale_active_job(self, job: TranscriptionJob) -> TranscriptionJob:
+        """Fail one locally-interrupted transient job record; pass others through.
+
+        A record stuck in queued/running/submitted without a remote_job_id has no
+        owning pipeline task anymore (its process died). After
+        INTERRUPTED_JOB_STALE_SECONDS without an update it is flipped to failed,
+        so the UI surfaces a retryable error instead of polling "排队中" forever.
+        Fresh records are untouched: an in-flight chunked pipeline keeps writing
+        progress (and thus updated_at) while it runs.
+        """
+        if job.remote_job_id or job.mode == "sync":
+            return job
+        if str(job.status).lower() not in TRANSIENT_JOB_STATUSES:
+            return job
+        try:
+            updated_ts = datetime.fromisoformat(str(job.updated_at)).timestamp()
+        except ValueError:
+            return job
+        stale_seconds = datetime.now(timezone.utc).timestamp() - updated_ts
+        if stale_seconds < INTERRUPTED_JOB_STALE_SECONDS:
+            return job
+        job.status = "failed"
+        job.error = job.error or JOB_INTERRUPTED_MESSAGE
+        job.progress = ""
+        job.updated_at = self._now_iso()
+        return self._write_job(job)
 
     def get_job(self, job_id: str) -> TranscriptionJob | None:
         path = self._job_path(job_id)
@@ -411,6 +456,10 @@ class TranscriptionService:
                 )
             except Exception:
                 continue
+            # Self-heal records whose pipeline died with a previous process
+            # before they enter the listing, so stale rows don't sit in the
+            # library as eternal "排队中" entries.
+            job = self.reap_stale_active_job(job)
             if normalized_statuses and job.status.lower() not in normalized_statuses:
                 continue
             jobs.append(job)
@@ -447,6 +496,9 @@ class TranscriptionService:
         for path in [
             self._job_path(job_id),
             self.jobs_dir / f"{job_id}_words.json",
+            self.jobs_dir / f"{job_id}_translation.json",
+            self.jobs_dir / f"{job_id}_burn.srt",
+            self.jobs_dir / f"{job_id}_subtitled.mp4",
         ]:
             try:
                 if path.is_file():

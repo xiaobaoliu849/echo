@@ -126,6 +126,29 @@ export function useTranscriptionHistory() {
     });
   }, []);
 
+  /** The backend confirmed a cached history entry no longer exists server-side.
+   * Flip the local entry to failed so it stops masquerading as an active
+   * "排队中" task the user can never open. */
+  const markMissingJob = useCallback((jobId: string) => {
+    setHistory((prev) => {
+      const target = prev.find((item) => item.job_id === jobId);
+      if (!target) return prev;
+      const next = prev.map((item) =>
+        item.job_id === jobId
+          ? {
+              ...item,
+              status: "failed",
+              error:
+                "转写记录已失效，服务器上不存在该任务。 (This transcription record no longer exists on the server.)",
+              timestamp: Date.now(),
+            }
+          : item
+      );
+      safeSaveHistory(next);
+      return next;
+    });
+  }, []);
+
   const retryJob = async (jobId: string) => {
     const retried = await retryTranscriptionJob(jobId);
     addOrUpdateJob(retried);
@@ -177,6 +200,7 @@ export function useTranscriptionHistory() {
     setActiveFilter,
     refreshHistory,
     addOrUpdateJob,
+    markMissingJob,
     retryJob,
     clearHistory,
     removeJob,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   API_BASE_URL,
+  ApiRequestError,
   fetchTranscriptionJob,
   getTranscriptionJobWords,
   transcribeAudio,
@@ -29,6 +30,15 @@ type Props = {
 
 function isPollingStatus(status?: string): boolean {
   return status === "submitted" || status === "running" || status === "queued";
+}
+
+/** The backend confirms the job record itself is gone (deleted elsewhere,
+ * evicted, or lost store) — no amount of retrying can succeed. */
+function isJobNotFoundError(err: unknown): boolean {
+  return (
+    err instanceof ApiRequestError &&
+    (err.status === 404 || err.detail?.code === "TRANSCRIPTION_JOB_NOT_FOUND")
+  );
 }
 
 /** The backend hands back a root-relative `/api/transcription/jobs/{id}/audio`
@@ -114,6 +124,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
     setActiveFilter,
     refreshHistory,
     addOrUpdateJob,
+    markMissingJob,
     removeJob,
     removeJobs,
     retryJob,
@@ -174,6 +185,21 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
       } catch (err) {
         if (cancelled) return;
         const e = err instanceof Error ? err : new Error(String(err));
+        if (isJobNotFoundError(e)) {
+          // The record is confirmed gone server-side — polling can never
+          // succeed. Flip the view to a terminal failed state instead of
+          // spinning on "任务排队中…" forever, and mark the history entry.
+          setJob((prev) => (prev ? { ...prev, status: "failed", error: e.message } : prev));
+          setStatusMessage(
+            t(
+              "转写失败：服务器上已不存在该任务记录。",
+              "Transcription failed: this job no longer exists on the server."
+            )
+          );
+          setError(e);
+          markMissingJob(activePollingJobId);
+          return;
+        }
         setError(e);
         timerId = setTimeout(poll, 4000);
       }
@@ -185,7 +211,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
       cancelled = true;
       if (timerId !== null) clearTimeout(timerId);
     };
-  }, [activePollingJobId, addOrUpdateJob, t]);
+    }, [activePollingJobId, addOrUpdateJob, markMissingJob, t]);
 
   async function handleLocalTranscription(file: File, provider?: string) {
     setError(null);
@@ -303,24 +329,51 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
       if (fullJob.status === "completed") {
         void loadJobWords(fullJob.job_id);
       }
-    } catch {
-      const fallbackJob: TranscriptionJobResponse = {
-        job_id: item.job_id,
-        remote_job_id: item.remote_job_id,
-        mode: "saved",
-        status: item.status,
-        file_name: item.file_name,
-        has_transcript: item.has_transcript,
-        memory_saved: item.memory_saved,
-        source_url: item.source_url,
-        updated_at: item.updated_at,
-        error: item.error,
-      };
-      setJob(fallbackJob);
-      setTranscript("");
-      setWords([]);
-      setMemorySaved(Boolean(item.memory_saved));
-      setStatusMessage(getJobStatusMessage(fallbackJob, t));
+    } catch (err) {
+      if (isJobNotFoundError(err)) {
+        // The record is gone server-side. Do NOT rebuild it with the stale
+        // queued/running history status — that previously spawned an eternal
+        // "任务排队中" polling loop for a job that no longer exists.
+        const missingJob: TranscriptionJobResponse = {
+          job_id: item.job_id,
+          remote_job_id: item.remote_job_id,
+          mode: "saved",
+          status: "failed",
+          file_name: item.file_name,
+          has_transcript: item.has_transcript,
+          memory_saved: item.memory_saved,
+          source_url: item.source_url,
+          updated_at: item.updated_at,
+          error: t(
+            "服务器上已不存在该任务记录（可能已被删除）。",
+            "This job no longer exists on the server (it may have been deleted)."
+          ),
+        };
+        setJob(missingJob);
+        setTranscript("");
+        setWords([]);
+        setMemorySaved(Boolean(item.memory_saved));
+        setStatusMessage(getJobStatusMessage(missingJob, t));
+        markMissingJob(item.job_id);
+      } else {
+        const fallbackJob: TranscriptionJobResponse = {
+          job_id: item.job_id,
+          remote_job_id: item.remote_job_id,
+          mode: "saved",
+          status: item.status,
+          file_name: item.file_name,
+          has_transcript: item.has_transcript,
+          memory_saved: item.memory_saved,
+          source_url: item.source_url,
+          updated_at: item.updated_at,
+          error: item.error,
+        };
+        setJob(fallbackJob);
+        setTranscript("");
+        setWords([]);
+        setMemorySaved(Boolean(item.memory_saved));
+        setStatusMessage(getJobStatusMessage(fallbackJob, t));
+      }
     } finally {
       setDetailLoading(false);
     }
@@ -886,7 +939,13 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
             onRefresh={refreshHistory}
             onCardClick={handleCardClick}
             onDeleteJob={removeJob}
-            onRetryJob={(id) => retryJob(id).catch(() => {})}
+            onRetryJob={(id) =>
+              retryJob(id).catch((err) => {
+                // A record that 404s on retry is gone server-side; reflect it
+                // in the library instead of silently ignoring the click.
+                if (isJobNotFoundError(err)) markMissingJob(id);
+              })
+            }
             manageMode={manageMode}
             selectedIds={selectedIds}
             batchDeleting={batchDeleting}
