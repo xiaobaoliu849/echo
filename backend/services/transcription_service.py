@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import mimetypes
+import re
 import shutil
 import uuid
 from dataclasses import dataclass
@@ -2096,6 +2097,15 @@ class TranscriptionService:
         except Exception:
             return None
 
+    DEFAULT_TRANSLATION_MODELS = {
+        "DashScope": "qwen-plus",
+        "Google": "gemini-2.5-flash",
+        "DeepSeek": "deepseek-chat",
+        "OpenRouter": "deepseek/deepseek-chat",
+        "SiliconFlow": "deepseek-ai/DeepSeek-V3",
+        "Xiaomi": "mimo-v2.5-pro",
+    }
+
     async def translate_cues(
         self,
         cues: list[dict[str, Any]],
@@ -2108,7 +2118,7 @@ class TranscriptionService:
             return []
 
         texts = [str(c.get("text", "")).strip() for c in cues]
-        chunk_size = 35
+        chunk_size = 30
         translated_all: list[str] = []
 
         lang_names = {
@@ -2125,55 +2135,95 @@ class TranscriptionService:
         }
         target_name = lang_names.get(target_language, target_language)
 
+        # 1. Resolve provider with configured API key
+        resolved_provider = provider or "DashScope"
+        p_settings = self.config.get_provider_settings(resolved_provider)
+        if not p_settings.get("api_key"):
+            found = False
+            for fallback_p in ["DashScope", "Google", "DeepSeek", "Xiaomi", "OpenRouter", "SiliconFlow"]:
+                candidate = self.config.get_provider_settings(fallback_p)
+                if candidate.get("api_key"):
+                    resolved_provider = fallback_p
+                    p_settings = candidate
+                    found = True
+                    break
+            if not found:
+                raise ValueError("未检测到任何可用的大模型 API Key。请在“设置 -> API 设置”中配置 DashScope、Google、DeepSeek 或 Xiaomi 的 API Key。")
+
+        # 2. Resolve model name for the provider
+        resolved_model = (model or "").strip()
+        if not resolved_model:
+            configured_model = (p_settings.get("model") or "").strip()
+            resolved_model = configured_model or self.DEFAULT_TRANSLATION_MODELS.get(resolved_provider, "qwen-plus")
+
+        def _extract_translated_lines(reply_text: str, expected_len: int) -> list[str]:
+            reply_text = reply_text.strip()
+            # Try JSON parsing
+            clean_json = reply_text
+            if "```json" in clean_json:
+                clean_json = clean_json.split("```json", 1)[1].split("```", 1)[0].strip()
+            elif "```" in clean_json:
+                clean_json = clean_json.split("```", 1)[1].split("```", 1)[0].strip()
+            try:
+                parsed = json.loads(clean_json)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed][:expected_len]
+                if isinstance(parsed, dict):
+                    for k in ["translations", "subtitles", "results", "cues", "data"]:
+                        if isinstance(parsed.get(k), list):
+                            return [str(item).strip() for item in parsed[k]][:expected_len]
+            except Exception:
+                pass
+
+            # Fallback line-by-line parsing
+            lines = [l.strip() for l in reply_text.split("\n") if l.strip()]
+            parsed_lines = []
+            for l in lines:
+                if l in ("[", "]", "{", "}"):
+                    continue
+                cleaned_line = re.sub(r'^(?:\[\d+\]|\d+[\.\:\、\s\-\)]+|\"\d+\"\:)\s*', '', l).strip()
+                if (cleaned_line.startswith('"') and cleaned_line.endswith('"')) or (cleaned_line.startswith("'") and cleaned_line.endswith("'")):
+                    cleaned_line = cleaned_line[1:-1].strip()
+                if cleaned_line:
+                    parsed_lines.append(cleaned_line)
+            if parsed_lines:
+                return parsed_lines[:expected_len]
+            raise ValueError(f"无法解析大模型翻译结果: {reply_text[:120]}")
+
         for i in range(0, len(texts), chunk_size):
             chunk = texts[i : i + chunk_size]
             prompt = (
-                f"You are a professional video subtitle translator.\n"
+                f"You are an expert video subtitle translator.\n"
                 f"Translate each of the following subtitle lines into {target_name}.\n"
-                f"Rules:\n"
-                f"1. Keep translations concise, natural, and accurately matched to video context.\n"
-                f"2. Return ONLY a valid JSON array of strings with EXACTLY {len(chunk)} elements matching the input index order.\n"
-                f"3. Do not add explanations or conversational filler.\n\n"
-                f"Input JSON:\n{json.dumps(chunk, ensure_ascii=False)}"
+                f"Requirements:\n"
+                f"1. Accurately translate each line into natural, fluent {target_name}.\n"
+                f"2. Return ONLY a JSON array of strings with EXACTLY {len(chunk)} elements matching the input index order.\n"
+                f"3. Do not include any explanations, markdown code fences, or additional text.\n\n"
+                f"Input Subtitles:\n{json.dumps(chunk, ensure_ascii=False)}"
             )
-
-            resolved_provider = provider or "DeepSeek"
-            p_settings = self.config.get_provider_settings(resolved_provider)
-            if not p_settings.get("api_key"):
-                for fallback_p in ["DashScope", "Google", "OpenRouter", "SiliconFlow"]:
-                    if self.config.get_provider_settings(fallback_p).get("api_key"):
-                        resolved_provider = fallback_p
-                        break
 
             try:
                 result = await self.llm_service.chat_completion(
                     provider=resolved_provider,
-                    model=model,
+                    model=resolved_model,
                     messages=[
-                        {"role": "system", "content": "You are a specialized subtitle translation engine. Output valid JSON arrays only."},
+                        {"role": "system", "content": f"You are a specialized video subtitle translation engine. Always translate input text into {target_name}. Output a valid JSON array of strings only."},
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.2,
-                    max_tokens=2048,
+                    max_tokens=3000,
                     use_memory=False,
                 )
                 reply = result.get("reply", "").strip()
-                if "```json" in reply:
-                    reply = reply.split("```json")[1].split("```")[0].strip()
-                elif "```" in reply:
-                    reply = reply.split("```")[1].split("```")[0].strip()
-                parsed = json.loads(reply)
-                if isinstance(parsed, list):
-                    for trans_text in parsed:
-                        translated_all.append(str(trans_text))
-                    while len(translated_all) < i + len(chunk):
-                        idx_missing = len(translated_all) - i
-                        translated_all.append(chunk[idx_missing] if idx_missing < len(chunk) else "")
-                else:
-                    raise ValueError("LLM returned non-list JSON")
+                extracted = _extract_translated_lines(reply, len(chunk))
+                for trans_text in extracted:
+                    translated_all.append(str(trans_text))
+                while len(translated_all) < i + len(chunk):
+                    idx_missing = len(translated_all) - i
+                    translated_all.append(chunk[idx_missing] if idx_missing < len(chunk) else "")
             except Exception as exc:
-                logger.warning("Subtitle chunk translation failed (%s); fallback to original", exc)
-                translated_all.extend(chunk)
+                logger.error("Subtitle chunk translation failed with provider %s (%s)", resolved_provider, exc)
+                raise RuntimeError(f"使用 {resolved_provider} 模型翻译字幕失败: {exc}") from exc
 
         result_cues: list[dict[str, Any]] = []
         for idx, cue in enumerate(cues):

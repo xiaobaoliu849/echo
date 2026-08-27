@@ -24,6 +24,7 @@ type ViewMode = "library" | "detail";
 type Props = {
   onSendToChat?: (text: string) => void;
   initialTab?: PageTab;
+  onDetailModeChange?: (isDetail: boolean) => void;
 };
 
 function isPollingStatus(status?: string): boolean {
@@ -75,10 +76,14 @@ function getJobStatusMessage(
 
 export type PageTab = "realtime" | "file" | "remote" | "library";
 
-export function TranscriptionPage({ onSendToChat, initialTab = "file" }: Props) {
+export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailModeChange }: Props) {
   const { t, language } = useI18n();
 
   const [viewMode, setViewMode] = useState<ViewMode>("library");
+
+  useEffect(() => {
+    onDetailModeChange?.(viewMode === "detail");
+  }, [viewMode, onDetailModeChange]);
   const [pageTab, setPageTab] = useState<PageTab>(initialTab);
   const [job, setJob] = useState<TranscriptionJobResponse | null>(null);
   const [transcript, setTranscript] = useState("");

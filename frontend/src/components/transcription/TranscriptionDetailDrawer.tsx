@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import type { TranscriptionJobResponse, WordTimestamp } from "../../api";
 import ErrorNotice from "../ErrorNotice";
 import { useI18n } from "../../i18n";
 import { asrProviderLabel } from "../../utils/asrProviders";
-import TranscriptionSubtitlePlayer from "./TranscriptionSubtitlePlayer";
+import TranscriptionSubtitlePlayer, { type SubtitleExportActions } from "./TranscriptionSubtitlePlayer";
 
 type Props = {
   job: TranscriptionJobResponse | null;
@@ -20,9 +21,9 @@ type Props = {
   language: string;
   onBack: () => void;
   onCopy: () => void;
-  onExport: (format: "txt" | "srt" | "vtt") => void;
+  onExport: (format: "txt" | "srt" | "vtt" | "json") => void;
   onAudioDurationChange: (dur: number) => void;
-  onReservedAction: (action: string) => void;
+  onReservedAction?: (action: string) => void;
   onSaveMemory: () => void;
   memorySaving: boolean;
 };
@@ -44,12 +45,18 @@ export default function TranscriptionDetailDrawer({
   onCopy,
   onExport,
   onAudioDurationChange,
-  onReservedAction,
   onSaveMemory,
   memorySaving,
 }: Props) {
   const { t } = useI18n();
   const [showExportMenu, setShowExportMenu] = useState(false);
+  // Cue-aware export actions registered by the subtitle player (bilingual exports, burn-in video).
+  const [subtitleExports, setSubtitleExports] = useState<SubtitleExportActions | null>(null);
+
+  const runExport = (run: () => void) => {
+    run();
+    setShowExportMenu(false);
+  };
 
   const fileName = job?.file_name || t("转写详情", "Transcription Detail");
   const detailStatusClass =
@@ -64,14 +71,18 @@ export default function TranscriptionDetailDrawer({
       {/* Header */}
       <div className="vsTranscribeDetailHeader">
         <button
+          type="button"
           className="vsTranscribeBackBtn"
           onClick={onBack}
-          title={t("返回列表", "Back to list")}
+          title={t("返回转写列表", "Back to transcription list")}
+          aria-label={t("返回转写列表", "Back to transcription list")}
         >
-          ←
+          <ArrowLeft size={16} strokeWidth={2.2} />
+          <span>{t("返回列表", "Back")}</span>
         </button>
+
         <div className="vsTranscribeDetailInfo">
-          <h2 className="vsTranscribeDetailFileName">{fileName}</h2>
+          <h2 className="vsTranscribeDetailFileName" title={fileName}>{fileName}</h2>
           <div className="vsTranscribeDetailMeta">
             {job?.updated_at
               ? new Date(job.updated_at).toLocaleString(
@@ -86,6 +97,26 @@ export default function TranscriptionDetailDrawer({
             {job?.provider && (
               <span style={{ marginLeft: 8, opacity: 0.7 }}>
                 · {t("引擎", "Engine")}: {asrProviderLabel(job.provider, language)}
+              </span>
+            )}
+            {statusMessage && (
+              <span className="vsTranscribeStatusText" style={{ marginLeft: 8 }}>
+                {statusMessage}
+              </span>
+            )}
+            {memorySaved && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background: "#10b981",
+                  color: "#fff",
+                  padding: "1px 6px",
+                  borderRadius: 999,
+                  marginLeft: 6,
+                }}
+              >
+                {t("已入记忆", "Saved to memory")}
               </span>
             )}
           </div>
@@ -130,22 +161,76 @@ export default function TranscriptionDetailDrawer({
                 <div className="vsExportDropdownMenu">
                   <button
                     className="vsExportDropdownItem"
-                    onClick={() => { onExport("txt"); setShowExportMenu(false); }}
+                    onClick={() => runExport(() => onExport("txt"))}
                   >
-                    {t("导出 TXT 文本", "Export TXT")}
+                    <span>📃</span>
+                    <span>{t("导出 TXT 文本", "Export TXT")}</span>
                   </button>
                   <button
                     className="vsExportDropdownItem"
-                    onClick={() => { onExport("srt"); setShowExportMenu(false); }}
+                    onClick={() => runExport(() => onExport("json"))}
                   >
-                    {t("导出 SRT 字幕", "Export SRT Subtitle")}
+                    <span>📦</span>
+                    <span>{t("导出 JSON 数据", "Export JSON Data")}</span>
+                  </button>
+                  <div className="vsMenuDivider" />
+                  <button
+                    className="vsExportDropdownItem"
+                    onClick={() => runExport(() => onExport("srt"))}
+                  >
+                    <span>📄</span>
+                    <span>{t("导出 SRT 字幕", "Export SRT Subtitle")}</span>
                   </button>
                   <button
                     className="vsExportDropdownItem"
-                    onClick={() => { onExport("vtt"); setShowExportMenu(false); }}
+                    onClick={() => runExport(() => onExport("vtt"))}
                   >
-                    {t("导出 VTT 字幕", "Export VTT Subtitle")}
+                    <span>📑</span>
+                    <span>{t("导出 VTT 字幕", "Export VTT Subtitle")}</span>
                   </button>
+                  {subtitleExports && (
+                    <>
+                      <div className="vsMenuDivider" />
+                      <button
+                        className="vsExportDropdownItem"
+                        onClick={() => runExport(() => subtitleExports.exportSubtitleFile("bilingual_srt"))}
+                      >
+                        <span>📝</span>
+                        <span>{t("导出双语字幕 (SRT)", "Export Bilingual SRT")}</span>
+                      </button>
+                      <button
+                        className="vsExportDropdownItem"
+                        onClick={() => runExport(() => subtitleExports.exportSubtitleFile("target_srt"))}
+                      >
+                        <span>🌐</span>
+                        <span>{t("导出译文字幕 (SRT)", "Export Translated SRT")}</span>
+                      </button>
+                      <button
+                        className="vsExportDropdownItem"
+                        onClick={() => runExport(() => subtitleExports.exportSubtitleFile("bilingual_vtt"))}
+                      >
+                        <span>🗂️</span>
+                        <span>{t("导出双语 WebVTT", "Export Bilingual VTT")}</span>
+                      </button>
+                      {subtitleExports.hasVideo && (
+                        <>
+                          <div className="vsMenuDivider" />
+                          <button
+                            className="vsExportDropdownItem vsExportDropdownHighlight"
+                            disabled={subtitleExports.burning}
+                            onClick={() => runExport(() => subtitleExports.burnBilingualVideo())}
+                          >
+                            <span>🎬</span>
+                            <span>
+                              {subtitleExports.burning
+                                ? t("正在压制双语视频…", "Burning bilingual video…")
+                                : t("压制并导出双语视频 (MP4)", "Burn-in Bilingual Video (MP4)")}
+                            </span>
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
               </>
             )}
@@ -153,36 +238,19 @@ export default function TranscriptionDetailDrawer({
         </div>
       </div>
 
-      {/* Status Banner */}
-      {statusMessage && (
+      {/* Status Banner - only when busy or failed */}
+      {statusMessage && (isBusy || job?.status === "failed") && (
         <div className={`vsTranscribeStatusBanner ${detailStatusClass}`}>
           <div
             className="vsTranscribeStatusDot"
             style={{
               background: isBusy
                 ? "var(--brand)"
-                : transcript
-                ? "#10b981"
-                : "var(--muted)",
+                : "var(--danger, #ef4444)",
               animation: isBusy ? "pulsingDot 2s infinite" : "none",
             }}
           />
           <span className="vsTranscribeStatusText">{statusMessage}</span>
-          {memorySaved && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                background: "#10b981",
-                color: "#fff",
-                padding: "2px 8px",
-                borderRadius: 999,
-                flexShrink: 0,
-              }}
-            >
-              {t("已入记忆", "Saved to memory")}
-            </span>
-          )}
         </div>
       )}
 
@@ -214,6 +282,7 @@ export default function TranscriptionDetailDrawer({
           audioDuration={audioDuration}
           fileName={job?.file_name}
           onAudioDurationChange={onAudioDurationChange}
+          onRegisterExportActions={setSubtitleExports}
         />
       ) : isBusy ? (
         <div className="vsTranscribeDetailContent custom-scrollbar">
@@ -270,32 +339,6 @@ export default function TranscriptionDetailDrawer({
           <span style={{ flex: 1 }}>{infoMessage}</span>
         </div>
       )}
-
-      {/* Footer Toolbox */}
-      <div className="vsTranscribeDetailFooter">
-        <span className="vsTranscribeFooterLabel">
-          {t("工具箱", "Toolbox")}:
-        </span>
-        {[
-          t("发送到聊天", "Send to chat"),
-          t("生成摘要", "Generate summary"),
-          t("生成播客脚本", "Generate podcast script"),
-        ].map((action) => (
-          <button
-            key={action}
-            onClick={() => onReservedAction(action)}
-            className="vsBtnSecondary"
-            style={{
-              height: 30,
-              fontSize: 12,
-              padding: "0 12px",
-              borderStyle: "dashed",
-            }}
-          >
-            {action}
-          </button>
-        ))}
-      </div>
     </section>
   );
 }

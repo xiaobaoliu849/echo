@@ -33,10 +33,17 @@ export default function VoiceCenterPage({
 }: Props) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<VoiceCenterSubTab>(initialSubTab);
+  const [isDetailMode, setIsDetailMode] = useState(false);
 
   useEffect(() => {
     setActiveTab(initialSubTab);
+    setIsDetailMode(false);
   }, [initialSubTab]);
+
+  const handleTabChange = (tab: VoiceCenterSubTab) => {
+    setActiveTab(tab);
+    setIsDetailMode(false);
+  };
 
   const tabs = [
     { id: "tts" as const, label: t("文本到音频", "Text to Audio") },
@@ -46,37 +53,39 @@ export default function VoiceCenterPage({
   ];
 
   return (
-    <div className="vsVoiceCenter">
-      <div className="vsVoiceCenterNav">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`vsVoiceSubTab ${isActive ? "active" : ""}`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className={`vsVoiceCenter ${isDetailMode ? "vsVoiceCenter--immersive" : ""}`}>
+      {!isDetailMode && (
+        <div className="vsVoiceCenterNav">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleTabChange(tab.id)}
+                className={`vsVoiceSubTab ${isActive ? "active" : ""}`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      <div className="vsVoiceCenterContent">
+      <div className={`vsVoiceCenterContent ${isDetailMode ? "vsVoiceCenterContent--immersive" : ""}`}>
         <div className="vsVoiceCenterScroll">
           <Suspense fallback={<div className="vsPageLoading" />}>
           {activeTab === "tts" && (
              <div className="vsVoiceSubContent"><TtsPage tts={tts} errorRuntimeContext={errorRuntimeContext} /></div>
           )}
           {activeTab === "design" && (
-             <div className="vsVoiceSubContent"><VoiceDesignPage design={design} errorRuntimeContext={errorRuntimeContext} voiceProvider={voiceProvider} onVoiceProviderChange={onVoiceProviderChange} /></div>
+             <div className="vsVoiceSubContent"><VoiceDesignPage design={design} errorRuntimeContext={errorRuntimeContext} voiceProvider={voiceProvider} onVoiceProviderChange={onVoiceProviderChange} onDetailModeChange={setIsDetailMode} /></div>
           )}
           {activeTab === "clone" && (
-             <div className="vsVoiceSubContent"><VoiceClonePage clone={clone} errorRuntimeContext={errorRuntimeContext} voiceProvider={voiceProvider} onVoiceProviderChange={onVoiceProviderChange} /></div>
+             <div className="vsVoiceSubContent"><VoiceClonePage clone={clone} errorRuntimeContext={errorRuntimeContext} voiceProvider={voiceProvider} onVoiceProviderChange={onVoiceProviderChange} onDetailModeChange={setIsDetailMode} /></div>
           )}
           {activeTab === "transcribe" && (
-             <div className="vsVoiceSubContent"><TranscriptionPage onSendToChat={onSendToChat} /></div>
+             <div className="vsVoiceSubContent"><TranscriptionPage onSendToChat={onSendToChat} onDetailModeChange={setIsDetailMode} /></div>
           )}
           </Suspense>
         </div>

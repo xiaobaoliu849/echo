@@ -5720,6 +5720,12 @@ button.danger:focus-visible {
   border: 1px solid rgba(98, 76, 54, 0.1);
   overflow: hidden;
   box-shadow: 0 18px 40px rgba(56, 41, 27, 0.08);
+  transition: all 0.25s ease;
+}
+
+.vsVoiceCenter--immersive {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(56, 41, 27, 0.04);
 }
 
 .vsVoiceCenterNav {
@@ -5768,6 +5774,15 @@ button.danger:focus-visible {
   background:
     radial-gradient(circle at top right, rgba(176, 106, 63, 0.08), transparent 28%),
     linear-gradient(180deg, rgba(248, 242, 234, 0.82), rgba(243, 235, 224, 0.94));
+}
+
+.vsVoiceCenterContent--immersive {
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.vsVoiceCenterContent--immersive .vsVoiceSubContent {
+  border-radius: 0 !important;
 }
 
 .vsVoiceCenterScroll {
@@ -7282,33 +7297,41 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsTranscribeDetailHeader {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 24px;
-  background: rgba(255, 251, 245, 0.7);
-  border-bottom: 1px solid rgba(98, 76, 54, 0.08);
+  gap: 14px;
+  padding: 12px 20px;
+  background: var(--bg-card, #fff);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
 .vsTranscribeBackBtn {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid rgba(98, 76, 54, 0.1);
-  background: rgba(255, 255, 255, 0.8);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  color: var(--text);
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  background: var(--bg-card, #ffffff);
+  color: var(--text, #1e293b);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
   flex-shrink: 0;
 }
 
+.vsTranscribeBackBtn svg {
+  flex-shrink: 0;
+  stroke: currentColor;
+}
+
 .vsTranscribeBackBtn:hover {
-  background: #fff;
-  border-color: var(--brand);
-  color: var(--brand);
+  background: color-mix(in oklab, var(--brand-soft) 85%, transparent);
+  border-color: color-mix(in oklab, var(--brand) 40%, transparent);
+  color: var(--brand-dark, var(--brand));
+  box-shadow: 0 2px 6px color-mix(in oklab, var(--brand) 18%, transparent);
 }
 
 .vsTranscribeDetailInfo {
@@ -7318,7 +7341,7 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsTranscribeDetailFileName {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text);
   overflow: hidden;
@@ -7327,9 +7350,27 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsTranscribeDetailMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
+}
+
+.vsTranscribeBadgeSuccess {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  margin-left: 4px;
 }
 
 .vsTranscribeDetailActions {
@@ -7343,36 +7384,67 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsExportDropdownMenu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   right: 0;
   z-index: 100;
-  min-width: 180px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  padding: 4px;
+  min-width: 230px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 6px;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .vsExportDropdownItem {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 9px 12px;
   border: none;
   background: transparent;
-  color: var(--text);
+  color: var(--text, #1e293b) !important;
   font-size: 13px;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.15s;
+  border-radius: 8px;
+  box-shadow: none !important;
+  transform: none !important;
+  transition: background 0.15s ease, color 0.15s ease;
   white-space: nowrap;
+  justify-content: flex-start;
 }
 
 .vsExportDropdownItem:hover {
-  background: var(--brand-soft, rgba(99, 102, 241, 0.08));
+  background: color-mix(in oklab, var(--brand-soft) 85%, transparent) !important;
+  color: var(--brand-dark, var(--brand)) !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+.vsExportDropdownItem:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.vsExportDropdownItem:disabled:hover {
+  background: transparent !important;
+  color: var(--text, #1e293b) !important;
+}
+
+.vsExportDropdownHighlight {
+  color: var(--brand-dark, var(--brand)) !important;
+  font-weight: 600;
+}
+
+.vsMenuDivider {
+  height: 1px;
+  background: var(--line, rgba(0, 0, 0, 0.08));
+  margin: 4px 0;
 }
 
 .vsTranscribeDetailContent {
@@ -7451,9 +7523,9 @@ button.vsPasswordToggleBtn:focus-visible {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr);
-  gap: 16px;
-  padding: 16px 24px 12px;
+  grid-template-columns: minmax(0, 1.12fr) minmax(320px, 1fr);
+  gap: 12px;
+  padding: 10px 14px;
   overflow: hidden;
 }
 
@@ -7473,20 +7545,22 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  gap: 12px;
+  gap: 10px;
+  height: 100%;
 }
 
 .vsMediaStage {
   position: relative;
-  background: #0d0b16;
+  background: #0b0914;
   border-radius: 14px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   aspect-ratio: 16 / 9;
-  max-height: 100%;
-  box-shadow: 0 8px 28px rgba(20, 12, 40, 0.18);
+  flex: 1;
+  max-height: calc(100% - 56px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
 }
 
 .vsMediaStage video {
@@ -7607,20 +7681,21 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsNowLine.overlay {
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  bottom: 16px;
   transform: translateX(-50%);
-  max-width: 86%;
-  padding: 6px 14px;
+  max-width: 88%;
+  padding: 6px 16px;
   border-radius: 10px;
-  background: rgba(8, 6, 16, 0.62);
-  backdrop-filter: blur(4px);
+  background: rgba(8, 6, 16, 0.72);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
 }
 
 .vsNowLine.overlay .vsNowLineText {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.75);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
 }
 
 .vsNowLine.overlay .vsNowWord.spoken {
@@ -7633,8 +7708,7 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsNowWord {
-  /* No transition — the old 0.15s color transition caused compositor overhead
-   * when hundreds of word <span> elements changed state at high frequency. */
+  /* No transition */
 }
 
 /* ── Custom transport bar ── */
@@ -7643,14 +7717,14 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 14px;
-  border-radius: 14px;
-  background: color-mix(in oklab, var(--bg-card) 92%, transparent);
-  border: 1px solid var(--line);
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--bg-card) 94%, transparent);
+  border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
 }
 
-/* Thin divider between transport clusters (skip/play, seek, options). */
+/* Thin divider between transport clusters */
 .vsTransportDivider {
   width: 1px;
   height: 20px;
@@ -7661,9 +7735,9 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsTransportBtn {
   position: relative;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   color: var(--muted);
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
@@ -7678,12 +7752,10 @@ button.vsPasswordToggleBtn:focus-visible {
   background: color-mix(in oklab, var(--brand-soft) 92%, transparent);
 }
 
-/* "10" badge on the ±10s skip buttons: sits under the arrow glyph, tucked
- * into the corner so it reads as a unit with the icon rather than as text. */
 .vsTransportSkipLabel {
   position: absolute;
-  bottom: 3px;
-  right: 3px;
+  bottom: 2px;
+  right: 2px;
   font-size: 8px;
   font-weight: 800;
   line-height: 1;
@@ -7695,14 +7767,14 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsTransportPlay {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   border-color: transparent;
   background: linear-gradient(180deg, var(--brand), var(--brand-dark));
   color: #fff;
   box-shadow:
-    0 4px 12px color-mix(in oklab, var(--brand-dark) 30%, transparent),
+    0 3px 10px color-mix(in oklab, var(--brand-dark) 30%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
   transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
@@ -7711,7 +7783,7 @@ button.vsPasswordToggleBtn:focus-visible {
   filter: brightness(1.06);
   transform: scale(1.05);
   box-shadow:
-    0 6px 18px color-mix(in oklab, var(--brand-dark) 38%, transparent),
+    0 5px 14px color-mix(in oklab, var(--brand-dark) 38%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
@@ -7719,10 +7791,6 @@ button.vsPasswordToggleBtn:focus-visible {
   transform: scale(0.95);
 }
 
-/*
- * Range inputs: `accent-color` alone leaves the browser default track height
- * and a chunky thumb, which read as unfinished next to the rest of the bar.
- */
 .vsSeek,
 .vsVolume {
   -webkit-appearance: none;
@@ -7738,15 +7806,13 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsVolume {
-  width: 68px;
+  width: 64px;
   flex-shrink: 0;
 }
 
 .vsSeek::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
-  /* WebKit has no ::-moz-range-progress equivalent, so the played portion is
-   * painted as a hard-stop gradient driven by the --vs-fill custom property. */
   background: linear-gradient(
     to right,
     var(--brand) 0 var(--vs-fill, 0%),
@@ -7822,15 +7888,14 @@ button.vsPasswordToggleBtn:focus-visible {
   letter-spacing: 0.01em;
 }
 
-/* Elapsed time is the value users track; keep it darker than total. */
 .vsTimeLabel.current {
   color: var(--text);
 }
 
 .vsRateBtn {
   width: auto;
-  min-width: 38px;
-  padding: 0 8px;
+  min-width: 36px;
+  padding: 0 6px;
   font-size: 11px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -7845,35 +7910,101 @@ button.vsPasswordToggleBtn:focus-visible {
   min-height: 0;
   min-width: 0;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(98, 76, 54, 0.09);
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
+  height: 100%;
+}
+
+/* Right Panel Tabs (Subtitles vs AI Insights) */
+.vsRightPanelTabs {
+  display: flex;
+  align-items: center;
+  background: color-mix(in oklab, var(--bg-subtle, rgba(0, 0, 0, 0.03)) 85%, transparent);
+  padding: 4px;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.vsRightPanelTab {
+  flex: 1;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsRightPanelTab:hover {
+  color: var(--text);
+}
+
+.vsRightPanelTab.active {
+  background: var(--bg-card, #fff);
+  color: var(--brand-dark, var(--brand));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.vsRightPanelTab .vsTabCount {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--brand-soft) 80%, transparent);
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.vsAiPanelContainer {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .vsSubtitleToolbar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(98, 76, 54, 0.08);
-  background: rgba(255, 251, 245, 0.7);
-  min-height: 46px;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in oklab, var(--bg-card) 95%, transparent);
+  min-height: 38px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
 }
 
-/*
- * Search lives on its own row under the toolbar. Sharing the toolbar line with
- * the five 34px tool buttons squeezed the input to near-zero width inside the
- * narrow (minmax(340px, 1fr)) subtitle panel, which is what made it unusable.
- */
+.vsSubtitleAiTranslateBtn {
+  height: 26px !important;
+  font-size: 11px !important;
+  padding: 0 6px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .vsSubtitleSearchRow {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(98, 76, 54, 0.08);
-  background: rgba(255, 251, 245, 0.5);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
 }
 
 .vsSubtitleSearch {
@@ -7882,9 +8013,9 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
+  height: 32px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--bg-card, #fff);
   border: 1px solid var(--line);
   color: var(--muted);
@@ -7930,10 +8061,10 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsSearchNavBtn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid var(--line);
   background: var(--bg-card, #fff);
   color: var(--muted);
@@ -7955,7 +8086,7 @@ button.vsPasswordToggleBtn:focus-visible {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
@@ -8016,16 +8147,15 @@ button.vsPasswordToggleBtn:focus-visible {
   }
 }
 
-/*
- * Ghost tool buttons: no chrome at rest so the toolbar reads as a quiet strip,
- * with the surface appearing only on hover or when a mode is engaged.
- */
 .vsToolBtn {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   color: var(--muted);
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .vsToolBtn:hover:not(:disabled) {
@@ -8046,7 +8176,7 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsToolBtnClock {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -8057,7 +8187,7 @@ button.vsPasswordToggleBtn:focus-visible {
   min-height: 0;
   overflow-y: auto;
   position: relative;
-  padding: 8px 8px 24px;
+  padding: 8px 10px 24px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -8065,7 +8195,7 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsSubtitleCue {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 12px;
   text-align: left;
   width: 100%;
@@ -8076,10 +8206,11 @@ button.vsPasswordToggleBtn:focus-visible {
   background: transparent;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .vsSubtitleCue:hover {
-  background: rgba(98, 76, 54, 0.05);
+  background: color-mix(in oklab, var(--brand-soft) 40%, transparent);
 }
 
 .vsSubtitleCue:hover .vsCueRowEditBtn {
@@ -8102,7 +8233,7 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsSubtitleCueText {
   flex: 1;
-  line-height: 1.65;
+  line-height: 1.6;
   color: var(--text);
   word-break: break-word;
 }
@@ -8115,7 +8246,7 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsSubtitleCue.active {
-  background: color-mix(in oklab, var(--brand-soft) 62%, transparent);
+  background: color-mix(in oklab, var(--brand-soft) 68%, transparent);
   border-left-color: var(--brand);
 }
 
@@ -8143,7 +8274,7 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsNowLine.overlay .vsNowLineTranslation {
   display: block;
-  font-size: 14px;
+  font-size: 13px;
   color: #ffd166;
   font-weight: 600;
   margin-top: 3px;
@@ -8197,20 +8328,22 @@ button.vsPasswordToggleBtn:focus-visible {
   display: inline-flex;
   background: var(--bg-subtle, rgba(0,0,0,0.04));
   padding: 2px;
-  border-radius: 8px;
-  gap: 2px;
+  border-radius: 7px;
+  gap: 1px;
+  flex-shrink: 0;
 }
 
 .vsLangSwitcherBtn {
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 3px 7px;
+  font-size: 11.5px;
   font-weight: 600;
   border: none;
   background: transparent;
   color: var(--muted);
-  border-radius: 6px;
+  border-radius: 5px;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .vsLangSwitcherBtn.active {
@@ -8234,7 +8367,7 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 /* Narrow windows: stack media above subtitles */
-@media (max-width: 1080px) {
+@media (max-width: 860px) {
   .vsPlayerGrid {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);

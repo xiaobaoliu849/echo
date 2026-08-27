@@ -48,6 +48,16 @@ type Props = {
   audioDuration: number;
   fileName?: string;
   onAudioDurationChange: (dur: number) => void;
+  /** Register cue-aware export actions (bilingual subtitles, burn-in video) with the parent. */
+  onRegisterExportActions?: (actions: SubtitleExportActions | null) => void;
+};
+
+/** Cue-aware exports owned by the player; surfaced through the page-level export menu. */
+export type SubtitleExportActions = {
+  exportSubtitleFile: (type: "bilingual_srt" | "target_srt" | "bilingual_vtt") => void;
+  burnBilingualVideo: () => void;
+  hasVideo: boolean;
+  burning: boolean;
 };
 
 const VIDEO_EXTS = new Set([
@@ -487,6 +497,7 @@ export default function TranscriptionSubtitlePlayer({
   audioDuration,
   fileName,
   onAudioDurationChange,
+  onRegisterExportActions,
 }: Props) {
   const { t } = useI18n();
   const [mediaEl, setMediaEl] = useState<HTMLMediaElement | null>(null);
@@ -520,7 +531,7 @@ export default function TranscriptionSubtitlePlayer({
   const [langView, setLangView] = useState<"bilingual" | "source" | "target">("bilingual");
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [targetLang, setTargetLang] = useState("zh-CN");
-  const [translateModel, setTranslateModel] = useState("DeepSeek");
+  const [translateModel, setTranslateModel] = useState("DashScope");
   const [isTranslating, setIsTranslating] = useState(false);
 
   // Inline Cue Editing
@@ -530,8 +541,8 @@ export default function TranscriptionSubtitlePlayer({
   const [burnVideoLoading, setBurnVideoLoading] = useState(false);
   const [burnVideoSuccess, setBurnVideoSuccess] = useState("");
 
-  // Export Popover Menu
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  // Right Panel Tabs: Subtitles vs AI Insights
+  const [panelTab, setPanelTab] = useState<"subtitles" | "ai">("subtitles");
 
   const video = isVideoFile(fileName);
   const hasMedia = Boolean(audioSourceUrl) && !mediaError;
@@ -795,42 +806,29 @@ export default function TranscriptionSubtitlePlayer({
     setEditingIndex(null);
   }
 
-  // Export handlers
-  async function handleExportFile(type: "bilingual_srt" | "source_srt" | "target_srt" | "bilingual_vtt" | "txt" | "json") {
-    setExportMenuOpen(false);
+  // Export handlers (cue-aware; invoked from the page-level export menu)
+  async function handleExportFile(type: "bilingual_srt" | "target_srt" | "bilingual_vtt") {
     const base = (fileName || "transcription").replace(/\.[^/.]+$/, "");
     let content = "";
     let ext = "srt";
-    let mime = "text/plain";
 
     if (type === "bilingual_srt") {
       content = "\uFEFF" + generateBilingualSrt(cues, "bilingual");
       ext = "bilingual.srt";
-    } else if (type === "source_srt") {
-      content = "\uFEFF" + generateBilingualSrt(cues, "source");
-      ext = "source.srt";
     } else if (type === "target_srt") {
       content = "\uFEFF" + generateBilingualSrt(cues, "target");
       ext = "translated.srt";
     } else if (type === "bilingual_vtt") {
       content = generateBilingualVtt(cues, "bilingual");
       ext = "vtt";
-    } else if (type === "txt") {
-      content = cues.map((c) => c.text + (c.translation ? `\n${c.translation}` : "")).join("\n\n");
-      ext = "txt";
-    } else if (type === "json") {
-      content = JSON.stringify(cues, null, 2);
-      ext = "json";
-      mime = "application/json";
     }
 
-    await exportTextFile(`${base}.${ext}`, content, mime);
+    await exportTextFile(`${base}.${ext}`, content);
   }
 
   // Burn Video Handler
   async function handleBurnVideo() {
     if (!jobId || burnVideoLoading) return;
-    setExportMenuOpen(false);
     setBurnVideoLoading(true);
     setBurnVideoSuccess("");
     try {
@@ -846,6 +844,26 @@ export default function TranscriptionSubtitlePlayer({
       setBurnVideoLoading(false);
     }
   }
+
+  // Keep the registered actions pointing at fresh closures (cues/edits change over time).
+  const exportActionsRef = useRef<SubtitleExportActions | null>(null);
+  exportActionsRef.current = {
+    exportSubtitleFile: handleExportFile,
+    burnBilingualVideo: handleBurnVideo,
+    hasVideo: video,
+    burning: burnVideoLoading,
+  };
+
+  useEffect(() => {
+    if (!onRegisterExportActions) return;
+    onRegisterExportActions({
+      exportSubtitleFile: (type) => exportActionsRef.current?.exportSubtitleFile(type),
+      burnBilingualVideo: () => exportActionsRef.current?.burnBilingualVideo(),
+      hasVideo: exportActionsRef.current?.hasVideo ?? false,
+      burning: exportActionsRef.current?.burning ?? false,
+    });
+    return () => onRegisterExportActions(null);
+  }, [onRegisterExportActions, video, burnVideoLoading]);
 
   return (
     <div className={`vsPlayerGrid ${hasMedia ? "" : "no-media"}`}>
@@ -977,445 +995,377 @@ export default function TranscriptionSubtitlePlayer({
               <span>{burnVideoSuccess}</span>
             </div>
           )}
-
-          {/* Memo-style Bottom AI Assistant (Summary / MindMap / Q&A) */}
-          <TranscriptionAiAssistant
-            transcript={transcript}
-            fileName={fileName}
-            jobId={jobId}
-          />
         </div>
       )}
 
-      {/* RIGHT COLUMN: Subtitle / Transcript Workspace */}
+      {/* RIGHT COLUMN: Subtitle / AI Insights Workspace */}
       <div className="vsSubtitlePanel">
-        {mediaFailed && (
-          <div className="vsPlayerAlert vsPlayerAlertTop" role="alert">
-            <TriangleAlert size={14} />
-            <span>
-              {t(
-                "源音频无法播放（文件可能已被移动或删除），以下仍可阅读文稿。",
-                "The source audio could not be played (the file may have been moved or deleted). The transcript is still available below."
-              )}
-            </span>
-          </div>
-        )}
-
-        {/* Subtitle Workspace Toolbar */}
-        <div className="vsSubtitleToolbar" style={{ flexWrap: "wrap", gap: 8 }}>
-          {/* Language View Switcher */}
-          <div className="vsLangSwitcher">
-            <button
-              type="button"
-              className={`vsLangSwitcherBtn ${langView === "bilingual" ? "active" : ""}`}
-              onClick={() => setLangView("bilingual")}
-            >
-              {t("双语对照", "Bilingual")}
-            </button>
-            <button
-              type="button"
-              className={`vsLangSwitcherBtn ${langView === "source" ? "active" : ""}`}
-              onClick={() => setLangView("source")}
-            >
-              {t("仅原文", "Source")}
-            </button>
-            <button
-              type="button"
-              className={`vsLangSwitcherBtn ${langView === "target" ? "active" : ""}`}
-              onClick={() => setLangView("target")}
-            >
-              {t("仅译文", "Target")}
-            </button>
-          </div>
-
-          {/* AI One-Click Translate Button */}
+        {/* Right Panel Header Tabs: Subtitles vs AI */}
+        <div className="vsRightPanelTabs">
           <button
             type="button"
-            className="vsBtnSecondary"
-            style={{ height: 32, fontSize: 12, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 5 }}
-            onClick={() => setTranslateModalOpen(true)}
+            className={`vsRightPanelTab ${panelTab === "subtitles" ? "active" : ""}`}
+            onClick={() => setPanelTab("subtitles")}
           >
-            <Globe size={14} />
-            {t("一键 AI 翻译", "AI Translate")}
+            <Captions size={15} />
+            <span>{t("逐句字幕", "Subtitles")}</span>
+            <span className="vsTabCount">{cues.length}</span>
           </button>
+          <button
+            type="button"
+            className={`vsRightPanelTab ${panelTab === "ai" ? "active" : ""}`}
+            onClick={() => setPanelTab("ai")}
+          >
+            <Sparkles size={15} />
+            <span>{t("AI 智能分析", "AI Insights")}</span>
+          </button>
+        </div>
 
-          {/* Right Tools Group */}
-          <div className="vsSubtitleTools">
-            <button
-              type="button"
-              className={`vsIconBtn vsToolBtn ${searchOpen ? "active" : ""}`}
-              onClick={() => {
-                setSearchOpen((v) => !v);
-                if (searchOpen) {
-                  setQuery("");
-                  setMatchCursor(0);
-                }
-              }}
-              title={t("搜索字幕", "Search subtitles")}
-              aria-label={t("搜索字幕", "Search subtitles")}
-              aria-expanded={searchOpen}
-            >
-              {searchOpen ? <X size={18} /> : <Search size={18} />}
-            </button>
+        {panelTab === "ai" ? (
+          <div className="vsAiPanelContainer custom-scrollbar">
+            <TranscriptionAiAssistant
+              transcript={transcript}
+              fileName={fileName}
+              jobId={jobId}
+            />
+          </div>
+        ) : (
+          <>
+            {mediaFailed && (
+              <div className="vsPlayerAlert vsPlayerAlertTop" role="alert">
+                <TriangleAlert size={14} />
+                <span>
+                  {t(
+                    "源音频无法播放（文件可能已被移动或删除），以下仍可阅读文稿。",
+                    "The source audio could not be played (the file may have been moved or deleted). The transcript is still available below."
+                  )}
+                </span>
+              </div>
+            )}
 
-            {hasMedia && (
-              <>
+            {/* Subtitle Workspace Toolbar */}
+            <div className="vsSubtitleToolbar">
+              {/* Language View Switcher */}
+              <div className="vsLangSwitcher">
                 <button
                   type="button"
-                  className={`vsIconBtn vsToolBtn ${follow ? "active" : ""}`}
-                  onClick={() => {
-                    setFollow((v) => !v);
-                    userScrollingRef.current = false;
-                  }}
-                  title={t("跟随播放自动滚动", "Auto-scroll with playback")}
-                  aria-pressed={follow}
+                  className={`vsLangSwitcherBtn ${langView === "bilingual" ? "active" : ""}`}
+                  onClick={() => setLangView("bilingual")}
+                  title={t("双语对照模式", "Bilingual View")}
                 >
-                  <Captions size={18} />
+                  {t("双语", "Bilingual")}
                 </button>
+                <button
+                  type="button"
+                  className={`vsLangSwitcherBtn ${langView === "source" ? "active" : ""}`}
+                  onClick={() => setLangView("source")}
+                  title={t("仅看原文", "Source Only")}
+                >
+                  {t("原文", "Source")}
+                </button>
+                <button
+                  type="button"
+                  className={`vsLangSwitcherBtn ${langView === "target" ? "active" : ""}`}
+                  onClick={() => setLangView("target")}
+                  title={t("仅看译文", "Target Only")}
+                >
+                  {t("译文", "Target")}
+                </button>
+              </div>
+
+              {/* AI One-Click Translate Button */}
+              <button
+                type="button"
+                className="vsBtnSecondary vsSubtitleAiTranslateBtn"
+                onClick={() => setTranslateModalOpen(true)}
+                title={t("AI 一键翻译字幕", "AI Translate")}
+              >
+                <Globe size={13} />
+                <span>{t("AI 翻译", "AI Translate")}</span>
+              </button>
+
+              {/* Right Tools Group */}
+              <div className="vsSubtitleTools">
+                <button
+                  type="button"
+                  className={`vsIconBtn vsToolBtn ${searchOpen ? "active" : ""}`}
+                  onClick={() => {
+                    setSearchOpen((v) => !v);
+                    if (searchOpen) {
+                      setQuery("");
+                      setMatchCursor(0);
+                    }
+                  }}
+                  title={t("搜索字幕", "Search subtitles")}
+                  aria-label={t("搜索字幕", "Search subtitles")}
+                  aria-expanded={searchOpen}
+                >
+                  {searchOpen ? <X size={15} /> : <Search size={15} />}
+                </button>
+
+                {hasMedia && (
+                  <>
+                    <button
+                      type="button"
+                      className={`vsIconBtn vsToolBtn ${follow ? "active" : ""}`}
+                      onClick={() => {
+                        setFollow((v) => !v);
+                        userScrollingRef.current = false;
+                      }}
+                      title={t("跟随播放自动滚动", "Auto-scroll with playback")}
+                      aria-pressed={follow}
+                    >
+                      <Captions size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="vsIconBtn vsToolBtn"
+                      onClick={locateActive}
+                      title={t("回到当前字幕", "Jump to current cue")}
+                      aria-label={t("回到当前字幕", "Jump to current cue")}
+                    >
+                      <LocateFixed size={15} />
+                    </button>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  className={`vsIconBtn vsToolBtn ${mode === "paragraph" ? "active" : ""}`}
+                  onClick={() =>
+                    setMode((m) => (m === "cues" ? "paragraph" : "cues"))
+                  }
+                  title={
+                    mode === "cues"
+                      ? t("切换为段落阅读", "Switch to paragraph view")
+                      : t("切换为字幕列表", "Switch to subtitle list")
+                  }
+                  aria-pressed={mode === "paragraph"}
+                >
+                  {mode === "cues" ? <FileText size={15} /> : <Captions size={15} />}
+                </button>
+
+                <button
+                  type="button"
+                  className={`vsIconBtn vsToolBtn ${showTime ? "active" : ""}`}
+                  onClick={() => setShowTime((v) => !v)}
+                  title={t("显示/隐藏时间戳", "Toggle timestamps")}
+                  aria-label={t("显示/隐藏时间戳", "Toggle timestamps")}
+                  aria-pressed={showTime}
+                >
+                  <span className="vsToolBtnClock">00:00</span>
+                </button>
+
                 <button
                   type="button"
                   className="vsIconBtn vsToolBtn"
-                  onClick={locateActive}
-                  title={t("回到当前字幕", "Jump to current cue")}
-                  aria-label={t("回到当前字幕", "Jump to current cue")}
+                  onClick={() => setFontSizeIdx((i) => (i + 1) % FONT_SIZES.length)}
+                  title={t("调整字号", "Cycle font size")}
+                  aria-label={t("调整字号", "Cycle font size")}
                 >
-                  <LocateFixed size={18} />
+                  <ALargeSmall size={15} />
                 </button>
-              </>
+              </div>
+            </div>
+
+            {/* Translation Modal / Popover */}
+            {translateModalOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 50,
+                  left: 16,
+                  right: 16,
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: 12,
+                  padding: "16px 20px",
+                  boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+                  zIndex: 90,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 15 }}>
+                    <Globe size={18} color="var(--brand)" />
+                    {t("AI 一键全片双语翻译", "AI Bilingual Translation")}
+                  </div>
+                  <button
+                    type="button"
+                    className="vsIconBtn"
+                    onClick={() => setTranslateModalOpen(false)}
+                    style={{ width: 28, height: 28 }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("目标语言", "Target Language")}</label>
+                    <select
+                      value={targetLang}
+                      onChange={(e) => setTargetLang(e.target.value)}
+                      className="vsSelect"
+                      style={{ height: 38, borderRadius: 8, fontSize: 13 }}
+                    >
+                      {SUPPORTED_TRANSLATE_LANGUAGES.map((l) => (
+                        <option key={l.code} value={l.code}>{l.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("翻译大模型", "Translation Engine")}</label>
+                    <select
+                      value={translateModel}
+                      onChange={(e) => setTranslateModel(e.target.value)}
+                      className="vsSelect"
+                      style={{ height: 38, borderRadius: 8, fontSize: 13 }}
+                    >
+                      <option value="DashScope">DashScope (通义千问 Qwen / 推荐)</option>
+                      <option value="Google">Google (Gemini 2.5 Flash)</option>
+                      <option value="DeepSeek">DeepSeek (V3 / R1)</option>
+                      <option value="Xiaomi">Xiaomi (小米 MiMo)</option>
+                      <option value="OpenRouter">OpenRouter</option>
+                      <option value="SiliconFlow">SiliconFlow (硅基流动)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+                  <button
+                    type="button"
+                    className="vsBtnGhost"
+                    onClick={() => setTranslateModalOpen(false)}
+                    disabled={isTranslating}
+                  >
+                    {t("取消", "Cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    className="vsBtnPrimary"
+                    onClick={handleStartTranslate}
+                    disabled={isTranslating}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    {isTranslating ? <Loader2 size={14} className="vsSpin" /> : <Sparkles size={14} />}
+                    {isTranslating ? t("正在全速翻译中…", "Translating…") : t("开始翻译", "Start Translating")}
+                  </button>
+                </div>
+              </div>
             )}
 
-            <button
-              type="button"
-              className={`vsIconBtn vsToolBtn ${mode === "paragraph" ? "active" : ""}`}
-              onClick={() =>
-                setMode((m) => (m === "cues" ? "paragraph" : "cues"))
-              }
-              title={
-                mode === "cues"
-                  ? t("切换为段落阅读", "Switch to paragraph view")
-                  : t("切换为字幕列表", "Switch to subtitle list")
-              }
-              aria-pressed={mode === "paragraph"}
-            >
-              {mode === "cues" ? <FileText size={18} /> : <Captions size={18} />}
-            </button>
-
-            <button
-              type="button"
-              className={`vsIconBtn vsToolBtn ${showTime ? "active" : ""}`}
-              onClick={() => setShowTime((v) => !v)}
-              title={t("显示/隐藏时间戳", "Toggle timestamps")}
-              aria-label={t("显示/隐藏时间戳", "Toggle timestamps")}
-              aria-pressed={showTime}
-            >
-              <span className="vsToolBtnClock">00:00</span>
-            </button>
-
-            <button
-              type="button"
-              className="vsIconBtn vsToolBtn"
-              onClick={() => setFontSizeIdx((i) => (i + 1) % FONT_SIZES.length)}
-              title={t("调整字号", "Cycle font size")}
-              aria-label={t("调整字号", "Cycle font size")}
-            >
-              <ALargeSmall size={18} />
-            </button>
-
-            {/* Export Dropdown Popover */}
-            <div style={{ position: "relative" }}>
-              <button
-                type="button"
-                className="vsBtnPrimary"
-                style={{ height: 32, fontSize: 12, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 4 }}
-                onClick={() => setExportMenuOpen((v) => !v)}
-                title={t("保存与导出字幕文稿", "Save and export subtitles")}
-                aria-label={t("保存字幕", "Save Subtitles")}
-              >
-                <Download size={14} />
-                {t("保存字幕", "Save Subtitles")}
-                <ChevronDown size={13} />
-              </button>
-
-              {exportMenuOpen && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "100%",
-                    right: 0,
-                    marginTop: 6,
-                    width: 220,
-                    background: "var(--bg-card)",
-                    border: "1px solid var(--border-color)",
-                    borderRadius: 10,
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
-                    zIndex: 100,
-                    display: "flex",
-                    flexDirection: "column",
-                    padding: "6px 0",
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="vsMenuItem"
-                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
-                    onClick={() => handleExportFile("bilingual_srt")}
+            {/* Search Bar Row */}
+            {searchOpen && (
+              <div className="vsSubtitleSearchRow">
+                <div className="vsSubtitleSearch">
+                  <Search size={15} className="vsSubtitleSearchIcon" />
+                  <input
+                    autoFocus
+                    value={query}
+                    placeholder={t("搜索字幕…", "Search subtitles…")}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setMatchCursor(0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        jumpMatch(e.shiftKey ? -1 : 1);
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setSearchOpen(false);
+                        setQuery("");
+                        setMatchCursor(0);
+                      }
+                    }}
+                  />
+                  <span
+                    className={`vsSubtitleSearchCount ${
+                      query && matches.length === 0 ? "empty" : ""
+                    }`}
                   >
-                    📝 {t("导出双语字幕 (SRT)", "Export Bilingual SRT")}
-                  </button>
-                  <button
-                    type="button"
-                    className="vsMenuItem"
-                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
-                    onClick={() => handleExportFile("source_srt")}
-                  >
-                    📄 {t("导出原文字幕 (SRT)", "Export Source SRT")}
-                  </button>
-                  <button
-                    type="button"
-                    className="vsMenuItem"
-                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
-                    onClick={() => handleExportFile("target_srt")}
-                  >
-                    🌐 {t("导出译文字幕 (SRT)", "Export Translated SRT")}
-                  </button>
-                  <button
-                    type="button"
-                    className="vsMenuItem"
-                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
-                    onClick={() => handleExportFile("bilingual_vtt")}
-                  >
-                    📑 {t("导出双语 WebVTT", "Export Bilingual VTT")}
-                  </button>
-                  <div style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />
-                  <button
-                    type="button"
-                    className="vsMenuItem"
-                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
-                    onClick={() => handleExportFile("txt")}
-                  >
-                    📃 {t("导出文稿纯文本 (TXT)", "Export Plain Text (TXT)")}
-                  </button>
-                  <button
-                    type="button"
-                    className="vsMenuItem"
-                    style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer" }}
-                    onClick={() => handleExportFile("json")}
-                  >
-                    📦 {t("导出分句数据 (JSON)", "Export JSON Data")}
-                  </button>
-                  {video && (
-                    <>
-                      <div style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />
-                      <button
-                        type="button"
-                        className="vsMenuItem"
-                        style={{ padding: "8px 14px", fontSize: 13, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", color: "var(--brand)" }}
-                        onClick={handleBurnVideo}
-                      >
-                        🎬 {t("压制并导出双语视频 (MP4)", "Burn-in Bilingual Subtitles Video")}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Translation Modal / Popover */}
-        {translateModalOpen && (
-          <div
-            style={{
-              position: "absolute",
-              top: 50,
-              left: 16,
-              right: 16,
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-color)",
-              borderRadius: 12,
-              padding: "16px 20px",
-              boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
-              zIndex: 90,
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 15 }}>
-                <Globe size={18} color="var(--brand)" />
-                {t("AI 一键全片双语翻译", "AI Bilingual Translation")}
-              </div>
-              <button
-                type="button"
-                className="vsIconBtn"
-                onClick={() => setTranslateModalOpen(false)}
-                style={{ width: 28, height: 28 }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("目标语言", "Target Language")}</label>
-                <select
-                  value={targetLang}
-                  onChange={(e) => setTargetLang(e.target.value)}
-                  className="vsSelect"
-                  style={{ height: 38, borderRadius: 8, fontSize: 13 }}
-                >
-                  {SUPPORTED_TRANSLATE_LANGUAGES.map((l) => (
-                    <option key={l.code} value={l.code}>{l.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("翻译大模型", "Translation Engine")}</label>
-                <select
-                  value={translateModel}
-                  onChange={(e) => setTranslateModel(e.target.value)}
-                  className="vsSelect"
-                  style={{ height: 38, borderRadius: 8, fontSize: 13 }}
-                >
-                  <option value="DeepSeek">DeepSeek V3 / R1 (推荐)</option>
-                  <option value="DashScope">Qwen-Max (通义千问)</option>
-                  <option value="Google">Google Gemini 2.5 Flash</option>
-                  <option value="OpenRouter">OpenRouter</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-              <button
-                type="button"
-                className="vsBtnGhost"
-                onClick={() => setTranslateModalOpen(false)}
-                disabled={isTranslating}
-              >
-                {t("取消", "Cancel")}
-              </button>
-              <button
-                type="button"
-                className="vsBtnPrimary"
-                onClick={handleStartTranslate}
-                disabled={isTranslating}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
-                {isTranslating ? <Loader2 size={14} className="vsSpin" /> : <Sparkles size={14} />}
-                {isTranslating ? t("正在全速翻译中…", "Translating…") : t("开始翻译", "Start Translating")}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Search Bar Row */}
-        {searchOpen && (
-          <div className="vsSubtitleSearchRow">
-            <div className="vsSubtitleSearch">
-              <Search size={15} className="vsSubtitleSearchIcon" />
-              <input
-                autoFocus
-                value={query}
-                placeholder={t("搜索字幕…", "Search subtitles…")}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setMatchCursor(0);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    jumpMatch(e.shiftKey ? -1 : 1);
-                  } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    setSearchOpen(false);
-                    setQuery("");
-                    setMatchCursor(0);
-                  }
-                }}
-              />
-              <span
-                className={`vsSubtitleSearchCount ${
-                  query && matches.length === 0 ? "empty" : ""
-                }`}
-              >
-                {query
-                  ? matches.length > 0
-                    ? `${matchCursor + 1}/${matches.length}`
-                    : t("无结果", "No matches")
-                  : ""}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="vsIconBtn vsSearchNavBtn"
-              disabled={matches.length === 0}
-              onClick={() => jumpMatch(-1)}
-              title={t("上一个匹配 (Shift+Enter)", "Previous match (Shift+Enter)")}
-              aria-label={t("上一个匹配", "Previous match")}
-            >
-              <ChevronUp size={16} />
-            </button>
-            <button
-              type="button"
-              className="vsIconBtn vsSearchNavBtn"
-              disabled={matches.length === 0}
-              onClick={() => jumpMatch(1)}
-              title={t("下一个匹配 (Enter)", "Next match (Enter)")}
-              aria-label={t("下一个匹配", "Next match")}
-            >
-              <ChevronDown size={16} />
-            </button>
-          </div>
-        )}
-
-        {/* Subtitle Cue List / Paragraph View */}
-        {mode === "paragraph" ? (
-          <div className="vsTranscriptParagraph" style={{ fontSize }}>
-            {cues.map((c, i) => (
-              <p key={i} style={{ margin: "0 0 12px 0" }}>
-                <span>{c.text}</span>
-                {c.translation && (
-                  <span style={{ display: "block", color: "var(--brand)", fontSize: "0.9em", marginTop: 2 }}>
-                    {c.translation}
+                    {query
+                      ? matches.length > 0
+                        ? `${matchCursor + 1}/${matches.length}`
+                        : t("无结果", "No matches")
+                      : ""}
                   </span>
-                )}
-              </p>
-            ))}
-          </div>
-        ) : (
-          <div
-            className="vsSubtitleList custom-scrollbar"
-            ref={listRef}
-            onScroll={handleListScroll}
-          >
-            {cues.map((cue, index) => {
-              const isMatch = matchSet.has(index);
-              const matchState: 0 | 1 | 2 =
-                currentMatchIndex === index ? 2 : isMatch ? 1 : 0;
-              return (
-                <CueRow
-                  key={index}
-                  index={index}
-                  cue={cue}
-                  active={activeIndex === index}
-                  matchState={matchState}
-                  seekable={hasMedia}
-                  showTime={showTime}
-                  fontSize={fontSize}
-                  query={query}
-                  langView={langView}
-                  isEditing={editingIndex === index}
-                  onSeek={handleSeek}
-                  onStartEdit={(idx) => setEditingIndex(idx)}
-                  onSaveEdit={handleSaveCueEdit}
-                  onCancelEdit={() => setEditingIndex(null)}
-                  register={registerRow}
-                />
-              );
-            })}
-          </div>
+                </div>
+                <button
+                  type="button"
+                  className="vsIconBtn vsSearchNavBtn"
+                  disabled={matches.length === 0}
+                  onClick={() => jumpMatch(-1)}
+                  title={t("上一个匹配 (Shift+Enter)", "Previous match (Shift+Enter)")}
+                  aria-label={t("上一个匹配", "Previous match")}
+                >
+                  <ChevronUp size={16} />
+                </button>
+                <button
+                  type="button"
+                  className="vsIconBtn vsSearchNavBtn"
+                  disabled={matches.length === 0}
+                  onClick={() => jumpMatch(1)}
+                  title={t("下一个匹配 (Enter)", "Next match (Enter)")}
+                  aria-label={t("下一个匹配", "Next match")}
+                >
+                  <ChevronDown size={16} />
+                </button>
+              </div>
+            )}
+
+            {/* Subtitle Cue List / Paragraph View */}
+            {mode === "paragraph" ? (
+              <div className="vsTranscriptParagraph" style={{ fontSize }}>
+                {cues.map((c, i) => (
+                  <p key={i} style={{ margin: "0 0 12px 0" }}>
+                    <span>{c.text}</span>
+                    {c.translation && (
+                      <span style={{ display: "block", color: "var(--brand)", fontSize: "0.9em", marginTop: 2 }}>
+                        {c.translation}
+                      </span>
+                    )}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <div
+                className="vsSubtitleList custom-scrollbar"
+                ref={listRef}
+                onScroll={handleListScroll}
+              >
+                {cues.map((cue, index) => {
+                  const isMatch = matchSet.has(index);
+                  const matchState: 0 | 1 | 2 =
+                    currentMatchIndex === index ? 2 : isMatch ? 1 : 0;
+                  return (
+                    <CueRow
+                      key={index}
+                      index={index}
+                      cue={cue}
+                      active={activeIndex === index}
+                      matchState={matchState}
+                      seekable={hasMedia}
+                      showTime={showTime}
+                      fontSize={fontSize}
+                      query={query}
+                      langView={langView}
+                      isEditing={editingIndex === index}
+                      onSeek={handleSeek}
+                      onStartEdit={(idx) => setEditingIndex(idx)}
+                      onSaveEdit={handleSaveCueEdit}
+                      onCancelEdit={() => setEditingIndex(null)}
+                      register={registerRow}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

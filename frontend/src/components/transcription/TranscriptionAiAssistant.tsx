@@ -157,14 +157,14 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
       style={{
         display: "flex",
         flexDirection: "column",
-        background: "var(--bg-card)",
-        border: "1px solid var(--border-color)",
-        borderRadius: "14px",
+        flex: 1,
+        minHeight: 0,
+        height: "100%",
+        background: "transparent",
         overflow: "hidden",
-        marginTop: "12px",
       }}
     >
-      {/* Tab Navigation */}
+      {/* Sub-tab Navigation */}
       <div
         style={{
           display: "flex",
@@ -173,6 +173,7 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
           padding: "8px 12px",
           borderBottom: "1px solid var(--border-color)",
           background: "var(--bg-subtle, rgba(0,0,0,0.02))",
+          flexShrink: 0,
         }}
       >
         <button
@@ -182,20 +183,20 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "6px",
-            padding: "6px 14px",
-            borderRadius: "8px",
-            fontSize: "13px",
+            gap: "5px",
+            padding: "5px 12px",
+            borderRadius: "7px",
+            fontSize: "12px",
             fontWeight: 600,
             border: "none",
             cursor: "pointer",
             background: activeTab === "summary" ? "var(--brand, #6366f1)" : "transparent",
-            color: activeTab === "summary" ? "#fff" : "var(--text)",
+            color: activeTab === "summary" ? "#fff" : "var(--muted)",
             transition: "all 0.15s ease",
           }}
         >
-          <Sparkles size={15} />
-          {t("📋 AI 总结", "📋 AI Summary")}
+          <Sparkles size={14} />
+          {t("AI 总结", "AI Summary")}
         </button>
         <button
           type="button"
@@ -204,20 +205,20 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "6px",
-            padding: "6px 14px",
-            borderRadius: "8px",
-            fontSize: "13px",
+            gap: "5px",
+            padding: "5px 12px",
+            borderRadius: "7px",
+            fontSize: "12px",
             fontWeight: 600,
             border: "none",
             cursor: "pointer",
             background: activeTab === "mindmap" ? "var(--brand, #6366f1)" : "transparent",
-            color: activeTab === "mindmap" ? "#fff" : "var(--text)",
+            color: activeTab === "mindmap" ? "#fff" : "var(--muted)",
             transition: "all 0.15s ease",
           }}
         >
-          <ListTree size={15} />
-          {t("🧠 思维导图", "🧠 Mind Map")}
+          <ListTree size={14} />
+          {t("思维导图", "Mind Map")}
         </button>
         <button
           type="button"
@@ -226,38 +227,38 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "6px",
-            padding: "6px 14px",
-            borderRadius: "8px",
-            fontSize: "13px",
+            gap: "5px",
+            padding: "5px 12px",
+            borderRadius: "7px",
+            fontSize: "12px",
             fontWeight: 600,
             border: "none",
             cursor: "pointer",
             background: activeTab === "chat" ? "var(--brand, #6366f1)" : "transparent",
-            color: activeTab === "chat" ? "#fff" : "var(--text)",
+            color: activeTab === "chat" ? "#fff" : "var(--muted)",
             transition: "all 0.15s ease",
           }}
         >
-          <Bot size={15} />
-          {t("💬 视频问答", "💬 Ask Video")}
+          <Bot size={14} />
+          {t("视频问答", "Ask Video")}
         </button>
       </div>
 
       {/* Content Area */}
-      <div style={{ padding: "16px", minHeight: "220px", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "14px", flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
         {/* TAB 1: SUMMARY */}
         {activeTab === "summary" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, minHeight: 0 }}>
             {/* Control Bar */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
               <select
                 value={summaryModel}
                 onChange={(e) => setSummaryModel(e.target.value)}
                 className="vsSelect"
-                style={{ height: "34px", fontSize: "13px", borderRadius: "8px", padding: "0 10px" }}
+                style={{ height: "32px", fontSize: "12px", borderRadius: "8px", padding: "0 8px" }}
               >
                 <option value="DeepSeek">DeepSeek V3 / R1</option>
-                <option value="DashScope">Qwen-Max / Qwen-Plus (通义千问)</option>
+                <option value="DashScope">Qwen-Max (通义千问)</option>
                 <option value="Google">Google Gemini 2.5 Flash</option>
                 <option value="OpenRouter">OpenRouter</option>
                 <option value="SiliconFlow">SiliconFlow</option>
@@ -267,7 +268,7 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                 value={summaryLang}
                 onChange={(e) => setSummaryLang(e.target.value)}
                 className="vsSelect"
-                style={{ height: "34px", fontSize: "13px", borderRadius: "8px", padding: "0 10px" }}
+                style={{ height: "32px", fontSize: "12px", borderRadius: "8px", padding: "0 8px" }}
               >
                 <option value="中文">简体中文</option>
                 <option value="繁體中文">繁體中文</option>
@@ -280,7 +281,7 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value)}
                 className="vsSelect"
-                style={{ height: "34px", fontSize: "13px", borderRadius: "8px", padding: "0 10px", flex: 1, minWidth: "160px" }}
+                style={{ height: "32px", fontSize: "12px", borderRadius: "8px", padding: "0 8px", flex: 1, minWidth: "140px" }}
               >
                 {SUMMARY_TEMPLATES.map((tmpl) => (
                   <option key={tmpl.id} value={tmpl.id}>
@@ -295,18 +296,18 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                 disabled={summaryLoading || !transcript.trim()}
                 className="vsBtnPrimary"
                 style={{
-                  height: "34px",
-                  padding: "0 16px",
-                  fontSize: "13px",
+                  height: "32px",
+                  padding: "0 14px",
+                  fontSize: "12px",
                   borderRadius: "8px",
                   fontWeight: 600,
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "6px",
+                  gap: "5px",
                 }}
               >
-                {summaryLoading ? <Loader2 size={14} className="vsSpin" /> : <Sparkles size={14} />}
-                {t("AI 总结", "Generate Summary")}
+                {summaryLoading ? <Loader2 size={13} className="vsSpin" /> : <Sparkles size={13} />}
+                {t("生成摘要", "Generate")}
               </button>
             </div>
 
@@ -317,11 +318,12 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                   background: "var(--bg-subtle, rgba(0,0,0,0.02))",
                   border: "1px solid var(--border-color)",
                   borderRadius: "10px",
-                  padding: "14px 18px",
+                  padding: "14px 16px",
                   fontSize: "13px",
                   lineHeight: 1.6,
                   color: "var(--text)",
-                  maxHeight: "280px",
+                  flex: 1,
+                  minHeight: "180px",
                   overflowY: "auto",
                   whiteSpace: "pre-wrap",
                   position: "relative",
@@ -376,10 +378,11 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                   textAlign: "center",
                   border: "1px dashed var(--border-color)",
                   borderRadius: "10px",
+                  flex: 1,
                 }}
               >
                 <Sparkles size={24} style={{ marginBottom: "8px", opacity: 0.6 }} />
-                <span>{t("点击上方「AI 总结」按钮，一键提炼音视频核心内容要点", "Click 'Generate Summary' to extract key takeaways from this media")}</span>
+                <span>{t("点击上方「生成摘要」按钮，一键提炼音视频核心内容要点", "Click 'Generate' to extract key takeaways from this media")}</span>
               </div>
             )}
           </div>
@@ -387,10 +390,10 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
 
         {/* TAB 2: MIND MAP */}
         {activeTab === "mindmap" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, minHeight: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "13px", color: "var(--muted)" }}>
-                {t("将音视频文稿提炼为逻辑层级清晰的思维导图大纲", "Extract a clear hierarchical mind map outline from the transcript")}
+              <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+                {t("将音视频文稿提炼为层次分明的思维导图大纲", "Extract a clear hierarchical mind map outline")}
               </span>
               <button
                 type="button"
@@ -398,18 +401,18 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                 disabled={mindmapLoading || !transcript.trim()}
                 className="vsBtnPrimary"
                 style={{
-                  height: "34px",
-                  padding: "0 16px",
-                  fontSize: "13px",
+                  height: "32px",
+                  padding: "0 14px",
+                  fontSize: "12px",
                   borderRadius: "8px",
                   fontWeight: 600,
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "6px",
+                  gap: "5px",
                 }}
               >
-                {mindmapLoading ? <Loader2 size={14} className="vsSpin" /> : <ListTree size={14} />}
-                {t("生成思维导图", "Generate Mind Map")}
+                {mindmapLoading ? <Loader2 size={13} className="vsSpin" /> : <ListTree size={13} />}
+                {t("生成导图", "Generate")}
               </button>
             </div>
 
@@ -419,11 +422,12 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                   background: "var(--bg-subtle, rgba(0,0,0,0.02))",
                   border: "1px solid var(--border-color)",
                   borderRadius: "10px",
-                  padding: "14px 18px",
+                  padding: "14px 16px",
                   fontSize: "13px",
                   lineHeight: 1.6,
                   color: "var(--text)",
-                  maxHeight: "280px",
+                  flex: 1,
+                  minHeight: "180px",
                   overflowY: "auto",
                   whiteSpace: "pre-wrap",
                 }}
@@ -443,6 +447,7 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                   textAlign: "center",
                   border: "1px dashed var(--border-color)",
                   borderRadius: "10px",
+                  flex: 1,
                 }}
               >
                 <ListTree size={24} style={{ marginBottom: "8px", opacity: 0.6 }} />
@@ -454,7 +459,7 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
 
         {/* TAB 3: VIDEO CHAT */}
         {activeTab === "chat" && (
-          <div style={{ display: "flex", flexDirection: "column", height: "280px" }}>
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
             <div
               style={{
                 flex: 1,
@@ -464,6 +469,7 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                 gap: "10px",
                 paddingRight: "6px",
                 marginBottom: "12px",
+                minHeight: "160px",
               }}
             >
               {chatMessages.map((msg, idx) => (
@@ -502,7 +508,7 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
               )}
             </div>
 
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
               <input
                 type="text"
                 value={chatInput}
@@ -513,18 +519,18 @@ export default function TranscriptionAiAssistant({ transcript, fileName }: Props
                     handleSendChat();
                   }
                 }}
-                placeholder={t("向 AI 追问有关此视频的任何细节… (按 Enter 发送)", "Ask anything about this video... (Press Enter)")}
+                placeholder={t("向 AI 追问有关此视频的细节… (按 Enter 发送)", "Ask anything about this video... (Enter)")}
                 className="vsInput"
-                style={{ flex: 1, height: "38px", borderRadius: "10px", fontSize: "13px", padding: "0 12px" }}
+                style={{ flex: 1, height: "36px", borderRadius: "8px", fontSize: "13px", padding: "0 12px" }}
               />
               <button
                 type="button"
                 onClick={handleSendChat}
                 disabled={chatLoading || !chatInput.trim()}
                 className="vsBtnPrimary"
-                style={{ height: "38px", width: "42px", borderRadius: "10px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ height: "36px", width: "38px", borderRadius: "8px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
               >
-                <Send size={15} />
+                <Send size={14} />
               </button>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import ErrorNotice from "../components/ErrorNotice";
 import { VoiceCard } from "../components/VoiceCard";
 import type { VoiceCloneController } from "../hooks/useVoiceManagement";
@@ -10,11 +10,16 @@ type Props = {
   errorRuntimeContext: ErrorRuntimeContext;
   voiceProvider?: "qwen" | "xiaomi" | "gpt_sovits";
   onVoiceProviderChange?: (provider: "qwen" | "xiaomi" | "gpt_sovits") => void;
+  onDetailModeChange?: (isDetail: boolean) => void;
 };
 
-export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvider = "qwen", onVoiceProviderChange }: Props) {
+export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvider = "qwen", onVoiceProviderChange, onDetailModeChange }: Props) {
   const { t } = useI18n();
   const [viewMode, setViewMode] = useState<"library" | "workspace">("library");
+
+  useEffect(() => {
+    onDetailModeChange?.(viewMode === "workspace");
+  }, [viewMode, onDetailModeChange]);
   const [searchQuery, setSearchQuery] = useState("");
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
