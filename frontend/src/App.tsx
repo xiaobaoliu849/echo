@@ -1,5 +1,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AUTH_REJECTED_EVENT,
   clearAuthRuntime,
   fetchCurrentAuthUser,
   loginAuthUser,
@@ -285,6 +286,23 @@ export default function App() {
       disposed = true;
     };
   }, [authRuntime.apiToken, authRuntime.userEmail]);
+
+  // Stale credentials fail every data request silently; surface one login
+  // prompt instead of letting each hook report its own AUTH_* error.
+  const authDialogAutoOpenedAtRef = useRef(0);
+  useEffect(() => {
+    function handleAuthRejected() {
+      setAuthRuntime(clearAuthRuntime());
+      const now = Date.now();
+      if (now - authDialogAutoOpenedAtRef.current < 30_000) {
+        return;
+      }
+      authDialogAutoOpenedAtRef.current = now;
+      setAuthDialogOpen(true);
+    }
+    window.addEventListener(AUTH_REJECTED_EVENT, handleAuthRejected);
+    return () => window.removeEventListener(AUTH_REJECTED_EVENT, handleAuthRejected);
+  }, []);
 
   function pushConversationHistory(entry: ConversationArchiveEntry | null) {
     if (!entry) {

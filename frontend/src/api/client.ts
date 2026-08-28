@@ -972,8 +972,30 @@ async function parseError(response: Response): Promise<ParsedError> {
   return { message: `Request failed: ${response.status}` };
 }
 
+export const AUTH_REJECTED_EVENT = "vs:auth-rejected";
+
+function notifyAuthRejected(response: Response, detail: ApiErrorDetail | undefined): void {
+  if (response.status !== 401 && response.status !== 403) {
+    return;
+  }
+  const code = String(detail?.code || "").trim();
+  if (!code.startsWith("AUTH_")) {
+    return;
+  }
+  // Auth endpoints report their own failures inline (bad password, lockout);
+  // only rejections on data endpoints mean the stored credentials went stale.
+  if (response.url.includes("/api/auth/")) {
+    return;
+  }
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(new CustomEvent(AUTH_REJECTED_EVENT, { detail: { code } }));
+}
+
 async function throwApiError(response: Response): Promise<never> {
   const parsed = await parseError(response);
+  notifyAuthRejected(response, parsed.detail);
   throw new ApiRequestError(parsed.message, response.status, parsed.detail);
 }
 
