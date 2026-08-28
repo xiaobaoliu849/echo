@@ -335,10 +335,16 @@ def create_app() -> FastAPI:
                 name="frontend-assets-root",
             )
 
+        INDEX_HEADERS = {
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+
         @app.get("/app")
         @app.get("/app/")
         async def web_app_index() -> FileResponse:
-            return FileResponse(frontend_dist / "index.html")
+            return FileResponse(frontend_dist / "index.html", headers=INDEX_HEADERS)
 
         @app.get("/app/{full_path:path}")
         async def web_app_spa(full_path: str) -> FileResponse:
@@ -350,7 +356,12 @@ def create_app() -> FastAPI:
                 and safe_target.is_file()
             ):
                 return FileResponse(safe_target)
-            return FileResponse(frontend_dist / "index.html")
+            if (
+                full_path.startswith("assets/")
+                or full_path.endswith((".js", ".css", ".map", ".wasm", ".ico", ".png", ".jpg", ".svg", ".json"))
+            ):
+                raise HTTPException(status_code=404, detail=f"Asset not found: {full_path}")
+            return FileResponse(frontend_dist / "index.html", headers=INDEX_HEADERS)
 
     @app.get("/")
     async def root() -> dict:

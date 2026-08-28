@@ -30,10 +30,20 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   private handleRetry = (): void => {
+    try {
+      sessionStorage.removeItem("vs_chunk_retry_pending");
+    } catch {
+      // Ignore
+    }
     this.setState({ error: null });
   };
 
   private handleReload = (): void => {
+    try {
+      sessionStorage.removeItem("vs_chunk_retry_pending");
+    } catch {
+      // Ignore
+    }
     window.location.reload();
   };
 

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   clearAuthRuntime,
   fetchCurrentAuthUser,
@@ -14,7 +14,8 @@ import {
 } from "./appConfig";
 import AuthDialog from "./components/AuthDialog";
 import AppSidebar from "./components/AppSidebar";
-const SettingsModal = lazy(() => import("./components/SettingsModal"));
+import { lazyWithRetry } from "./utils/lazyWithRetry";
+const SettingsModal = lazyWithRetry(() => import("./components/SettingsModal"));
 import useChat from "./hooks/useChat";
 import useAudioOverview from "./hooks/useAudioOverview";
 import useSettings from "./hooks/useSettings";
@@ -22,11 +23,11 @@ import useTts from "./hooks/useTts";
 import useTranslate from "./hooks/useTranslate";
 import useVoiceChat from "./hooks/useVoiceChat";
 import useVoiceManagement from "./hooks/useVoiceManagement";
-const AudioOverviewPage = lazy(() => import("./pages/AudioOverviewPage"));
-const ChatPage = lazy(() => import("./pages/ChatPage"));
-const PalPage = lazy(() => import("./pages/PalPage"));
-const TranslatePage = lazy(() => import("./pages/TranslatePage"));
-const VoiceCenterPage = lazy(() => import("./pages/VoiceCenterPage"));
+const AudioOverviewPage = lazyWithRetry(() => import("./pages/AudioOverviewPage"));
+const ChatPage = lazyWithRetry(() => import("./pages/ChatPage"));
+const PalPage = lazyWithRetry(() => import("./pages/PalPage"));
+const TranslatePage = lazyWithRetry(() => import("./pages/TranslatePage"));
+const VoiceCenterPage = lazyWithRetry(() => import("./pages/VoiceCenterPage"));
 import { I18nProvider, createInlineTranslator, localizeText, type UiLanguage } from "./i18n";
 import { formatErrorMessage } from "./utils/errorFormatting";
 
