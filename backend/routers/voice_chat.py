@@ -210,6 +210,16 @@ async def voice_chat_ws(
     await websocket.accept()
 
     selected_provider = (provider or "DashScope").strip()
+    if selected_provider == "Tavus":
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": "Tavus 是实时视频分身服务，请点击左侧导航栏的「视频分身 (Video PAL)」开启实时音视频通话。",
+                "provider": selected_provider,
+            }
+        )
+        await websocket.close(code=1003)
+        return
     if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia"}:
         await websocket.send_json(
             {

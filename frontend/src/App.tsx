@@ -446,6 +446,7 @@ export default function App() {
                     settings={settings}
                     errorRuntimeContext={errorRuntimeContext}
                     onOpenSettings={() => setIsSettingsOpen(true)}
+                    onOpenPal={() => setActiveTab("pal")}
                   />
                 ) : null}
 

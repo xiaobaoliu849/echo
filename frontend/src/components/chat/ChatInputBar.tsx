@@ -11,6 +11,7 @@ type Props = {
   chat: UseChatResult;
   voiceChat: UseVoiceChatResult;
   onOpenSettings?: () => void;
+  onOpenPal?: () => void;
 };
 
 /* ── Inline SVG icons ── */
@@ -25,6 +26,9 @@ const StopIcon = () => (
 );
 const PhoneIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.78 19.78 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.78 19.78 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.77.62 2.6a2 2 0 0 1-.45 2.11L8.09 9.62a16 16 0 0 0 6.29 6.29l1.19-1.19a2 2 0 0 1 2.11-.45c.83.29 1.7.5 2.6.62A2 2 0 0 1 22 16.92Z"></path></svg>
+);
+const VideoIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"></path><rect width="14" height="12" x="2" y="6" rx="2"></rect></svg>
 );
 const SendIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18.168-8.215a.5.5 0 0 0 0-.904z"></path><line x1="6" x2="11" y1="12" y2="12"></line></svg>
@@ -59,7 +63,7 @@ type SpeechRecognitionWindow = Window & {
   webkitSpeechRecognition?: new () => SpeechRecognitionLike;
 };
 
-export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props) {
+export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPal }: Props) {
   const { t } = useI18n();
   const isVoiceActive = voiceChat.voiceChatRecording || voiceChat.voiceChatConnected;
   const hasInput = chat.chatInput.trim().length > 0;
@@ -469,9 +473,21 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
             <button
               type="button"
               className={`vsComposerCallBtn ${!isRealtime ? "disabled" : ""}`}
-              aria-label={t("实时通话", "Realtime call")}
+              aria-label={
+                (chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus"
+                  ? t("开启视频分身", "Video PAL")
+                  : t("实时通话", "Realtime call")
+              }
               onClick={() => {
                 if (!isRealtime) return;
+                if ((chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus") {
+                  if (onOpenPal) {
+                    onOpenPal();
+                  } else {
+                    void voiceChat.onToggleRecording();
+                  }
+                  return;
+                }
                 void voiceChat.onToggleRecording();
               }}
               disabled={!isRealtime || !voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
@@ -481,12 +497,14 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings }: Props)
                       "当前选择的是文本/多模态模型，实时通话请在左侧切换为实时语音模型（如带「实时」徽章的模型）",
                       "Current model is a text/multimodal model. Switch to a realtime voice model on the left to start a call."
                     )
-                  : isLiveTranslate
-                    ? t(`实时翻译：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Live translate: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
-                    : t(`实时通话：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Realtime call: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+                  : (chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus"
+                    ? t("开启 Tavus 实时视频分身对话", "Start Tavus video PAL conversation")
+                    : isLiveTranslate
+                      ? t(`实时翻译：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Live translate: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+                      : t(`实时通话：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Realtime call: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
               }
             >
-              <PhoneIcon />
+              {(chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus" ? <VideoIcon /> : <PhoneIcon />}
             </button>
           )}
 

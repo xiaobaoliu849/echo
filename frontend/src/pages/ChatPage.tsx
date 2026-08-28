@@ -14,6 +14,7 @@ type Props = {
   settings?: UseSettingsResult;
   errorRuntimeContext: ErrorRuntimeContext;
   onOpenSettings?: () => void;
+  onOpenPal?: () => void;
 };
 
 /* ── Inline SVG icons ── */
@@ -330,6 +331,7 @@ export default function ChatPage({
   settings,
   errorRuntimeContext,
   onOpenSettings,
+  onOpenPal,
 }: Props) {
   const { t } = useI18n();
 
@@ -598,6 +600,12 @@ export default function ChatPage({
     const attachments = chat.chatAttachments || [];
     if (!userText && attachments.length === 0) return;
 
+    if (chat.chatProvider === "Tavus") {
+      if (onOpenPal) {
+        onOpenPal();
+      }
+      return;
+    }
     if (isVoiceActive) {
       voiceChat.sendTextMessage(userText, attachments);
       chat.onInputChange("");
@@ -609,7 +617,7 @@ export default function ChatPage({
     } else {
       chat.onSubmit(e);
     }
-  }, [chat, voiceChat, isVoiceActive]);
+  }, [chat, voiceChat, isVoiceActive, onOpenPal]);
 
   return (
     <section className="vsChatWorkspace" style={{ position: "relative" }}>
@@ -643,6 +651,7 @@ export default function ChatPage({
                 chat={chat}
                 voiceChat={voiceChat}
                 onOpenSettings={onOpenSettings}
+                onOpenPal={onOpenPal}
               />
             </form>
 
@@ -794,6 +803,7 @@ export default function ChatPage({
               chat={chat}
               voiceChat={voiceChat}
               onOpenSettings={onOpenSettings}
+              onOpenPal={onOpenPal}
             />
           </form>
 
