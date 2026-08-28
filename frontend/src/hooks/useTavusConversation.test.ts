@@ -84,8 +84,8 @@ describe("useTavusConversation", () => {
     expect(dailyMocks.createFrame).toHaveBeenCalledWith(
       container,
       expect.objectContaining({
-        showLeaveButton: true,
-        showFullscreenButton: true,
+        showLeaveButton: false,
+        showFullscreenButton: false,
       })
     );
     expect(call.join).toHaveBeenCalledWith({

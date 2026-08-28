@@ -22,8 +22,12 @@ export type UseTavusConversationResult = {
   localAudioLevel: number;
   isMuted: boolean;
   isVideoOff: boolean;
+  isSharingScreen: boolean;
+  callDuration: number;
+  formattedDuration: string;
   toggleMute: () => void;
   toggleVideo: () => void;
+  toggleScreenShare: () => Promise<void>;
   attachVideoContainer: (node: HTMLDivElement | null) => void;
   start: (params?: StartParams) => Promise<void>;
   leave: () => void;
@@ -43,11 +47,14 @@ export default function useTavusConversation({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const conversationIdRef = useRef<string>("");
   const autoLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [status, setStatus] = useState<TavusConversationStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
 
   const toggleMute = useCallback(() => {
     const call = callRef.current;
@@ -69,6 +76,22 @@ export default function useTavusConversation({
     } catch {}
   }, [isVideoOff]);
 
+  const toggleScreenShare = useCallback(async () => {
+    const call = callRef.current;
+    if (!call) return;
+    try {
+      if (isSharingScreen) {
+        call.stopScreenShare();
+        setIsSharingScreen(false);
+      } else {
+        await call.startScreenShare();
+        setIsSharingScreen(true);
+      }
+    } catch {
+      // User cancelled screen picker or permission denied
+    }
+  }, [isSharingScreen]);
+
   const attachVideoContainer = useCallback((node: HTMLDivElement | null) => {
     containerRef.current = node;
   }, []);
@@ -77,6 +100,13 @@ export default function useTavusConversation({
     if (autoLeaveTimerRef.current) {
       clearTimeout(autoLeaveTimerRef.current);
       autoLeaveTimerRef.current = null;
+    }
+  }, []);
+
+  const clearDurationTimer = useCallback(() => {
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
     }
   }, []);
 
@@ -91,6 +121,7 @@ export default function useTavusConversation({
 
   const teardownCall = useCallback(() => {
     clearAutoLeaveTimer();
+    clearDurationTimer();
     const call = callRef.current;
     callRef.current = null;
     if (!call) {
@@ -104,7 +135,9 @@ export default function useTavusConversation({
     setLocalAudioLevel(0);
     setIsMuted(false);
     setIsVideoOff(false);
-  }, [clearAutoLeaveTimer]);
+    setIsSharingScreen(false);
+    setCallDuration(0);
+  }, [clearAutoLeaveTimer, clearDurationTimer]);
 
   const leave = useCallback(() => {
     const call = callRef.current;
@@ -143,8 +176,23 @@ export default function useTavusConversation({
       const parent = containerRef.current ?? undefined;
       const frame = parent
         ? Daily.createFrame(parent, {
-            showLeaveButton: true,
-            showFullscreenButton: true,
+            showLeaveButton: false,
+            showFullscreenButton: false,
+            showUserNameChangeUI: false,
+            theme: {
+              colors: {
+                accent: "#6366f1",
+                accentText: "#ffffff",
+                background: "#0f172a",
+                backgroundAccent: "#1e293b",
+                baseText: "#f8fafc",
+                border: "#334155",
+                mainAreaBg: "#0b0f19",
+                mainAreaBgAccent: "#0f172a",
+                mainAreaText: "#f8fafc",
+                supportiveText: "#94a3b8",
+              },
+            },
             iframeStyle: {
               width: "100%",
               height: "100%",
@@ -156,6 +204,11 @@ export default function useTavusConversation({
 
       frame.on("joined-meeting", () => {
         setStatus("connected");
+        setCallDuration(0);
+        clearDurationTimer();
+        durationTimerRef.current = setInterval(() => {
+          setCallDuration((prev) => prev + 1);
+        }, 1000);
       });
       frame.on("left-meeting", () => {
         leave();
@@ -178,6 +231,9 @@ export default function useTavusConversation({
           }
           if (typeof event.participant.video === "boolean") {
             setIsVideoOff(!event.participant.video);
+          }
+          if (typeof event.participant.screen === "boolean") {
+            setIsSharingScreen(event.participant.screen);
           }
         }
       });
@@ -221,7 +277,7 @@ export default function useTavusConversation({
         formatErrorMessage(error, t("无法开始视频通话。", "Could not start the video conversation."))
       );
     }
-  }, [clearAutoLeaveTimer, formatErrorMessage, leave, t, teardownCall]);
+  }, [clearAutoLeaveTimer, clearDurationTimer, formatErrorMessage, leave, t, teardownCall]);
 
   const clearError = useCallback(() => {
     setErrorMessage("");
@@ -236,14 +292,22 @@ export default function useTavusConversation({
     };
   }, [endConversationUpstream, teardownCall]);
 
+  const formattedDuration = `${Math.floor(callDuration / 60)
+    .toString()
+    .padStart(2, "0")}:${(callDuration % 60).toString().padStart(2, "0")}`;
+
   return {
     status,
     errorMessage,
     localAudioLevel,
     isMuted,
     isVideoOff,
+    isSharingScreen,
+    callDuration,
+    formattedDuration,
     toggleMute,
     toggleVideo,
+    toggleScreenShare,
     attachVideoContainer,
     start,
     leave,
