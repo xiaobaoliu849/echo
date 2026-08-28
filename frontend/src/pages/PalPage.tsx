@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, LogOut, Play, Video } from "lucide-react";
+import { KeyRound, LogOut, Mic, MicOff, Play, Video, VideoOff } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import useTavusConversation from "../hooks/useTavusConversation";
 import {
@@ -197,6 +197,46 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
           <div className="vsPalLiveBar">
             <span className="vsPalLiveDot" aria-hidden="true" />
             <span>{t("通话中", "Live")}</span>
+
+            <div
+              className="vsPalAudioMeter"
+              title={
+                conversation.isMuted
+                  ? t("麦克风已静音 (点击开启)", "Microphone muted (click to unmute)")
+                  : t("麦克风拾音中 (说话时右侧绿条会跳动)", "Microphone active (green bar pulses when speaking)")
+              }
+            >
+              <button
+                type="button"
+                className={`vsPalControlBtn ${conversation.isMuted ? "isMuted" : ""}`}
+                onClick={conversation.toggleMute}
+                title={conversation.isMuted ? t("取消静音", "Unmute microphone") : t("静音麦克风", "Mute microphone")}
+                data-testid="pal-toggle-mute-button"
+              >
+                {conversation.isMuted ? <MicOff size={14} /> : <Mic size={14} />}
+              </button>
+              <div className="vsPalLevelBarTrack">
+                <div
+                  className={`vsPalLevelBarFill ${conversation.localAudioLevel > 0.04 ? "speaking" : ""}`}
+                  style={{
+                    width: conversation.isMuted
+                      ? "0%"
+                      : `${Math.min(100, Math.round(conversation.localAudioLevel * 250))}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className={`vsPalControlBtn ${conversation.isVideoOff ? "isMuted" : ""}`}
+              onClick={conversation.toggleVideo}
+              title={conversation.isVideoOff ? t("打开摄像头", "Turn on camera") : t("关闭摄像头", "Turn off camera")}
+              data-testid="pal-toggle-video-button"
+            >
+              {conversation.isVideoOff ? <VideoOff size={14} /> : <Video size={14} />}
+            </button>
+
             <button
               type="button"
               className="vsPalLeaveBtn"

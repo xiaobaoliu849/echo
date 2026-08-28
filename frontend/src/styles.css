@@ -10220,3 +10220,58 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsPalLeaveBtn:hover {
   filter: brightness(1.06);
 }
+
+.vsPalAudioMeter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 2px 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+  border: 1px solid var(--border-color);
+}
+
+.vsPalControlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsPalControlBtn:hover {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.vsPalControlBtn.isMuted {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.vsPalLevelBarTrack {
+  width: 48px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+  position: relative;
+}
+
+.vsPalLevelBarFill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: #10b981;
+  transition: width 0.08s ease-out;
+}
+
+.vsPalLevelBarFill.speaking {
+  box-shadow: 0 0 6px #10b981;
+}

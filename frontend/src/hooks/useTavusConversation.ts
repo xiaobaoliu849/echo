@@ -19,6 +19,11 @@ type Options = {
 export type UseTavusConversationResult = {
   status: TavusConversationStatus;
   errorMessage: string;
+  localAudioLevel: number;
+  isMuted: boolean;
+  isVideoOff: boolean;
+  toggleMute: () => void;
+  toggleVideo: () => void;
   attachVideoContainer: (node: HTMLDivElement | null) => void;
   start: (params?: StartParams) => Promise<void>;
   leave: () => void;
@@ -40,6 +45,29 @@ export default function useTavusConversation({
   const autoLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState<TavusConversationStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [localAudioLevel, setLocalAudioLevel] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+
+  const toggleMute = useCallback(() => {
+    const call = callRef.current;
+    if (!call) return;
+    try {
+      const nextMuted = !isMuted;
+      call.setLocalAudio(!nextMuted);
+      setIsMuted(nextMuted);
+    } catch {}
+  }, [isMuted]);
+
+  const toggleVideo = useCallback(() => {
+    const call = callRef.current;
+    if (!call) return;
+    try {
+      const nextOff = !isVideoOff;
+      call.setLocalVideo(!nextOff);
+      setIsVideoOff(nextOff);
+    } catch {}
+  }, [isVideoOff]);
 
   const attachVideoContainer = useCallback((node: HTMLDivElement | null) => {
     containerRef.current = node;
@@ -73,6 +101,9 @@ export default function useTavusConversation({
     } catch {
       // The frame may already be gone with the unmounted container.
     }
+    setLocalAudioLevel(0);
+    setIsMuted(false);
+    setIsVideoOff(false);
   }, [clearAutoLeaveTimer]);
 
   const leave = useCallback(() => {
@@ -135,6 +166,21 @@ export default function useTavusConversation({
           setErrorMessage(message);
         }
       });
+      frame.on("local-audio-level" as any, (event: any) => {
+        if (typeof event?.audioLevel === "number") {
+          setLocalAudioLevel(event.audioLevel);
+        }
+      });
+      frame.on("participant-updated", (event: any) => {
+        if (event?.participant?.local) {
+          if (typeof event.participant.audio === "boolean") {
+            setIsMuted(!event.participant.audio);
+          }
+          if (typeof event.participant.video === "boolean") {
+            setIsVideoOff(!event.participant.video);
+          }
+        }
+      });
       frame.on("participant-left", () => {
         const activeCall = callRef.current;
         if (!activeCall) {
@@ -193,6 +239,11 @@ export default function useTavusConversation({
   return {
     status,
     errorMessage,
+    localAudioLevel,
+    isMuted,
+    isVideoOff,
+    toggleMute,
+    toggleVideo,
     attachVideoContainer,
     start,
     leave,
