@@ -4,10 +4,12 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import secrets
 import sqlite3
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,77 @@ from .config_loader import BackendConfig
 
 PBKDF2_ITERATIONS = 240_000
 TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
+AUTH_WINDOW_SECONDS = 15 * 60
+AUTH_IP_MAX_REQUESTS = 20
+AUTH_FAILURE_LOCK_THRESHOLD = 5
+AUTH_LOCKOUT_SECONDS = 15 * 60
+REVOKED_SESSION_RETENTION_SECONDS = 60 * 60 * 24 * 7
+
+
+class AuthRateLimitError(Exception):
+    """Raised when an auth endpoint exceeds its rate limit or is locked out."""
+
+    def __init__(self, retry_after: int, message: str = "Too many attempts. Try again later.") -> None:
+        super().__init__(message)
+        self.retry_after = max(1, int(retry_after))
+
+
+class AuthRateLimiter:
+    """In-memory sliding-window limiter plus failed-login lockout.
+
+    Deliberately process-local: the deployment model is a single uvicorn
+    worker, so a shared external store (Redis) would add an operational
+    dependency without protecting anything extra.
+    """
+
+    def __init__(self) -> None:
+        self._ip_events: dict[str, deque[float]] = {}
+        self._login_failures: dict[str, deque[float]] = {}
+
+    @staticmethod
+    def _prune(events: deque[float], now: float, window: float) -> None:
+        cutoff = now - window
+        while events and events[0] <= cutoff:
+            events.popleft()
+
+    def hit_ip(self, ip: str) -> None:
+        """Record one auth request for ``ip`` and raise when over budget."""
+        key = str(ip or "unknown")
+        now = time.monotonic()
+        events = self._ip_events.setdefault(key, deque())
+        self._prune(events, now, AUTH_WINDOW_SECONDS)
+        if len(events) >= AUTH_IP_MAX_REQUESTS:
+            oldest = events[0] if events else now
+            raise AuthRateLimitError(
+                retry_after=math.ceil(AUTH_WINDOW_SECONDS - (now - oldest)),
+                message="Too many authentication attempts from this address.",
+            )
+        events.append(now)
+
+    def lockout_remaining(self, email: str) -> int:
+        """Seconds left in the failed-login lockout for ``email`` (0 = clear)."""
+        key = self._normalize(email)
+        events = self._login_failures.get(key)
+        if not events:
+            return 0
+        now = time.monotonic()
+        self._prune(events, now, AUTH_LOCKOUT_SECONDS)
+        if len(events) < AUTH_FAILURE_LOCK_THRESHOLD:
+            return 0
+        newest = events[-1]
+        return math.ceil(AUTH_LOCKOUT_SECONDS - (now - newest))
+
+    def record_login_failure(self, email: str) -> None:
+        key = self._normalize(email)
+        events = self._login_failures.setdefault(key, deque())
+        events.append(time.monotonic())
+
+    def clear_login_failures(self, email: str) -> None:
+        self._login_failures.pop(self._normalize(email), None)
+
+    @staticmethod
+    def _normalize(email: str) -> str:
+        return str(email or "").strip().lower()
 
 
 class ClosingConnection(sqlite3.Connection):
@@ -76,6 +149,21 @@ class UserAuthService:
                     created_at INTEGER NOT NULL
                 )
                 """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS auth_sessions (
+                    jti TEXT PRIMARY KEY,
+                    user_email TEXT NOT NULL,
+                    client_id TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    revoked_at INTEGER
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_email ON auth_sessions(user_email)"
             )
             conn.commit()
 
@@ -205,17 +293,46 @@ class UserAuthService:
             return None
         return self._row_to_user(row)
 
-    def create_access_token(self, user: dict[str, Any], *, expires_in: int = TOKEN_TTL_SECONDS) -> str:
+    def create_access_token(
+        self,
+        user: dict[str, Any],
+        *,
+        expires_in: int = TOKEN_TTL_SECONDS,
+        client_id: str = "",
+    ) -> str:
         now = int(time.time())
+        expires_at = now + max(60, int(expires_in))
+        jti = secrets.token_urlsafe(24)
         payload = {
             "sub": str(user.get("email", "")).strip().lower(),
             "admin": bool(user.get("is_admin")),
             "iat": now,
-            "exp": now + max(60, int(expires_in)),
+            "exp": expires_at,
+            "jti": jti,
         }
         payload_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
         encoded_payload = _b64encode(payload_bytes)
         signature = self._sign(payload_bytes)
+        with self._connect() as conn:
+            # Lazy housekeeping: drop sessions the verifier would reject anyway.
+            conn.execute(
+                "DELETE FROM auth_sessions WHERE expires_at <= ?",
+                (now - REVOKED_SESSION_RETENTION_SECONDS,),
+            )
+            conn.execute(
+                """
+                INSERT INTO auth_sessions (jti, user_email, client_id, created_at, expires_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, NULL)
+                """,
+                (
+                    jti,
+                    str(user.get("email", "")).strip().lower(),
+                    str(client_id or "").strip()[:128],
+                    now,
+                    expires_at,
+                ),
+            )
+            conn.commit()
         return f"vsu.{encoded_payload}.{signature}"
 
     def verify_access_token(self, token: str) -> dict[str, Any] | None:
@@ -237,10 +354,24 @@ class UserAuthService:
             return None
         email = self._normalize_email(str(payload.get("sub", "")))
         expires_at = int(payload.get("exp", 0) or 0)
-        if not email or expires_at <= int(time.time()):
+        jti = str(payload.get("jti", "")).strip()
+        now = int(time.time())
+        if not email or expires_at <= now:
+            return None
+        # Tokens issued before server-side sessions existed carry no jti;
+        # reject them so "revoke all sessions" has complete coverage.
+        if not jti:
             return None
 
         with self._connect() as conn:
+            session = conn.execute(
+                "SELECT client_id, expires_at, revoked_at FROM auth_sessions WHERE jti = ?",
+                (jti,),
+            ).fetchone()
+            if session is None:
+                return None
+            if session["revoked_at"] is not None or int(session["expires_at"]) <= now:
+                return None
             row = conn.execute(
                 "SELECT * FROM auth_users WHERE email = ?",
                 (email,),
@@ -248,7 +379,106 @@ class UserAuthService:
         user = self._row_to_user(row)
         if user is None or not bool(user.get("is_active")):
             return None
+        user["jti"] = jti
+        user["client_id"] = str(session["client_id"] or "")
+        return user
+
+    def revoke_session(self, jti: str) -> bool:
+        cleaned = str(jti or "").strip()
+        if not cleaned:
+            return False
+        now = int(time.time())
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "UPDATE auth_sessions SET revoked_at = ? WHERE jti = ? AND revoked_at IS NULL",
+                (now, cleaned),
+            )
+            conn.commit()
+        return cursor.rowcount > 0
+
+    def revoke_other_sessions(self, email: str, *, current_jti: str = "") -> int:
+        normalized = self._normalize_email(email)
+        now = int(time.time())
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE auth_sessions
+                SET revoked_at = ?
+                WHERE user_email = ? AND revoked_at IS NULL AND jti != ?
+                """,
+                (now, normalized, str(current_jti or "").strip()),
+            )
+            conn.commit()
+        return cursor.rowcount
+
+    def list_active_sessions(self, email: str, *, current_jti: str = "") -> list[dict[str, Any]]:
+        normalized = self._normalize_email(email)
+        now = int(time.time())
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT jti, client_id, created_at, expires_at
+                FROM auth_sessions
+                WHERE user_email = ? AND revoked_at IS NULL AND expires_at > ?
+                ORDER BY created_at DESC
+                """,
+                (normalized, now),
+            ).fetchall()
+        current = str(current_jti or "").strip()
+        return [
+            {
+                "client_id": str(row["client_id"] or ""),
+                "created_at": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(row["created_at"]))
+                ),
+                "expires_at": time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(row["expires_at"]))
+                ),
+                "is_current": bool(current) and str(row["jti"]) == current,
+            }
+            for row in rows
+        ]
+
+    def change_password(
+        self,
+        email: str,
+        current_password: str,
+        new_password: str,
+        *,
+        current_jti: str = "",
+    ) -> dict[str, Any]:
+        normalized = self._normalize_email(email)
+        new_password_text = str(new_password or "")
+        if len(new_password_text) < 6:
+            raise ValueError("Password must contain at least 6 characters.")
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM auth_users WHERE email = ?",
+                (normalized,),
+            ).fetchone()
+        if row is None or not self._verify_password(
+            str(current_password or ""),
+            salt_hex=str(row["password_salt"]),
+            digest_hex=str(row["password_hash"]),
+        ):
+            raise ValueError("Current password is incorrect.")
+        salt_hex, digest_hex = self._hash_password(new_password_text)
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE auth_users SET password_hash = ?, password_salt = ? WHERE id = ?",
+                (digest_hex, salt_hex, row["id"]),
+            )
+            conn.commit()
+            updated = conn.execute(
+                "SELECT * FROM auth_users WHERE id = ?",
+                (row["id"],),
+            ).fetchone()
+        self.revoke_other_sessions(normalized, current_jti=current_jti)
+        user = self._row_to_user(updated)
+        if user is None:
+            raise RuntimeError("Failed to reload user after password change.")
         return user
 
 
 user_auth_service = UserAuthService()
+auth_rate_limiter = AuthRateLimiter()

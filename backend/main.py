@@ -146,7 +146,11 @@ def create_app() -> FastAPI:
             message=str(detail.get("message", "")),
         )
         request.state.error_logged = True
-        response = JSONResponse(status_code=exc.status_code, content={"detail": detail})
+        response = JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": detail},
+            headers=exc.headers,
+        )
         response.headers["X-Request-ID"] = request_id
         return response
 
@@ -189,10 +193,13 @@ def create_app() -> FastAPI:
                 auth_header = request.headers.get("Authorization")
                 if not auth_header and request.query_params.get("token"):
                     auth_header = f"Bearer {request.query_params.get('token')}"
-                validate_auth_header(
+                auth_context = validate_auth_header(
                     auth_header,
                     require_admin=should_require_admin_auth(request.method, request.url.path),
                 )
+                # Stash the resolved identity (user dict or static-token marker)
+                # so per-user data scoping can consume it without re-verifying.
+                request.state.auth_user = auth_context
             except HTTPException as exc:
                 detail_raw = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
                 detail: dict[str, Any] = dict(detail_raw)

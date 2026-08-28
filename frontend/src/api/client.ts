@@ -15,6 +15,7 @@ import type {
   AudioOverviewSynthesizeRequest,
   AudioOverviewSynthesizeResponse,
   AuthSessionResponse,
+  AuthSessionInfo,
   AuthUser,
   BurnVideoResponse,
   ChatRequest,
@@ -759,6 +760,62 @@ export async function fetchCurrentAuthUser(): Promise<AuthRuntimeConfig> {
     userEmail: user.email,
     isAdmin: user.is_admin,
   });
+}
+
+export async function changeAuthPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<AuthUser> {
+  const response = await apiFetch(`${API_BASE_URL}/api/auth/change-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return (await response.json()) as AuthUser;
+}
+
+export async function logoutAuthSession(): Promise<void> {
+  // Capture the token before wiping storage: callers may clear local state
+  // first (or concurrently), and the revoke request still needs credentials.
+  const token = getStoredApiToken() || getStoredAdminToken();
+  clearAuthRuntime();
+  if (!token) {
+    return;
+  }
+  try {
+    await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    // Best-effort: an expired token is already unusable and an unreachable
+    // backend still leaves the local session cleared.
+  }
+}
+
+export async function fetchAuthSessions(): Promise<AuthSessionInfo[]> {
+  const response = await apiFetch(`${API_BASE_URL}/api/auth/sessions`);
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return (await response.json()) as AuthSessionInfo[];
+}
+
+export async function revokeOtherAuthSessions(): Promise<number> {
+  const response = await apiFetch(`${API_BASE_URL}/api/auth/sessions/revoke-others`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const data = (await response.json()) as { revoked?: number };
+  return Number(data.revoked || 0);
 }
 
 export async function fetchVoices(locale?: string, engine?: TtsEngine, model?: string): Promise<VoicesResponse> {

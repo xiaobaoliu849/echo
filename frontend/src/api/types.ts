@@ -539,6 +539,13 @@ export type AuthSessionResponse = {
   user: AuthUser;
 };
 
+export type AuthSessionInfo = {
+  client_id: string;
+  created_at: string;
+  expires_at: string;
+  is_current: boolean;
+};
+
 export type ApiErrorDetail = {
   code?: string;
   message?: string;

@@ -4,6 +4,7 @@ import {
   fetchCurrentAuthUser,
   loginAuthUser,
   getAuthRuntimeConfig,
+  logoutAuthSession,
   registerAuthUser,
   type AuthRuntimeConfig,
   type ChatMessage,
@@ -399,7 +400,10 @@ export default function App() {
   }
 
   function handleAuthLogout() {
-    setAuthRuntime(clearAuthRuntime());
+    // Captures the token, clears local storage synchronously, then revokes
+    // the server-side session in the background so the UI never waits.
+    void logoutAuthSession();
+    setAuthRuntime(getAuthRuntimeConfig());
   }
 
   /* Stable callbacks for memoized AppSidebar */
