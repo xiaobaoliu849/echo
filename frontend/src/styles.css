@@ -164,8 +164,9 @@ textarea {
 
 .vsSidebar.collapsed .vsSidebarHeader {
   height: 76px;
-  justify-content: center;
-  padding: 0 12px;
+  /* Center via padding (animatable) instead of justify-content (snaps).
+     19px keeps the 40px toggle inside 80px - 1px border with zero clipping. */
+  padding: 0 19px;
 }
 
 .vsBrand {
@@ -179,12 +180,8 @@ textarea {
 }
 
 .vsSidebar.collapsed .vsBrand {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  /* Keep flex: 1 from the base rule; gap animates via --sidebar-transition. */
   gap: 0;
-  flex: 0 0 auto;
-  width: 100%;
 }
 
 .vsSidebarToggleBtn {
@@ -282,7 +279,7 @@ textarea {
   justify-content: center;
   min-width: 0;
   transition:
-    opacity 0.2s ease,
+    opacity var(--sidebar-transition),
     max-width var(--sidebar-transition),
     transform var(--sidebar-transition);
   max-width: 160px;
@@ -373,7 +370,7 @@ textarea {
   overflow: hidden;
   max-width: 120px;
   transition:
-    opacity 0.2s ease,
+    opacity var(--sidebar-transition),
     max-width var(--sidebar-transition),
     transform var(--sidebar-transition);
 }
@@ -496,7 +493,7 @@ textarea {
   overflow: hidden;
   max-width: 140px;
   transition:
-    opacity 0.2s ease,
+    opacity var(--sidebar-transition),
     max-width var(--sidebar-transition),
     transform var(--sidebar-transition);
   opacity: 1;
@@ -550,6 +547,7 @@ textarea {
   border-top: 1px solid color-mix(in oklab, var(--accent) 8%, var(--line));
   transition:
     opacity var(--sidebar-transition),
+    max-height var(--sidebar-transition),
     padding var(--sidebar-transition),
     border-top-color var(--sidebar-transition),
     margin-top var(--sidebar-transition);
@@ -559,6 +557,8 @@ textarea {
   width: 100%;
   opacity: 1;
   overflow: hidden;
+  /* Definite clamp so collapsed max-height: 0 animates instead of snapping. */
+  max-height: 100%;
 }
 
 .vsSidebar.collapsed .vsHistorySection {
@@ -584,6 +584,9 @@ textarea {
   gap: 2px;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Reserve the scrollbar gutter so rows never shift when the list
+     starts/stops overflowing (e.g. mid collapse animation). */
+  scrollbar-gutter: stable;
   max-height: 100%;
   min-width: 0;
   width: 100%;
@@ -894,7 +897,7 @@ textarea {
   overflow: hidden;
   max-width: 120px;
   transition:
-    opacity 0.2s ease,
+    opacity var(--sidebar-transition),
     max-width var(--sidebar-transition),
     transform var(--sidebar-transition);
 }
@@ -8445,6 +8448,11 @@ button.vsPasswordToggleBtn:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .vsSpin {
     animation: none;
+  }
+
+  .vsSidebar,
+  .vsSidebar * {
+    transition-duration: 0.01ms !important;
   }
 }
 
