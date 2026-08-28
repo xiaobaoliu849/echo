@@ -281,12 +281,27 @@ async def _job_to_response(
     if not source_url:
         source_url = job.source_url
 
+    file_name = (job.original_filename or "").strip()
+    if not file_name or file_name in {"sync_upload", "realtime_mic"}:
+        if job.file_path and not str(job.file_path).startswith("realtime_mic"):
+            candidate = Path(str(job.file_path)).name
+            if not candidate.startswith("upload_"):
+                file_name = candidate
+        if not file_name or file_name in {"sync_upload", "realtime_mic"}:
+            if transcript_preview:
+                first_line = transcript_preview.strip().split("\n")[0].strip()
+                file_name = first_line[:30].rstrip("，。！？,.!? ") or ("实时录音" if job.origin == "realtime" else "本地音频")
+            elif job.origin == "realtime":
+                file_name = "实时录音"
+            else:
+                file_name = "未命名录音"
+
     data: dict[str, Any] = {
         "job_id": str(job.job_id or ""),
         "remote_job_id": job.remote_job_id,
         "mode": job.mode,
         "status": job.status,
-        "file_name": job.original_filename or Path(str(job.file_path)).name,
+        "file_name": file_name,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
         "transcript": transcript,
@@ -453,9 +468,10 @@ async def transcribe_audio(
         if words_raw:
             words = [WordTimestamp(**w) for w in words_raw if isinstance(w, dict)]
 
+        original_name = Path(str(file.filename or "")).name.strip() if file.filename else "sync_upload"
         job = await transcription_service.create_completed_sync_job(
             file_path=str(upload_path),
-            original_filename=file.filename or "sync_upload",
+            original_filename=original_name,
             transcript=transcript,
             duration_seconds=duration_seconds,
             origin="upload",
@@ -521,7 +537,8 @@ async def create_transcription_job(
 
     try:
         upload_path = await _persist_upload(file, transcription_service.jobs_dir / "uploads", suffix)
-        job = await transcription_service.prepare_long_transcription_job(upload_path, file.filename)
+        original_name = Path(str(file.filename or "")).name.strip() if file.filename else None
+        job = await transcription_service.prepare_long_transcription_job(upload_path, original_name)
         if provider:
             job = transcription_service.update_job(job.job_id or "", provider=provider.strip())
         # Publishing copies (or uploads, for S3) the entire file — potentially
@@ -1343,9 +1360,11 @@ async def save_transcription_text(payload: TranscriptionTextSaveRequest) -> Tran
             detail=_error("TRANSCRIPTION_VALIDATION_ERROR", "transcript must not be empty."),
         )
     try:
+        from datetime import datetime as _dt
+        target_name = (payload.file_name or "").strip() or f"实时录音_{_dt.now().strftime('%Y%m%d_%H%M%S')}"
         job = await transcription_service.create_completed_sync_job(
             file_path="realtime_mic",
-            original_filename=(payload.file_name or "").strip() or "实时转写",
+            original_filename=target_name,
             transcript=transcript,
             origin="realtime",
         )

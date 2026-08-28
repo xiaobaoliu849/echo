@@ -154,13 +154,12 @@ textarea {
   height: 76px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   padding: 0 14px 0 16px;
   background:
     linear-gradient(180deg, color-mix(in oklab, var(--bg-card) 85%, var(--accent-soft)) 0%, var(--bg-secondary) 100%);
   border-bottom: 1px solid var(--border-color);
-  transition: padding var(--sidebar-transition), gap var(--sidebar-transition);
+  transition: padding var(--sidebar-transition);
 }
 
 .vsSidebar.collapsed .vsSidebarHeader {
@@ -180,7 +179,37 @@ textarea {
 }
 
 .vsSidebar.collapsed .vsBrand {
-  display: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.vsSidebarToggleBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  outline: none;
+  transition: transform 0.15s ease;
+}
+
+.vsSidebarToggleBtn:hover {
+  transform: translateY(-1px);
+}
+
+.vsSidebarToggleBtn:active {
+  transform: scale(0.95);
 }
 
 .vsBrandIcon {
@@ -197,15 +226,54 @@ textarea {
   font-weight: 800;
   letter-spacing: 0.08em;
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
   box-shadow:
     0 10px 22px color-mix(in oklab, var(--brand-dark) 22%, transparent),
     inset 0 1px 0 color-mix(in oklab, white 65%, transparent);
+  transition:
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
 }
 
-.vsSidebar.collapsed .vsBrandIcon {
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
+.vsSidebarToggleBtn:hover .vsBrandIcon {
+  box-shadow:
+    0 14px 28px color-mix(in oklab, var(--brand-dark) 32%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 70%, transparent);
+  filter: brightness(1.04);
+}
+
+.vsBrandIconMark,
+.vsBrandIconHoverAction {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.vsBrandIconMark {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.vsBrandIconHoverAction {
+  opacity: 0;
+  transform: scale(0.85);
+  pointer-events: none;
+}
+
+.vsSidebarToggleBtn:hover .vsBrandIconMark {
+  opacity: 0;
+  transform: scale(0.85);
+}
+
+.vsSidebarToggleBtn:hover .vsBrandIconHoverAction {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .vsBrandCopy {
@@ -234,58 +302,7 @@ textarea {
   opacity: 0;
   max-width: 0;
   transform: translateX(-4px);
-}
-
-.vsSidebarToggleBtn {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--sidebar-text);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  border: 1px solid transparent;
-  flex-shrink: 0;
-  /* Mirrored interaction: the same header button is permanently visible in
-     both states — PanelLeftClose when expanded, the Echo logo when collapsed.
-     Hover-only reveal made the two directions inconsistent. */
-  transition:
-    background 0.2s ease,
-    color 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.15s ease;
-}
-
-.vsSidebarToggleBtn:hover {
-  background: var(--vs-sidebar-hover-bg);
-  color: var(--sidebar-text-strong);
-  border-color: var(--vs-sidebar-hover-border);
-  box-shadow: var(--vs-sidebar-hover-shadow);
-}
-
-.vsSidebarToggleBtn:active {
-  transform: scale(0.95);
-}
-
-/* Collapsed rail: the toggle itself becomes the Echo logo */
-.vsSidebar.collapsed .vsSidebarToggleBtn {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 14px;
-}
-
-.vsSidebar.collapsed .vsSidebarToggleBtn:hover {
-  background: transparent;
-  border-color: transparent;
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px color-mix(in oklab, var(--brand-dark) 30%, transparent);
-}
-
-.vsSidebar.collapsed .vsSidebarToggleBtn:active {
-  transform: scale(0.95);
+  pointer-events: none;
 }
 
 .vsSidebarAction {

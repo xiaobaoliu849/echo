@@ -191,6 +191,23 @@ describe('AppSidebar', () => {
         expect(container.querySelector('.vsSidebar')).toHaveClass('collapsed');
     });
 
+    it('renders unified logo toggle with default mark and hover action icon, without duplicate toggle buttons', () => {
+        const { container } = render(
+            <AppSidebar
+                {...baseProps}
+                chatHistoryItems={[]}
+            />
+        );
+
+        const header = container.querySelector('.vsSidebarHeader') as HTMLElement;
+        const toggleButtons = header.querySelectorAll('.vsSidebarToggleBtn');
+        expect(toggleButtons).toHaveLength(1);
+
+        const toggleBtn = toggleButtons[0];
+        expect(toggleBtn.querySelector('.vsBrandIconMark')).toBeInTheDocument();
+        expect(toggleBtn.querySelector('.vsBrandIconHoverAction')).toBeInTheDocument();
+    });
+
     it('pins the sidebar open when clicking the collapsed logo toggle', () => {
         localStorage.setItem('vs_sidebar_collapsed', 'true');
         const { container } = render(

@@ -142,12 +142,7 @@ describe("TranscriptionPage", () => {
   });
 
   it("polls a remote async transcription job until completion", async () => {
-    vi.spyOn(window, "setTimeout").mockImplementation(((handler: TimerHandler) => {
-      if (typeof handler === "function") {
-        handler();
-      }
-      return 0 as unknown as number;
-    }) as typeof window.setTimeout);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     render(<TranscriptionPage />);
 
     // Open the new transcription modal
@@ -167,7 +162,7 @@ describe("TranscriptionPage", () => {
     );
 
     await act(async () => {
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(3000);
     });
 
     expect(mockedFetchTranscriptionJob).toHaveBeenCalledWith("tx_url_001");

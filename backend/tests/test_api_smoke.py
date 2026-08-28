@@ -58,8 +58,14 @@ class ApiSmokeTests(unittest.TestCase):
         )
         self._auth_env_patcher.start()
         self.app = create_app()
+        self._smoke_jobs_tmp = tempfile.TemporaryDirectory()
+        self._smoke_original_jobs_dir = transcription_router.transcription_service.jobs_dir
+        transcription_router.transcription_service.jobs_dir = Path(self._smoke_jobs_tmp.name)
+        transcription_router.transcription_service.jobs_dir.mkdir(parents=True, exist_ok=True)
 
     def tearDown(self) -> None:
+        transcription_router.transcription_service.jobs_dir = self._smoke_original_jobs_dir
+        self._smoke_jobs_tmp.cleanup()
         self._auth_env_patcher.stop()
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:

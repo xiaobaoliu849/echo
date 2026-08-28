@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import httpx  # type: ignore
 import logging
@@ -1779,6 +1779,12 @@ class TranscriptionService:
             self._persist_transcript, job_id, transcript
         )
 
+        clean_name = Path(str(original_filename or "")).name.strip() if original_filename else None
+        if not clean_name and file_path != "realtime_mic":
+            candidate = Path(file_path).name
+            if not candidate.startswith("upload_"):
+                clean_name = candidate
+
         # Explicit initialization with type ignores
         job = TranscriptionJob(
             job_id=str(job_id), # type: ignore
@@ -1792,7 +1798,7 @@ class TranscriptionService:
             remote_job_id=None, # type: ignore
             source_url=None, # type: ignore
             memory_saved=False, # type: ignore
-            original_filename=original_filename, # type: ignore
+            original_filename=clean_name or (original_filename if original_filename else None), # type: ignore
             duration_seconds=duration_seconds, # type: ignore
             origin=origin, # type: ignore
         )
@@ -1807,6 +1813,7 @@ class TranscriptionService:
         for i in range(16):
             job_id_part += full_hex[i]
             
+        clean_name = Path(str(original_filename or "")).name.strip() if original_filename else None
         job = TranscriptionJob(
             job_id=f"tx_{job_id_part}",
             file_path=str(path),
@@ -1814,7 +1821,7 @@ class TranscriptionService:
             status="queued",
             created_at=timestamp,
             updated_at=timestamp,
-            original_filename=original_filename,
+            original_filename=clean_name or path.name,
             origin="upload",
         )
         return self._write_job(job)
@@ -1829,7 +1836,9 @@ class TranscriptionService:
         for i in range(16):
             job_id_part += full_hex[i]
             
-        original_filename = normalized_url.split("/")[-1] if "/" in normalized_url else normalized_url
+        parsed = urlparse(normalized_url)
+        path_name = unquote(Path(parsed.path).name).strip() if parsed.path else ""
+        original_filename = path_name or (f"网络音频_{parsed.netloc}" if parsed.netloc else normalized_url)
         job = TranscriptionJob(
             job_id=f"tx_{job_id_part}",
             file_path=normalized_url,

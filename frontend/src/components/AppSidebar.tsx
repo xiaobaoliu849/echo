@@ -16,6 +16,7 @@ import {
   FileAudio,
   Settings,
   PanelLeftClose,
+  PanelLeftOpen,
   MessageSquarePlus,
   MoreHorizontal,
   Pencil,
@@ -249,29 +250,25 @@ function AppSidebar({
       <aside className={`vsSidebar ${isCollapsed ? "collapsed" : ""}`}>
         <div className="vsSidebarHeader">
           <div className="vsBrand">
-            <div className="vsBrandIcon" aria-hidden="true">
-              {brandMark}
-            </div>
+            <button
+              type="button"
+              className="vsSidebarToggleBtn"
+              onClick={() => setIsCollapsed((prev) => !prev)}
+              aria-label={toggleLabel}
+              aria-expanded={!isCollapsed}
+              title={toggleLabel}
+            >
+              <span className="vsBrandIcon" aria-hidden="true">
+                <span className="vsBrandIconMark">{brandMark}</span>
+                <span className="vsBrandIconHoverAction">
+                  {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+                </span>
+              </span>
+            </button>
             <div className="vsBrandCopy">
               <h1>Echo</h1>
             </div>
           </div>
-          <button
-            type="button"
-            className="vsSidebarToggleBtn"
-            onClick={() => setIsCollapsed((prev) => !prev)}
-            aria-label={toggleLabel}
-            aria-expanded={!isCollapsed}
-            title={toggleLabel}
-          >
-            {isCollapsed ? (
-              <span className="vsBrandIcon" aria-hidden="true">
-                {brandMark}
-              </span>
-            ) : (
-              <PanelLeftClose size={18} />
-            )}
-          </button>
         </div>
 
         <div className="vsSidebarTop">

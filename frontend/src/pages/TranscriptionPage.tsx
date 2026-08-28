@@ -253,6 +253,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
         memory_saved: resp.memory_saved,
         provider: resp.provider ?? null,
         source_url: resp.source_url || (resp.job_id ? `/api/transcription/jobs/${resp.job_id}/audio` : undefined),
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         origin: "upload",
         duration_seconds: resp.duration_seconds ?? null,

@@ -63,14 +63,14 @@ function isSyntheticName(name: string): boolean {
 }
 
 function formatRelativeTime(
-  dateStr: string | null | undefined,
+  dateStr: string | number | null | undefined,
   t: (zh: string, en: string) => string
 ): string {
-  if (!dateStr) return t("未知时间", "Unknown");
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return t("未知时间", "Unknown");
+  if (!dateStr) return t("刚刚", "Just now");
+  const date = typeof dateStr === "number" ? new Date(dateStr) : new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return t("刚刚", "Just now");
   const now = Date.now();
-  const diffMs = now - date.getTime();
+  const diffMs = Math.max(0, now - date.getTime());
   const diffMin = Math.floor(diffMs / 60000);
   if (diffMin < 1) return t("刚刚", "Just now");
   if (diffMin < 60) return t(`${diffMin} 分钟前`, `${diffMin}m ago`);
@@ -133,7 +133,24 @@ export const TranscriptionCard: React.FC<Props> = ({
 
   const rawName = item.file_name || "";
   const untitled = t("未命名录音", "Untitled recording");
-  const displayName = !rawName || isSyntheticName(rawName) ? untitled : getTitleStem(rawName);
+  const displayName = useMemo(() => {
+    if (rawName && !isSyntheticName(rawName)) {
+      try {
+        return getTitleStem(decodeURIComponent(rawName));
+      } catch {
+        return getTitleStem(rawName);
+      }
+    }
+    if (item.transcript_preview) {
+      const clean = item.transcript_preview.trim().replace(/^["'“‘]+/, "");
+      return clean.length > 22 ? clean.slice(0, 22) + "…" : clean;
+    }
+    if (item.origin === "realtime") {
+      return t("实时录音", "Realtime Recording");
+    }
+    return untitled;
+  }, [rawName, item.transcript_preview, item.origin, untitled, t]);
+
   const ext = useMemo(() => getFileExtension(rawName || ""), [rawName]);
   const hash = useMemo(() => hashStr(rawName || item.job_id), [rawName, item.job_id]);
   const palette = COVER_GRADIENTS[hash % COVER_GRADIENTS.length];
@@ -273,7 +290,7 @@ export const TranscriptionCard: React.FC<Props> = ({
             </div>
           )}
           <div className="vsTranscribeCardSub">
-            <span className="vsTranscribeCardTime">{formatRelativeTime(item.updated_at, t)}</span>
+            <span className="vsTranscribeCardTime">{formatRelativeTime(item.updated_at || item.timestamp, t)}</span>
             {originInfo && (
               <>
                 <span className="vsTranscribeCardSubSep">·</span>

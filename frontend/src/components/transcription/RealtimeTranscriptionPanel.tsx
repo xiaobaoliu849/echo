@@ -648,9 +648,14 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary }: Pr
         }));
       }
 
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const timeTag = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+      const recName = t(`实时录音_${timeTag}`, `Realtime_${timeTag}`);
+
       const job = await saveTranscriptionText(
         text,
-        t(`实时录音_${new Date().toLocaleTimeString()}`, `Realtime_${new Date().toLocaleTimeString()}`),
+        recName,
         finalWords
       );
       onComplete(job, finalWords);
