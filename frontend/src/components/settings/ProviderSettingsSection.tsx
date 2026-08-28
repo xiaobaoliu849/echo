@@ -22,6 +22,7 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   Ollama: t("本地 Ollama", "Local Ollama"),
   Deepgram: t("Deepgram ASR", "Deepgram ASR"),
   "GPT-SoVITS": t("本地 GPT-SoVITS API", "Local GPT-SoVITS API"),
+  Tavus: t("Tavus 视频分身", "Tavus Video PAL"),
 });
 
 const getLobeProviderKey = (name: string): string => {
@@ -42,6 +43,7 @@ const getLobeProviderKey = (name: string): string => {
   if (lower === "zenmux") return "zenmux";
   if (lower === "ollama") return "ollama";
   if (lower === "deepgram") return "deepgram";
+  if (lower === "tavus") return "tavus";
   return lower;
 };
 
@@ -49,7 +51,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   qwen: "#6366f1", deepseek: "#4f46e5", google: "#4285f4", openai: "#10a37f",
   groq: "#f55036", openrouter: "#8b5cf6", siliconcloud: "#7c3aed",
   xiaomimimo: "#ff6900", anthropic: "#d4a574", nvidia: "#76b900",
-  ollama: "#6b7280", deepgram: "#13ef93", zenmux: "#a855f7",
+  ollama: "#6b7280", deepgram: "#13ef93", zenmux: "#a855f7", tavus: "#6c5ce7",
 };
 
 const LocalProviderIcon = ({ provider, size = 18 }: { provider: string; size?: number }) => (
@@ -218,16 +220,36 @@ export default function ProviderSettingsSection({ settings }: Props) {
             />
           </label>
 
-          <label className="vsField">
-            <span className="vsFieldLabel">Base URL ({t("可选", "Optional")})</span>
-            <input
-              className="vsInput"
-              value={settings.settingsApiUrl || ""}
-              onChange={(e) => settings.onApiUrlChange(e.target.value)}
-              placeholder={t("留空则使用默认地址", "Leave empty to use the default URL")}
-            />
-            <span className="vsFieldHint">{t("留空则使用该供应商的默认 API 端点", "Leave empty to use the default API endpoint for this provider")}</span>
-          </label>
+          {settings.settingsProvider === "Tavus" && (
+            <label className="vsField">
+              <span className="vsFieldLabel">{t("默认 PAL ID (分身 ID，可选)", "Default PAL ID (Optional)")}</span>
+              <input
+                className="vsInput"
+                value={settings.settingsTavusPalId || ""}
+                onChange={(e) => settings.onTavusPalIdChange?.(e.target.value)}
+                placeholder={t("留空则在视频分身页面自动列出或手动输入", "Leave empty to list PALs or select in Video PAL page")}
+              />
+              <span className="vsFieldHint">
+                {t(
+                  "可选配置。在 platform.tavus.io 创建分身 (PAL)，保存后将作为视频通话的默认分身。",
+                  "Optional. Created on platform.tavus.io. When set, used as the default avatar for video calls."
+                )}
+              </span>
+            </label>
+          )}
+
+          {settings.settingsProvider !== "Tavus" && (
+            <label className="vsField">
+              <span className="vsFieldLabel">Base URL ({t("可选", "Optional")})</span>
+              <input
+                className="vsInput"
+                value={settings.settingsApiUrl || ""}
+                onChange={(e) => settings.onApiUrlChange(e.target.value)}
+                placeholder={t("留空则使用默认地址", "Leave empty to use the default URL")}
+              />
+              <span className="vsFieldHint">{t("留空则使用该供应商的默认 API 端点", "Leave empty to use the default API endpoint for this provider")}</span>
+            </label>
+          )}
 
           {settings.settingsProvider === "DashScope" && (
             <label className="vsField">
@@ -356,7 +378,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </>
           )}
 
-          {settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && (
+          {settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && settings.settingsProvider !== "Tavus" && (
             <label className="vsField">
               <span className="vsFieldLabel">{t("默认主模型", "Default Model")}</span>
               <select
@@ -411,7 +433,16 @@ export default function ProviderSettingsSection({ settings }: Props) {
         </div>
 
         {/* Model Management Section */}
-        {settings.settingsProvider === "Deepgram" || settings.settingsProvider === "OpenAI" ? (
+        {settings.settingsProvider === "Tavus" ? (
+          <div className="vsProviderModelSection">
+            <div className="vsSettingsNotice ok">
+              {t(
+                "Tavus 是实时视频分身对话引擎 (Conversational Video Interface)，支持与数字人进行低延迟双向音视频通话。配置 API Key 后，可在左侧导航栏的「视频分身 (Video PAL)」页面直接开启实时视频对话。",
+                "Tavus provides real-time Conversational Video Interface (CVI) for interactive video avatars. After configuring your API Key, head to the \"Video PAL\" page in the sidebar to start a real-time video conversation."
+              )}
+            </div>
+          </div>
+        ) : settings.settingsProvider === "Deepgram" || settings.settingsProvider === "OpenAI" ? (
           <div className="vsProviderModelSection">
             <div className="vsSettingsNotice ok">
               {settings.settingsProvider === "Deepgram"

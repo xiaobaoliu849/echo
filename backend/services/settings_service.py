@@ -90,6 +90,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "doubao_app_id": "",
         "doubao_websearch_api_key": "",
         "cartesia_api_key": "",
+        "tavus_api_key": "",
     },
     "api_urls": {
         "Google": "",
@@ -107,6 +108,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "GPT-SoVITS": "",
         "Doubao": "",
         "Cartesia": "",
+        "Tavus": "",
     },
     "realtime_api_urls": {
         "DashScope": "",
@@ -200,6 +202,9 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
     "shortcuts": {
         "wake_app": "Alt+Shift+S",
     },
+    "tavus_settings": {
+        "default_pal_id": "",
+    },
     "custom_providers": [],
 }
 
@@ -220,7 +225,11 @@ ALLOWED_UPDATE_SECTIONS = {
     "ui_settings",
     "shortcuts",
     "custom_providers",
+    "tavus_settings",
 }
+
+_SETTINGS_DEFAULTS = DEFAULT_SETTINGS_TEMPLATE
+WRITE_ALLOWED_SECTIONS = ALLOWED_UPDATE_SECTIONS
 
 
 class SettingsService:

@@ -323,6 +323,7 @@ export type AppSettings = {
   transcription_settings: Record<string, unknown>;
   minimax: Record<string, unknown>;
   xiaomi: Record<string, unknown>;
+  tavus_settings?: Record<string, unknown>;
   ui_settings: Record<string, unknown>;
   shortcuts: Record<string, unknown>;
   custom_providers?: any[];

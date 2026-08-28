@@ -63,6 +63,7 @@ PROVIDER_KEY_MAP = {
     # get_provider_settings resolves base URLs and registers them in provider lists.
     "PersonaPlex": "personaplex_api_key",
     "GLM4Voice": "glm4voice_api_key",
+    "Tavus": "tavus_api_key",
 }
 
 GOOGLE_INTERACTIONS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -86,6 +87,7 @@ DEFAULT_BASE_URLS = {
     # PersonaPlex and GLM4Voice use local WebSocket URLs
     "PersonaPlex": "",
     "GLM4Voice": "",
+    "Tavus": "https://tavusapi.com",
 }
 
 
@@ -157,6 +159,9 @@ class BackendConfig:
 
     def get_all(self) -> dict[str, Any]:
         return copy.deepcopy(self._config)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._config.get(key, default)
 
     def get_setting(self, key: str, default: Any = "") -> Any:
         cfg = self.get_all()

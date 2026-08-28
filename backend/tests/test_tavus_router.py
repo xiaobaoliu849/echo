@@ -62,7 +62,7 @@ class TavusRouterTests(unittest.TestCase):
         self.assertEqual(payload["conversation_url"], "https://tavus.daily.co/room?t=token")
 
         create_mock = TavusService.create_conversation
-        self.assertTrue(create_mock.awaited_once())
+        create_mock.assert_awaited_once()
         self.assertEqual(create_mock.await_args.kwargs["pal_id"], "pal-1")
 
     def test_create_conversation_falls_back_to_server_pal_id(self) -> None:
@@ -82,6 +82,54 @@ class TavusRouterTests(unittest.TestCase):
         self.assertEqual(
             TavusService.create_conversation.await_args.kwargs["pal_id"],
             "env-pal",
+        )
+
+    def test_create_conversation_falls_back_to_config_settings(self) -> None:
+        self._patch_service(
+            create_conversation=AsyncMock(
+                return_value={
+                    "conversation_id": "conv-cfg",
+                    "conversation_url": "https://tavus.daily.co/room?t=token",
+                }
+            )
+        )
+        with patch.dict(os.environ):
+            os.environ.pop("TAVUS_API_KEY", None)
+            os.environ.pop("TAVUS_PAL_ID", None)
+            mock_cfg = {
+                "api_keys": {"tavus_api_key": "cfg-key"},
+                "tavus_settings": {"default_pal_id": "cfg-pal"},
+            }
+            with patch("services.config_loader.BackendConfig.get", side_effect=lambda k: mock_cfg.get(k)):
+                response = self.client.post("/api/tavus/conversations", json={})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            TavusService.create_conversation.await_args.kwargs["pal_id"],
+            "cfg-pal",
+        )
+
+    def test_create_conversation_config_takes_precedence_over_env(self) -> None:
+        self._patch_service(
+            create_conversation=AsyncMock(
+                return_value={
+                    "conversation_id": "conv-cfg",
+                    "conversation_url": "https://tavus.daily.co/room?t=token",
+                }
+            )
+        )
+        with patch.dict(os.environ):
+            os.environ["TAVUS_API_KEY"] = "env-key"
+            os.environ["TAVUS_PAL_ID"] = "env-pal"
+            mock_cfg = {
+                "api_keys": {"tavus_api_key": "cfg-key"},
+                "tavus_settings": {"default_pal_id": "cfg-pal"},
+            }
+            with patch("services.config_loader.BackendConfig.get", side_effect=lambda k: mock_cfg.get(k)):
+                response = self.client.post("/api/tavus/conversations", json={})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            TavusService.create_conversation.await_args.kwargs["pal_id"],
+            "cfg-pal",
         )
 
     def test_create_conversation_maps_upstream_auth_error(self) -> None:

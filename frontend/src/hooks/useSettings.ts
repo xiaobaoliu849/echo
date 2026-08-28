@@ -29,10 +29,12 @@ export const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   "GPT-SoVITS": "gpt_sovits_api_key",
   Doubao: "doubao_api_key",
   Cartesia: "cartesia_api_key",
-  // Local moshi server — no API key, but it needs a slot here so the provider
+  // Local speech-to-speech servers — no API key, but it needs a slot here so the provider
   // shows up in the picker and can carry a realtime base URL.
   PersonaPlex: "personaplex_api_key",
-  GLM4Voice: "glm4voice_api_key"
+  GLM4Voice: "glm4voice_api_key",
+  // Tavus CVI — real-time video avatar conversations via Daily.co WebRTC.
+  Tavus: "tavus_api_key"
 };
 
 const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_API_KEY_FIELD);
@@ -126,6 +128,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
   const [customProviders, setCustomProviders] = useState<any[]>([]);
   const [settingsProviderUseMaxCompletionTokens, setSettingsProviderUseMaxCompletionTokens] = useState(false);
   const [settingsProviderHeadersJson, setSettingsProviderHeadersJson] = useState("{}");
+  const [settingsTavusPalId, setSettingsTavusPalId] = useState("");
 
   const [evermemEnabled, setEvermemEnabled] = useState(false);
   const [evermemApiUrl, setEvermemApiUrl] = useState("");
@@ -539,6 +542,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
     if (typeof xiaomiSettings.api_key === "string") setXiaomiApiKey(xiaomiSettings.api_key);
     if (typeof xiaomiSettings.api_url === "string") setXiaomiApiUrl(xiaomiSettings.api_url);
 
+    const tavusSettings = settingsData.tavus_settings || {};
+    if (typeof tavusSettings.default_pal_id === "string") setSettingsTavusPalId(tavusSettings.default_pal_id);
+
     const memorySettings = settingsData.memory_settings || {};
     const transcriptionSettings = settingsData.transcription_settings || {};
     const uiSettings = settingsData.ui_settings || {};
@@ -829,6 +835,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
           api_key: xiaomiApiKey.trim(),
           api_url: xiaomiApiUrl.trim()
         },
+        tavus_settings: {
+          default_pal_id: settingsTavusPalId.trim()
+        },
         ui_settings: {
           display_language: displayLanguage,
           remember_window_position: desktopRememberWindowPosition,
@@ -1040,6 +1049,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
     onDoubaoWebsearchKeyChange: setSettingsDoubaoWebsearchKey,
     onXiaomiApiKeyChange: setXiaomiApiKey,
     onXiaomiApiUrlChange: setXiaomiApiUrl,
+    settingsTavusPalId,
+    onTavusPalIdChange: setSettingsTavusPalId,
     settingsTtsDefaultModel,
     settingsTtsAvailableModels,
     settingsTtsEnabledModels,

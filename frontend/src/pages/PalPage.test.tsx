@@ -49,6 +49,7 @@ function renderPage() {
 describe("PalPage", () => {
   beforeEach(() => {
     vi.mocked(listTavusPals).mockReset();
+    vi.mocked(listTavusPals).mockResolvedValue({ pals: [] });
     vi.mocked(createTavusConversation).mockReset();
     vi.mocked(endTavusConversation).mockReset();
     vi.mocked(endTavusConversation).mockResolvedValue(undefined);

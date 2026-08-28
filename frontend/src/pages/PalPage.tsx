@@ -30,17 +30,14 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   const [selectedPalId, setSelectedPalId] = useState(MANUAL_PAL_VALUE);
 
   useEffect(() => {
-    if (!apiKey) {
-      return;
-    }
     let disposed = false;
-    listTavusPals()
+    Promise.resolve(listTavusPals())
       .then((payload) => {
-        if (disposed) {
+        if (disposed || !payload) {
           return;
         }
-        setPals(payload.pals);
-        if (payload.pals.length > 0) {
+        setPals(payload.pals || []);
+        if (payload.pals && payload.pals.length > 0) {
           setSelectedPalId(payload.pals[0].pal_id);
         }
       })

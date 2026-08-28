@@ -2,7 +2,8 @@
 
 Resolves the credential and default PAL per request. The client may bring
 its own key via X-Tavus-* headers (stored locally in the frontend); the
-server-side environment (TAVUS_API_KEY / TAVUS_PAL_ID) acts as a fallback
+Settings config.json (api_keys.tavus_api_key / tavus_settings.default_pal_id)
+and server-side environment (TAVUS_API_KEY / TAVUS_PAL_ID) act as fallbacks
 so desktop deployments can pin a shared account.
 """
 from __future__ import annotations
@@ -27,16 +28,28 @@ class TavusConfig:
         self._service: TavusService | None = None
 
     def update_from_headers(self, headers: dict[str, Any]) -> None:
-        # Starlette lowercases header names when they are materialized into a
-        # plain dict, so look up case-insensitively.
         normalized = {str(key).lower(): value for key, value in headers.items()}
         header_key = _clean_header_value(normalized.get("x-tavus-api-key"))
-        env_key = os.getenv("TAVUS_API_KEY", "").strip()
         header_pal = _clean_header_value(normalized.get("x-tavus-pal-id"))
+
+        # Config.json fallback (managed via Settings page).
+        config_key = ""
+        config_pal = ""
+        try:
+            from .config_loader import BackendConfig
+            cfg = BackendConfig()
+            api_keys = cfg.get("api_keys") or {}
+            config_key = str(api_keys.get("tavus_api_key", "")).strip()
+            tavus_settings = cfg.get("tavus_settings") or {}
+            config_pal = str(tavus_settings.get("default_pal_id", "")).strip()
+        except Exception:
+            pass
+
+        env_key = os.getenv("TAVUS_API_KEY", "").strip()
         env_pal = os.getenv("TAVUS_PAL_ID", "").strip()
 
-        self.api_key = header_key or env_key or None
-        self.pal_id = header_pal or env_pal or None
+        self.api_key = header_key or config_key or env_key or None
+        self.pal_id = header_pal or config_pal or env_pal or None
 
         if self.api_key:
             self._service = TavusService(api_key=self.api_key, api_url=self.api_url)
