@@ -81,10 +81,17 @@ describe("useTavusConversation", () => {
       palId: "pal-1",
       conversationName: undefined,
     });
-    expect(dailyMocks.createFrame).toHaveBeenCalledWith(container);
+    expect(dailyMocks.createFrame).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({
+        showLeaveButton: true,
+        showFullscreenButton: true,
+      })
+    );
     expect(call.join).toHaveBeenCalledWith({
       url: "https://tavus.daily.co/room?t=token",
       token: "meeting-token-1",
+      userName: "Echo User",
     });
     expect(result.current.status).toBe("connected");
     expect(result.current.errorMessage).toBe("");
@@ -103,7 +110,10 @@ describe("useTavusConversation", () => {
       await result.current.start();
     });
 
-    expect(call.join).toHaveBeenCalledWith({ url: "https://tavus.daily.co/room?t=token" });
+    expect(call.join).toHaveBeenCalledWith({
+      url: "https://tavus.daily.co/room?t=token",
+      userName: "Echo User",
+    });
     expect(result.current.status).toBe("connected");
   });
 

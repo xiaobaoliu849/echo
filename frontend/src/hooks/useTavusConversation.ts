@@ -111,10 +111,21 @@ export default function useTavusConversation({
       const Daily = (await import("@daily-co/daily-js")).default;
       const parent = containerRef.current ?? undefined;
       const frame = parent
-        ? Daily.createFrame(parent)
+        ? Daily.createFrame(parent, {
+            showLeaveButton: true,
+            showFullscreenButton: true,
+            iframeStyle: {
+              width: "100%",
+              height: "100%",
+              border: "0",
+            },
+          })
         : Daily.createFrame();
       callRef.current = frame;
 
+      frame.on("joined-meeting", () => {
+        setStatus("connected");
+      });
       frame.on("left-meeting", () => {
         leave();
       });
@@ -143,11 +154,14 @@ export default function useTavusConversation({
       // Private rooms (require_auth) issue a meeting token that must be
       // passed as the join token; public rooms join by URL alone.
       const meetingToken = conversation.meeting_token?.trim();
-      await frame.join(
-        meetingToken
-          ? { url: conversation.conversation_url, token: meetingToken }
-          : { url: conversation.conversation_url }
-      );
+      const joinParams: Record<string, any> = {
+        url: conversation.conversation_url,
+        userName: "Echo User",
+      };
+      if (meetingToken) {
+        joinParams.token = meetingToken;
+      }
+      await frame.join(joinParams);
       setStatus("connected");
     } catch (error) {
       // Billing starts when the conversation is created, so a conversation

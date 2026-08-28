@@ -177,12 +177,19 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
           </div>
         ) : null}
 
-        {isPending ? (
+        {conversation.status === "creating" ? (
           <div className="vsPalOverlay">
             <div className="vsPalPendingCard" role="status">
               <span className="vsPalSpinner" aria-hidden="true" />
               <span>{pendingLabel}</span>
             </div>
+          </div>
+        ) : null}
+
+        {conversation.status === "joining" ? (
+          <div className="vsPalPendingPill" role="status">
+            <span className="vsPalSpinner" aria-hidden="true" />
+            <span>{pendingLabel}</span>
           </div>
         ) : null}
 
