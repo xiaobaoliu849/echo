@@ -44,7 +44,8 @@ export function isVoiceRealtimeModel(provider: string, model: string): boolean {
   }
   if (
     normalizedProvider === "personaplex" ||
-    normalizedProvider === "glm4voice"
+    normalizedProvider === "glm4voice" ||
+    normalizedProvider === "tavus"
   ) {
     return true;
   }
@@ -71,6 +72,9 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
     return "";
   }
   const normalizedProv = (provider || "").trim().toLowerCase();
+  if (normalizedProv === "tavus" || model.toLowerCase().includes("tavus")) {
+    return t("实时视频分身", "Video PAL avatar");
+  }
   if (normalizedProv === "glm4voice" || model.toLowerCase().includes("glm-4-voice")) {
     return t("智谱端到端语音", "GLM-4-Voice bilingual");
   }

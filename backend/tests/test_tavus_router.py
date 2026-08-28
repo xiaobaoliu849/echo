@@ -17,6 +17,9 @@ class TavusRouterTests(unittest.TestCase):
         self._enforce_patcher = patch("main.should_enforce_auth", return_value=False)
         self._enforce_patcher.start()
         self.addCleanup(self._enforce_patcher.stop)
+        self._cfg_patcher = patch("services.config_loader.BackendConfig.get", return_value={})
+        self._cfg_patcher.start()
+        self.addCleanup(self._cfg_patcher.stop)
         self.app = create_app()
         self.client = TestClient(self.app)
 

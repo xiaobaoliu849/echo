@@ -59,6 +59,7 @@ export const DOUBAO_PROVIDER = "Doubao";
 export const PERSONAPLEX_PROVIDER = "PersonaPlex";
 export const GLM4VOICE_PROVIDER = "GLM4Voice";
 export const CARTESIA_PROVIDER = "Cartesia";
+export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 // The legacy gemini-2.5-flash-native-audio-preview-12-2025 model has been retired;
@@ -69,6 +70,7 @@ export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
 export const DEFAULT_PERSONAPLEX_MODEL = "personaplex-7b-v1-bnb-4bit";
 export const DEFAULT_GLM4VOICE_MODEL = "glm-4-voice-9b";
+export const DEFAULT_TAVUS_MODEL = "tavus-video-pal";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
   "native-audio",
   "live",
@@ -418,6 +420,8 @@ export function formatRealtimeVoiceOptions(
     options = [{ value: "default", label: "Default · 默认音色", description: "原生默认音色" }];
   } else if (provider === CARTESIA_PROVIDER) {
     options = CARTESIA_REALTIME_VOICES;
+  } else if (provider === TAVUS_PROVIDER) {
+    options = [{ value: "default", label: "Tavus Avatar · 默认分身", description: "CVI 实时视频分身" }];
   } else if (provider === DASHSCOPE_PROVIDER) {
     if (isQwenAudioModel(model)) {
       options = QWEN_AUDIO_VOICES;
@@ -485,6 +489,7 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
     CARTESIA_PROVIDER,
+    TAVUS_PROVIDER,
   ];
   if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
     return preferredProvider;
@@ -514,7 +519,8 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   if (!normalizedModel) {
     return false;
   }
-  if (normalizedProvider === DOUBAO_PROVIDER.toLowerCase()) {
+  if (normalizedProvider === DOUBAO_PROVIDER.toLowerCase() ||
+      normalizedProvider === TAVUS_PROVIDER.toLowerCase()) {
     return true;
   }
   if (normalizedProvider === PERSONAPLEX_PROVIDER.toLowerCase() ||
@@ -578,6 +584,9 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   if (provider === CARTESIA_PROVIDER) {
     return "cartesia-realtime";
   }
+  if (provider === TAVUS_PROVIDER) {
+    return DEFAULT_TAVUS_MODEL;
+  }
   return "";
 }
 
@@ -627,6 +636,9 @@ export function resolveRealtimeModelOptions(
   const cartesiaBuiltIns = provider === CARTESIA_PROVIDER
     ? ["cartesia-realtime"]
     : [];
+  const tavusBuiltIns = provider === TAVUS_PROVIDER
+    ? [DEFAULT_TAVUS_MODEL, "tavus-phoenix-2"]
+    : [];
   const allBuiltIns = [
     ...googleBuiltIns,
     ...openaiBuiltIns,
@@ -635,6 +647,7 @@ export function resolveRealtimeModelOptions(
     ...personaplexBuiltIns,
     ...glm4voiceBuiltIns,
     ...cartesiaBuiltIns,
+    ...tavusBuiltIns,
   ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];
   return [...new Set(ordered.filter(Boolean))];

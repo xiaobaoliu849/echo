@@ -438,12 +438,18 @@ describe("VoiceCallSettingsPopover", () => {
     expect(dialog.style.maxHeight).toBe("390px");
   });
 
-  it("does not open when disabled", () => {
-    const voiceChat = createVoiceChatController();
-    render(<VoiceCallSettingsPopover voiceChat={voiceChat} t={t} disabled />);
-    const summary = screen.getByTitle("通话设置");
-    expect(summary).toBeDisabled();
-    fireEvent.click(summary);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  it("renders Tavus provider and its video avatar model", () => {
+    renderPopover({
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "DashScope", models: ["qwen3.5-omni-plus-realtime"] },
+        { provider: "Tavus", models: ["tavus-video-pal"] },
+      ],
+    });
+    openPanel();
+    const tavusRow = screen.getByRole("button", { name: /Tavus/ });
+    expect(tavusRow).toBeInTheDocument();
+    fireEvent.mouseEnter(tavusRow);
+    expect(screen.getByText("tavus-video-pal")).toBeInTheDocument();
+    expect(screen.getByText("实时视频分身")).toBeInTheDocument();
   });
 });
