@@ -148,13 +148,19 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
 
               {pals.length === 0 || selectedPalId === MANUAL_PAL_VALUE ? (
                 <label className="vsPalField">
-                  <span>{t("PAL ID", "PAL ID")}</span>
+                  <span>{t("PAL ID (数字人分身 ID)", "PAL ID (Avatar Persona ID)")}</span>
                   <input
                     value={palIdInput}
                     onChange={(event) => handlePalIdInputChange(event.target.value)}
-                    placeholder={t("留空则使用服务器默认分身", "Leave empty to use the server's default PAL")}
+                    placeholder={t("在 platform.tavus.io 创建的 PAL ID (如 p9a8d...)", "PAL ID from platform.tavus.io (e.g. p9a8d...)")}
                     data-testid="pal-id-input"
                   />
+                  <small>
+                    {t(
+                      "在 platform.tavus.io 创建分身后会自动列在下拉列表中，也可在此手动粘贴 PAL ID。",
+                      "Personas created on platform.tavus.io appear in the dropdown, or you can paste a PAL ID manually here."
+                    )}
+                  </small>
                 </label>
               ) : null}
 
