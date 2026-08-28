@@ -10320,3 +10320,322 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsPalHangupBtn:active {
   transform: scale(0.95);
 }
+
+.vsPalDockCountBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #6366f1;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #0f172a;
+}
+
+/* ── Live Floating Subtitle Banner ── */
+.vsPalFloatingSubtitle {
+  position: absolute;
+  bottom: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(88%, 680px);
+  z-index: 9;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  animation: vsPalSubSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  user-select: none;
+}
+
+@keyframes vsPalSubSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.vsPalFloatingSubtitle.user {
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.vsPalFloatingSubtitle.pal {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.vsPalSubSpeaker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #94a3b8;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.vsPalFloatingSubtitle.user .vsPalSubSpeaker {
+  color: #a5b4fc;
+}
+
+.vsPalFloatingSubtitle.pal .vsPalSubSpeaker {
+  color: #6ee7b7;
+}
+
+.vsPalSubText {
+  font-size: 15px;
+  line-height: 1.45;
+  color: #f8fafc;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  word-break: break-word;
+}
+
+/* ── Side Transcript Drawer ── */
+.vsPalTranscriptDrawer {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 86px;
+  width: 320px;
+  max-width: calc(100% - 32px);
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: -8px 12px 36px rgba(0, 0, 0, 0.5);
+  animation: vsPalDrawerSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vsPalDrawerSlide {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.vsPalDrawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.vsPalDrawerHead h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.vsPalDrawerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vsPalDrawerIconBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsPalDrawerIconBtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.vsPalDrawerBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vsPalDrawerEmpty {
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 40px;
+}
+
+.vsPalTranscriptRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vsPalTranscriptMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.vsPalTranscriptRow.user .vsPalTranscriptName {
+  color: #a5b4fc;
+  font-weight: 600;
+}
+
+.vsPalTranscriptRow.pal .vsPalTranscriptName {
+  color: #6ee7b7;
+  font-weight: 600;
+}
+
+.vsPalTranscriptBubble {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  word-break: break-word;
+}
+
+.vsPalTranscriptRow.user .vsPalTranscriptBubble {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+.vsPalTranscriptRow.pal .vsPalTranscriptBubble {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+/* ── Post-Call Summary Card ── */
+.vsPalSummaryCard {
+  width: 100%;
+  max-width: 620px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg, 0 20px 40px rgba(0, 0, 0, 0.15));
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: vsPalSummaryPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vsPalSummaryPop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vsPalSummaryHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  padding-bottom: 14px;
+}
+
+.vsPalSummaryHead h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: var(--text-primary, #0f172a);
+}
+
+.vsPalSummaryHead p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+}
+
+.vsPalSummaryActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vsPalGhostBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background: transparent;
+  color: var(--text-primary, #0f172a);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsPalGhostBtn:hover {
+  background: var(--bg-secondary, #f1f5f9);
+}
+
+.vsPalRestartBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  background: #6366f1;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsPalRestartBtn:hover {
+  background: #4f46e5;
+}
+
+.vsPalTranscriptScrollArea {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 4px;
+}

@@ -6,6 +6,15 @@ import { createTavusConversation, endTavusConversation } from "../api";
 
 export type TavusConversationStatus = "idle" | "creating" | "joining" | "connected" | "ended";
 
+export type SubtitleItem = {
+  id: string;
+  speaker: "user" | "pal";
+  speakerName: string;
+  text: string;
+  isFinal: boolean;
+  timestamp: number;
+};
+
 type StartParams = {
   palId?: string;
   conversationName?: string;
@@ -25,6 +34,11 @@ export type UseTavusConversationResult = {
   isSharingScreen: boolean;
   callDuration: number;
   formattedDuration: string;
+  transcripts: SubtitleItem[];
+  activeSubtitle: SubtitleItem | null;
+  showSubtitles: boolean;
+  toggleSubtitles: () => void;
+  clearTranscripts: () => void;
   toggleMute: () => void;
   toggleVideo: () => void;
   toggleScreenShare: () => Promise<void>;
@@ -33,6 +47,46 @@ export type UseTavusConversationResult = {
   leave: () => void;
   clearError: () => void;
 };
+
+function parseAppMessageSubtitle(rawData: any): { speaker: "user" | "pal"; text: string; isFinal: boolean } | null {
+  if (!rawData) return null;
+  let data = rawData;
+  if (typeof rawData === "string") {
+    try {
+      data = JSON.parse(rawData);
+    } catch {
+      return { speaker: "pal", text: rawData.trim(), isFinal: true };
+    }
+  }
+
+  const eventType = String(data.event_type || data.type || data.event || "");
+  const payload = data.data || data.payload || data;
+
+  const role = String(payload.role || payload.speaker || data.role || data.speaker || "");
+  const isUser = role.toLowerCase() === "user" || role.toLowerCase() === "me" || eventType.startsWith("user.");
+  const speaker: "user" | "pal" = isUser ? "user" : "pal";
+
+  const text = String(
+    payload.text ||
+    payload.utterance ||
+    payload.transcript ||
+    payload.content ||
+    payload.message ||
+    data.text ||
+    ""
+  ).trim();
+
+  if (!text) return null;
+
+  const isFinal = Boolean(
+    eventType.includes("completed") ||
+    eventType.includes("final") ||
+    payload.is_final ||
+    payload.final
+  );
+
+  return { speaker, text, isFinal };
+}
 
 // Fires after the last remote participant (the PAL) leaves, so a stray
 // network blip does not kill a call that is about to resume.
@@ -48,6 +102,7 @@ export default function useTavusConversation({
   const conversationIdRef = useRef<string>("");
   const autoLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeSubtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState<TavusConversationStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
@@ -55,6 +110,9 @@ export default function useTavusConversation({
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
+  const [transcripts, setTranscripts] = useState<SubtitleItem[]>([]);
+  const [activeSubtitle, setActiveSubtitle] = useState<SubtitleItem | null>(null);
+  const [showSubtitles, setShowSubtitles] = useState(true);
 
   const toggleMute = useCallback(() => {
     const call = callRef.current;
@@ -122,6 +180,10 @@ export default function useTavusConversation({
   const teardownCall = useCallback(() => {
     clearAutoLeaveTimer();
     clearDurationTimer();
+    if (activeSubtitleTimerRef.current) {
+      clearTimeout(activeSubtitleTimerRef.current);
+      activeSubtitleTimerRef.current = null;
+    }
     const call = callRef.current;
     callRef.current = null;
     if (!call) {
@@ -137,6 +199,7 @@ export default function useTavusConversation({
     setIsVideoOff(false);
     setIsSharingScreen(false);
     setCallDuration(0);
+    setActiveSubtitle(null);
   }, [clearAutoLeaveTimer, clearDurationTimer]);
 
   const leave = useCallback(() => {
@@ -224,6 +287,46 @@ export default function useTavusConversation({
           setLocalAudioLevel(event.audioLevel);
         }
       });
+      frame.on("app-message", (event: any) => {
+        const parsed = parseAppMessageSubtitle(event?.data);
+        if (!parsed) return;
+
+        const timestamp = Date.now();
+        const speakerName = parsed.speaker === "user" ? t("你", "You") : t("AI 分身", "AI PAL");
+
+        setTranscripts((prev) => {
+          const last = prev[prev.length - 1];
+          // If previous message was same speaker within 5s and not final, update it in place
+          if (last && last.speaker === parsed.speaker && !last.isFinal && timestamp - last.timestamp < 5000) {
+            const updatedItem: SubtitleItem = {
+              ...last,
+              text: parsed.text,
+              isFinal: parsed.isFinal,
+              timestamp,
+            };
+            setActiveSubtitle(updatedItem);
+            return [...prev.slice(0, -1), updatedItem];
+          }
+
+          const newItem: SubtitleItem = {
+            id: `sub-${timestamp}-${Math.random().toString(36).slice(2, 6)}`,
+            speaker: parsed.speaker,
+            speakerName,
+            text: parsed.text,
+            isFinal: parsed.isFinal,
+            timestamp,
+          };
+          setActiveSubtitle(newItem);
+          return [...prev, newItem];
+        });
+
+        if (activeSubtitleTimerRef.current) {
+          clearTimeout(activeSubtitleTimerRef.current);
+        }
+        activeSubtitleTimerRef.current = setTimeout(() => {
+          setActiveSubtitle(null);
+        }, 4500);
+      });
       frame.on("participant-updated", (event: any) => {
         if (event?.participant?.local) {
           if (typeof event.participant.audio === "boolean") {
@@ -283,6 +386,15 @@ export default function useTavusConversation({
     setErrorMessage("");
   }, []);
 
+  const toggleSubtitles = useCallback(() => {
+    setShowSubtitles((prev) => !prev);
+  }, []);
+
+  const clearTranscripts = useCallback(() => {
+    setTranscripts([]);
+    setActiveSubtitle(null);
+  }, []);
+
   useEffect(() => {
     return () => {
       const conversationId = conversationIdRef.current;
@@ -305,6 +417,11 @@ export default function useTavusConversation({
     isSharingScreen,
     callDuration,
     formattedDuration,
+    transcripts,
+    activeSubtitle,
+    showSubtitles,
+    toggleSubtitles,
+    clearTranscripts,
     toggleMute,
     toggleVideo,
     toggleScreenShare,

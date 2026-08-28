@@ -159,9 +159,14 @@ describe("PalPage", () => {
     expect(screen.getByText("上一场通话已结束。")).toBeInTheDocument();
   });
 
-  it("shows the failure message when the conversation cannot be created", async () => {
+  it("supports subtitles toggle and opening the transcript drawer during a call", async () => {
     vi.mocked(listTavusPals).mockRejectedValue(new Error("not configured"));
-    vi.mocked(createTavusConversation).mockRejectedValue(new Error("boom"));
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-live",
+      conversation_url: "https://tavus.daily.co/room?t=token"
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
 
     renderPage();
 
@@ -171,8 +176,17 @@ describe("PalPage", () => {
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
     await waitFor(() => {
-      expect(screen.getByText("boom")).toBeInTheDocument();
+      expect(screen.getByTestId("pal-toggle-subtitles-button")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();
+
+    // Toggle subtitles button
+    fireEvent.click(screen.getByTestId("pal-toggle-subtitles-button"));
+    expect(screen.getByTestId("pal-toggle-subtitles-button")).toHaveAttribute("aria-label", "开启字幕");
+
+    // Open transcript drawer
+    expect(screen.getByTestId("pal-toggle-drawer-button")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("pal-toggle-drawer-button"));
+
+    expect(screen.getByText(/实时速记/)).toBeInTheDocument();
   });
 });

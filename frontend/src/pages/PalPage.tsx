@@ -1,5 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, Mic, MicOff, Monitor, MonitorOff, PhoneOff, Play, Video, VideoOff } from "lucide-react";
+import {
+  Check,
+  Copy,
+  KeyRound,
+  MessageSquareText,
+  Mic,
+  MicOff,
+  Monitor,
+  MonitorOff,
+  PhoneOff,
+  Play,
+  RotateCcw,
+  Subtitles,
+  Video,
+  VideoOff,
+  X,
+} from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import useTavusConversation from "../hooks/useTavusConversation";
 import {
@@ -28,6 +44,8 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   const [palIdInput, setPalIdInput] = useState(() => getPersistedTavusPalId());
   const [pals, setPals] = useState<TavusPalSummary[]>([]);
   const [selectedPalId, setSelectedPalId] = useState(MANUAL_PAL_VALUE);
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -56,7 +74,8 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
     return palIdInput.trim();
   }, [palIdInput, pals.length, selectedPalId]);
 
-  const showConfigPanel = conversation.status === "idle" || conversation.status === "ended";
+  const showConfigPanel = conversation.status === "idle" || (conversation.status === "ended" && conversation.transcripts.length === 0);
+  const showPostCallSummary = conversation.status === "ended" && conversation.transcripts.length > 0;
   const isPending = conversation.status === "creating" || conversation.status === "joining";
 
   const pendingLabel = conversation.status === "creating"
@@ -74,7 +93,20 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   }
 
   function handleStart() {
+    setShowDrawer(false);
+    conversation.clearTranscripts();
     void conversation.start({ palId: resolvedPalId || undefined });
+  }
+
+  function handleCopyTranscript() {
+    const fullText = conversation.transcripts
+      .map((item) => `[${new Date(item.timestamp).toLocaleTimeString()}] ${item.speakerName}: ${item.text}`)
+      .join("\n\n");
+    if (!fullText) return;
+    navigator.clipboard.writeText(fullText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   return (
@@ -177,6 +209,51 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
           </div>
         ) : null}
 
+        {showPostCallSummary ? (
+          <div className="vsPalOverlay">
+            <div className="vsPalSummaryCard">
+              <div className="vsPalSummaryHead">
+                <div>
+                  <h2>{t("通话已结束", "Call Ended")}</h2>
+                  <p>{t("通话时长", "Duration")}: <strong>{conversation.formattedDuration}</strong> · {t("对话条数", "Messages")}: <strong>{conversation.transcripts.length}</strong></p>
+                </div>
+                <div className="vsPalSummaryActions">
+                  <button
+                    type="button"
+                    className="vsPalGhostBtn"
+                    onClick={handleCopyTranscript}
+                    title={t("复制对话全文", "Copy full transcript")}
+                  >
+                    {copied ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
+                    <span>{copied ? t("已复制", "Copied") : t("复制记录", "Copy")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="vsPalRestartBtn"
+                    onClick={handleStart}
+                    data-testid="pal-start-button"
+                  >
+                    <RotateCcw size={15} />
+                    <span>{t("再次通话", "Call Again")}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="vsPalTranscriptScrollArea">
+                {conversation.transcripts.map((item) => (
+                  <div key={item.id} className={`vsPalTranscriptRow ${item.speaker}`}>
+                    <div className="vsPalTranscriptMeta">
+                      <span className="vsPalTranscriptName">{item.speaker === "user" ? "🗣️" : "🤖"} {item.speakerName}</span>
+                      <span className="vsPalTranscriptTime">{new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                    </div>
+                    <div className="vsPalTranscriptBubble">{item.text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {conversation.status === "creating" ? (
           <div className="vsPalOverlay">
             <div className="vsPalPendingCard" role="status">
@@ -202,6 +279,60 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
               <span className="vsPalBadgeDivider">·</span>
               <span className="vsPalStatusText">{t("通话中", "Live")}</span>
             </div>
+
+            {/* Live Floating Subtitle Banner */}
+            {conversation.showSubtitles && conversation.activeSubtitle ? (
+              <div className={`vsPalFloatingSubtitle ${conversation.activeSubtitle.speaker}`} role="status">
+                <span className="vsPalSubSpeaker">
+                  {conversation.activeSubtitle.speaker === "user" ? "🗣️ " : "🤖 "}
+                  {conversation.activeSubtitle.speakerName}
+                </span>
+                <span className="vsPalSubText">{conversation.activeSubtitle.text}</span>
+              </div>
+            ) : null}
+
+            {/* Side Transcript Drawer */}
+            {showDrawer ? (
+              <aside className="vsPalTranscriptDrawer" aria-label={t("实时对话记录", "Live conversation transcript")}>
+                <div className="vsPalDrawerHead">
+                  <h3>{t("实时速记", "Live Transcript")} ({conversation.transcripts.length})</h3>
+                  <div className="vsPalDrawerActions">
+                    <button
+                      type="button"
+                      className="vsPalDrawerIconBtn"
+                      onClick={handleCopyTranscript}
+                      title={t("复制对话全文", "Copy full transcript")}
+                    >
+                      {copied ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="vsPalDrawerIconBtn"
+                      onClick={() => setShowDrawer(false)}
+                      title={t("关闭速记", "Close drawer")}
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="vsPalDrawerBody">
+                  {conversation.transcripts.length === 0 ? (
+                    <div className="vsPalDrawerEmpty">{t("对话开始后，发言将实时显示在此...", "Speech will appear here in realtime...")}</div>
+                  ) : (
+                    conversation.transcripts.map((item) => (
+                      <div key={item.id} className={`vsPalTranscriptRow ${item.speaker}`}>
+                        <div className="vsPalTranscriptMeta">
+                          <span className="vsPalTranscriptName">{item.speaker === "user" ? "🗣️" : "🤖"} {item.speakerName}</span>
+                          <span className="vsPalTranscriptTime">{new Date(item.timestamp).toLocaleTimeString([], { minute: "2-digit", second: "2-digit" })}</span>
+                        </div>
+                        <div className="vsPalTranscriptBubble">{item.text}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </aside>
+            ) : null}
 
             {/* Unified Bottom Floating Dock */}
             <div className="vsPalControlDock" role="toolbar" aria-label={t("通话控制", "Call controls")}>
@@ -245,6 +376,31 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                 aria-label={conversation.isSharingScreen ? t("停止共享", "Stop sharing") : t("共享屏幕", "Share screen")}
               >
                 {conversation.isSharingScreen ? <MonitorOff size={18} /> : <Monitor size={18} />}
+              </button>
+
+              <button
+                type="button"
+                className={`vsPalDockBtn ${conversation.showSubtitles ? "isActive" : ""}`}
+                onClick={conversation.toggleSubtitles}
+                title={conversation.showSubtitles ? t("隐藏实时字幕", "Hide subtitles") : t("开启实时字幕", "Show subtitles")}
+                data-testid="pal-toggle-subtitles-button"
+                aria-label={conversation.showSubtitles ? t("隐藏字幕", "Hide subtitles") : t("开启字幕", "Show subtitles")}
+              >
+                <Subtitles size={18} />
+              </button>
+
+              <button
+                type="button"
+                className={`vsPalDockBtn ${showDrawer ? "isActive" : ""}`}
+                onClick={() => setShowDrawer((prev) => !prev)}
+                title={showDrawer ? t("收起速记面板", "Close transcript panel") : t("展开对话速记", "Open transcript panel")}
+                data-testid="pal-toggle-drawer-button"
+                aria-label={showDrawer ? t("收起速记", "Close transcript") : t("展开速记", "Open transcript")}
+              >
+                <MessageSquareText size={18} />
+                {conversation.transcripts.length > 0 && (
+                  <span className="vsPalDockCountBadge">{conversation.transcripts.length}</span>
+                )}
               </button>
 
               <div className="vsPalDockDivider" aria-hidden="true" />
