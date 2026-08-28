@@ -25,6 +25,9 @@ import type {
   SettingsResponse,
   StreamEventHandlers,
   SubtitleCueItem,
+  TavusConversationResponse,
+  TavusPalListResponse,
+  TavusPalSummary,
   TranscriptionBatchDeleteResponse,
   TranscriptionJobListResponse,
   TranscriptionJobResponse,
@@ -417,6 +420,120 @@ export async function ensureEverMemConversationGroupId(
   }
   const meta = await createEverMemConversationMeta(scene);
   return meta?.group_id || "";
+}
+
+const TAVUS_API_KEY_STORAGE_KEY = "tavus_api_key";
+const TAVUS_PAL_ID_STORAGE_KEY = "tavus_pal_id";
+
+export function getPersistedTavusApiKey(): string {
+  return safeStorageGet(TAVUS_API_KEY_STORAGE_KEY).trim();
+}
+
+export function persistTavusApiKey(value: string): string {
+  const normalized = (value || "").trim();
+  if (!normalized) {
+    safeStorageRemove(TAVUS_API_KEY_STORAGE_KEY);
+    return "";
+  }
+  safeStorageSet(TAVUS_API_KEY_STORAGE_KEY, normalized);
+  return normalized;
+}
+
+export function getPersistedTavusPalId(): string {
+  return safeStorageGet(TAVUS_PAL_ID_STORAGE_KEY).trim();
+}
+
+export function persistTavusPalId(value: string): string {
+  const normalized = (value || "").trim();
+  if (!normalized) {
+    safeStorageRemove(TAVUS_PAL_ID_STORAGE_KEY);
+    return "";
+  }
+  safeStorageSet(TAVUS_PAL_ID_STORAGE_KEY, normalized);
+  return normalized;
+}
+
+// The API key stays out of the frontend bundle: it is only attached to
+// per-request headers and read by the FastAPI backend, which proxies Tavus.
+function buildTavusHeaders(): Record<string, string> {
+  const apiKey = getPersistedTavusApiKey();
+  if (!apiKey) {
+    return {};
+  }
+  const palId = getPersistedTavusPalId();
+  return {
+    "X-Tavus-Api-Key": apiKey,
+    ...(palId ? { "X-Tavus-Pal-Id": palId } : {}),
+  };
+}
+
+export async function listTavusPals(): Promise<TavusPalListResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/api/tavus/pals`, {
+    headers: buildTavusHeaders(),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const payload = (await response.json()) as Partial<TavusPalListResponse>;
+  const pals = Array.isArray(payload.pals) ? payload.pals : [];
+  return {
+    pals: pals
+      .filter((item): item is TavusPalSummary => Boolean(item && item.pal_id))
+      .map((item) => ({
+        pal_id: item.pal_id,
+        pal_name: item.pal_name || item.pal_id,
+      })),
+  };
+}
+
+export async function createTavusConversation(
+  params: { palId?: string; conversationName?: string } = {}
+): Promise<TavusConversationResponse> {
+  const palId = (params.palId || "").trim();
+  const conversationName = (params.conversationName || "").trim();
+  const response = await apiFetch(`${API_BASE_URL}/api/tavus/conversations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...buildTavusHeaders(),
+    },
+    body: JSON.stringify({
+      ...(palId ? { pal_id: palId } : {}),
+      ...(conversationName ? { conversation_name: conversationName } : {}),
+    }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const payload = (await response.json()) as Partial<TavusConversationResponse>;
+  const conversationId = typeof payload.conversation_id === "string" ? payload.conversation_id.trim() : "";
+  const conversationUrl = typeof payload.conversation_url === "string" ? payload.conversation_url.trim() : "";
+  if (!conversationId || !conversationUrl) {
+    throw new Error("Tavus conversation response is missing the join URL.");
+  }
+  return {
+    conversation_id: conversationId,
+    conversation_url: conversationUrl,
+    ...(typeof payload.status === "string" && payload.status.trim() ? { status: payload.status.trim() } : {}),
+    ...(typeof payload.meeting_token === "string" && payload.meeting_token.trim()
+      ? { meeting_token: payload.meeting_token.trim() }
+      : {}),
+  };
+}
+
+export async function endTavusConversation(conversationId: string): Promise<void> {
+  const normalized = (conversationId || "").trim();
+  if (!normalized) {
+    return;
+  }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/tavus/conversations/${encodeURIComponent(normalized)}`,
+    { method: "DELETE", headers: buildTavusHeaders() }
+  );
+  // A 404 means the conversation already ended upstream; treat it as success.
+  if (!response.ok && response.status !== 404) {
+    await throwApiError(response);
+  }
 }
 
 function apiFetch(

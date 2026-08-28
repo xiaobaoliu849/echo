@@ -58,6 +58,18 @@ const EXACT_HINTS: Record<string, string[]> = {
   FETCH_MODELS_FAILED: [
     "Check if API Key or Base URL field contains invalid Chinese characters or instructions.",
     "Verify provider endpoint URL and network connectivity."
+  ],
+  TAVUS_NOT_CONFIGURED: [
+    "Open the Video PAL page and enter your Tavus API Key.",
+    "Or set the TAVUS_API_KEY environment variable on the backend."
+  ],
+  TAVUS_PAL_ID_MISSING: [
+    "Select a PAL from the dropdown or enter a PAL ID manually.",
+    "Or set the TAVUS_PAL_ID environment variable on the backend."
+  ],
+  TAVUS_AUTH_REJECTED: [
+    "Check that your Tavus API Key is correct and active.",
+    "Create a new key at platform.tavus.io if needed."
   ]
 };
 
@@ -130,6 +142,13 @@ const PREFIX_HINTS: Array<{ prefix: string; hints: string[] }> = [
     hints: [
       "Retry with merge strategy auto or concat.",
       "Check backend logs for synthesis stack trace."
+    ]
+  },
+  {
+    prefix: "TAVUS_",
+    hints: [
+      "Check Tavus API Key in the Video PAL page.",
+      "Verify network connectivity to tavusapi.com and retry."
     ]
   }
 ];

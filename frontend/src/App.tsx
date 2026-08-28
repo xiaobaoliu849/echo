@@ -24,6 +24,7 @@ import useVoiceChat from "./hooks/useVoiceChat";
 import useVoiceManagement from "./hooks/useVoiceManagement";
 const AudioOverviewPage = lazy(() => import("./pages/AudioOverviewPage"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
+const PalPage = lazy(() => import("./pages/PalPage"));
 const TranslatePage = lazy(() => import("./pages/TranslatePage"));
 const VoiceCenterPage = lazy(() => import("./pages/VoiceCenterPage"));
 import { I18nProvider, createInlineTranslator, localizeText, type UiLanguage } from "./i18n";
@@ -237,7 +238,9 @@ export default function App() {
   // against every descendant on each DOM mutation, which froze the main
   // thread once the transcription cue list grew to thousands of rows.
   const selfScrollingTab =
-    activeTab === "transcription" || activeTab === "voice_center";
+    activeTab === "transcription" ||
+    activeTab === "voice_center" ||
+    activeTab === "pal";
   const normalizedConversationHistory = useMemo(
     () => normalizeConversationHistory(conversationHistory),
     [conversationHistory],
@@ -468,6 +471,13 @@ export default function App() {
 
                 {activeTab === "audio_overview" ? (
                   <AudioOverviewPage audioOverview={audioOverview} errorRuntimeContext={errorRuntimeContext} />
+                ) : null}
+
+                {activeTab === "pal" ? (
+                  <PalPage
+                    formatErrorMessage={formatErrorMessage}
+                    errorRuntimeContext={errorRuntimeContext}
+                  />
                 ) : null}
                 </Suspense>
               </div>

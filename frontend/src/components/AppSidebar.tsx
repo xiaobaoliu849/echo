@@ -19,7 +19,8 @@ import {
   MessageSquarePlus,
   MoreHorizontal,
   Pencil,
-  Trash2
+  Trash2,
+  Video
 } from "lucide-react";
 
 const IconMap: Record<string, React.ElementType> = {
@@ -30,7 +31,8 @@ const IconMap: Record<string, React.ElementType> = {
   Fingerprint,
   Mic2,
   FileAudio,
-  Settings
+  Settings,
+  Video
 };
 
 const brandMark = (

@@ -806,3 +806,20 @@ export type VoiceChatServerEvent =
   | { type: "pong" }
   | { type: "error"; message: string; provider?: string };
 
+
+export type TavusPalSummary = {
+  pal_id: string;
+  pal_name: string;
+};
+
+export type TavusPalListResponse = {
+  pals: TavusPalSummary[];
+};
+
+export type TavusConversationResponse = {
+  conversation_id: string;
+  conversation_url: string;
+  status?: string | null;
+  // Only present when the conversation was created with require_auth.
+  meeting_token?: string | null;
+};

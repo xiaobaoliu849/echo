@@ -1,0 +1,213 @@
+import { useEffect, useMemo, useState } from "react";
+import { KeyRound, LogOut, Play, Video } from "lucide-react";
+import ErrorNotice from "../components/ErrorNotice";
+import useTavusConversation from "../hooks/useTavusConversation";
+import {
+  getPersistedTavusApiKey,
+  getPersistedTavusPalId,
+  listTavusPals,
+  persistTavusApiKey,
+  persistTavusPalId,
+  type TavusPalSummary,
+} from "../api";
+import { useI18n } from "../i18n";
+import type { FormatErrorMessage } from "../utils/errorFormatting";
+import type { ErrorRuntimeContext } from "../types/ui";
+
+type Props = {
+  formatErrorMessage: FormatErrorMessage;
+  errorRuntimeContext: ErrorRuntimeContext;
+};
+
+const MANUAL_PAL_VALUE = "__manual__";
+
+export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Props) {
+  const { t, language } = useI18n();
+  const conversation = useTavusConversation({ formatErrorMessage, language });
+  const [apiKey, setApiKey] = useState(() => getPersistedTavusApiKey());
+  const [palIdInput, setPalIdInput] = useState(() => getPersistedTavusPalId());
+  const [pals, setPals] = useState<TavusPalSummary[]>([]);
+  const [selectedPalId, setSelectedPalId] = useState(MANUAL_PAL_VALUE);
+
+  useEffect(() => {
+    if (!apiKey) {
+      return;
+    }
+    let disposed = false;
+    listTavusPals()
+      .then((payload) => {
+        if (disposed) {
+          return;
+        }
+        setPals(payload.pals);
+        if (payload.pals.length > 0) {
+          setSelectedPalId(payload.pals[0].pal_id);
+        }
+      })
+      .catch(() => {
+        // Falls back to manual PAL entry; the start attempt surfaces real errors.
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [apiKey]);
+
+  const resolvedPalId = useMemo(() => {
+    if (pals.length > 0 && selectedPalId !== MANUAL_PAL_VALUE) {
+      return selectedPalId;
+    }
+    return palIdInput.trim();
+  }, [palIdInput, pals.length, selectedPalId]);
+
+  const showConfigPanel = conversation.status === "idle" || conversation.status === "ended";
+  const isPending = conversation.status === "creating" || conversation.status === "joining";
+
+  const pendingLabel = conversation.status === "creating"
+    ? t("正在创建视频会话...", "Creating the video conversation...")
+    : t("正在接入视频房间...", "Joining the video room...");
+
+  function handleApiKeyChange(value: string) {
+    setApiKey(value);
+    persistTavusApiKey(value);
+  }
+
+  function handlePalIdInputChange(value: string) {
+    setPalIdInput(value);
+    persistTavusPalId(value);
+  }
+
+  function handleStart() {
+    void conversation.start({ palId: resolvedPalId || undefined });
+  }
+
+  return (
+    <section className="vsPalPage">
+      <div className="vsPalStage">
+        <div ref={conversation.attachVideoContainer} className="vsPalVideoHost" data-testid="pal-video-host" />
+
+        {showConfigPanel ? (
+          <div className="vsPalOverlay">
+            <form
+              className="vsPalConfigCard"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleStart();
+              }}
+            >
+              <div className="vsPalConfigHead">
+                <span className="vsPalConfigIcon" aria-hidden="true">
+                  <Video size={22} />
+                </span>
+                <div>
+                  <h2>{t("AI 视频分身", "AI Video PAL")}</h2>
+                  <p>{t("与你的 Tavus 分身进行实时视频对话。", "Have a realtime video conversation with your Tavus PAL.")}</p>
+                </div>
+              </div>
+
+              {conversation.status === "ended" ? (
+                <p className="vsPalEndedHint">{t("上一场通话已结束。", "The previous conversation has ended.")}</p>
+              ) : null}
+
+              <label className="vsPalField">
+                <span>{t("Tavus API Key", "Tavus API Key")}</span>
+                <div className="vsPalKeyRow">
+                  <span className="vsPalKeyIcon" aria-hidden="true">
+                    <KeyRound size={15} />
+                  </span>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(event) => handleApiKeyChange(event.target.value)}
+                    placeholder={t("粘贴 API Key（仅保存在本机）", "Paste your API key (stored locally only)")}
+                    autoComplete="off"
+                    data-testid="pal-api-key-input"
+                  />
+                </div>
+                <small>
+                  {t(
+                    "在 platform.tavus.io 创建，仅在本机与后端之间传输。",
+                    "Create one at platform.tavus.io. It only travels between this machine and the backend."
+                  )}
+                </small>
+              </label>
+
+              {pals.length > 0 ? (
+                <label className="vsPalField">
+                  <span>{t("选择分身", "Choose a PAL")}</span>
+                  <select
+                    value={selectedPalId}
+                    onChange={(event) => setSelectedPalId(event.target.value)}
+                    data-testid="pal-select"
+                  >
+                    {pals.map((pal) => (
+                      <option key={pal.pal_id} value={pal.pal_id}>
+                        {pal.pal_name}
+                      </option>
+                    ))}
+                    <option value={MANUAL_PAL_VALUE}>{t("手动输入 PAL ID...", "Enter a PAL ID...")}</option>
+                  </select>
+                </label>
+              ) : null}
+
+              {pals.length === 0 || selectedPalId === MANUAL_PAL_VALUE ? (
+                <label className="vsPalField">
+                  <span>{t("PAL ID", "PAL ID")}</span>
+                  <input
+                    value={palIdInput}
+                    onChange={(event) => handlePalIdInputChange(event.target.value)}
+                    placeholder={t("留空则使用服务器默认分身", "Leave empty to use the server's default PAL")}
+                    data-testid="pal-id-input"
+                  />
+                </label>
+              ) : null}
+
+              <button
+                type="submit"
+                className="vsPalStartBtn"
+                disabled={isPending}
+                data-testid="pal-start-button"
+              >
+                <Play size={16} />
+                <span>{t("开始视频对话", "Start video conversation")}</span>
+              </button>
+            </form>
+          </div>
+        ) : null}
+
+        {isPending ? (
+          <div className="vsPalOverlay">
+            <div className="vsPalPendingCard" role="status">
+              <span className="vsPalSpinner" aria-hidden="true" />
+              <span>{pendingLabel}</span>
+            </div>
+          </div>
+        ) : null}
+
+        {conversation.status === "connected" ? (
+          <div className="vsPalLiveBar">
+            <span className="vsPalLiveDot" aria-hidden="true" />
+            <span>{t("通话中", "Live")}</span>
+            <button
+              type="button"
+              className="vsPalLeaveBtn"
+              onClick={conversation.leave}
+              data-testid="pal-leave-button"
+            >
+              <LogOut size={15} />
+              <span>{t("结束通话", "Leave")}</span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <ErrorNotice
+        message={conversation.errorMessage}
+        scope="pal"
+        context={{
+          ...errorRuntimeContext,
+          pal_id: resolvedPalId || null
+        }}
+      />
+    </section>
+  );
+}
