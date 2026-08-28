@@ -166,10 +166,9 @@ export function useTranscriptionHistory() {
         item.job_id === jobId
           ? {
               ...item,
-              status: "failed",
+              status: "failed" as const,
               error:
                 "转写记录已失效，服务器上不存在该任务。 (This transcription record no longer exists on the server.)",
-              timestamp: Date.now(),
             }
           : item
       );

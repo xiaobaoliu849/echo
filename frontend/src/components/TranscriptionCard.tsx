@@ -134,22 +134,18 @@ export const TranscriptionCard: React.FC<Props> = ({
   const rawName = item.file_name || "";
   const untitled = t("未命名录音", "Untitled recording");
   const displayName = useMemo(() => {
-    if (rawName && !isSyntheticName(rawName)) {
+    if (rawName) {
       try {
         return getTitleStem(decodeURIComponent(rawName));
       } catch {
         return getTitleStem(rawName);
       }
     }
-    if (item.transcript_preview) {
-      const clean = item.transcript_preview.trim().replace(/^["'“‘]+/, "");
-      return clean.length > 22 ? clean.slice(0, 22) + "…" : clean;
-    }
     if (item.origin === "realtime") {
       return t("实时录音", "Realtime Recording");
     }
     return untitled;
-  }, [rawName, item.transcript_preview, item.origin, untitled, t]);
+  }, [rawName, item.origin, untitled, t]);
 
   const ext = useMemo(() => getFileExtension(rawName || ""), [rawName]);
   const hash = useMemo(() => hashStr(rawName || item.job_id), [rawName, item.job_id]);

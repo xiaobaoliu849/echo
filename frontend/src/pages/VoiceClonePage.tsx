@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { ArrowLeft } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import { VoiceCard } from "../components/VoiceCard";
 import type { VoiceCloneController } from "../hooks/useVoiceManagement";
@@ -59,7 +60,8 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
               onClick={handleBackToLibrary}
               title={t("返回音色库", "Back to library")}
             >
-              ←
+              <ArrowLeft size={16} strokeWidth={2.2} />
+              <span className="vsTranscribeBackBtnText">{t("返回", "Back")}</span>
             </button>
             <div className="vsTranscribeDetailInfo">
               <h2 className="vsTranscribeDetailFileName" style={{ fontSize: "16px", margin: 0 }}>

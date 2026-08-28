@@ -7587,33 +7587,49 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-shrink: 0;
 }
 
-/* Icon-only circular ghost back button shared by the transcription and podcast
-   detail headers: quiet next to the title, unlike the bordered action buttons. */
+/* Modern navigation back button shared by detail headers */
 .vsTranscribeBackBtn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted, #64748b);
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px 0 9px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary, #f8fafc);
+  color: var(--text-secondary, #475569);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   flex-shrink: 0;
 }
 
 .vsTranscribeBackBtn svg {
   flex-shrink: 0;
   stroke: currentColor;
+  transition: transform 0.18s ease;
 }
 
 .vsTranscribeBackBtn:hover {
-  background: color-mix(in oklab, var(--brand-soft) 85%, transparent);
-  color: var(--brand-dark, var(--brand));
+  background: var(--bg-hover, #f1f5f9);
+  color: var(--text, #0f172a);
+  border-color: color-mix(in oklab, var(--brand, #3b82f6) 35%, var(--border-color));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
   transform: translateX(-2px);
+}
+
+.vsTranscribeBackBtn:hover svg {
+  transform: translateX(-1px);
+}
+
+.vsTranscribeBackBtn:active {
+  transform: scale(0.97);
+}
+
+.vsTranscribeBackBtnText {
+  line-height: 1;
 }
 
 .vsTranscribeDetailInfo {

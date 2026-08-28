@@ -285,16 +285,11 @@ async def _job_to_response(
     if not file_name or file_name in {"sync_upload", "realtime_mic"}:
         if job.file_path and not str(job.file_path).startswith("realtime_mic"):
             candidate = Path(str(job.file_path)).name
-            if not candidate.startswith("upload_"):
-                file_name = candidate
-        if not file_name or file_name in {"sync_upload", "realtime_mic"}:
-            if transcript_preview:
-                first_line = transcript_preview.strip().split("\n")[0].strip()
-                file_name = first_line[:30].rstrip("，。！？,.!? ") or ("实时录音" if job.origin == "realtime" else "本地音频")
-            elif job.origin == "realtime":
-                file_name = "实时录音"
-            else:
-                file_name = "未命名录音"
+            file_name = candidate
+        elif job.origin == "realtime" or str(job.file_path).startswith("realtime_mic"):
+            file_name = "实时录音"
+        else:
+            file_name = "本地音频"
 
     data: dict[str, Any] = {
         "job_id": str(job.job_id or ""),

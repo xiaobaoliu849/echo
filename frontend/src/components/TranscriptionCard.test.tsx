@@ -54,17 +54,16 @@ describe("TranscriptionCard", () => {
     expect(screen.getByText("v1.2 产品评审")).toBeInTheDocument();
   });
 
-  it("falls back to a friendly title for legacy synthetic storage names", () => {
+  it("falls back to a friendly title when file_name is missing", () => {
     render(
       <TranscriptionCard
-        item={makeItem({ file_name: "upload_efc957af0fe2.wav" })}
+        item={makeItem({ file_name: "" })}
         onClick={() => {}}
         onDelete={() => {}}
       />
     );
 
     expect(screen.getByText(/未命名录音|Untitled recording/)).toBeInTheDocument();
-    expect(screen.queryByText(/upload_efc957af/)).not.toBeInTheDocument();
   });
 
   it("shows the transcript preview for completed records", () => {

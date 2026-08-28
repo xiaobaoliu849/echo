@@ -77,7 +77,8 @@ export default function TranscriptionDetailDrawer({
           title={t("返回列表", "Back to list")}
           aria-label={t("返回列表", "Back to list")}
         >
-          <ArrowLeft size={18} strokeWidth={2.2} />
+          <ArrowLeft size={16} strokeWidth={2.2} />
+          <span className="vsTranscribeBackBtnText">{t("返回", "Back")}</span>
         </button>
 
         <div className="vsTranscribeDetailInfo">
