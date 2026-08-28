@@ -52,7 +52,6 @@ export function getSidebarItems(t: TranslatePair): SidebarItem[] {
     { tab: "chat", label: t("聊天", "Chat"), icon: "Bot", tooltip: t("AI 助理聊天", "AI assistant chat") },
     { tab: "voice_center", label: t("语音中心", "Voice Center"), icon: "Mic2", tooltip: t("统一语音工作台", "Voice workspace") },
     { tab: "audio_overview", label: t("播客", "Podcast"), icon: "FileAudio", tooltip: t("播客与多人对白", "Podcast & mixed dialogue") },
-    { tab: "pal", label: t("视频分身", "Video PAL"), icon: "Video", tooltip: t("与 AI 分身实时视频对话", "Realtime video conversation with an AI PAL") },
     { tab: "translate", label: t("翻译", "Translate"), icon: "Languages", tooltip: t("智能翻译", "Translation") }
   ];
 }
