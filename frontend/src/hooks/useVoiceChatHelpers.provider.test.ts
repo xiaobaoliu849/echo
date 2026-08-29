@@ -83,10 +83,12 @@ describe("resolveRealtimeProvider", () => {
     expect(getProviderSortOrder("OpenAI")).toBeLessThan(getProviderSortOrder("PersonaPlex"));
 
     const t = (zh: string, _en: string) => zh;
-    expect(getProviderBadge("DashScope", t)?.type).toBe("realtime");
-    expect(getProviderBadge("Tavus", t)?.type).toBe("video");
-    expect(getProviderBadge("PersonaPlex", t)?.type).toBe("local");
-    expect(getProviderBadge("DeepSeek", t)?.type).toBe("text");
+    expect(getProviderBadge("DashScope", t)).toEqual({ label: "实时语音", type: "realtime" });
+    expect(getProviderBadge("Tavus", t)).toEqual({ label: "视频分身", type: "video" });
+    expect(getProviderBadge("PersonaPlex", t)).toEqual({ label: "本地实时", type: "local" });
+    expect(getProviderBadge("GLM4Voice", t)).toEqual({ label: "本地实时", type: "local" });
+    expect(getProviderBadge("Ollama", t)).toEqual({ label: "本地文本", type: "local" });
+    expect(getProviderBadge("DeepSeek", t)).toEqual({ label: "文本", type: "text" });
   });
 });
 

@@ -519,8 +519,11 @@ export function getProviderBadge(
   if (norm === "tavus") {
     return { label: t("视频分身", "Video PAL"), type: "video" };
   }
-  if (norm === "personaplex" || norm === "glm4voice" || norm === "ollama") {
-    return { label: t("本地", "Local"), type: "local" };
+  if (norm === "personaplex" || norm === "glm4voice") {
+    return { label: t("本地实时", "Local Realtime"), type: "local" };
+  }
+  if (norm === "ollama") {
+    return { label: t("本地文本", "Local Text"), type: "local" };
   }
   if (
     norm === "dashscope" ||
@@ -529,7 +532,7 @@ export function getProviderBadge(
     norm === "cartesia" ||
     norm === "openai"
   ) {
-    return { label: t("实时", "Realtime"), type: "realtime" };
+    return { label: t("实时语音", "Realtime"), type: "realtime" };
   }
   if (
     norm === "deepseek" ||
