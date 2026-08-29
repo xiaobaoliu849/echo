@@ -145,7 +145,7 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
 
               <div className="vsCardSection" style={{ background: "var(--surface)", padding: "24px", borderRadius: "8px", border: "1px dashed var(--brand)", textAlign: "center" }}>
                 <div className="vsField">
-                  <span className="vsFieldLabel" style={{ fontSize: "15px", marginBottom: "8px" }}>{t("🎙️ 上传音频样板 (Audio Sample)", "🎙️ Upload audio sample")}</span>
+                  <span className="vsFieldLabel" style={{ fontSize: "15px", marginBottom: "8px" }}>{t("🎙️ 上传音频样板", "🎙️ Upload audio sample")}</span>
                   <input
                     type="file"
                     accept="audio/*"
@@ -155,7 +155,7 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
                     required
                   />
                   <span className="vsFieldHint" style={{ marginTop: "12px", color: "var(--brand-dark)" }}>
-                    {t("💡 建议：上传 5-30 秒清晰、无背景噪音 of a single speaker clip, for best results.", "💡 Tip: upload a clear 5-30 second single-speaker clip with minimal background noise for best results.")}
+                    {t("💡 建议：上传 5-30 秒清晰、无背景噪音的单人语音片段，效果最佳。", "💡 Tip: upload a clear 5-30 second single-speaker clip with minimal background noise for best results.")}
                   </span>
                 </div>
 

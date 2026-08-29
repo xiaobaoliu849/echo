@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .db_utils import ClosingConnection, get_db_connection
 from .llm_service import LLMService
 from .evermem_config import EverMemConfig
 from .tts_service import TTSService
@@ -69,12 +70,6 @@ SUPPORTED_INTRO_MUSIC_STYLES = {"warm", "bright", "calm"}
 logger = logging.getLogger(__name__)
 
 
-class ClosingConnection(sqlite3.Connection):
-    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
-        try:
-            return super().__exit__(exc_type, exc, traceback)
-        finally:
-            self.close()
 
 
 class AudioOverviewServiceError(Exception):
@@ -175,13 +170,7 @@ class AudioOverviewService:
         return get_data_dir() / "temp_audio" / "audio_overview"
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(
-            str(self.db_path),
-            check_same_thread=False,
-            factory=ClosingConnection,
-        )
-        conn.row_factory = sqlite3.Row
-        return conn
+        return get_db_connection(self.db_path)
 
     @staticmethod
     def _clean_language(value: str | None) -> str:

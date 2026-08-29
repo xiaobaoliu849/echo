@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from services.audio_overview_service import AudioOverviewService, AudioOverviewServiceError
@@ -248,8 +248,9 @@ async def get_podcast_audio(podcast_id: int) -> Response:
             meta={"podcast_id": podcast_id},
         )
 
-    audio_path = str(podcast.get("audio_path", "")).strip()
-    if not audio_path:
+    raw_audio_path = podcast.get("audio_path")
+    audio_path = str(raw_audio_path or "").strip()
+    if not audio_path or audio_path.lower() == "none":
         _raise_structured(
             404,
             code="AUDIO_OVERVIEW_AUDIO_MISSING",
@@ -284,10 +285,10 @@ async def get_podcast_audio(podcast_id: int) -> Response:
             meta={"podcast_id": podcast_id, "audio_path": audio_path},
         )
 
-    return Response(
-        content=file_path.read_bytes(),
+    return FileResponse(
+        path=file_path,
         media_type="audio/mpeg",
-        headers={"Content-Disposition": f'attachment; filename="{file_path.name}"'},
+        headers={"Accept-Ranges": "bytes"},
     )
 
 

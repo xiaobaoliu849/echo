@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .config_loader import BackendConfig
+from .db_utils import ClosingConnection, get_db_connection
 
 PBKDF2_ITERATIONS = 240_000
 TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
@@ -90,12 +91,6 @@ class AuthRateLimiter:
         return str(email or "").strip().lower()
 
 
-class ClosingConnection(sqlite3.Connection):
-    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
-        try:
-            return super().__exit__(exc_type, exc, traceback)
-        finally:
-            self.close()
 
 
 def _b64encode(data: bytes) -> str:
@@ -126,14 +121,7 @@ class UserAuthService:
         return get_data_file_path("voice_spirit.db")
 
     def _connect(self) -> sqlite3.Connection:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(
-            str(self.db_path),
-            check_same_thread=False,
-            factory=ClosingConnection,
-        )
-        conn.row_factory = sqlite3.Row
-        return conn
+        return get_db_connection(self.db_path)
 
     def _init_db(self) -> None:
         with self._connect() as conn:

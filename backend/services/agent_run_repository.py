@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from .audio_agent_repository import ClosingConnection
+from .db_utils import ClosingConnection, get_db_connection
 
 
 class AgentRunRepository:
@@ -26,14 +26,7 @@ class AgentRunRepository:
         return get_data_file_path("voice_spirit.db")
 
     def _connect(self) -> sqlite3.Connection:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(
-            str(self.db_path),
-            check_same_thread=False,
-            factory=ClosingConnection,
-        )
-        conn.row_factory = sqlite3.Row
-        return conn
+        return get_db_connection(self.db_path)
 
     @staticmethod
     def canonical_audio_run_id(source_run_id: int | str) -> str:

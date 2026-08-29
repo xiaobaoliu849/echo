@@ -482,7 +482,7 @@ export default function useAudioOverview(options: Options) {
       if (err instanceof AgentRunSupersededError) {
         return;
       }
-      setAudioOverviewError(formatErrorMessage(err, "生成脚本失败。"));
+      setAudioOverviewError(formatErrorMessage(err, t("生成脚本失败。", "Failed to generate script.")));
     } finally {
       if (agentRunEpochRef.current === epoch) {
         setAudioOverviewBusy(false);
@@ -586,9 +586,11 @@ export default function useAudioOverview(options: Options) {
       const updated = await saveAudioOverviewScript(podcastId, scriptLines);
       applyAudioOverviewPodcast(updated);
       await loadAudioOverviewPodcasts();
-      setAudioOverviewInfo(`播客 #${podcastId} 的脚本已保存。`);
+      setAudioOverviewInfo(
+        t(`播客 #${podcastId} 的脚本已保存。`, `Script for podcast #${podcastId} saved.`)
+      );
     } catch (err) {
-      setAudioOverviewError(formatErrorMessage(err, "保存脚本失败。"));
+      setAudioOverviewError(formatErrorMessage(err, t("保存脚本失败。", "Failed to save script.")));
     } finally {
       setAudioOverviewSaving(false);
     }
@@ -698,35 +700,41 @@ export default function useAudioOverview(options: Options) {
         )
       );
     } catch (err) {
-      setAudioOverviewError(formatErrorMessage(err, "合成音频失败。"));
+      setAudioOverviewError(formatErrorMessage(err, t("合成音频失败。", "Failed to synthesize audio.")));
     } finally {
       setAudioOverviewSynthBusy(false);
     }
   }
 
-  async function onDeleteCurrent() {
-    if (audioOverviewPodcastId === null) {
-      setAudioOverviewError("当前没有可删除的播客。");
-      return;
-    }
+  async function onDeletePodcastById(id: number) {
     setAudioOverviewError("");
     setAudioOverviewInfo("");
     try {
-      await deleteAudioOverviewPodcast(audioOverviewPodcastId);
-      setAudioOverviewPodcastId(null);
-      setAudioOverviewTopic("");
-      setAudioOverviewScriptLines([]);
-      setAudioAgentSourceText("");
-      setAudioAgentSourceUrlsText("");
-      setAudioAgentGenerationConstraints("");
-      resetAudioAgentState();
-      clearAudioOverviewAudio();
-      setAudioOverviewMenuOpen(false);
-      await loadAudioOverviewPodcasts();
-      setAudioOverviewInfo("当前播客已删除。");
+      await deleteAudioOverviewPodcast(id);
+      setAudioOverviewPodcasts((prev) => prev.filter((item) => item.id !== id));
+      if (audioOverviewPodcastId === id) {
+        setAudioOverviewPodcastId(null);
+        setAudioOverviewTopic("");
+        setAudioOverviewScriptLines([]);
+        setAudioAgentSourceText("");
+        setAudioAgentSourceUrlsText("");
+        setAudioAgentGenerationConstraints("");
+        resetAudioAgentState();
+        clearAudioOverviewAudio();
+        setAudioOverviewMenuOpen(false);
+      }
+      setAudioOverviewInfo(t(`播客 #${id} 已删除。`, `Podcast #${id} deleted.`));
     } catch (err) {
-      setAudioOverviewError(formatErrorMessage(err, "删除播客失败。"));
+      setAudioOverviewError(formatErrorMessage(err, t("删除播客失败。", "Failed to delete podcast.")));
     }
+  }
+
+  async function onDeleteCurrent() {
+    if (audioOverviewPodcastId === null) {
+      setAudioOverviewError(t("当前没有可删除的播客。", "There is no podcast to delete."));
+      return;
+    }
+    await onDeletePodcastById(audioOverviewPodcastId);
   }
 
   function onNewDraft() {
@@ -734,7 +742,7 @@ export default function useAudioOverview(options: Options) {
     setAudioOverviewTopic("");
     setAudioOverviewScriptLines([]);
     setAudioOverviewError("");
-    setAudioOverviewInfo("已新建草稿。");
+    setAudioOverviewInfo(t("已新建草稿。", "Created new draft."));
     setAudioOverviewAdvancedOpen(false);
     setSynthBarAdvancedOpen(false);
     setAudioOverviewMenuOpen(false);
@@ -777,8 +785,8 @@ export default function useAudioOverview(options: Options) {
 
   function buildAudioOverviewScriptText() {
     const roleMap: Record<string, string> = {
-      A: audioOverviewSpeakerA.trim() || "角色 A",
-      B: audioOverviewSpeakerB.trim() || "角色 B"
+      A: audioOverviewSpeakerA.trim() || t("角色 A", "Speaker A"),
+      B: audioOverviewSpeakerB.trim() || t("角色 B", "Speaker B")
     };
     return normalizeAudioOverviewScriptLines(audioOverviewScriptLines)
       .map((line, index) => `${index + 1}. ${roleMap[line.role]}：${line.text}`)
@@ -788,41 +796,42 @@ export default function useAudioOverview(options: Options) {
   async function onCopyScript() {
     const scriptText = buildAudioOverviewScriptText();
     if (!scriptText) {
-      setAudioOverviewError("当前还没有可复制的脚本。");
+      setAudioOverviewError(t("当前还没有可复制的脚本。", "No script to copy."));
       return;
     }
     try {
       if (!navigator.clipboard?.writeText) {
-        throw new Error("剪贴板接口不可用");
+        throw new Error(t("剪贴板接口不可用", "Clipboard API unavailable"));
       }
       await navigator.clipboard.writeText(scriptText);
       setAudioOverviewError("");
-      setAudioOverviewInfo("脚本已复制到剪贴板。");
+      setAudioOverviewInfo(t("脚本已复制到剪贴板。", "Script copied to clipboard."));
     } catch (err) {
-      setAudioOverviewError(formatErrorMessage(err, "复制脚本失败。"));
+      setAudioOverviewError(formatErrorMessage(err, t("复制脚本失败。", "Failed to copy script.")));
     }
   }
 
   function onExportScript() {
     const scriptText = buildAudioOverviewScriptText();
     if (!scriptText) {
-      setAudioOverviewError("当前还没有可导出的脚本。");
+      setAudioOverviewError(t("当前还没有可导出的脚本。", "No script to export."));
       return;
     }
-    const safeTopic = (audioOverviewTopic.trim() || "播客脚本")
+    const defaultTopic = t("播客脚本", "Podcast Script");
+    const safeTopic = (audioOverviewTopic.trim() || defaultTopic)
       .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
       .slice(0, 48);
     const blob = new Blob([scriptText], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${safeTopic || "播客脚本"}.txt`;
+    link.download = `${safeTopic || defaultTopic}.txt`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
     setAudioOverviewError("");
-    setAudioOverviewInfo("脚本已导出为文本文件。");
+    setAudioOverviewInfo(t("脚本已导出为文本文件。", "Script exported as text file."));
   }
 
   function onTurnCountChange(value: string) {
@@ -839,16 +848,16 @@ export default function useAudioOverview(options: Options) {
 
   const currentAudioOverviewLabel =
     audioOverviewPodcastId !== null
-      ? `${audioOverviewWorkspaceMode === "podcast" ? "节目" : "多人对话"} #${audioOverviewPodcastId}`
-      : "未保存草稿";
+      ? `${audioOverviewWorkspaceMode === "podcast" ? t("节目", "Episode") : t("多人对话", "Dialogue")} #${audioOverviewPodcastId}`
+      : t("未保存草稿", "Unsaved draft");
 
   const audioOverviewWorkspaceTitle =
-    audioOverviewWorkspaceMode === "podcast" ? "播客工作台" : "多人对话工作台";
+    audioOverviewWorkspaceMode === "podcast" ? t("播客工作台", "Podcast Studio") : t("多人对话工作台", "Dialogue Studio");
 
   const audioOverviewWorkspaceDescription =
     audioOverviewWorkspaceMode === "podcast"
-      ? "围绕一个主题生成双人节目脚本，并进一步合成为完整音频。"
-      : "围绕一个议题生成多轮人物对话脚本，适合演示、角色讨论和场景化内容。";
+      ? t("围绕一个主题生成双人节目脚本，并进一步合成为完整音频。", "Generate a dual-host show script around a topic, then synthesize complete audio.")
+      : t("围绕一个议题生成多轮人物对话脚本，适合演示、角色讨论和场景化内容。", "Generate a multi-turn character dialogue script around a topic, suitable for presentations, role discussions, and contextual content.");
 
   return {
     audioOverviewWorkspaceMode,
@@ -906,6 +915,7 @@ export default function useAudioOverview(options: Options) {
     onWorkspaceModeChange: setAudioOverviewWorkspaceMode,
     onToggleMenu: () => setAudioOverviewMenuOpen((value) => !value),
     onDeleteCurrent,
+    onDeletePodcastById,
     onTopicChange: setAudioOverviewTopic,
     onToggleAdvanced: () => setAudioOverviewAdvancedOpen((value) => !value),
     onLanguageChange: setAudioOverviewLanguage,

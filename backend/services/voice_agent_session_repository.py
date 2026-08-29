@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .agent_run_repository import AgentRunRepository
-from .audio_agent_repository import ClosingConnection
+from .db_utils import ClosingConnection, get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -27,27 +27,7 @@ class VoiceAgentSessionRepository:
         return get_data_dir() / "voice_spirit.db"
 
     def _connect(self) -> sqlite3.Connection:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(
-            str(self.db_path),
-            check_same_thread=False,
-            factory=ClosingConnection,
-        )
-        conn.row_factory = sqlite3.Row
-        # busy_timeout first: switching journal mode below needs exclusive
-        # access, and the timeout absorbs brief lock overlaps between the
-        # repositories sharing this database file instead of raising
-        # "database is locked".
-        conn.execute("PRAGMA busy_timeout=5000")
-        # WAL lets UI reads proceed while the recorder writes. It persists
-        # on the database file; tolerate failure (e.g. filesystems without
-        # shared-memory support) and fall back to the rollback journal
-        # rather than breaking every repository call.
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")
-        except sqlite3.Error:
-            logger.debug("WAL journal mode unavailable for %s", self.db_path)
-        return conn
+        return get_db_connection(self.db_path)
 
     @staticmethod
     def _encode_json(value: Any) -> str:

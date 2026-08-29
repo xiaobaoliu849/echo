@@ -4,7 +4,9 @@ import useAudioOverview from "./useAudioOverview";
 import { createFormatErrorMessageStub } from "../test/factories";
 import {
   createAudioOverviewPodcast,
+  deleteAudioOverviewPodcast,
   fetchAudioOverviewPodcastAudio,
+  getAudioOverviewPodcast,
   listAudioOverviewPodcasts,
   synthesizeAudioOverviewPodcast
 } from "../api";
@@ -167,5 +169,143 @@ describe("useAudioOverview", () => {
         intro_music_duration_ms: 3000
       })
     );
+  });
+
+  it("deletes a podcast by id and removes it from local podcast list", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    vi.mocked(listAudioOverviewPodcasts).mockResolvedValue({
+      count: 2,
+      podcasts: [
+        {
+          id: 10,
+          topic: "播客10",
+          language: "zh",
+          audio_path: null,
+          created_at: "2026-01-01",
+          updated_at: "2026-01-01",
+          script_lines: [{ role: "A", text: "Line 1" }, { role: "B", text: "Line 2" }]
+        },
+        {
+          id: 20,
+          topic: "播客20",
+          language: "zh",
+          audio_path: null,
+          created_at: "2026-01-01",
+          updated_at: "2026-01-01",
+          script_lines: [{ role: "A", text: "Line 1" }, { role: "B", text: "Line 2" }]
+        }
+      ]
+    });
+    vi.mocked(deleteAudioOverviewPodcast).mockResolvedValue(undefined as any);
+
+    const { result } = renderHook(() =>
+      useAudioOverview({ voices: [], formatErrorMessage })
+    );
+
+    await act(async () => {
+      await result.current.onRefreshList();
+    });
+
+    expect(result.current.audioOverviewPodcasts).toHaveLength(2);
+
+    await act(async () => {
+      await result.current.onDeletePodcastById(10);
+    });
+
+    expect(deleteAudioOverviewPodcast).toHaveBeenCalledWith(10);
+    expect(result.current.audioOverviewPodcasts).toHaveLength(1);
+    expect(result.current.audioOverviewPodcasts[0].id).toBe(20);
+    expect(result.current.audioOverviewInfo).toContain("10");
+  });
+
+  it("reports error when onDeleteCurrent is called without an active podcast", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() =>
+      useAudioOverview({ voices: [], formatErrorMessage })
+    );
+
+    await act(async () => {
+      await result.current.onDeleteCurrent();
+    });
+
+    expect(result.current.audioOverviewError).toBe("当前没有可删除的播客。");
+  });
+
+  it("preserves active podcast draft when deleting a different non-selected podcast", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    vi.mocked(listAudioOverviewPodcasts).mockResolvedValue({
+      count: 2,
+      podcasts: [
+        {
+          id: 10,
+          topic: "Active Topic 10",
+          language: "zh",
+          audio_path: null,
+          created_at: "2026-01-01",
+          updated_at: "2026-01-01",
+          script_lines: [{ role: "A", text: "Line 10" }]
+        },
+        {
+          id: 20,
+          topic: "Inactive Topic 20",
+          language: "zh",
+          audio_path: null,
+          created_at: "2026-01-01",
+          updated_at: "2026-01-01",
+          script_lines: [{ role: "A", text: "Line 20" }]
+        }
+      ]
+    });
+    vi.mocked(deleteAudioOverviewPodcast).mockResolvedValue(undefined as any);
+
+    vi.mocked(getAudioOverviewPodcast).mockResolvedValue({
+      id: 10,
+      topic: "Active Topic 10",
+      language: "zh",
+      audio_path: null,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+      script_lines: [{ role: "A", text: "Line 10" }]
+    });
+
+    const { result } = renderHook(() =>
+      useAudioOverview({ voices: [], formatErrorMessage })
+    );
+
+    await act(async () => {
+      await result.current.onRefreshList();
+    });
+
+    // Select podcast 10
+    await act(async () => {
+      await result.current.onLoadPodcast(10);
+    });
+
+    expect(result.current.audioOverviewPodcastId).toBe(10);
+    expect(result.current.audioOverviewTopic).toBe("Active Topic 10");
+
+    // Delete non-selected podcast 20
+    await act(async () => {
+      await result.current.onDeletePodcastById(20);
+    });
+
+    expect(deleteAudioOverviewPodcast).toHaveBeenCalledWith(20);
+    expect(result.current.audioOverviewPodcasts.map((p) => p.id)).toEqual([10]);
+    // Active draft should remain intact
+    expect(result.current.audioOverviewPodcastId).toBe(10);
+    expect(result.current.audioOverviewTopic).toBe("Active Topic 10");
+    expect(result.current.audioOverviewScriptLines).toEqual([{ role: "A", text: "Line 10" }]);
+
+    // Now delete active podcast 10
+    await act(async () => {
+      await result.current.onDeletePodcastById(10);
+    });
+
+    expect(deleteAudioOverviewPodcast).toHaveBeenCalledWith(10);
+    expect(result.current.audioOverviewPodcasts).toHaveLength(0);
+    // Active draft should now be cleared
+    expect(result.current.audioOverviewPodcastId).toBeNull();
+    expect(result.current.audioOverviewTopic).toBe("");
+    expect(result.current.audioOverviewScriptLines).toEqual([]);
   });
 });

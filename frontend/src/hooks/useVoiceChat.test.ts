@@ -1844,4 +1844,42 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatMessages[1].content).toBe("看这张图片");
     expect(result.current.voiceChatMessages[1].attachments).toHaveLength(1);
   });
+
+  it("exposes reactive micAnalyser and assistantAnalyser instances on session start and clears them on stop", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        preferredProvider: "Google",
+        preferredModel: "gemini-3.1-flash-live-preview",
+      })
+    );
+
+    expect(result.current.micAnalyser).toBeNull();
+    expect(result.current.assistantAnalyser).toBeNull();
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+
+    const ws = FakeWebSocket.instances[0];
+    expect(ws).toBeDefined();
+
+    act(() => {
+      ws.emitOpen();
+      ws.emitMessage({ type: "session_open", model: "gemini-3.1-flash-live-preview" });
+    });
+
+    expect(result.current.voiceChatConnected).toBe(true);
+    expect(result.current.micAnalyser).not.toBeNull();
+    expect(result.current.assistantAnalyser).not.toBeNull();
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+
+    expect(result.current.voiceChatConnected).toBe(false);
+    expect(result.current.micAnalyser).toBeNull();
+    expect(result.current.assistantAnalyser).toBeNull();
+  });
 });

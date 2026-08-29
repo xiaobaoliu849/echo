@@ -213,7 +213,7 @@ export default function useVoiceManagement({
       return;
     }
     if (!cloneAudioFile) {
-      setCloneError(t("请先 choose an audio file first.", "Choose an audio file first."));
+      setCloneError(t("请先选择音频文件。", "Choose an audio file first."));
       return;
     }
     if (!isCurrentProviderKeyConfigured()) {

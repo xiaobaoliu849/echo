@@ -130,6 +130,8 @@ export default function useVoiceChat({
   const [voiceAgentHistoryExportText, setVoiceAgentHistoryExportText] = useState("");
   const [voiceAgentMetricsSummary, setVoiceAgentMetricsSummary] =
     useState<VoiceAgentMetricsSummary | null>(null);
+  const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
+  const [assistantAnalyser, setAssistantAnalyser] = useState<AnalyserNode | null>(null);
 
   const websocketRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -385,6 +387,8 @@ export default function useVoiceChat({
     assistantGainRef.current = null;
     micAnalyserRef.current = null;
     assistantAnalyserRef.current = null;
+    setMicAnalyser(null);
+    setAssistantAnalyser(null);
 
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     mediaStreamRef.current = null;
@@ -1493,11 +1497,13 @@ export default function useVoiceChat({
       const micAnalyser = audioContext.createAnalyser();
       micAnalyser.fftSize = 64;
       micAnalyserRef.current = micAnalyser;
+      setMicAnalyser(micAnalyser);
 
       const assistantAnalyser = audioContext.createAnalyser();
       assistantAnalyser.fftSize = 64;
       assistantGain.connect(assistantAnalyser);
       assistantAnalyserRef.current = assistantAnalyser;
+      setAssistantAnalyser(assistantAnalyser);
 
       const wsUrl = buildVoiceChatWebSocketUrl({
         provider: voiceChatProvider,
@@ -1995,8 +2001,8 @@ export default function useVoiceChat({
     replaceSession,
     sendTextMessage,
     startRecordingWithInitialPrompt,
-    micAnalyser: micAnalyserRef.current,
-    assistantAnalyser: assistantAnalyserRef.current,
+    micAnalyser,
+    assistantAnalyser,
   };
 }
 

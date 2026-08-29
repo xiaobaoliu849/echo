@@ -8,89 +8,21 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
 
-# Ensure robust imports for both runtime and IDE
-try:
-    from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect # type: ignore
-    from fastapi.responses import Response # type: ignore
-    from pydantic import BaseModel, Field # type: ignore
-except ImportError:
-    # Rich mocks for IDE to silence "unexpected keyword" and "no attribute" errors
-    class MockDecorator:
-        def __call__(self, f: Any) -> Any: return f
-
-    class APIRouter:
-        def post(self, *args, **kwargs): return lambda f: f
-        def get(self, *args, **kwargs): return lambda f: f
-        def put(self, *args, **kwargs): return lambda f: f
-        def delete(self, *args, **kwargs): return lambda f: f
-        def websocket(self, *args, **kwargs): return lambda f: f
-        def include_router(self, *args, **kwargs): pass
-
-    class BaseModel:
-        def __init__(self, **kwargs): pass
-        @classmethod
-        def model_validate(cls, obj: Any): return cls()
-
-    def Field(*args, **kwargs) -> Any: return Any
-
-    class HTTPException(Exception):
-        def __init__(self, status_code: int, detail: Any = None, headers: dict | None = None):
-            super().__init__(str(detail))
-            self.status_code = status_code
-            self.detail = detail
-            self.headers = headers
-
-    class Response:
-        headers: dict[str, str] = {}
-        def __init__(self, content: Any = None, status_code: int = 200, headers: dict | None = None, media_type: str | None = None):
-            self.content = content
-            self.status_code = status_code
-            if headers: self.headers.update(headers)
-
-    class Request:
-        headers: dict[str, str] = {}
-        state: Any = None
-
-    class WebSocket:
-        async def accept(self) -> None: pass
-        async def receive(self) -> dict: return {}
-        async def send_json(self, data: Any) -> None: pass
-        async def close(self, code: int = 1000) -> None: pass
-
-    class WebSocketDisconnect(Exception):
-        pass
-
-    class UploadFile:
-        filename: str | None = None
-        async def read(self) -> bytes: return b""
-
-    def Query(*args, **kwargs) -> Any: return Any
-    def File(*args, **kwargs) -> Any: return Any
-    def Form(*args, **kwargs) -> Any: return Any
-
-try:
-    # Prefer relative import for runtime stability
-    from .transcription_service import SUPPORTED_AUDIO_SUFFIXES, TranscriptionJob, TranscriptionService # type: ignore
-except ImportError:
-    try:
-        from backend.services.transcription_service import SUPPORTED_AUDIO_SUFFIXES, TranscriptionJob, TranscriptionService # type: ignore
-    except ImportError:
-        # Last resort
-        from services.transcription_service import SUPPORTED_AUDIO_SUFFIXES, TranscriptionJob, TranscriptionService # type: ignore
-
-try:
-    from services.realtime_asr_service import (
-        RealtimeAsrError,
-        STREAMING_MODEL_LANGUAGE_HINT_CAPS,
-        build_streaming_asr_session,
-    )
-except ImportError:  # pragma: no cover - IDE fallback
-    from backend.services.realtime_asr_service import (  # type: ignore
-        RealtimeAsrError,
-        build_streaming_asr_session,
-    )
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from pydantic import BaseModel, Field
 
 from services.api_auth_guard import validate_websocket_token
+from services.realtime_asr_service import (
+    RealtimeAsrError,
+    STREAMING_MODEL_LANGUAGE_HINT_CAPS,
+    build_streaming_asr_session,
+)
+from services.transcription_service import (
+    SUPPORTED_AUDIO_SUFFIXES,
+    TranscriptionJob,
+    TranscriptionService,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

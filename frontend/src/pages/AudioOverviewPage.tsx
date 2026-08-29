@@ -292,13 +292,7 @@ export default function AudioOverviewPage({
                 onDelete={(e) => {
                   e.stopPropagation();
                   if (confirm(t("确定要删除这条播客记录吗？", "Are you sure you want to delete this podcast?"))) {
-                    const hook = audioOverview as any;
-                    if (hook.onDeletePodcastById) {
-                       hook.onDeletePodcastById(item.id);
-                    } else {
-                       handleOpenPodcast(item.id);
-                       setTimeout(() => audioOverview.onDeleteCurrent(), 500);
-                    }
+                    void audioOverview.onDeletePodcastById(item.id);
                   }
                 }}
               />

@@ -516,6 +516,7 @@ export function createAudioOverviewController(
     onWorkspaceModeChange: vi.fn(),
     onToggleMenu: vi.fn(),
     onDeleteCurrent: vi.fn(),
+    onDeletePodcastById: vi.fn(),
     onTopicChange: vi.fn(),
     onToggleAdvanced: vi.fn(),
     onLanguageChange: vi.fn(),
