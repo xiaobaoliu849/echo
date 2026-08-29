@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { buildErrorHints, parseErrorCode, parseRequestId } from "../error_hints";
+import { buildErrorHints, detectSuggestedProvider, parseErrorCode, parseRequestId } from "../error_hints";
 import { useI18n } from "../i18n";
 
 type ErrorNoticeProps = {
   message: string;
   scope?: string;
   context?: Record<string, string | number | boolean | null | undefined>;
+  onOpenSettings?: (provider?: string) => void;
 };
 
 type ToastState = {
@@ -36,12 +37,31 @@ function buildLogSearchUrl(baseUrl: string, requestId: string): string | null {
   }
 }
 
-export default function ErrorNotice({ message, scope = "", context }: ErrorNoticeProps) {
+export default function ErrorNotice({ message, scope = "", context, onOpenSettings }: ErrorNoticeProps) {
   const { t } = useI18n();
   const text = String(message || "").trim();
   const [copyState, setCopyState] = useState<"idle" | "ok">("idle");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+
+  const suggestedProvider = detectSuggestedProvider(text);
+
+  const handleOpenSettings = () => {
+    if (onOpenSettings) {
+      onOpenSettings(suggestedProvider?.provider);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("open-settings", {
+          detail: {
+            category: suggestedProvider?.category || "provider",
+            provider: suggestedProvider?.provider || "Google",
+          },
+        })
+      );
+    }
+  };
 
   useEffect(() => {
     setCopyState("idle");
@@ -234,6 +254,15 @@ export default function ErrorNotice({ message, scope = "", context }: ErrorNotic
           >
             {t("复制问题模板", "Copy issue template")}
           </button>
+          {suggestedProvider ? (
+            <button
+              type="button"
+              className="errorSettingsBtn"
+              onClick={handleOpenSettings}
+            >
+              ⚙️ {t(`前往配置 ${suggestedProvider.labelZh}`, `Configure ${suggestedProvider.labelEn}`)}
+            </button>
+          ) : null}
           <button
             type="button"
             className="ghost errorCopyBtn"

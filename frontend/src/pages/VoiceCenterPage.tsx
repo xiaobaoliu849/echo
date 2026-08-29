@@ -19,6 +19,7 @@ type Props = {
   onSendToChat?: (text: string) => void;
   voiceProvider?: "qwen" | "xiaomi" | "gpt_sovits";
   onVoiceProviderChange?: (provider: "qwen" | "xiaomi" | "gpt_sovits") => void;
+  onOpenSettings?: (provider?: string) => void;
 };
 
 export default function VoiceCenterPage({
@@ -30,6 +31,7 @@ export default function VoiceCenterPage({
   onSendToChat,
   voiceProvider = "qwen",
   onVoiceProviderChange,
+  onOpenSettings,
 }: Props) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<VoiceCenterSubTab>(initialSubTab);
@@ -85,7 +87,7 @@ export default function VoiceCenterPage({
              <div className="vsVoiceSubContent"><VoiceClonePage clone={clone} errorRuntimeContext={errorRuntimeContext} voiceProvider={voiceProvider} onVoiceProviderChange={onVoiceProviderChange} onDetailModeChange={setIsDetailMode} /></div>
           )}
           {activeTab === "transcribe" && (
-             <div className="vsVoiceSubContent"><TranscriptionPage onSendToChat={onSendToChat} onDetailModeChange={setIsDetailMode} /></div>
+             <div className="vsVoiceSubContent"><TranscriptionPage onSendToChat={onSendToChat} onDetailModeChange={setIsDetailMode} onOpenSettings={onOpenSettings} /></div>
           )}
           </Suspense>
         </div>

@@ -3983,6 +3983,32 @@ button.danger:focus-visible {
   white-space: nowrap;
 }
 
+.errorSettingsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--accent, #4f46e5);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.errorSettingsBtn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.errorSettingsBtn:active {
+  transform: translateY(0);
+}
+
 .errorToast {
   margin: 0 0 10px;
   border-radius: 8px;

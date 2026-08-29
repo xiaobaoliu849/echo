@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { AudioDropZone } from "./AudioDropZone";
 import ErrorNotice from "./ErrorNotice";
 import RealtimeTranscriptionPanel from "./transcription/RealtimeTranscriptionPanel";
 import { useI18n } from "../i18n";
-import type { TranscriptionJobResponse, WordTimestamp } from "../api";
-import { ASR_ENGINES, ASYNC_ASR_MODELS } from "../utils/asrProviders";
+import { fetchSettings, type AppSettings, type TranscriptionJobResponse, type WordTimestamp } from "../api";
+import { ASR_ENGINES, ASYNC_ASR_MODELS, isAsrEngineConfigured, ASR_ENGINE_PROVIDER_MAP } from "../utils/asrProviders";
 
 type Props = {
   open: boolean;
@@ -13,6 +13,7 @@ type Props = {
   onRemoteSubmit: (url: string, provider?: string) => void;
   onRealtimeComplete: (job: TranscriptionJobResponse, words?: WordTimestamp[]) => void;
   onSwitchToRealtimeStudio?: () => void;
+  onOpenSettings?: (provider?: string) => void;
   isBusy: boolean;
   isSyncBusy: boolean;
   isAsyncBusy: boolean;
@@ -26,6 +27,7 @@ export const NewTranscriptionModal: React.FC<Props> = ({
   onRemoteSubmit,
   onRealtimeComplete,
   onSwitchToRealtimeStudio,
+  onOpenSettings,
   isBusy,
   isSyncBusy,
   isAsyncBusy,
@@ -37,6 +39,15 @@ export const NewTranscriptionModal: React.FC<Props> = ({
   const [remoteUrl, setRemoteUrl] = useState("");
   const [asrProvider, setAsrProvider] = useState<string>("auto");
   const [asyncModel, setAsyncModel] = useState<string>("qwen-filetrans");
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      fetchSettings()
+        .then((data) => setAppSettings(data.settings))
+        .catch(() => setAppSettings(null));
+    }
+  }, [open]);
 
   if (!open) return null;
 
@@ -160,32 +171,77 @@ export const NewTranscriptionModal: React.FC<Props> = ({
               >
                 <option value="auto">{t("自动选择", "Auto")}</option>
                 <optgroup label={t("推荐 · 支持精确字幕", "Recommended · precise subtitles")}>
-                  {ASR_ENGINES.filter((e) => e.group === "timestamps").map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {t(e.zh, e.en)}
-                    </option>
-                  ))}
+                  {ASR_ENGINES.filter((e) => e.group === "timestamps").map((e) => {
+                    const isConfigured = isAsrEngineConfigured(e.id, appSettings);
+                    const tag = isConfigured ? t("🟢 已配置", "🟢 Configured") : t("⚪ 未配置", "⚪ Not Configured");
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {t(e.zh, e.en)} ({tag})
+                      </option>
+                    );
+                  })}
                 </optgroup>
                 <optgroup label={t("仅文本转写", "Text-only transcription")}>
-                  {ASR_ENGINES.filter((e) => e.group === "text-only").map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {t(e.zh, e.en)}
-                    </option>
-                  ))}
+                  {ASR_ENGINES.filter((e) => e.group === "text-only").map((e) => {
+                    const isConfigured = isAsrEngineConfigured(e.id, appSettings);
+                    const tag = isConfigured ? t("🟢 已配置", "🟢 Configured") : t("⚪ 未配置", "⚪ Not Configured");
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {t(e.zh, e.en)} ({tag})
+                      </option>
+                    );
+                  })}
                 </optgroup>
               </select>
-              <span
-                style={{
-                  fontSize: "12px",
-                  color: "var(--muted)",
-                  lineHeight: "1.4",
-                }}
-              >
-                {(() => {
-                  const engine = ASR_ENGINES.find((e) => e.id === asrProvider);
-                  return engine ? t(engine.noteZh, engine.noteEn) : "";
-                })()}
-              </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--muted)",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {(() => {
+                    const engine = ASR_ENGINES.find((e) => e.id === asrProvider);
+                    return engine ? t(engine.noteZh, engine.noteEn) : "";
+                  })()}
+                </span>
+                {asrProvider !== "auto" && !isAsrEngineConfigured(asrProvider, appSettings) && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      fontSize: "12px",
+                      color: "var(--warning, #d97706)",
+                      marginTop: "2px",
+                    }}
+                  >
+                    <span>
+                      ⚠️ {t("当前引擎未配置 API Key，建议先完成配置。", "This engine has no API Key configured.")}
+                    </span>
+                    <button
+                      type="button"
+                      className="errorSettingsBtn"
+                      style={{ padding: "2px 8px", fontSize: "11px" }}
+                      onClick={() => {
+                        const target = ASR_ENGINE_PROVIDER_MAP[asrProvider];
+                        if (onOpenSettings) {
+                          onOpenSettings(target?.providerName);
+                        } else {
+                          window.dispatchEvent(
+                            new CustomEvent("open-settings", {
+                              detail: { category: "provider", provider: target?.providerName || "Google" },
+                            })
+                          );
+                        }
+                      }}
+                    >
+                      ⚙️ {t("前往配置", "Configure")}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             {selectedFile && selectedFile.size > 25 * 1024 * 1024 && (
               <span
@@ -325,6 +381,7 @@ export const NewTranscriptionModal: React.FC<Props> = ({
           <ErrorNotice
             message={error.message || String(error)}
             scope="Transcription"
+            onOpenSettings={onOpenSettings}
           />
         )}
       </div>

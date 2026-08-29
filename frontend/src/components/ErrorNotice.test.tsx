@@ -30,15 +30,22 @@ describe("ErrorNotice", () => {
   });
 
   it("shows provider configuration hints for missing TTS API keys", () => {
+    const onOpenSettings = vi.fn();
     render(
       <ErrorNotice
         message="TTS_SPEAK_DEPENDENCY_ERROR: Xiaomi API Key is not configured. (request_id: req_tts_001)"
         scope="tts"
+        onOpenSettings={onOpenSettings}
       />
     );
 
-    expect(screen.getByText("Open Settings and fill the API Key for the selected TTS provider.")).toBeInTheDocument();
-    expect(screen.getByText("Save settings, then retry synthesis with the same voice.")).toBeInTheDocument();
+    expect(screen.getByText("Open Settings and configure the API Key for Xiaomi mimo.")).toBeInTheDocument();
+    expect(screen.getByText("Save settings and retry your request.")).toBeInTheDocument();
+
+    const configBtn = screen.getByRole("button", { name: /前往配置 小米 mimo/ });
+    expect(configBtn).toBeInTheDocument();
+    fireEvent.click(configBtn);
+    expect(onOpenSettings).toHaveBeenCalledWith("Xiaomi");
   });
 
   it("renders request_id as log link when log url is configured", () => {

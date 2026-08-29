@@ -234,6 +234,20 @@ export default function App() {
   const { errorRuntimeContext } = settings;
 
   const translate = useTranslate({ formatErrorMessage, language: uiLanguage });
+
+  useEffect(() => {
+    const handleOpenSettings = (e: Event) => {
+      const customEvent = e as CustomEvent<{ category?: string; provider?: string }>;
+      const { provider } = customEvent.detail || {};
+      if (provider) {
+        settings.onProviderChange(provider);
+      }
+      setIsSettingsOpen(true);
+    };
+    window.addEventListener("open-settings", handleOpenSettings);
+    return () => window.removeEventListener("open-settings", handleOpenSettings);
+  }, [settings]);
+
   const workspaceClassName = `vsWorkspaceViewportInner is-${activeTab.replace(/_/g, "-")}`;
   // Tabs that manage their own internal scrolling and need a fixed-height
   // split layout.  Flagged on the ancestors directly: expressing this as
@@ -486,6 +500,10 @@ export default function App() {
                     }}
                     voiceProvider={voiceManagement.voiceProvider}
                     onVoiceProviderChange={voiceManagement.setVoiceProvider}
+                    onOpenSettings={(prov) => {
+                      if (prov) settings.onProviderChange(prov);
+                      setIsSettingsOpen(true);
+                    }}
                   />
                 ) : null}
 

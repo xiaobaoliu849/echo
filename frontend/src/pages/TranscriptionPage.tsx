@@ -3,11 +3,13 @@ import {
   API_BASE_URL,
   ApiRequestError,
   fetchTranscriptionJob,
+  fetchSettings,
   getTranscriptionJobWords,
   transcribeAudio,
   createTranscriptionJob,
   createTranscriptionJobFromUrl,
   saveTranscriptionJobMemory,
+  type AppSettings,
   type TranscriptionJobResponse,
   type WordTimestamp,
 } from "../api";
@@ -19,6 +21,8 @@ import { useI18n } from "../i18n";
 import { AudioDropZone } from "../components/AudioDropZone";
 import { generateSrt, generateVtt } from "../utils/subtitleGenerator";
 import { exportTextFile } from "../utils/desktopFileSave";
+import { ASR_ENGINES, isAsrEngineConfigured, ASR_ENGINE_PROVIDER_MAP } from "../utils/asrProviders";
+import ErrorNotice from "../components/ErrorNotice";
 
 type ViewMode = "library" | "detail";
 
@@ -26,6 +30,7 @@ type Props = {
   onSendToChat?: (text: string) => void;
   initialTab?: PageTab;
   onDetailModeChange?: (isDetail: boolean) => void;
+  onOpenSettings?: (provider?: string) => void;
 };
 
 function isPollingStatus(status?: string): boolean {
@@ -86,7 +91,7 @@ function getJobStatusMessage(
 
 export type PageTab = "realtime" | "file" | "remote" | "library";
 
-export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailModeChange }: Props) {
+export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailModeChange, onOpenSettings }: Props) {
   const { t, language } = useI18n();
 
   const [viewMode, setViewMode] = useState<ViewMode>("library");
@@ -108,6 +113,14 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
   const [error, setError] = useState<Error | null>(null);
   const [infoMessage, setInfoMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+
+  useEffect(() => {
+    fetchSettings()
+      .then((data) => setAppSettings(data.settings))
+      .catch(() => setAppSettings(null));
+  }, []);
 
   // File upload state in Studio File mode
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -768,25 +781,86 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
               >
                 <option value="auto">{t("自动选择 (推荐)", "Auto (Recommended)")}</option>
                 <optgroup label={t("精准字级时间戳引擎", "Word-level Timestamps Engines")}>
-                  <option value="google">Google Gemini 3.5 Transcribe</option>
-                  <option value="dashscope">Qwen-Audio 3.0 ASR Flash (阿里云)</option>
-                  <option value="deepgram">Deepgram Nova-3</option>
-                  <option value="openai">OpenAI Whisper</option>
-                  <option value="assemblyai">AssemblyAI</option>
-                  <option value="doubao">豆包 ASR 2.0 (火山引擎)</option>
+                  {ASR_ENGINES.filter((e) => e.group === "timestamps").map((e) => {
+                    const isConfigured = isAsrEngineConfigured(e.id, appSettings);
+                    const tag = isConfigured ? t("🟢 已配置", "🟢 Configured") : t("⚪ 未配置", "⚪ Not Configured");
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {t(e.zh, e.en)} ({tag})
+                      </option>
+                    );
+                  })}
                 </optgroup>
                 <optgroup label={t("纯文本引擎", "Text-only Engines")}>
-                  <option value="xiaomi">小米 MiMo</option>
-                  <option value="qwen-legacy">Qwen3 ASR Flash (旧版)</option>
+                  {ASR_ENGINES.filter((e) => e.group === "text-only").map((e) => {
+                    const isConfigured = isAsrEngineConfigured(e.id, appSettings);
+                    const tag = isConfigured ? t("🟢 已配置", "🟢 Configured") : t("⚪ 未配置", "⚪ Not Configured");
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {t(e.zh, e.en)} ({tag})
+                      </option>
+                    );
+                  })}
                 </optgroup>
               </select>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--muted)",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {(() => {
+                    const engine = ASR_ENGINES.find((e) => e.id === fileAsrProvider);
+                    return engine ? t(engine.noteZh, engine.noteEn) : "";
+                  })()}
+                </span>
+                {fileAsrProvider !== "auto" && !isAsrEngineConfigured(fileAsrProvider, appSettings) && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      fontSize: "12px",
+                      color: "var(--warning, #d97706)",
+                      marginTop: "2px",
+                    }}
+                  >
+                    <span>
+                      ⚠️ {t("当前引擎未配置 API Key，建议先完成配置。", "This engine has no API Key configured.")}
+                    </span>
+                    <button
+                      type="button"
+                      className="errorSettingsBtn"
+                      style={{ padding: "2px 8px", fontSize: "11px" }}
+                      onClick={() => {
+                        const target = ASR_ENGINE_PROVIDER_MAP[fileAsrProvider];
+                        if (onOpenSettings) {
+                          onOpenSettings(target?.providerName);
+                        } else {
+                          window.dispatchEvent(
+                            new CustomEvent("open-settings", {
+                              detail: { category: "provider", provider: target?.providerName || "Google" },
+                            })
+                          );
+                        }
+                      }}
+                    >
+                      ⚙️ {t("前往配置", "Configure")}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {error && (
-              <div style={{ marginTop: "4px" }}>
-                <span style={{ fontSize: "13px", color: "var(--danger, #e5484d)", fontWeight: 500 }}>
-                  {error.message}
-                </span>
+              <div style={{ marginTop: "6px" }}>
+                <ErrorNotice
+                  message={error.message || String(error)}
+                  scope="Transcription"
+                  onOpenSettings={onOpenSettings}
+                />
               </div>
             )}
 

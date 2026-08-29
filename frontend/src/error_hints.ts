@@ -75,16 +75,9 @@ const EXACT_HINTS: Record<string, string[]> = {
 
 const PREFIX_HINTS: Array<{ prefix: string; hints: string[] }> = [
   {
-    prefix: "TRANSCRIPTION_",
-    hints: [
-      "Check ASR provider API Key / Access Token / App ID in Settings → Doubao.",
-      "For Doubao ASR (Volcengine), ensure your API Key or Access Token is valid and has Doubao ASR service activated."
-    ]
-  },
-  {
     prefix: "CHAT_PROVIDER_ERROR",
     hints: [
-      "Check provider API key / endpoint / model.",
+      "Check provider API key / endpoint / model in Settings.",
       "Retry after confirming outbound network from backend."
     ]
   },
@@ -105,7 +98,7 @@ const PREFIX_HINTS: Array<{ prefix: string; hints: string[] }> = [
   {
     prefix: "VOICE_",
     hints: [
-      "Check qwen voice provider key and service status.",
+      "Check qwen voice provider key and service status in Settings → 阿里云 DashScope.",
       "Retry with simpler name/input and inspect backend logs."
     ]
   },
@@ -126,7 +119,7 @@ const PREFIX_HINTS: Array<{ prefix: string; hints: string[] }> = [
   {
     prefix: "AUDIO_SCRIPT_GENERATE_PROVIDER_ERROR",
     hints: [
-      "Check LLM provider config and model name.",
+      "Check LLM provider config and model name in Settings.",
       "Retry with default model in Settings."
     ]
   },
@@ -147,11 +140,78 @@ const PREFIX_HINTS: Array<{ prefix: string; hints: string[] }> = [
   {
     prefix: "TAVUS_",
     hints: [
-      "Check Tavus API Key in the Video PAL page.",
+      "Check Tavus API Key in the Video PAL page or Settings.",
       "Verify network connectivity to tavusapi.com and retry."
     ]
   }
 ];
+
+export interface SuggestedProviderTarget {
+  provider: string;
+  category?: "provider" | "transcription" | "general" | "memory";
+  labelZh: string;
+  labelEn: string;
+}
+
+export function detectSuggestedProvider(message: string): SuggestedProviderTarget | null {
+  const text = String(message || "").toLowerCase();
+
+  if (text.includes("google") || text.includes("gemini")) {
+    return { provider: "Google", category: "provider", labelZh: "Google Gemini", labelEn: "Google Gemini" };
+  }
+  if (text.includes("deepgram")) {
+    return { provider: "Deepgram", category: "provider", labelZh: "Deepgram", labelEn: "Deepgram" };
+  }
+  if (
+    text.includes("dashscope") ||
+    text.includes("qwen") ||
+    text.includes("funasr") ||
+    text.includes("fun_asr") ||
+    text.includes("阿里云")
+  ) {
+    return { provider: "DashScope", category: "provider", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" };
+  }
+  if (text.includes("openai") || text.includes("whisper")) {
+    return { provider: "OpenAI", category: "provider", labelZh: "OpenAI", labelEn: "OpenAI" };
+  }
+  if (text.includes("doubao") || text.includes("volcengine") || text.includes("火山") || text.includes("豆包")) {
+    return { provider: "Doubao", category: "provider", labelZh: "豆包 ASR", labelEn: "Doubao ASR" };
+  }
+  if (text.includes("xiaomi") || text.includes("mimo") || text.includes("小米")) {
+    return { provider: "Xiaomi", category: "provider", labelZh: "小米 mimo", labelEn: "Xiaomi mimo" };
+  }
+  if (text.includes("deepseek")) {
+    return { provider: "DeepSeek", category: "provider", labelZh: "DeepSeek", labelEn: "DeepSeek" };
+  }
+  if (text.includes("siliconflow") || text.includes("硅基流动")) {
+    return { provider: "SiliconFlow", category: "provider", labelZh: "硅基流动", labelEn: "SiliconFlow" };
+  }
+  if (text.includes("groq")) {
+    return { provider: "Groq", category: "provider", labelZh: "Groq", labelEn: "Groq" };
+  }
+  if (text.includes("openrouter")) {
+    return { provider: "OpenRouter", category: "provider", labelZh: "OpenRouter", labelEn: "OpenRouter" };
+  }
+  if (text.includes("elevenlabs")) {
+    return { provider: "ElevenLabs", category: "provider", labelZh: "ElevenLabs", labelEn: "ElevenLabs" };
+  }
+  if (text.includes("tavus")) {
+    return { provider: "Tavus", category: "provider", labelZh: "Tavus", labelEn: "Tavus" };
+  }
+  if (text.includes("transcription") || text.includes("asr")) {
+    return { provider: "Google", category: "provider", labelZh: "语音识别服务商", labelEn: "ASR Providers" };
+  }
+  if (
+    text.includes("settings") ||
+    text.includes("auth_token") ||
+    text.includes("api key") ||
+    text.includes("未配置") ||
+    text.includes("not configured")
+  ) {
+    return { provider: "Google", category: "provider", labelZh: "设置中心", labelEn: "Settings" };
+  }
+  return null;
+}
 
 export function parseErrorCode(message: string): string {
   const text = String(message || "").trim();
@@ -172,9 +232,11 @@ export function parseRequestId(message: string): string {
 export function buildErrorHints(message: string): string[] {
   const text = String(message || "");
   if (/api\s*key.*(not configured|未配置)/i.test(text)) {
+    const detected = detectSuggestedProvider(text);
+    const prov = detected ? detected.labelEn : "the selected";
     return [
-      "Open Settings and fill the API Key for the selected TTS provider.",
-      "Save settings, then retry synthesis with the same voice."
+      `Open Settings and configure the API Key for ${prov}.`,
+      "Save settings and retry your request."
     ];
   }
   const code = parseErrorCode(message);
@@ -184,6 +246,57 @@ export function buildErrorHints(message: string): string[] {
   if (EXACT_HINTS[code]) {
     return EXACT_HINTS[code];
   }
+
+  // Dynamic context-aware hints for TRANSCRIPTION
+  if (code.startsWith("TRANSCRIPTION_")) {
+    if (/google|gemini/i.test(text)) {
+      return [
+        "Check google_api_key in Settings → Google Gemini.",
+        "Ensure outbound network proxy can connect to Google generativelanguage APIs."
+      ];
+    }
+    if (/deepgram/i.test(text)) {
+      return [
+        "Check deepgram_api_key in Settings → Deepgram.",
+        "Verify Deepgram account quota and model nova-3 availability."
+      ];
+    }
+    if (/openai|whisper/i.test(text)) {
+      return [
+        "Check openai_api_key in Settings → OpenAI.",
+        "Ensure OpenAI balance is active and model whisper-1 is available."
+      ];
+    }
+    if (/dashscope|qwen|funasr/i.test(text)) {
+      return [
+        "Check dashscope_api_key in Settings → 阿里云 DashScope.",
+        "Verify DashScope API service status and quota on Alibaba Cloud console."
+      ];
+    }
+    if (/doubao|volcengine|豆包/i.test(text)) {
+      return [
+        "Check Doubao Voice API Key / Access Token and App ID in Settings → Doubao.",
+        "Ensure Doubao ASR BigModel service is activated on Volcengine console."
+      ];
+    }
+    if (/xiaomi|mimo/i.test(text)) {
+      return [
+        "Check xiaomi_api_key in Settings → Xiaomi mimo.",
+        "Verify MiMo API endpoint and token status."
+      ];
+    }
+    if (/assemblyai/i.test(text)) {
+      return [
+        "Check AssemblyAI API Key in Settings or environment variables.",
+        "Ensure AssemblyAI account is active."
+      ];
+    }
+    return [
+      "Check ASR provider API Key and configuration in Settings → Providers.",
+      "Retry with an alternative engine (e.g. Google Gemini, Qwen-Audio, Deepgram)."
+    ];
+  }
+
   for (const item of PREFIX_HINTS) {
     if (code.startsWith(item.prefix)) {
       return item.hints;

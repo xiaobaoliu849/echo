@@ -173,3 +173,27 @@ export function asrProviderLabel(provider: string | null | undefined, language: 
   if (!hit) return provider;
   return language === "en-US" ? hit.en : hit.zh;
 }
+
+export const ASR_ENGINE_PROVIDER_MAP: Record<string, { providerName: string; keyField: string; labelZh: string; labelEn: string }> = {
+  google: { providerName: "Google", keyField: "google_api_key", labelZh: "Google Gemini", labelEn: "Google Gemini" },
+  dashscope: { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
+  deepgram: { providerName: "Deepgram", keyField: "deepgram_api_key", labelZh: "Deepgram", labelEn: "Deepgram" },
+  openai: { providerName: "OpenAI", keyField: "openai_api_key", labelZh: "OpenAI", labelEn: "OpenAI" },
+  assemblyai: { providerName: "AssemblyAI", keyField: "assemblyai_api_key", labelZh: "AssemblyAI", labelEn: "AssemblyAI" },
+  doubao: { providerName: "Doubao", keyField: "doubao_api_key", labelZh: "豆包 (火山引擎)", labelEn: "Doubao (Volcengine)" },
+  xiaomi: { providerName: "Xiaomi", keyField: "xiaomi_api_key", labelZh: "小米 mimo", labelEn: "Xiaomi mimo" },
+  "qwen-legacy": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
+  "qwen-audio-filetrans": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
+  "qwen-filetrans": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
+  "gemini-3.5-transcribe-live": { providerName: "Google", keyField: "google_api_key", labelZh: "Google Gemini", labelEn: "Google Gemini" },
+  "qwen-audio-3.0-asr-flash-streaming": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
+  "fun-asr-realtime": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
+};
+
+export function isAsrEngineConfigured(engineId: string, settingsObj?: Record<string, any> | null): boolean {
+  if (!settingsObj || engineId === "auto") return true;
+  const target = ASR_ENGINE_PROVIDER_MAP[engineId];
+  if (!target) return true;
+  const val = settingsObj[target.keyField];
+  return typeof val === "string" ? val.trim().length > 0 : Boolean(val);
+}
