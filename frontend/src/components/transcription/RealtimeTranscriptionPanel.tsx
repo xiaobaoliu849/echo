@@ -949,18 +949,19 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOp
 
           {/* Audio level indicator */}
           {phase === "listening" && (
-            <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "14px" }}>
-              {[0.2, 0.6, 0.9, 0.7, 0.4].map((factor, idx) => {
-                const h = Math.max(3, Math.min(14, audioLevel * factor * 22));
+            <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "18px", padding: "0 4px" }}>
+              {[0.2, 0.5, 0.9, 1.0, 0.8, 0.4, 0.2].map((factor, idx) => {
+                const h = Math.max(3, Math.min(16, audioLevel * factor * 26));
                 return (
                   <div
                     key={idx}
                     style={{
                       width: "3px",
                       height: `${h}px`,
-                      borderRadius: "2px",
-                      background: "#e5484d",
-                      transition: "height 0.08s ease",
+                      borderRadius: "999px",
+                      background: "linear-gradient(180deg, #f43f5e, #e11d48)",
+                      boxShadow: "0 0 4px rgba(244, 63, 94, 0.4)",
+                      transition: "height 0.06s ease",
                     }}
                   />
                 );
@@ -974,27 +975,31 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOp
               display: "inline-flex",
               alignItems: "center",
               gap: "6px",
-              padding: "4px 10px",
+              padding: "4px 12px",
               borderRadius: "999px",
               fontSize: "12px",
               fontWeight: 600,
-              background: phase === "listening" ? "rgba(229, 72, 77, 0.1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
+              background: phase === "listening" ? "rgba(229, 72, 77, 0.12)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
               color: phase === "listening" ? "#e5484d" : "var(--muted)",
+              border: phase === "listening" ? "1px solid rgba(229, 72, 77, 0.25)" : "1px solid transparent",
+              boxShadow: phase === "listening" ? "0 2px 8px rgba(229, 72, 77, 0.15)" : "none",
             }}
           >
             {phase === "listening" && (
               <span
                 style={{
-                  width: "7px",
-                  height: "7px",
+                  width: "8px",
+                  height: "8px",
                   borderRadius: "50%",
                   background: "#e5484d",
                   display: "inline-block",
+                  boxShadow: "0 0 6px #e5484d",
+                  animation: "pulse 1.2s infinite",
                 }}
               />
             )}
             <span>{phase === "listening" ? "LIVE ON AIR" : statusText}</span>
-            <span style={{ fontFamily: "monospace" }}>{formatElapsed(elapsed)}</span>
+            <span style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}>{formatElapsed(elapsed)}</span>
           </div>
 
           {onSwitchToLibrary && (
