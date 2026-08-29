@@ -155,7 +155,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px 0 16px;
+  padding: 0 14px 0 19px;
   background:
     linear-gradient(180deg, color-mix(in oklab, var(--bg-card) 85%, var(--accent-soft)) 0%, var(--bg-secondary) 100%);
   border-bottom: 1px solid var(--border-color);
@@ -308,7 +308,7 @@ textarea {
 }
 
 .vsSidebar.collapsed .vsSidebarAction {
-  padding: 12px;
+  padding: 12px 14px 6px;
 }
 
 .vsNewChatBtn {
@@ -326,7 +326,7 @@ textarea {
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  padding: 0 14px;
+  padding: 0 16px;
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   transition:
@@ -350,7 +350,7 @@ textarea {
 .vsSidebar.collapsed .vsNewChatBtn {
   display: flex;
   justify-content: flex-start;
-  padding: 0 18px;
+  padding: 0 16px;
   border-radius: 18px;
   gap: 0;
 }
@@ -414,7 +414,7 @@ textarea {
 .vsNav {
   display: grid;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 14px;
   transition: padding var(--sidebar-transition), gap var(--sidebar-transition);
 }
 
@@ -427,7 +427,7 @@ textarea {
   border: 0;
   border: 1px solid transparent;
   border-radius: 14px;
-  padding: 10px 14px;
+  padding: 10px 16px;
   text-align: left;
   background: transparent;
   color: var(--sidebar-text);
@@ -502,7 +502,7 @@ textarea {
 .vsSidebar.collapsed .vsNavItem {
   border-radius: 18px;
   justify-content: flex-start;
-  padding: 10px 18px;
+  padding: 10px 16px;
   gap: 0;
 }
 
@@ -516,7 +516,7 @@ textarea {
 
 .vsSidebar.collapsed .vsNav {
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 14px;
 }
 
 .vsNavActiveIndicator {
@@ -884,7 +884,7 @@ textarea {
 }
 
 .vsSidebar.collapsed .vsSidebarFooter {
-  padding: 12px 12px 16px;
+  padding: 12px 14px 16px;
 }
 
 .vsSidebarFooterActions {
@@ -911,7 +911,7 @@ textarea {
   border: 1px solid transparent;
   border-radius: 14px;
   min-height: 48px;
-  padding: 0 14px;
+  padding: 0 16px;
   text-align: left;
   background: transparent;
   color: var(--sidebar-text);
@@ -949,7 +949,7 @@ textarea {
 .vsSidebar.collapsed .vsFooterAction {
   border-radius: 18px;
   justify-content: flex-start;
-  padding: 0 18px;
+  padding: 0 16px;
   gap: 0;
 }
 
