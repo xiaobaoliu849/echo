@@ -1078,9 +1078,6 @@ class TranscriptionService:
         else:
             text = ""
 
-        if not text:
-            raise RuntimeError(f"{provider_name} ASR returned empty transcript: {response_json}")
-
         # Extract audio duration from usage.seconds (MiMo API returns this)
         duration_seconds = None
         usage = response_json.get("usage", {})
@@ -1158,8 +1155,6 @@ class TranscriptionService:
         if not isinstance(output, dict):
             output = {}
         text = str(output.get("text", "")).strip()
-        if not text:
-            raise RuntimeError(f"Qwen-Audio ASR returned empty transcript: {response_json}")
 
         words = self._extract_qwen_audio_words(output)
 
@@ -1244,19 +1239,11 @@ class TranscriptionService:
         # Extract transcript text
         results = response_json.get("results", {})
         channels = results.get("channels", [])
-        if not channels:
-            raise RuntimeError(f"Deepgram ASR returned no channels: {response_json}")
-
-        alternatives = channels[0].get("alternatives", [])
-        if not alternatives:
-            raise RuntimeError(f"Deepgram ASR returned no alternatives: {response_json}")
-
-        transcript = alternatives[0].get("transcript", "")
-        if not transcript:
-            raise RuntimeError(f"Deepgram ASR returned empty transcript: {response_json}")
+        alternatives = channels[0].get("alternatives", []) if channels else []
+        transcript = alternatives[0].get("transcript", "") if alternatives else ""
 
         # Extract word-level timestamps
-        words_raw = alternatives[0].get("words", [])
+        words_raw = alternatives[0].get("words", []) if alternatives else []
         words = []
         for w in words_raw:
             word_text = w.get("word", "")
@@ -1330,9 +1317,7 @@ class TranscriptionService:
         response_json = response.json()
 
         # Extract transcript text
-        transcript = response_json.get("text", "")
-        if not transcript:
-            raise RuntimeError(f"OpenAI Whisper ASR returned empty transcript: {response_json}")
+        transcript = response_json.get("text", "") or ""
 
         # Extract word-level timestamps
         words_raw = response_json.get("words", [])
@@ -1430,9 +1415,7 @@ class TranscriptionService:
                 raise RuntimeError("AssemblyAI transcription timed out after 6 minutes")
 
         # Step 4: Extract results
-        transcript = result.get("text", "")
-        if not transcript:
-            raise RuntimeError(f"AssemblyAI returned empty transcript")
+        transcript = result.get("text", "") or ""
 
         # Extract word-level timestamps
         words_raw = result.get("words", [])
@@ -1464,39 +1447,54 @@ class TranscriptionService:
         self,
         path: Path,
         api_key: str,
-        app_id: str | None = None,
-        resource_id: str | None = None,
+        *,
+        app_id: str = "",
     ) -> dict:
-        """Transcribe using Doubao (ByteDance Volcengine) ASR.
+        """Transcribe audio using Doubao BigModel ASR (WebSocket protocol).
 
         Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}.
         """
-        res_id = resource_id or self._doubao_resource_id()
-        app_id_val = app_id or self._doubao_app_id()
         result = await doubao_asr_transcribe_file(
-            file_path=path,
+            path,
             api_key=api_key,
-            resource_id=res_id,
-            app_id=app_id_val,
+            app_id=app_id or None,
+            resource_id=DOUBAO_ASR_2_RESOURCE,
         )
-        return result
+        return {
+            "text": result.get("text", "") or "",
+            "duration_seconds": result.get("duration_seconds"),
+            "words": result.get("words"),
+        }
+
+    def _google_interactions_base_url(self) -> str:
+        """Resolve Google Interactions API base URL from settings or default to Google v1beta."""
+        provider_settings = self.config.get_provider_settings("Google") if hasattr(self, "config") and self.config else {}
+        base_url = (provider_settings.get("base_url") or "").strip()
+        if not base_url:
+            return "https://generativelanguage.googleapis.com/v1beta"
+        base_url = base_url.rstrip("/")
+        if not base_url.endswith("/v1beta") and not base_url.endswith("/v1alpha"):
+            base_url = f"{base_url}/v1beta"
+        return base_url
 
     @staticmethod
     def _parse_time_offset(val: Any) -> float | None:
+        """Parse time strings like '1.25s', numbers like 1.25, or return None."""
         if val is None:
             return None
         if isinstance(val, (int, float)):
             return float(val)
         if isinstance(val, str):
-            val_clean = val.strip().rstrip("sS")
+            val = val.strip().rstrip("s")
             try:
-                return float(val_clean)
+                return float(val)
             except ValueError:
                 return None
         return None
 
     @staticmethod
     def _get_first_present_field(d: dict[str, Any], *keys: str) -> Any:
+        """Return the first key present in dict `d` with non-None value, or None."""
         for k in keys:
             if k in d and d[k] is not None:
                 return d[k]
@@ -1592,10 +1590,12 @@ class TranscriptionService:
                     lambda: client.interactions.create(**kwargs)
                 )
 
-                # Extract text
+                # Extract text from various response representations
                 transcript = ""
                 if hasattr(interaction, "output_text") and interaction.output_text:
                     transcript = str(interaction.output_text).strip()
+                elif hasattr(interaction, "text") and interaction.text:
+                    transcript = str(interaction.text).strip()
                 elif hasattr(interaction, "steps") and interaction.steps:
                     texts: list[str] = []
                     for step in interaction.steps:
@@ -1626,11 +1626,9 @@ class TranscriptionService:
                         interaction_dict.get("output_text")
                         or interaction_dict.get("text")
                         or interaction_dict.get("output", {}).get("text")
+                        or interaction_dict.get("output", {}).get("transcript")
                         or ""
                     ).strip()
-
-                if not transcript:
-                    raise RuntimeError(f"Google Gemini Transcribe returned empty transcript: {interaction_dict or interaction}")
 
                 words = self._extract_google_words(interaction_dict) if interaction_dict else None
 
@@ -1732,9 +1730,6 @@ class TranscriptionService:
                                     elif isinstance(p, str):
                                         texts.append(p)
                     transcript = "".join(texts).strip()
-
-                if not transcript:
-                    raise RuntimeError(f"Google Gemini Transcribe returned empty transcript: {response_json}")
 
                 words = self._extract_google_words(response_json)
                 duration_seconds = self._parse_time_offset(

@@ -194,6 +194,50 @@ class GoogleGeminiTranscribeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(res["provider"], "google")
             self.assertEqual(res["text"], "Auto Google STT")
 
+    async def test_transcribe_with_google_gemini_empty_transcript_success(self):
+        service = _make_service()
+        service.config = SimpleNamespace(
+            get_provider_settings=lambda name: {"base_url": "https://generativelanguage.googleapis.com/v1beta"}
+        )
+
+        mock_audio_file = SimpleNamespace(
+            uri="https://generativelanguage.googleapis.com/v1beta/files/empty123",
+            mime_type="audio/mp4",
+            name="files/empty123",
+        )
+        # Model returns completed status with 0 output tokens (no speech detected)
+        mock_interaction = SimpleNamespace(
+            output_text="",
+            steps=[],
+            to_dict=lambda: {
+                "status": "completed",
+                "model": "gemini-3.5-transcribe",
+                "usage": {
+                    "total_input_tokens": 3563,
+                    "total_output_tokens": 0,
+                    "duration_seconds": 3.2,
+                },
+            },
+        )
+
+        mock_client = SimpleNamespace(
+            files=SimpleNamespace(
+                upload=lambda file: mock_audio_file,
+                delete=lambda name: True,
+            ),
+            interactions=SimpleNamespace(
+                create=lambda **kw: mock_interaction,
+            ),
+        )
+
+        with patch("services.transcription_service.genai", SimpleNamespace(Client=lambda **kw: mock_client)), \
+             _file_guards():
+            result = await service._transcribe_with_google_gemini(Path("sample.m4a"), api_key="sk-goog")
+
+        self.assertEqual(result["text"], "")
+        self.assertEqual(result["duration_seconds"], 3.2)
+        self.assertIsNone(result["words"])
+
 
 if __name__ == "__main__":
     unittest.main()

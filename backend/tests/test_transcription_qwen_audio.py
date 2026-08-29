@@ -176,7 +176,7 @@ class QwenAudioAsrRequestTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ValueError):
                     await service._transcribe_with_qwen_audio_asr(big, "sk-key")
 
-    async def test_empty_transcript_raises(self):
+    async def test_empty_transcript_returns_empty_result(self):
         service = _make_service()
         fake_client = _FakeClient(_FakeResponse({"output": {"text": ""}, "usage": {}}))
         with (
@@ -184,8 +184,9 @@ class QwenAudioAsrRequestTests(unittest.IsolatedAsyncioTestCase):
             patch.object(service, "_dashscope_async_base_url", return_value="https://dashscope.aliyuncs.com/api/v1"),
             patch("services.transcription_service.httpx.AsyncClient", return_value=fake_client),
         ):
-            with self.assertRaises(RuntimeError):
-                await service._transcribe_with_qwen_audio_asr(Path("a.wav"), "sk-key")
+            res = await service._transcribe_with_qwen_audio_asr(Path("a.wav"), "sk-key")
+            self.assertEqual(res["text"], "")
+            self.assertIsNone(res["words"])
 
     async def test_http_error_wrapped_with_provider_name(self):
         service = _make_service()
