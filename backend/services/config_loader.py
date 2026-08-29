@@ -44,50 +44,52 @@ def get_data_file_path(filename: str) -> Path:
 
 
 PROVIDER_KEY_MAP = {
+    # 1. High-Performance Realtime Voice & Video Cloud Providers
+    "DashScope": "dashscope_api_key",
+    "Google": "google_api_key",
+    "Tavus": "tavus_api_key",
+    "Doubao": "doubao_api_key",
+    "Cartesia": "cartesia_api_key",
+    # 2. Top Cloud LLM / Text & Multi-Model Providers
     "DeepSeek": "deepseek_api_key",
+    "Xiaomi": "xiaomi_api_key",
     "OpenRouter": "openrouter_api_key",
     "SiliconFlow": "siliconflow_api_key",
     "Groq": "groq_api_key",
-    "DashScope": "dashscope_api_key",
-    "Google": "google_api_key",
-    "Xiaomi": "xiaomi_api_key",
+    # 3. Global Cloud Providers (deprioritized if unconfigured)
     "OpenAI": "openai_api_key",
-    "ElevenLabs": "elevenlabs_api_key",
+    # 4. Local Models & Specialized Voice Engines
+    "PersonaPlex": "personaplex_api_key",
+    "GLM4Voice": "glm4voice_api_key",
     "Ollama": "ollama_api_key",
+    "ElevenLabs": "elevenlabs_api_key",
     "Deepgram": "deepgram_api_key",
     "AssemblyAI": "assemblyai_api_key",
     "GPT-SoVITS": "gpt_sovits_api_key",
-    "Doubao": "doubao_api_key",
-    "Cartesia": "cartesia_api_key",
-    # Local speech-to-speech servers — unauthenticated, but need entries so that
-    # get_provider_settings resolves base URLs and registers them in provider lists.
-    "PersonaPlex": "personaplex_api_key",
-    "GLM4Voice": "glm4voice_api_key",
-    "Tavus": "tavus_api_key",
 }
 
 GOOGLE_INTERACTIONS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 DEFAULT_BASE_URLS = {
+    "DashScope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "Google": GOOGLE_INTERACTIONS_BASE_URL,
+    "Tavus": "https://tavusapi.com",
+    "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
+    "Cartesia": "https://api.cartesia.ai",
     "DeepSeek": "https://api.deepseek.com/v1",
+    "Xiaomi": "https://token-plan-sgp.xiaomimimo.com/v1",
     "OpenRouter": "https://openrouter.ai/api/v1",
     "SiliconFlow": "https://api.siliconflow.cn/v1",
     "Groq": "https://api.groq.com/openai/v1",
-    "DashScope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "Google": GOOGLE_INTERACTIONS_BASE_URL,
-    "Xiaomi": "https://token-plan-sgp.xiaomimimo.com/v1",
     "OpenAI": "https://api.openai.com/v1",
-    "ElevenLabs": "https://api.elevenlabs.io/v1",
-    "Ollama": "http://localhost:11434/v1",
-    "Deepgram": "https://api.deepgram.com/v1",
-    "AssemblyAI": "https://api.assemblyai.com",
-    "GPT-SoVITS": "http://127.0.0.1:9880",
-    "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
-    "Cartesia": "https://api.cartesia.ai",
     # PersonaPlex and GLM4Voice use local WebSocket URLs
     "PersonaPlex": "",
     "GLM4Voice": "",
-    "Tavus": "https://tavusapi.com",
+    "Ollama": "http://localhost:11434/v1",
+    "ElevenLabs": "https://api.elevenlabs.io/v1",
+    "Deepgram": "https://api.deepgram.com/v1",
+    "AssemblyAI": "https://api.assemblyai.com",
+    "GPT-SoVITS": "http://127.0.0.1:9880",
 }
 
 

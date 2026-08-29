@@ -15,26 +15,27 @@ import { createInlineTranslator, normalizeUiLanguage, type UiLanguage } from "..
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 
 export const PROVIDER_API_KEY_FIELD: Record<string, string> = {
+  // 1. High-Performance Realtime Voice & Video Cloud Providers
+  DashScope: "dashscope_api_key",
+  Google: "google_api_key",
+  Tavus: "tavus_api_key",
+  Doubao: "doubao_api_key",
+  Cartesia: "cartesia_api_key",
+  // 2. Top Cloud LLM / Text & Multi-Model Providers
   DeepSeek: "deepseek_api_key",
+  Xiaomi: "xiaomi_api_key",
   OpenRouter: "openrouter_api_key",
   SiliconFlow: "siliconflow_api_key",
   Groq: "groq_api_key",
-  DashScope: "dashscope_api_key",
-  Google: "google_api_key",
-  Xiaomi: "xiaomi_api_key",
-  Ollama: "ollama_api_key",
-  Deepgram: "deepgram_api_key",
+  // 3. Global Cloud Providers
   OpenAI: "openai_api_key",
-  ElevenLabs: "elevenlabs_api_key",
-  "GPT-SoVITS": "gpt_sovits_api_key",
-  Doubao: "doubao_api_key",
-  Cartesia: "cartesia_api_key",
-  // Local speech-to-speech servers — no API key, but it needs a slot here so the provider
-  // shows up in the picker and can carry a realtime base URL.
+  // 4. Local Models & Specialized Voice Engines
   PersonaPlex: "personaplex_api_key",
   GLM4Voice: "glm4voice_api_key",
-  // Tavus CVI — real-time video avatar conversations via Daily.co WebRTC.
-  Tavus: "tavus_api_key"
+  Ollama: "ollama_api_key",
+  ElevenLabs: "elevenlabs_api_key",
+  Deepgram: "deepgram_api_key",
+  "GPT-SoVITS": "gpt_sovits_api_key",
 };
 
 const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_API_KEY_FIELD);

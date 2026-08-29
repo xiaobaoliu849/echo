@@ -4,6 +4,8 @@ import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseC
 import {
   DASHSCOPE_PROVIDER,
   formatVoiceChatSecondaryLabel,
+  getProviderBadge,
+  getProviderSortOrder,
   isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
 import { useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
@@ -85,7 +87,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
         provider,
         models: Array.from(modelMap.values()),
       }))
-      .filter((group) => group.models.length > 0);
+      .filter((group) => group.models.length > 0)
+      .sort((a, b) => getProviderSortOrder(a.provider) - getProviderSortOrder(b.provider));
   }, [chat?.chatModelChoices, voiceChat.voiceChatRealtimeChoicesByProvider]);
 
   const currentProviderName = activeProvider || (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
@@ -269,6 +272,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
               {providerGroups.map((group) => {
                 const isSelectedProvider = group.provider === (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
                 const isActiveProvider = group.provider === (activeProvider || currentProviderName);
+                const badge = getProviderBadge(group.provider, t);
                 return (
                   <button
                     key={group.provider}
@@ -290,6 +294,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       {isSelectedProvider ? "✓" : ""}
                     </span>
                     <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
+                    {badge ? (
+                      <span className={`vsProviderBadge ${badge.type}`}>{badge.label}</span>
+                    ) : null}
                     <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
                   </button>
                 );

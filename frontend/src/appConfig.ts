@@ -26,18 +26,20 @@ export type HistoryItem = {
 type TranslatePair = (zh: string, en: string) => string;
 
 export const PROVIDERS = [
-  "Google",
   "DashScope",
+  "Google",
+  "Tavus",
   "Doubao",
   "Cartesia",
   "DeepSeek",
+  "Xiaomi",
   "OpenRouter",
   "SiliconFlow",
   "Groq",
-  "Ollama",
+  "OpenAI",
   "PersonaPlex",
   "GLM4Voice",
-  "Tavus"
+  "Ollama",
 ];
 
 export function getDefaultText(t: TranslatePair): string {

@@ -480,22 +480,82 @@ export function formatLiveTranslateLanguageOptions(language: UiLanguage): Array<
     });
 }
 
+export const CANONICAL_PROVIDER_ORDER = [
+  "DashScope",
+  "Google",
+  "Tavus",
+  "Doubao",
+  "Cartesia",
+  "DeepSeek",
+  "Xiaomi",
+  "OpenRouter",
+  "SiliconFlow",
+  "Groq",
+  "OpenAI",
+  "PersonaPlex",
+  "GLM4Voice",
+  "Ollama",
+  "ElevenLabs",
+  "Deepgram",
+  "AssemblyAI",
+  "GPT-SoVITS",
+];
+
+export function getProviderSortOrder(provider: string): number {
+  const idx = CANONICAL_PROVIDER_ORDER.indexOf(provider);
+  return idx !== -1 ? idx : 999;
+}
+
+export type ProviderBadge = {
+  label: string;
+  type: "realtime" | "video" | "local" | "text";
+};
+
+export function getProviderBadge(
+  provider: string,
+  t: (zh: string, en: string) => string
+): ProviderBadge | null {
+  const norm = (provider || "").trim().toLowerCase();
+  if (norm === "tavus") {
+    return { label: t("视频分身", "Video PAL"), type: "video" };
+  }
+  if (norm === "personaplex" || norm === "glm4voice" || norm === "ollama") {
+    return { label: t("本地", "Local"), type: "local" };
+  }
+  if (
+    norm === "dashscope" ||
+    norm === "google" ||
+    norm === "doubao" ||
+    norm === "cartesia" ||
+    norm === "openai"
+  ) {
+    return { label: t("实时", "Realtime"), type: "realtime" };
+  }
+  if (
+    norm === "deepseek" ||
+    norm === "xiaomi" ||
+    norm === "openrouter" ||
+    norm === "siliconflow" ||
+    norm === "groq"
+  ) {
+    return { label: t("文本", "Text"), type: "text" };
+  }
+  return null;
+}
+
 export function resolveRealtimeProvider(preferredProvider: string | undefined, providerOptions: string[]): string {
   const realtimeProviders = [
-    GOOGLE_PROVIDER,
     DASHSCOPE_PROVIDER,
-    OPENAI_PROVIDER,
+    GOOGLE_PROVIDER,
+    TAVUS_PROVIDER,
     DOUBAO_PROVIDER,
+    CARTESIA_PROVIDER,
+    OPENAI_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
-    CARTESIA_PROVIDER,
-    TAVUS_PROVIDER,
   ];
   if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
     return preferredProvider;
-  }
-  if (providerOptions.includes(DOUBAO_PROVIDER)) {
-    return DOUBAO_PROVIDER;
   }
   if (providerOptions.includes(DASHSCOPE_PROVIDER)) {
     return DASHSCOPE_PROVIDER;
@@ -503,10 +563,25 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   if (providerOptions.includes(GOOGLE_PROVIDER)) {
     return GOOGLE_PROVIDER;
   }
+  if (providerOptions.includes(TAVUS_PROVIDER)) {
+    return TAVUS_PROVIDER;
+  }
+  if (providerOptions.includes(DOUBAO_PROVIDER)) {
+    return DOUBAO_PROVIDER;
+  }
+  if (providerOptions.includes(CARTESIA_PROVIDER)) {
+    return CARTESIA_PROVIDER;
+  }
   if (providerOptions.includes(OPENAI_PROVIDER)) {
     return OPENAI_PROVIDER;
   }
-  return providerOptions[0] || GOOGLE_PROVIDER;
+  if (providerOptions.includes(PERSONAPLEX_PROVIDER)) {
+    return PERSONAPLEX_PROVIDER;
+  }
+  if (providerOptions.includes(GLM4VOICE_PROVIDER)) {
+    return GLM4VOICE_PROVIDER;
+  }
+  return providerOptions[0] || DASHSCOPE_PROVIDER;
 }
 
 export function resolveDefaultModel(provider: string, providerModelCatalog: ProviderModelCatalog): string {

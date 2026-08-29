@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatModelHint, type UseChatResult } from "../../hooks/useChat";
+import { getProviderBadge, getProviderSortOrder } from "../../hooks/useVoiceChatHelpers";
 import { useProviderFlyoutTop } from "../../hooks/useProviderFlyoutTop";
 
 type Translator = (zh: string, en: string) => string;
@@ -36,7 +37,9 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
       }
       group.choices.push({ model: choice.model, value: choice.value });
     }
-    return [...byProvider.values()];
+    return [...byProvider.values()].sort(
+      (a, b) => getProviderSortOrder(a.provider) - getProviderSortOrder(b.provider)
+    );
   }, [chat.chatModelChoices]);
 
   const activeGroup = groups.find((g) => g.provider === activeProvider) || null;
@@ -121,6 +124,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
               {groups.map((group) => {
                 const isCurrentProvider = group.provider === chat.chatProvider;
                 const isActiveProvider = group.provider === activeProvider;
+                const badge = getProviderBadge(group.provider, t);
                 return (
                   <button
                     key={group.provider}
@@ -134,6 +138,9 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
                       {isCurrentProvider ? "✓" : ""}
                     </span>
                     <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
+                    {badge ? (
+                      <span className={`vsProviderBadge ${badge.type}`}>{badge.label}</span>
+                    ) : null}
                     <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
                   </button>
                 );

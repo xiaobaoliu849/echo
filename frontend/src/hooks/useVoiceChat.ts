@@ -39,6 +39,7 @@ import {
   QWEN_AUDIO_VOICES,
   QWEN_LIVETRANSLATE_VOICES,
   QWEN_OMNI_REALTIME_VOICES,
+  TAVUS_PROVIDER,
   buildToolMeta,
   decodeBase64Pcm,
   encodePcm16k,
@@ -74,8 +75,16 @@ export default function useVoiceChat({
 }: Options) {
   const t = createInlineTranslator(language);
   const resolvedProviders = useMemo(
-    () => [GOOGLE_PROVIDER, DASHSCOPE_PROVIDER, OPENAI_PROVIDER, DOUBAO_PROVIDER, PERSONAPLEX_PROVIDER, GLM4VOICE_PROVIDER, CARTESIA_PROVIDER]
-      .filter(p => providerOptions.includes(p)),
+    () => [
+      DASHSCOPE_PROVIDER,
+      GOOGLE_PROVIDER,
+      TAVUS_PROVIDER,
+      DOUBAO_PROVIDER,
+      CARTESIA_PROVIDER,
+      OPENAI_PROVIDER,
+      PERSONAPLEX_PROVIDER,
+      GLM4VOICE_PROVIDER,
+    ].filter(p => providerOptions.includes(p)),
     [providerOptions],
   );
 

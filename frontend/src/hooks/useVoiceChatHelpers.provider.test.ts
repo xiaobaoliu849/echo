@@ -9,6 +9,9 @@ import {
   OPENAI_PROVIDER,
   PERSONAPLEX_PROVIDER,
   PERSONAPLEX_REALTIME_VOICES,
+  TAVUS_PROVIDER,
+  getProviderBadge,
+  getProviderSortOrder,
   resolveRealtimeProvider,
 } from "./useVoiceChatHelpers";
 
@@ -23,13 +26,14 @@ import {
 // ---------------------------------------------------------------------------
 describe("resolveRealtimeProvider", () => {
   const allProviders = [
-    GOOGLE_PROVIDER,
     DASHSCOPE_PROVIDER,
-    OPENAI_PROVIDER,
+    GOOGLE_PROVIDER,
+    TAVUS_PROVIDER,
     DOUBAO_PROVIDER,
+    CARTESIA_PROVIDER,
+    OPENAI_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
-    CARTESIA_PROVIDER,
   ];
 
   it("honours every realtime provider it is offered", () => {
@@ -40,13 +44,19 @@ describe("resolveRealtimeProvider", () => {
     }
   });
 
+  it("keeps Tavus provider without falling back", () => {
+    expect(resolveRealtimeProvider(TAVUS_PROVIDER, allProviders)).toBe(
+      TAVUS_PROVIDER,
+    );
+  });
+
   it("keeps the local GLM4Voice provider without falling back", () => {
     expect(resolveRealtimeProvider(GLM4VOICE_PROVIDER, allProviders)).toBe(
       GLM4VOICE_PROVIDER,
     );
   });
 
-  it("keeps PersonaPlex instead of falling back to Doubao", () => {
+  it("keeps PersonaPlex instead of falling back to DashScope", () => {
     expect(resolveRealtimeProvider(PERSONAPLEX_PROVIDER, allProviders)).toBe(
       PERSONAPLEX_PROVIDER,
     );
@@ -59,11 +69,24 @@ describe("resolveRealtimeProvider", () => {
   });
 
   it("falls back when no provider is preferred", () => {
-    expect(resolveRealtimeProvider(undefined, allProviders)).toBe(DOUBAO_PROVIDER);
+    expect(resolveRealtimeProvider(undefined, allProviders)).toBe(DASHSCOPE_PROVIDER);
   });
 
   it("ignores a provider that is not a realtime provider at all", () => {
-    expect(resolveRealtimeProvider("DeepSeek", allProviders)).toBe(DOUBAO_PROVIDER);
+    expect(resolveRealtimeProvider("DeepSeek", allProviders)).toBe(DASHSCOPE_PROVIDER);
+  });
+
+  it("assigns proper provider sort orders and capability badges", () => {
+    expect(getProviderSortOrder("DashScope")).toBeLessThan(getProviderSortOrder("Google"));
+    expect(getProviderSortOrder("Google")).toBeLessThan(getProviderSortOrder("Tavus"));
+    expect(getProviderSortOrder("Tavus")).toBeLessThan(getProviderSortOrder("OpenAI"));
+    expect(getProviderSortOrder("OpenAI")).toBeLessThan(getProviderSortOrder("PersonaPlex"));
+
+    const t = (zh: string, _en: string) => zh;
+    expect(getProviderBadge("DashScope", t)?.type).toBe("realtime");
+    expect(getProviderBadge("Tavus", t)?.type).toBe("video");
+    expect(getProviderBadge("PersonaPlex", t)?.type).toBe("local");
+    expect(getProviderBadge("DeepSeek", t)?.type).toBe("text");
   });
 });
 
