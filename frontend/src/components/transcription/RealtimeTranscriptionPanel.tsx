@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   buildRealtimeTranscriptionWebSocketUrl,
+  fetchSettings,
   saveTranscriptionText,
+  type AppSettings,
   type TranscriptionJobResponse,
   type WordTimestamp,
 } from "../../api";
-import { REALTIME_ASR_MODELS } from "../../utils/asrProviders";
+import { REALTIME_ASR_MODELS, isAsrEngineConfigured, ASR_ENGINE_PROVIDER_MAP } from "../../utils/asrProviders";
 import { encodePcm16k, getAudioContextCtor } from "../../hooks/useVoiceChatHelpers";
 import { exportTextFile } from "../../utils/desktopFileSave";
 import { formatSrtTime, formatVttTime } from "../../utils/subtitleGenerator";
@@ -40,6 +42,7 @@ type RealtimeServerMessage =
 type Props = {
   onComplete: (job: TranscriptionJobResponse, words?: WordTimestamp[]) => void;
   onSwitchToLibrary?: () => void;
+  onOpenSettings?: (provider?: string) => void;
 };
 
 const LANGUAGE_OPTIONS: { value: string; hints?: string[]; zh: string; en: string }[] = [
@@ -92,7 +95,7 @@ export function formatTimestampDisplay(sec: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary }: Props) {
+export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOpenSettings }: Props) {
   const { t } = useI18n();
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -112,6 +115,14 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary }: Pr
   const [saving, setSaving] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showCopyMenu, setShowCopyMenu] = useState(false);
+
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+
+  useEffect(() => {
+    fetchSettings()
+      .then((data) => setAppSettings(data.settings))
+      .catch(() => setAppSettings(null));
+  }, []);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -492,7 +503,19 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary }: Pr
       cleanupAudio();
       stopTimer();
       setPhase("idle");
-      setError(err instanceof Error ? err : new Error(String(err)));
+      const errObj = err instanceof Error ? err : new Error(String(err));
+      if (errObj.name === "NotAllowedError" || errObj.name === "PermissionDeniedError" || /permission|denied|allowed/i.test(errObj.message)) {
+        setError(
+          new Error(
+            t(
+              "麦克风权限被拒绝，请在系统或浏览器设置中允许麦克风权限后重试。",
+              "Microphone permission was denied. Please allow microphone access in your system/browser settings and retry."
+            )
+          )
+        );
+      } else {
+        setError(errObj);
+      }
     }
   }
 
@@ -766,13 +789,52 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary }: Pr
               className="vsSelect"
               style={{ height: "34px", padding: "0 10px", borderRadius: "8px", fontSize: "13px" }}
             >
-              {REALTIME_ASR_MODELS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {t(option.zh, option.en)}
-                </option>
-              ))}
+              {REALTIME_ASR_MODELS.map((option) => {
+                const isConfigured = isAsrEngineConfigured(option.id, appSettings);
+                const tag = isConfigured ? t("🟢 已配置", "🟢 Configured") : t("⚪ 未配置", "⚪ Not Configured");
+                return (
+                  <option key={option.id} value={option.id}>
+                    {t(option.zh, option.en)} ({tag})
+                  </option>
+                );
+              })}
             </select>
           </div>
+
+          {!isAsrEngineConfigured(model, appSettings) && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "12px",
+                color: "var(--warning, #d97706)",
+              }}
+            >
+              <span>
+                ⚠️ {t("未配置 API Key", "API Key not configured")}
+              </span>
+              <button
+                type="button"
+                className="errorSettingsBtn"
+                style={{ padding: "2px 8px", fontSize: "11px" }}
+                onClick={() => {
+                  const target = ASR_ENGINE_PROVIDER_MAP[model];
+                  if (onOpenSettings) {
+                    onOpenSettings(target?.providerName);
+                  } else {
+                    window.dispatchEvent(
+                      new CustomEvent("open-settings", {
+                        detail: { category: "provider", provider: target?.providerName || "Google" },
+                      })
+                    );
+                  }
+                }}
+              >
+                ⚙️ {t("前往配置", "Configure")}
+              </button>
+            </div>
+          )}
 
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted)" }}>
@@ -1476,7 +1538,13 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary }: Pr
           {info}
         </span>
       )}
-      {error && <ErrorNotice message={error.message || String(error)} scope="Transcription" />}
+      {error && (
+        <ErrorNotice
+          message={error.message || String(error)}
+          scope="Transcription"
+          onOpenSettings={onOpenSettings}
+        />
+      )}
     </div>
   );
 }

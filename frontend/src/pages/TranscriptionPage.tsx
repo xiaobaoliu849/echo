@@ -587,6 +587,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
         onReservedAction={handleReservedAction}
         onSaveMemory={handleSaveMemory}
         memorySaving={memorySaving}
+        onOpenSettings={onOpenSettings}
       />
     );
   }
@@ -719,6 +720,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
           <RealtimeTranscriptionPanel
             onComplete={handleRealtimeComplete}
             onSwitchToLibrary={() => setPageTab("library")}
+            onOpenSettings={onOpenSettings}
           />
         )}
 
@@ -973,10 +975,12 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
             </div>
 
             {error && (
-              <div style={{ marginTop: "4px" }}>
-                <span style={{ fontSize: "13px", color: "var(--danger, #e5484d)", fontWeight: 500 }}>
-                  {error.message}
-                </span>
+              <div style={{ marginTop: "6px" }}>
+                <ErrorNotice
+                  message={error.message || String(error)}
+                  scope="Transcription"
+                  onOpenSettings={onOpenSettings}
+                />
               </div>
             )}
 

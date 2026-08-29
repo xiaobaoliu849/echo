@@ -9,6 +9,7 @@ vi.mock("../../utils/desktopFileSave", () => ({
 vi.mock("../../api", () => ({
   buildRealtimeTranscriptionWebSocketUrl: vi.fn(() => "ws://127.0.0.1:8000/api/transcription/realtime"),
   saveTranscriptionText: vi.fn().mockResolvedValue({ id: "job-123", file_name: "test.txt" }),
+  fetchSettings: vi.fn().mockResolvedValue({ settings: {} }),
 }));
 
 describe("RealtimeTranscriptionPanel helpers", () => {

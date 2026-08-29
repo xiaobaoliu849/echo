@@ -26,6 +26,7 @@ type Props = {
   onReservedAction?: (action: string) => void;
   onSaveMemory: () => void;
   memorySaving: boolean;
+  onOpenSettings?: (provider?: string) => void;
 };
 
 export default function TranscriptionDetailDrawer({
@@ -47,6 +48,7 @@ export default function TranscriptionDetailDrawer({
   onAudioDurationChange,
   onSaveMemory,
   memorySaving,
+  onOpenSettings,
 }: Props) {
   const { t } = useI18n();
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -298,9 +300,16 @@ export default function TranscriptionDetailDrawer({
         </div>
       ) : (
         <div className="vsTranscribeDetailContent custom-scrollbar">
-          <div className="vsTranscribeDetailTranscript loading">
-            <p style={{ fontSize: 14 }}>
-              {t("暂无转写内容", "No transcript content available")}
+          <div className="vsTranscribeEmptySpeech">
+            <div style={{ fontSize: "42px", marginBottom: "10px" }}>🔇</div>
+            <h3 style={{ margin: "0 0 6px 0", fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>
+              {t("未检测到有效语音", "No Speech Detected")}
+            </h3>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)", maxWidth: "420px", textAlign: "center", lineHeight: 1.5 }}>
+              {t(
+                "该音频已处理完成，但未检测到清晰人声或内容为空白。如果音频确有人声，可尝试在新建转写中选择其他引擎重试。",
+                "Audio was processed, but no clear speech was detected. If it contains speech, try re-transcribing with another engine."
+              )}
             </p>
           </div>
         </div>
@@ -309,7 +318,11 @@ export default function TranscriptionDetailDrawer({
       {/* Error */}
       {error && (
         <div style={{ padding: "0 24px 12px" }}>
-          <ErrorNotice message={error.message || String(error)} scope="Transcription" />
+          <ErrorNotice
+            message={error.message || String(error)}
+            scope="Transcription"
+            onOpenSettings={onOpenSettings}
+          />
         </div>
       )}
 

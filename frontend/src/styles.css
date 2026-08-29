@@ -5986,6 +5986,18 @@ button.danger:focus-visible {
   margin-top: 10px;
 }
 
+.vsTranscribeEmptySpeech {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  border-radius: 12px;
+  min-height: 240px;
+}
+
 /* Card-style Editor Workspace and Flex-grow properties */
 .vsTtsEditorWrap {
   flex: 1;
