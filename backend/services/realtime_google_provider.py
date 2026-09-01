@@ -189,14 +189,23 @@ class GoogleRealtimeMixin:
                 continue
         return ""
     @classmethod
-    def _build_live_config(cls, voice: str, instructions: str = ""):
-        declarations = [
-            types.FunctionDeclaration(
-                name=declaration["name"],
-                description=declaration["description"],
-                parameters_json_schema=declaration["parameters"],
+    def _build_live_config(
+        cls,
+        voice: str = DEFAULT_GOOGLE_REALTIME_VOICE,
+        instructions: str | None = None,
+        model: str | None = None,
+    ):
+        is_transcribe = "transcribe" in str(model or "").lower()
+        if is_transcribe:
+            return types.LiveConnectConfig(
+                response_modalities=["TEXT"],
+                input_audio_transcription=types.AudioTranscriptionConfig(),
+                output_audio_transcription=types.AudioTranscriptionConfig(),
             )
-            for declaration in native_tool_declarations()
+
+        declarations = [
+            d for d in native_tool_declarations()
+            if d.name in {"open_browser", "query_search_results", "report_browser_content"}
         ]
         system_inst = instructions or cls._build_realtime_instructions()
         tools_list = []
@@ -1044,7 +1053,7 @@ class GoogleRealtimeMixin:
                 echo_target_language,
             )
             if is_live_translate
-            else self._build_live_config(voice, self._build_realtime_instructions())
+            else self._build_live_config(voice, self._build_realtime_instructions(), model=settings["model"])
         )
 
         try:
