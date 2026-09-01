@@ -85,6 +85,14 @@ GRADIUM_REALTIME_VOICES = (
     "LFZvm12tW_z0xfGo",  # Kent (en)
     "jtEKaLYNn6iif5PR",  # Sydney (en)
     "Eu9iL_CYe8N-Gkx_",  # Tiffany (en)
+    "NbpkqMVS3CJeq2j8",  # Zoey (en)
+    "YVzbrdWnnu9FgRn5",  # Sunnie (en)
+    "Bla6SbVMczYnOhfK",  # Marlowe (en)
+    "4SZHfMpw-p46Ywgs",  # Harper (en)
+    "D6COLz20Hw7uh3UK",  # Brooklyn (en)
+    "6MFfc37kq0sBjBjy",  # Sterling (en)
+    "_6Aslh2DxfmnRLmP",  # Russell (en)
+    "r2sIQdqqoqgRJuXw",  # Marcus (en)
 )
 
 DEFAULT_DOUBAO_REALTIME_MODEL = "doubao-realtime"

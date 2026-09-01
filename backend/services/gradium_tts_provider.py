@@ -15,15 +15,23 @@ DEFAULT_GRADIUM_BASE_URL = "https://api.gradium.ai"
 GRADIUM_MODELS = ["default"]
 DEFAULT_GRADIUM_MODEL = "default"
 
-# Static catalog of standard Gradium pre-built voices
+# Static catalog of standard Gradium pre-built flagship voices
 GRADIUM_VOICES = [
-    {"name": "YTpq7expH9539ERJ", "short_name": "Emma (en)", "locale": "en", "gender": "Female"},
-    {"name": "3jUdJyOi9pgbxBTK", "short_name": "Arthur (en)", "locale": "en", "gender": "Male"},
-    {"name": "2H4HY2CBNyJHBCrP", "short_name": "Christina (en)", "locale": "en", "gender": "Female"},
-    {"name": "KWJiFWu2O9nMPYcR", "short_name": "John (en)", "locale": "en", "gender": "Male"},
-    {"name": "LFZvm12tW_z0xfGo", "short_name": "Kent (en)", "locale": "en", "gender": "Male"},
-    {"name": "jtEKaLYNn6iif5PR", "short_name": "Sydney (en)", "locale": "en", "gender": "Female"},
-    {"name": "Eu9iL_CYe8N-Gkx_", "short_name": "Tiffany (en)", "locale": "en", "gender": "Female"},
+    {"name": "YTpq7expH9539ERJ", "short_name": "Emma (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "标准温和女声"},
+    {"name": "3jUdJyOi9pgbxBTK", "short_name": "Arthur (en-US, Male)", "locale": "en-US", "gender": "Male", "description": "磁性成熟男声"},
+    {"name": "2H4HY2CBNyJHBCrP", "short_name": "Christina (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "表现力充沛女声"},
+    {"name": "KWJiFWu2O9nMPYcR", "short_name": "John (en-US, Male)", "locale": "en-US", "gender": "Male", "description": "沉稳专业男声"},
+    {"name": "LFZvm12tW_z0xfGo", "short_name": "Kent (en-US, Male)", "locale": "en-US", "gender": "Male", "description": "青年活力男声"},
+    {"name": "jtEKaLYNn6iif5PR", "short_name": "Sydney (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "清澈亲切女声"},
+    {"name": "Eu9iL_CYe8N-Gkx_", "short_name": "Tiffany (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "热情灵动女声"},
+    {"name": "NbpkqMVS3CJeq2j8", "short_name": "Zoey (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "活泼自信女声 (Gen Z)"},
+    {"name": "YVzbrdWnnu9FgRn5", "short_name": "Sunnie (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "阳光明亮女声"},
+    {"name": "Bla6SbVMczYnOhfK", "short_name": "Marlowe (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "热情爱笑女声"},
+    {"name": "4SZHfMpw-p46Ywgs", "short_name": "Harper (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "现代干练女声"},
+    {"name": "D6COLz20Hw7uh3UK", "short_name": "Brooklyn (en-US, Female)", "locale": "en-US", "gender": "Female", "description": "开朗亲和女声"},
+    {"name": "6MFfc37kq0sBjBjy", "short_name": "Sterling (en-US, Male)", "locale": "en-US", "gender": "Male", "description": "戏剧感男声"},
+    {"name": "_6Aslh2DxfmnRLmP", "short_name": "Russell (en-US, Male)", "locale": "en-US", "gender": "Male", "description": "高能量说服力男声"},
+    {"name": "r2sIQdqqoqgRJuXw", "short_name": "Marcus (en-US, Male)", "locale": "en-US", "gender": "Male", "description": "高能量共鸣男声"},
 ]
 
 DEFAULT_GRADIUM_VOICE = GRADIUM_VOICES[0]["name"]

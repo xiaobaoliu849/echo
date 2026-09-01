@@ -417,13 +417,21 @@ export const CARTESIA_REALTIME_VOICES = [
 ];
 
 export const GRADIUM_REALTIME_VOICES = [
-  { value: "YTpq7expH9539ERJ", label: "Emma (Female, en)", description: "Gradium 默认女声" },
-  { value: "3jUdJyOi9pgbxBTK", label: "Arthur (Male, en)", description: "Gradium 男声" },
-  { value: "2H4HY2CBNyJHBCrP", label: "Christina (Female, en)", description: "Gradium 表现力女声" },
-  { value: "KWJiFWu2O9nMPYcR", label: "John (Male, en)", description: "Gradium 磁性男声" },
-  { value: "LFZvm12tW_z0xfGo", label: "Kent (Male, en)", description: "Gradium 稳重男声" },
-  { value: "jtEKaLYNn6iif5PR", label: "Sydney (Female, en)", description: "Gradium 清澈女声" },
-  { value: "Eu9iL_CYe8N-Gkx_", label: "Tiffany (Female, en)", description: "Gradium 亲切女声" },
+  { value: "YTpq7expH9539ERJ", label: "Emma (Female, en-US)", description: "Gradium 标准温和女声" },
+  { value: "3jUdJyOi9pgbxBTK", label: "Arthur (Male, en-US)", description: "Gradium 磁性成熟男声" },
+  { value: "2H4HY2CBNyJHBCrP", label: "Christina (Female, en-US)", description: "Gradium 表现力充沛女声" },
+  { value: "KWJiFWu2O9nMPYcR", label: "John (Male, en-US)", description: "Gradium 沉稳专业男声" },
+  { value: "LFZvm12tW_z0xfGo", label: "Kent (Male, en-US)", description: "Gradium 青年活力男声" },
+  { value: "jtEKaLYNn6iif5PR", label: "Sydney (Female, en-US)", description: "Gradium 清澈亲切女声" },
+  { value: "Eu9iL_CYe8N-Gkx_", label: "Tiffany (Female, en-US)", description: "Gradium 热情灵动女声" },
+  { value: "NbpkqMVS3CJeq2j8", label: "Zoey (Female, en-US)", description: "Gradium 活泼自信女声 (Gen Z)" },
+  { value: "YVzbrdWnnu9FgRn5", label: "Sunnie (Female, en-US)", description: "Gradium 阳光明亮女声" },
+  { value: "Bla6SbVMczYnOhfK", label: "Marlowe (Female, en-US)", description: "Gradium 热情爱笑女声" },
+  { value: "4SZHfMpw-p46Ywgs", label: "Harper (Female, en-US)", description: "Gradium 现代干练女声" },
+  { value: "D6COLz20Hw7uh3UK", label: "Brooklyn (Female, en-US)", description: "Gradium 开朗亲和女声" },
+  { value: "6MFfc37kq0sBjBjy", label: "Sterling (Male, en-US)", description: "Gradium 戏剧感男声" },
+  { value: "_6Aslh2DxfmnRLmP", label: "Russell (Male, en-US)", description: "Gradium 高能量说服力男声" },
+  { value: "r2sIQdqqoqgRJuXw", label: "Marcus (Male, en-US)", description: "Gradium 高能量共鸣男声" },
 ];
 
 // Must stay in sync with DEFAULT_PERSONAPLEX_REALTIME_VOICE in the backend's
