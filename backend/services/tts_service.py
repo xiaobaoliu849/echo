@@ -36,6 +36,14 @@ from .cartesia_tts_provider import (
     fetch_cartesia_voices,
     is_cartesia_voice,
 )
+from .gradium_tts_provider import (
+    GRADIUM_VOICES,
+    DEFAULT_GRADIUM_MODEL,
+    DEFAULT_GRADIUM_VOICE,
+    gradium_tts_synthesize,
+    fetch_gradium_voices,
+    is_gradium_voice,
+)
 
 try:
     import edge_tts
@@ -89,6 +97,7 @@ TTS_ENGINE_GPT_SOVITS = "gpt_sovits"
 TTS_ENGINE_AZURE = "azure"
 TTS_ENGINE_DOUBAO = "doubao"
 TTS_ENGINE_CARTESIA = "cartesia"
+TTS_ENGINE_GRADIUM = "gradium"
 
 SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_EDGE,
@@ -102,6 +111,7 @@ SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_AZURE,
     TTS_ENGINE_DOUBAO,
     TTS_ENGINE_CARTESIA,
+    TTS_ENGINE_GRADIUM,
 }
 
 OPENAI_VOICES = [
@@ -647,6 +657,44 @@ class TTSService:
             pass
         return CARTESIA_VOICES
 
+    def _gradium_settings(self) -> tuple[str, str]:
+        """Return (api_key, base_url) for Gradium."""
+        self.config.reload()
+        cfg = self.config.get_all()
+        api_key = str(cfg.get("api_keys", {}).get("gradium_api_key", "")).strip()
+        base_url = str(cfg.get("api_urls", {}).get("Gradium", "")).strip()
+        if not base_url:
+            from .gradium_tts_provider import DEFAULT_GRADIUM_BASE_URL
+            base_url = DEFAULT_GRADIUM_BASE_URL
+        if not base_url.startswith(("http://", "https://")):
+            base_url = f"https://{base_url}"
+        return api_key, base_url.rstrip("/")
+
+    async def _generate_gradium_audio(self, text: str, voice: str, path: Path, model: str | None = None) -> None:
+        api_key, base_url = self._gradium_settings()
+        if not api_key:
+            raise RuntimeError("Gradium API Key is not configured. 请在 设置 → Gradium 中填写 gradium_api_key。")
+        audio_bytes = await gradium_tts_synthesize(
+            text=text,
+            voice_id=voice,
+            api_key=api_key,
+            base_url=base_url,
+            model=model or DEFAULT_GRADIUM_MODEL,
+        )
+        self._atomic_write_bytes(path, audio_bytes)
+
+    async def _fetch_gradium_voices(self) -> list[dict[str, Any]]:
+        api_key, base_url = self._gradium_settings()
+        if not api_key:
+            return GRADIUM_VOICES
+        try:
+            voices = await fetch_gradium_voices(api_key, base_url)
+            if voices:
+                return voices
+        except Exception:
+            pass
+        return GRADIUM_VOICES
+
     def _doubao_settings(self) -> tuple[str, str, str]:
         """Return (access_token, app_id, cluster) for Doubao OpenSpeech TTS."""
         self.config.reload()
@@ -1177,6 +1225,9 @@ class TTSService:
         # "-" → Edge fallback below, since UUIDs contain dashes)
         if is_cartesia_voice(voice):
             return TTS_ENGINE_CARTESIA
+        # Check Gradium voices
+        if is_gradium_voice(voice):
+            return TTS_ENGINE_GRADIUM
         # 2. Check MiniMax voices
         if any(v["name"] == voice for v in MINIMAX_VOICES):
             return TTS_ENGINE_MINIMAX
@@ -1233,6 +1284,8 @@ class TTSService:
             selected_voice = voice or DEFAULT_DOUBAO_TTS_VOICE
         elif normalized_engine == TTS_ENGINE_CARTESIA:
             selected_voice = voice or DEFAULT_CARTESIA_VOICE
+        elif normalized_engine == TTS_ENGINE_GRADIUM:
+            selected_voice = voice or DEFAULT_GRADIUM_VOICE
         else:
             selected_voice = voice or XIAOMI_VOICES[0]["name"]
 
@@ -1268,6 +1321,8 @@ class TTSService:
             await self._generate_doubao_audio(cleaned, selected_voice, rate, path)
         elif normalized_engine == TTS_ENGINE_CARTESIA:
             await self._generate_cartesia_audio(cleaned, selected_voice, path, model=model)
+        elif normalized_engine == TTS_ENGINE_GRADIUM:
+            await self._generate_gradium_audio(cleaned, selected_voice, path, model=model)
         else:
             await self._generate_xiaomi_audio(cleaned, selected_voice, path, model=model)
 
@@ -1388,6 +1443,9 @@ class TTSService:
             return self._filter_by_locale(DOUBAO_VOICES, locale)
         if normalized_engine == TTS_ENGINE_CARTESIA:
             voices = await self._fetch_cartesia_voices()
+            return self._filter_by_locale(voices, locale)
+        if normalized_engine == TTS_ENGINE_GRADIUM:
+            voices = await self._fetch_gradium_voices()
             return self._filter_by_locale(voices, locale)
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
             # The two Qwen TTS families use incompatible voice sets; when the

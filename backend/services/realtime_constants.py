@@ -74,6 +74,19 @@ DEFAULT_CARTESIA_REALTIME_MODEL = "cartesia-realtime"
 DEFAULT_CARTESIA_REALTIME_VOICE = "f786b574-daa5-4673-aa0c-cbe3e8534c02"
 DEFAULT_CARTESIA_STT_MODEL = "ink-2"
 
+# Gradium pipeline: Gradium ASR → DeepSeek / LLM → Gradium TTS.
+DEFAULT_GRADIUM_REALTIME_MODEL = "gradium-realtime"
+DEFAULT_GRADIUM_REALTIME_VOICE = "YTpq7expH9539ERJ"
+GRADIUM_REALTIME_VOICES = (
+    "YTpq7expH9539ERJ",  # Emma (en)
+    "3jUdJyOi9pgbxBTK",  # Arthur (en)
+    "2H4HY2CBNyJHBCrP",  # Christina (en)
+    "KWJiFWu2O9nMPYcR",  # John (en)
+    "LFZvm12tW_z0xfGo",  # Kent (en)
+    "jtEKaLYNn6iif5PR",  # Sydney (en)
+    "Eu9iL_CYe8N-Gkx_",  # Tiffany (en)
+)
+
 DEFAULT_DOUBAO_REALTIME_MODEL = "doubao-realtime"
 # 端到端实时语音-全双工版本 (SeedPulse duplex) voices — the only supported
 # Doubao realtime transport since 2026-08-24.

@@ -83,6 +83,8 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     DEFAULT_OPENAI_REALTIME_VOICE,
     DEFAULT_CARTESIA_REALTIME_MODEL,
     DEFAULT_CARTESIA_REALTIME_VOICE,
+    DEFAULT_GRADIUM_REALTIME_MODEL,
+    DEFAULT_GRADIUM_REALTIME_VOICE,
     DEFAULT_DOUBAO_REALTIME_MODEL,
     DEFAULT_DOUBAO_REALTIME_VOICE,
     DEFAULT_PERSONAPLEX_REALTIME_MODEL,
@@ -119,6 +121,7 @@ from .realtime_doubao_provider import DoubaoRealtimeMixin
 from .realtime_personaplex_provider import PersonaPlexRealtimeMixin
 from .realtime_glm4voice_provider import RealtimeGlm4VoiceMixin
 from .realtime_cartesia_provider import CartesiaRealtimeMixin
+from .realtime_gradium_provider import GradiumRealtimeMixin
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +139,7 @@ class RealtimeVoiceService(
     PersonaPlexRealtimeMixin,
     RealtimeGlm4VoiceMixin,
     CartesiaRealtimeMixin,
+    GradiumRealtimeMixin,
 ):
     """Orchestrates realtime voice sessions across multiple providers.
 
@@ -721,6 +725,8 @@ __all__ = [
     "DEFAULT_OPENAI_REALTIME_VOICE",
     "DEFAULT_QWEN_AUDIO_REALTIME_VOICE",
     "DEFAULT_DOUBAO_REALTIME_VOICE",
+    "DEFAULT_CARTESIA_REALTIME_VOICE",
+    "DEFAULT_GRADIUM_REALTIME_VOICE",
     # re-exported from sibling modules (used by tests)
     "RealtimeMemorySession",
     "VoiceAgentSessionRecorder",

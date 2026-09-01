@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CARTESIA_PROVIDER,
+  GRADIUM_PROVIDER,
   DASHSCOPE_PROVIDER,
   DEFAULT_PERSONAPLEX_VOICE,
   DOUBAO_PROVIDER,
@@ -32,6 +33,7 @@ describe("resolveRealtimeProvider", () => {
     TAVUS_PROVIDER,
     DOUBAO_PROVIDER,
     CARTESIA_PROVIDER,
+    GRADIUM_PROVIDER,
     OPENAI_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
@@ -85,6 +87,8 @@ describe("resolveRealtimeProvider", () => {
 
     const t = (zh: string, _en: string) => zh;
     expect(getProviderBadge("DashScope", t)).toEqual({ label: "实时语音", type: "realtime" });
+    expect(getProviderBadge("Gradium", t)).toEqual({ label: "实时语音", type: "realtime" });
+    expect(getProviderBadge("Cartesia", t)).toEqual({ label: "实时语音", type: "realtime" });
     expect(getProviderBadge("Tavus", t)).toEqual({ label: "视频分身", type: "video" });
     expect(getProviderBadge("PersonaPlex", t)).toEqual({ label: "本地实时", type: "local" });
     expect(getProviderBadge("GLM4Voice", t)).toEqual({ label: "本地实时", type: "local" });

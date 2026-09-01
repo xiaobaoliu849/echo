@@ -1,0 +1,185 @@
+"""Tests for Gradium TTS and Realtime Voice Provider."""
+from __future__ import annotations
+
+import asyncio
+import json
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from services.gradium_tts_provider import (
+    DEFAULT_GRADIUM_BASE_URL,
+    DEFAULT_GRADIUM_MODEL,
+    DEFAULT_GRADIUM_VOICE,
+    GRADIUM_VOICES,
+    fetch_gradium_voices,
+    gradium_headers,
+    gradium_tts_synthesize,
+    is_gradium_voice,
+)
+from services.realtime_constants import (
+    DEFAULT_GRADIUM_REALTIME_MODEL,
+    DEFAULT_GRADIUM_REALTIME_VOICE,
+    GRADIUM_REALTIME_VOICES,
+)
+from services.realtime_gradium_provider import (
+    GradiumRealtimeMixin,
+    _GradiumSessionState,
+    _GradiumTurn,
+)
+
+
+class DummyGradiumService(GradiumRealtimeMixin):
+    def __init__(self):
+        self.config = MagicMock()
+        self._finalize_realtime_turn = AsyncMock()
+        self._create_voice_session_recorder = AsyncMock(return_value=None)
+        self._run_duplex_tasks = AsyncMock()
+        self._build_realtime_instructions = MagicMock(return_value="You are an assistant.")
+        self._handle_common_client_command = AsyncMock(return_value=None)
+
+    async def _send_event(self, websocket, event_type, **payload):
+        await websocket.send_json({"type": event_type, **payload})
+
+    async def _deliver_assistant_output(self, websocket, event, *, memory_session, recorder, record_memory=True):
+        await websocket.send_json(event)
+
+
+class CollectingWebSocket:
+    def __init__(self, inbound: list[dict] | None = None):
+        self.events: list[dict] = []
+        self.inbound = list(inbound or [])
+
+    async def send_json(self, payload: dict) -> None:
+        self.events.append(dict(payload))
+
+    async def receive(self) -> dict:
+        if self.inbound:
+            return self.inbound.pop(0)
+        return {"type": "websocket.disconnect"}
+
+
+class FakeWs:
+    def __init__(self, events: list[dict] | None = None):
+        self.sent: list[str] = []
+        self._events = list(events or [])
+
+    async def send(self, data) -> None:
+        self.sent.append(data if isinstance(data, str) else data.decode("utf-8", errors="replace"))
+
+    async def recv(self) -> str:
+        if self._events:
+            return json.dumps(self._events.pop(0))
+        return json.dumps({"type": "ready", "sample_rate": 48000})
+
+    async def __aiter__(self):
+        for ev in self._events:
+            yield json.dumps(ev)
+        while True:
+            await asyncio.sleep(3600)
+
+
+class TestGradiumTtsProvider(unittest.TestCase):
+    def test_voice_identification(self):
+        self.assertTrue(is_gradium_voice("YTpq7expH9539ERJ"))
+        self.assertTrue(is_gradium_voice("3jUdJyOi9pgbxBTK"))
+        self.assertTrue(is_gradium_voice("custom_voice_12345678"))
+        self.assertFalse(is_gradium_voice(""))
+        self.assertFalse(is_gradium_voice("short"))
+
+    def test_headers(self):
+        h = gradium_headers("test-key")
+        self.assertEqual(h["x-api-key"], "test-key")
+        self.assertEqual(h["Content-Type"], "application/json")
+
+    def test_constants(self):
+        self.assertIn(DEFAULT_GRADIUM_VOICE, [v["name"] for v in GRADIUM_VOICES])
+        self.assertEqual(DEFAULT_GRADIUM_BASE_URL, "https://api.gradium.ai")
+        self.assertEqual(DEFAULT_GRADIUM_MODEL, "default")
+        self.assertEqual(DEFAULT_GRADIUM_REALTIME_MODEL, "gradium-realtime")
+
+
+class TestGradiumRealtimeSettings(unittest.TestCase):
+    def setUp(self):
+        self.svc = DummyGradiumService()
+
+    def test_settings_resolution_success(self):
+        self.svc.config.get_provider_settings.side_effect = lambda prov, m=None: {
+            "Gradium": {
+                "api_key": "gsk_test",
+                "base_url": "https://api.gradium.ai",
+                "realtime_base_url": "wss://api.gradium.ai",
+                "model": "gradium-realtime",
+            },
+            "DeepSeek": {
+                "api_key": "ds_test",
+                "base_url": "https://api.deepseek.com",
+                "model": "deepseek-v4-flash",
+            },
+        }.get(prov, {"api_key": "", "base_url": "", "model": ""})
+        self.svc.config.get_all.return_value = {}
+
+        settings = self.svc._resolve_gradium_settings("gradium-realtime")
+        self.assertEqual(settings["api_key"], "gsk_test")
+        self.assertEqual(settings["ws_base"], "wss://api.gradium.ai")
+        self.assertEqual(settings["llm_provider"], "DeepSeek")
+        self.assertEqual(settings["llm_model"], "deepseek-v4-flash")
+
+    def test_settings_resolution_missing_key(self):
+        self.svc.config.get_provider_settings.return_value = {"api_key": "", "base_url": ""}
+        with self.assertRaises(RuntimeError) as ctx:
+            self.svc._resolve_gradium_settings(None)
+        self.assertIn("Gradium API Key 未配置", str(ctx.exception))
+
+
+class TestGradiumBargeIn(unittest.IsolatedAsyncioTestCase):
+    async def test_barge_in_cancels_turn(self):
+        svc = DummyGradiumService()
+        ws = CollectingWebSocket()
+        state = _GradiumSessionState(
+            tts_model="default",
+            voice=DEFAULT_GRADIUM_VOICE,
+            llm_model="deepseek-v4-flash",
+            api_key="gsk_test",
+            ws_base="wss://api.gradium.ai",
+        )
+
+        async def long_task():
+            await asyncio.sleep(10)
+
+        task = asyncio.create_task(long_task())
+        state.active = _GradiumTurn(seq=1, user_text="Hello", task=task)
+        state.history.append({"role": "user", "content": "Hello"})
+
+        memory_session = MagicMock()
+        await svc._gradium_barge_in(ws, state, memory_session, recorder=None, notify=True)
+
+        self.assertTrue(task.cancelled())
+        self.assertIsNone(state.active)
+        self.assertEqual(len(state.history), 0)
+        self.assertTrue(any(e["type"] == "interrupted" for e in ws.events))
+
+
+class TestGradiumClientLoop(unittest.IsolatedAsyncioTestCase):
+    async def test_text_input_starts_turn(self):
+        svc = DummyGradiumService()
+        svc._gradium_start_turn = AsyncMock()
+        ws = CollectingWebSocket(inbound=[
+            {"text": json.dumps({"type": "text_input", "text": "Hello bot"})}
+        ])
+        state = _GradiumSessionState(
+            tts_model="default",
+            voice=DEFAULT_GRADIUM_VOICE,
+            llm_model="deepseek-v4-flash",
+            api_key="gsk_test",
+            ws_base="wss://api.gradium.ai",
+        )
+        llm = MagicMock()
+        mem = MagicMock()
+        tool = MagicMock()
+
+        await svc._gradium_client_loop(ws, state, llm, "DeepSeek", mem, tool, recorder=None)
+        svc._gradium_start_turn.assert_awaited_once()
+
+
+if __name__ == "__main__":
+    unittest.main()

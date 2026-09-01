@@ -249,6 +249,10 @@ CARTESIA_MODEL_LIST_SUPPLEMENTS = [
     "sonic-3.5",
     "sonic-3",
 ]
+GRADIUM_MODEL_LIST_SUPPLEMENTS = [
+    "gradium-realtime",
+    "default",
+]
 GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
 
 
@@ -504,6 +508,12 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 models=[m for m in CARTESIA_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in CARTESIA_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
+        if provider == "Gradium":
+            return FetchModelsResponse(
+                provider=provider,
+                models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
         raise HTTPException(
             status_code=400,
             detail={
@@ -583,6 +593,12 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 provider=provider,
                 models=[m for m in CARTESIA_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in CARTESIA_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
+        if provider == "Gradium":
+            return FetchModelsResponse(
+                provider=provider,
+                models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
         detail = exc.response.text[:500] if exc.response is not None else str(exc)
         raise HTTPException(

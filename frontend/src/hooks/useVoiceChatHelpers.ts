@@ -59,6 +59,7 @@ export const DOUBAO_PROVIDER = "Doubao";
 export const PERSONAPLEX_PROVIDER = "PersonaPlex";
 export const GLM4VOICE_PROVIDER = "GLM4Voice";
 export const CARTESIA_PROVIDER = "Cartesia";
+export const GRADIUM_PROVIDER = "Gradium";
 export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
@@ -68,6 +69,8 @@ export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
 export const DEFAULT_PERSONAPLEX_MODEL = "personaplex-7b-v1-bnb-4bit";
 export const DEFAULT_GLM4VOICE_MODEL = "glm-4-voice-9b";
+export const DEFAULT_CARTESIA_MODEL = "cartesia-realtime";
+export const DEFAULT_GRADIUM_MODEL = "gradium-realtime";
 export const DEFAULT_TAVUS_MODEL = "tavus-video-pal";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
   "native-audio",
@@ -413,6 +416,16 @@ export const CARTESIA_REALTIME_VOICES = [
   { value: "ef191366-f52f-447a-a398-ed8c0f2943a1", label: "Archie (Male, en-GB)", description: "Cartesia Sonic 英式男声" },
 ];
 
+export const GRADIUM_REALTIME_VOICES = [
+  { value: "YTpq7expH9539ERJ", label: "Emma (Female, en)", description: "Gradium 默认女声" },
+  { value: "3jUdJyOi9pgbxBTK", label: "Arthur (Male, en)", description: "Gradium 男声" },
+  { value: "2H4HY2CBNyJHBCrP", label: "Christina (Female, en)", description: "Gradium 表现力女声" },
+  { value: "KWJiFWu2O9nMPYcR", label: "John (Male, en)", description: "Gradium 磁性男声" },
+  { value: "LFZvm12tW_z0xfGo", label: "Kent (Male, en)", description: "Gradium 稳重男声" },
+  { value: "jtEKaLYNn6iif5PR", label: "Sydney (Female, en)", description: "Gradium 清澈女声" },
+  { value: "Eu9iL_CYe8N-Gkx_", label: "Tiffany (Female, en)", description: "Gradium 亲切女声" },
+];
+
 // Must stay in sync with DEFAULT_PERSONAPLEX_REALTIME_VOICE in the backend's
 // realtime_constants.py — the backend falls back to it for unknown voices.
 export const DEFAULT_PERSONAPLEX_VOICE = "NATF2.pt";
@@ -440,6 +453,8 @@ export function formatRealtimeVoiceOptions(
     options = [{ value: "default", label: "Default · 默认音色", description: "原生默认音色" }];
   } else if (provider === CARTESIA_PROVIDER) {
     options = CARTESIA_REALTIME_VOICES;
+  } else if (provider === GRADIUM_PROVIDER) {
+    options = GRADIUM_REALTIME_VOICES;
   } else if (provider === TAVUS_PROVIDER) {
     options = [{ value: "default", label: "Tavus Avatar · 默认分身", description: "CVI 实时视频分身" }];
   } else if (provider === DASHSCOPE_PROVIDER) {
@@ -506,6 +521,7 @@ export const CANONICAL_PROVIDER_ORDER = [
   "Tavus",
   "Doubao",
   "Cartesia",
+  "Gradium",
   "DeepSeek",
   "Xiaomi",
   "OpenRouter",
@@ -550,6 +566,7 @@ export function getProviderBadge(
     norm === "google" ||
     norm === "doubao" ||
     norm === "cartesia" ||
+    norm === "gradium" ||
     norm === "openai"
   ) {
     return { label: t("实时语音", "Realtime"), type: "realtime" };
@@ -573,6 +590,7 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
     TAVUS_PROVIDER,
     DOUBAO_PROVIDER,
     CARTESIA_PROVIDER,
+    GRADIUM_PROVIDER,
     OPENAI_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
@@ -594,6 +612,9 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   }
   if (providerOptions.includes(CARTESIA_PROVIDER)) {
     return CARTESIA_PROVIDER;
+  }
+  if (providerOptions.includes(GRADIUM_PROVIDER)) {
+    return GRADIUM_PROVIDER;
   }
   if (providerOptions.includes(OPENAI_PROVIDER)) {
     return OPENAI_PROVIDER;
@@ -628,6 +649,9 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   }
   if (normalizedProvider === CARTESIA_PROVIDER.toLowerCase()) {
     return normalizedModel.includes("cartesia");
+  }
+  if (normalizedProvider === GRADIUM_PROVIDER.toLowerCase()) {
+    return normalizedModel.includes("gradium");
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
     return /^qwen3\.5-omni-(plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel) ||
@@ -680,7 +704,10 @@ export function resolveRealtimeFallbackModel(provider: string): string {
     return DEFAULT_GLM4VOICE_MODEL;
   }
   if (provider === CARTESIA_PROVIDER) {
-    return "cartesia-realtime";
+    return DEFAULT_CARTESIA_MODEL;
+  }
+  if (provider === GRADIUM_PROVIDER) {
+    return DEFAULT_GRADIUM_MODEL;
   }
   if (provider === TAVUS_PROVIDER) {
     return DEFAULT_TAVUS_MODEL;
@@ -737,7 +764,10 @@ export function resolveRealtimeModelOptions(
     ? [DEFAULT_GLM4VOICE_MODEL]
     : [];
   const cartesiaBuiltIns = provider === CARTESIA_PROVIDER
-    ? ["cartesia-realtime"]
+    ? [DEFAULT_CARTESIA_MODEL]
+    : [];
+  const gradiumBuiltIns = provider === GRADIUM_PROVIDER
+    ? [DEFAULT_GRADIUM_MODEL]
     : [];
   const tavusBuiltIns = provider === TAVUS_PROVIDER
     ? [DEFAULT_TAVUS_MODEL, "tavus-phoenix-2"]
@@ -750,6 +780,7 @@ export function resolveRealtimeModelOptions(
     ...personaplexBuiltIns,
     ...glm4voiceBuiltIns,
     ...cartesiaBuiltIns,
+    ...gradiumBuiltIns,
     ...tavusBuiltIns,
   ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];

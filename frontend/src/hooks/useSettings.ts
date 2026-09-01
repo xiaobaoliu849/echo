@@ -21,6 +21,7 @@ export const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   Tavus: "tavus_api_key",
   Doubao: "doubao_api_key",
   Cartesia: "cartesia_api_key",
+  Gradium: "gradium_api_key",
   // 2. Top Cloud LLM / Text & Multi-Model Providers
   DeepSeek: "deepseek_api_key",
   Xiaomi: "xiaomi_api_key",

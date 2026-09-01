@@ -31,6 +31,7 @@ export const PROVIDERS = [
   "Tavus",
   "Doubao",
   "Cartesia",
+  "Gradium",
   "DeepSeek",
   "Xiaomi",
   "OpenRouter",

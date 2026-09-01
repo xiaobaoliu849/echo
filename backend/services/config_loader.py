@@ -50,6 +50,7 @@ PROVIDER_KEY_MAP = {
     "Tavus": "tavus_api_key",
     "Doubao": "doubao_api_key",
     "Cartesia": "cartesia_api_key",
+    "Gradium": "gradium_api_key",
     # 2. Top Cloud LLM / Text & Multi-Model Providers
     "DeepSeek": "deepseek_api_key",
     "Xiaomi": "xiaomi_api_key",
@@ -76,6 +77,7 @@ DEFAULT_BASE_URLS = {
     "Tavus": "https://tavusapi.com",
     "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
     "Cartesia": "https://api.cartesia.ai",
+    "Gradium": "https://api.gradium.ai",
     "DeepSeek": "https://api.deepseek.com/v1",
     "Xiaomi": "https://token-plan-sgp.xiaomimimo.com/v1",
     "OpenRouter": "https://openrouter.ai/api/v1",

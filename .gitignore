@@ -85,6 +85,7 @@ gen-lang-client-*.json
 .env.*
 
 # Local reference docs / tool dirs / archives / temp probe files
+gradium.txt
 .evermind_*
 .v1*
 .zcode/

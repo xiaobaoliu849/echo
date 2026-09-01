@@ -32,6 +32,8 @@ import {
   GLM4VOICE_PROVIDER,
   CARTESIA_PROVIDER,
   CARTESIA_REALTIME_VOICES,
+  GRADIUM_PROVIDER,
+  GRADIUM_REALTIME_VOICES,
   OPENAI_PROVIDER,
   OPENAI_REALTIME_VOICES,
   PERSONAPLEX_PROVIDER,
@@ -81,6 +83,7 @@ export default function useVoiceChat({
       TAVUS_PROVIDER,
       DOUBAO_PROVIDER,
       CARTESIA_PROVIDER,
+      GRADIUM_PROVIDER,
       OPENAI_PROVIDER,
       PERSONAPLEX_PROVIDER,
       GLM4VOICE_PROVIDER,
@@ -98,6 +101,7 @@ export default function useVoiceChat({
       : initialProvider === OPENAI_PROVIDER ? "alloy"
       : initialProvider === DOUBAO_PROVIDER ? "zh_female_vv_jupiter_bigtts"
       : initialProvider === CARTESIA_PROVIDER ? "f786b574-daa5-4673-aa0c-cbe3e8534c02"
+      : initialProvider === GRADIUM_PROVIDER ? "YTpq7expH9539ERJ"
       : "Puck"
   );
   const [voiceChatTranslationMode, setVoiceChatTranslationMode] = useState<TranslationMode>("bidirectional");
@@ -295,6 +299,10 @@ export default function useVoiceChat({
     } else if (voiceChatProvider === CARTESIA_PROVIDER) {
       if (!CARTESIA_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice("f786b574-daa5-4673-aa0c-cbe3e8534c02");
+      }
+    } else if (voiceChatProvider === GRADIUM_PROVIDER) {
+      if (!GRADIUM_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
+        setVoiceChatVoice("YTpq7expH9539ERJ");
       }
     }
     // voiceChatModel must be a dependency: switching between qwen-audio and other

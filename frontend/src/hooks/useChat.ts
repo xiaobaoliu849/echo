@@ -45,7 +45,9 @@ export function isVoiceRealtimeModel(provider: string, model: string): boolean {
   if (
     normalizedProvider === "personaplex" ||
     normalizedProvider === "glm4voice" ||
-    normalizedProvider === "tavus"
+    normalizedProvider === "tavus" ||
+    normalizedProvider === "cartesia" ||
+    normalizedProvider === "gradium"
   ) {
     return true;
   }
@@ -74,6 +76,12 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
   const normalizedProv = (provider || "").trim().toLowerCase();
   if (normalizedProv === "tavus" || model.toLowerCase().includes("tavus")) {
     return t("实时视频分身", "Video PAL avatar");
+  }
+  if (normalizedProv === "cartesia" || model.toLowerCase().includes("cartesia")) {
+    return t("Cartesia 极速语音", "Cartesia Sonic Voice");
+  }
+  if (normalizedProv === "gradium" || model.toLowerCase().includes("gradium")) {
+    return t("Gradium 实时语音", "Gradium Voice AI");
   }
   if (normalizedProv === "glm4voice" || model.toLowerCase().includes("glm-4-voice")) {
     return t("智谱端到端语音", "GLM-4-Voice bilingual");

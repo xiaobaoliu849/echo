@@ -1882,4 +1882,26 @@ describe("useVoiceChat", () => {
     expect(result.current.micAnalyser).toBeNull();
     expect(result.current.assistantAnalyser).toBeNull();
   });
+
+  it("initializes and switches to Gradium with default Emma voice", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        providerOptions: ["DashScope", "Gradium"],
+        preferredProvider: "Gradium",
+        preferredModel: "gradium-realtime",
+      })
+    );
+
+    expect(result.current.voiceChatProvider).toBe("Gradium");
+    expect(result.current.voiceChatModel).toBe("gradium-realtime");
+    expect(result.current.voiceChatVoice).toBe("YTpq7expH9539ERJ");
+    expect(result.current.voiceChatVoiceLabel).toContain("Emma");
+
+    act(() => {
+      result.current.onProviderChange("Gradium");
+    });
+    expect(result.current.voiceChatVoice).toBe("YTpq7expH9539ERJ");
+  });
 });

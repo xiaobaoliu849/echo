@@ -23,6 +23,8 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   Deepgram: t("Deepgram ASR", "Deepgram ASR"),
   "GPT-SoVITS": t("本地 GPT-SoVITS API", "Local GPT-SoVITS API"),
   Tavus: t("Tavus 视频分身", "Tavus Video PAL"),
+  Cartesia: t("Cartesia 极速语音", "Cartesia Sonic Voice"),
+  Gradium: t("Gradium 实时语音", "Gradium Voice AI"),
 });
 
 const getLobeProviderKey = (name: string): string => {
@@ -44,6 +46,8 @@ const getLobeProviderKey = (name: string): string => {
   if (lower === "ollama") return "ollama";
   if (lower === "deepgram") return "deepgram";
   if (lower === "tavus") return "tavus";
+  if (lower === "cartesia") return "cartesia";
+  if (lower === "gradium") return "gradium";
   return lower;
 };
 
@@ -52,6 +56,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   groq: "#f55036", openrouter: "#8b5cf6", siliconcloud: "#7c3aed",
   xiaomimimo: "#ff6900", anthropic: "#d4a574", nvidia: "#76b900",
   ollama: "#6b7280", deepgram: "#13ef93", zenmux: "#a855f7", tavus: "#6c5ce7",
+  cartesia: "#00c389", gradium: "#3b82f6",
 };
 
 const LocalProviderIcon = ({ provider, size = 18 }: { provider: string; size?: number }) => (
