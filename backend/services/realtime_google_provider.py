@@ -204,8 +204,12 @@ class GoogleRealtimeMixin:
             )
 
         declarations = [
-            d for d in native_tool_declarations()
-            if d.name in {"open_browser", "query_search_results", "report_browser_content"}
+            types.FunctionDeclaration(
+                name=declaration["name"],
+                description=declaration["description"],
+                parameters_json_schema=declaration["parameters"],
+            )
+            for declaration in native_tool_declarations()
         ]
         system_inst = instructions or cls._build_realtime_instructions()
         tools_list = []
