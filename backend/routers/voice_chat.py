@@ -345,6 +345,14 @@ async def voice_chat_ws(
                 target_language_code=(target_language_code or "en").strip(),
                 echo_target_language=bool(echo_target_language),
             )
+    except WebSocketDisconnect:
+        pass
     except Exception as exc:
-        await websocket.send_json({"type": "error", "message": str(exc)})
-        await websocket.close(code=1011)
+        try:
+            await websocket.send_json({"type": "error", "message": str(exc)})
+        except Exception:
+            pass
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass

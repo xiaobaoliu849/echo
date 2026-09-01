@@ -176,6 +176,50 @@ class TestGradiumClientLoop(unittest.IsolatedAsyncioTestCase):
         llm = MagicMock()
         mem = MagicMock()
         tool = MagicMock()
+        await svc._gradium_client_loop(ws, state, llm, "DeepSeek", mem, tool, None)
+        svc._gradium_start_turn.assert_awaited_once()
+
+    async def test_audio_bytes_forwarded_as_base64_json(self):
+        svc = DummyGradiumService()
+        raw_pcm = b"\x01\x02\x03\x04"
+        ws = CollectingWebSocket(inbound=[
+            {"bytes": raw_pcm}
+        ])
+        fake_stt_ws = FakeWs()
+        state = _GradiumSessionState(
+            tts_model="default",
+            voice=DEFAULT_GRADIUM_VOICE,
+            llm_model="deepseek-v4-flash",
+            api_key="gsk_test",
+            ws_base="wss://api.gradium.ai",
+            stt_ws=fake_stt_ws,
+        )
+        llm = MagicMock()
+        mem = MagicMock()
+        tool = MagicMock()
+        await svc._gradium_client_loop(ws, state, llm, "DeepSeek", mem, tool, None)
+
+        self.assertEqual(len(fake_stt_ws.sent), 1)
+        payload = json.loads(fake_stt_ws.sent[0])
+        self.assertEqual(payload["type"], "audio")
+        import base64
+        self.assertEqual(payload["audio"], base64.b64encode(raw_pcm).decode("utf-8"))
+
+
+class TestGradiumTtsChunking(unittest.TestCase):
+    def test_split_gradium_tts_chunks(self):
+        from services.realtime_gradium_provider import _split_gradium_tts_chunks
+
+        # Partial streaming chunks
+        chunks, remaining = _split_gradium_tts_chunks("Hello world, this is", is_final=False)
+        self.assertEqual(chunks, ["Hello", "world,", "this"])
+        self.assertEqual(remaining, "is")
+
+        # Final chunk flushes remaining
+        chunks2, remaining2 = _split_gradium_tts_chunks("is a test.", is_final=True)
+        self.assertEqual(chunks2, ["is", "a", "test."])
+        self.assertEqual(remaining2, "")
+
 
 class TestGradiumSessionEntryPoint(unittest.IsolatedAsyncioTestCase):
     @patch("websockets.connect")
@@ -204,3 +248,4 @@ class TestGradiumSessionEntryPoint(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

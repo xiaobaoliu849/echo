@@ -11,6 +11,7 @@ Supports low-latency audio streaming, turn finalization, and barge-in interrupti
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import re
@@ -42,6 +43,31 @@ logger = logging.getLogger(__name__)
 
 _TTS_TEXT_NOISE_RE = re.compile(r"[\*#`]")
 _GRADIUM_MAX_HISTORY_MESSAGES = 20
+_GRADIUM_TTS_SPLIT_RE = re.compile(r"([^,.;:!?\n，。！？；：\s]+[,.;:!?\n，。！？；：\s]+)")
+
+
+def _split_gradium_tts_chunks(buffer: str, is_final: bool = False) -> tuple[list[str], str]:
+    """Split streamed LLM text buffer into safe TTS chunks on word/punctuation boundaries.
+
+    Gradium TTS inserts a single space between consecutive text messages. This
+    function ensures text is never split mid-word.
+    """
+    chunks: list[str] = []
+    pos = 0
+    for match in _GRADIUM_TTS_SPLIT_RE.finditer(buffer):
+        chunk = match.group(1).strip()
+        if chunk:
+            chunks.append(chunk)
+        pos = match.end()
+    remaining = buffer[pos:]
+    if not is_final and len(remaining) >= 20:
+        if re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", remaining):
+            chunks.append(remaining[:12].strip())
+            remaining = remaining[12:]
+    if is_final and remaining.strip():
+        chunks.append(remaining.strip())
+        remaining = ""
+    return chunks, remaining
 
 
 @dataclass
@@ -234,6 +260,7 @@ class GradiumRealtimeMixin:
 
                 recv_task = asyncio.create_task(recv_tts_audio())
 
+                text_buffer = ""
                 try:
                     async for event in llm.chat_completion_stream(
                         provider=llm_provider,
@@ -251,8 +278,11 @@ class GradiumRealtimeMixin:
                         assistant_parts.append(delta)
                         tts_delta = _TTS_TEXT_NOISE_RE.sub("", delta)
                         if tts_delta:
-                            text_msg = {"type": "text", "text": tts_delta}
-                            await tts_ws.send(json.dumps(text_msg))
+                            text_buffer += tts_delta
+                            chunks, text_buffer = _split_gradium_tts_chunks(text_buffer, is_final=False)
+                            for chunk in chunks:
+                                if chunk:
+                                    await tts_ws.send(json.dumps({"type": "text", "text": chunk}))
 
                         await self._deliver_assistant_output(
                             websocket,
@@ -260,6 +290,12 @@ class GradiumRealtimeMixin:
                             memory_session=memory_session,
                             recorder=recorder,
                         )
+
+                    # Flush remaining buffered text
+                    chunks, text_buffer = _split_gradium_tts_chunks(text_buffer, is_final=True)
+                    for chunk in chunks:
+                        if chunk:
+                            await tts_ws.send(json.dumps({"type": "text", "text": chunk}))
 
                     # Send end of stream to signal text completion
                     await tts_ws.send(json.dumps({"type": "end_of_stream"}))
@@ -379,7 +415,8 @@ class GradiumRealtimeMixin:
             audio_bytes = message.get("bytes")
             if audio_bytes and state.stt_ws is not None:
                 try:
-                    await state.stt_ws.send(audio_bytes)
+                    chunk_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+                    await state.stt_ws.send(json.dumps({"type": "audio", "audio": chunk_b64}))
                 except Exception:
                     pass
 
@@ -398,7 +435,7 @@ class GradiumRealtimeMixin:
         silence_flush_task: asyncio.Task[None] | None = None
 
         async def flush_turn_after_pause() -> None:
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(0.9)
             full_text = "".join(accumulated_text).strip()
             if full_text:
                 accumulated_text.clear()
@@ -420,11 +457,27 @@ class GradiumRealtimeMixin:
                         if state.active is not None:
                             await self._gradium_barge_in(websocket, state, memory_session, recorder)
                         accumulated_text.append(text_piece + " ")
+                        interim_text = "".join(accumulated_text).strip()
+                        await self._send_event(websocket, "user_transcript", text=interim_text, final=False)
                         if silence_flush_task is not None and not silence_flush_task.done():
                             silence_flush_task.cancel()
                         silence_flush_task = asyncio.create_task(flush_turn_after_pause())
+                elif event_type == "step":
+                    vad = event.get("vad")
+                    if isinstance(vad, list) and len(vad) >= 3 and accumulated_text:
+                        inact_2s = float(vad[2].get("inactivity_prob", 0.0)) if len(vad) > 2 else 0.0
+                        inact_3s = float(vad[-1].get("inactivity_prob", 0.0))
+                        if inact_2s > 0.7 or inact_3s > 0.8:
+                            if silence_flush_task is not None and not silence_flush_task.done():
+                                silence_flush_task.cancel()
+                            full_text = "".join(accumulated_text).strip()
+                            if full_text:
+                                accumulated_text.clear()
+                                await self._gradium_start_turn(
+                                    websocket, state, full_text,
+                                    llm, llm_provider, memory_session, tool_session, recorder,
+                                )
                 elif event_type == "turn":
-                    # If Gradium sends turn end
                     if event.get("turn_end"):
                         if silence_flush_task is not None and not silence_flush_task.done():
                             silence_flush_task.cancel()
@@ -485,8 +538,8 @@ class GradiumRealtimeMixin:
                 setup_msg = {
                     "type": "setup",
                     "model_name": "default",
-                    "input_format": "pcm",
-                    "json_config": json.dumps({"language": "any"}),
+                    "input_format": "pcm_16000",
+                    "json_config": {"language": "any", "delay_in_frames": 16},
                 }
                 await stt_ws.send(json.dumps(setup_msg))
                 ready_msg = await stt_ws.recv()
