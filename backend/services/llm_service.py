@@ -258,6 +258,26 @@ class LLMService:
         return "aiplatform.googleapis.com" in base_url
 
     @staticmethod
+    def _get_vertex_auth(api_key: str = "") -> tuple[dict[str, str], str]:
+        sa_file = "gen-lang-client-0313108616-b62670b6c2cb.json"
+        if os.path.exists(sa_file):
+            try:
+                from google.oauth2 import service_account
+                from google.auth.transport.requests import Request
+                creds = service_account.Credentials.from_service_account_file(
+                    sa_file,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
+                creds.refresh(Request())
+                if creds.token:
+                    return {"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"}, ""
+            except Exception as e:
+                logger.warning("vertex_sa_oauth_failed: %s", e)
+        headers = {"Content-Type": "application/json"}
+        key_param = f"key={api_key}" if api_key else ""
+        return headers, key_param
+
+    @staticmethod
     def _build_vertex_payload(
         messages: list[dict[str, Any]],
         temperature: float = 0.7,
@@ -303,10 +323,10 @@ class LLMService:
             project_id = "gen-lang-client-0313108616"
             location = "us-central1"
             model = settings.get("model", "").strip() or "gemini-2.5-flash"
-            api_key = settings["api_key"]
-            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:generateContent?key={api_key}"
+            headers, key_param = self._get_vertex_auth(settings.get("api_key", ""))
+            param_str = f"?{key_param}" if key_param else ""
+            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:generateContent{param_str}"
             payload = self._build_vertex_payload(messages, temperature)
-            headers = {"Content-Type": "application/json"}
             try:
                 async with httpx.AsyncClient(timeout=90.0) as client:
                     response = await client.post(url, json=payload, headers=headers)
@@ -385,10 +405,10 @@ class LLMService:
             project_id = "gen-lang-client-0313108616"
             location = "us-central1"
             model = settings.get("model", "").strip() or "gemini-3.7-flash"
-            api_key = settings["api_key"]
-            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
+            headers, key_param = self._get_vertex_auth(settings.get("api_key", ""))
+            param_str = f"?{key_param}&alt=sse" if key_param else "?alt=sse"
+            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:streamGenerateContent{param_str}"
             payload = self._build_vertex_payload(messages, temperature)
-            headers = {"Content-Type": "application/json"}
 
             yield {"type": "meta", "provider": "Google", "model": model}
             chunks: list[str] = []
