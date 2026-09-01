@@ -344,10 +344,11 @@ class GoogleStreamingAsrSession:
             http_options["base_url"] = self._base_url
 
         api_key = self._api_key.strip()
-        is_vertex = api_key.startswith("AQ.") or (self._base_url and "aiplatform.googleapis.com" in self._base_url)
+        base_url = self._base_url or ""
+        is_vertex = "aiplatform.googleapis.com" in base_url
         sa_file = "gen-lang-client-0313108616-b62670b6c2cb.json"
 
-        if is_vertex or os.path.exists(sa_file) and not api_key.startswith("AIza"):
+        if is_vertex:
             if os.path.exists(sa_file):
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
                 self._client = genai.Client(

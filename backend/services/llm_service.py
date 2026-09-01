@@ -254,12 +254,8 @@ class LLMService:
 
     @staticmethod
     def _is_vertex_ai(settings: dict[str, str]) -> bool:
-        api_key = settings.get("api_key", "").strip()
         base_url = settings.get("base_url", "").strip()
-        return (
-            api_key.startswith("AQ.")
-            or "aiplatform.googleapis.com" in base_url
-        )
+        return "aiplatform.googleapis.com" in base_url
 
     @staticmethod
     def _build_vertex_payload(

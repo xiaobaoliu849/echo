@@ -1032,10 +1032,11 @@ class GoogleRealtimeMixin:
             http_options["base_url"] = settings["base_url"]
 
         api_key = settings["api_key"].strip()
-        is_vertex = api_key.startswith("AQ.") or "aiplatform.googleapis.com" in settings.get("base_url", "")
+        base_url = settings.get("base_url", "").strip()
+        is_vertex = "aiplatform.googleapis.com" in base_url
         sa_file = "gen-lang-client-0313108616-b62670b6c2cb.json"
 
-        if is_vertex or os.path.exists(sa_file) and not api_key.startswith("AIza"):
+        if is_vertex:
             if os.path.exists(sa_file):
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
                 client = genai.Client(
