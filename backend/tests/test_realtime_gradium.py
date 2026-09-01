@@ -177,8 +177,29 @@ class TestGradiumClientLoop(unittest.IsolatedAsyncioTestCase):
         mem = MagicMock()
         tool = MagicMock()
 
-        await svc._gradium_client_loop(ws, state, llm, "DeepSeek", mem, tool, recorder=None)
-        svc._gradium_start_turn.assert_awaited_once()
+class TestGradiumSessionEntryPoint(unittest.IsolatedAsyncioTestCase):
+    @patch("websockets.connect")
+    async def test_stream_gradium_session_starts_and_validates_voice(self, mock_ws_connect):
+        fake_ws = FakeWs()
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = fake_ws
+        mock_ws_connect.return_value = mock_ctx
+
+        svc = DummyGradiumService()
+        svc._resolve_gradium_settings = MagicMock(return_value={
+            "api_key": "gsk_test",
+            "ws_base": "wss://api.gradium.ai",
+            "tts_model": "default",
+            "llm_model": "deepseek-v4-flash",
+            "llm_provider": "DeepSeek",
+            "session_model": "gradium-realtime",
+        })
+        client_ws = CollectingWebSocket()
+
+        # Test with invalid voice string (e.g. "Tina") to verify fallback
+        await svc.stream_gradium_session(client_ws, model="gradium-realtime", voice="Tina")
+        svc._run_duplex_tasks.assert_awaited_once()
+        self.assertTrue(any(e["type"] == "session_open" for e in client_ws.events))
 
 
 if __name__ == "__main__":

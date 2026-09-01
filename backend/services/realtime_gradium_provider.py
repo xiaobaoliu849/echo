@@ -26,6 +26,7 @@ from .gradium_tts_provider import (
     DEFAULT_GRADIUM_MODEL,
     DEFAULT_GRADIUM_VOICE,
     gradium_headers,
+    is_gradium_voice,
 )
 from .interruption_classifier import InterruptionDecisionCoordinator
 from .llm_service import LLMService
