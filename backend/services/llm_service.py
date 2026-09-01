@@ -325,11 +325,12 @@ class LLMService:
         """Non-streaming chat completion via Google Interactions API or Vertex AI."""
         if self._is_vertex_ai(settings):
             project_id = "gen-lang-client-0313108616"
-            location = "us-central1"
-            model = settings.get("model", "").strip() or "gemini-2.5-flash"
+            model = settings.get("model", "").strip() or "gemini-3.7-flash"
+            location = "global" if model.startswith("gemini-3") else "us-central1"
+            host = "aiplatform.googleapis.com" if location == "global" else f"{location}-aiplatform.googleapis.com"
             headers, key_param = self._get_vertex_auth(settings.get("api_key", ""))
             param_str = f"?{key_param}" if key_param else ""
-            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:generateContent{param_str}"
+            url = f"https://{host}/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:generateContent{param_str}"
             payload = self._build_vertex_payload(messages, temperature)
             try:
                 async with httpx.AsyncClient(timeout=90.0) as client:
@@ -407,11 +408,12 @@ class LLMService:
         """Streaming chat completion via Google Interactions API or Vertex AI (SSE)."""
         if self._is_vertex_ai(settings):
             project_id = "gen-lang-client-0313108616"
-            location = "us-central1"
             model = settings.get("model", "").strip() or "gemini-3.7-flash"
+            location = "global" if model.startswith("gemini-3") else "us-central1"
+            host = "aiplatform.googleapis.com" if location == "global" else f"{location}-aiplatform.googleapis.com"
             headers, key_param = self._get_vertex_auth(settings.get("api_key", ""))
             param_str = f"?{key_param}&alt=sse" if key_param else "?alt=sse"
-            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:streamGenerateContent{param_str}"
+            url = f"https://{host}/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:streamGenerateContent{param_str}"
             payload = self._build_vertex_payload(messages, temperature)
 
             yield {"type": "meta", "provider": "Google", "model": model}
