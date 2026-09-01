@@ -76,8 +76,17 @@ tests/__pycache__/
 *.key
 *apikey*.txt
 *apiKey*.txt
+*cloudapikey*.txt
+*key*.txt
+*key*.json
+gen-lang-client-*.json
+*credentials*.json
+.env
+.env.*
 
-# Local reference docs / tool dirs / archives
+# Local reference docs / tool dirs / archives / temp probe files
+.evermind_*
+.v1*
 .zcode/
 .freebuff/
 *.log
@@ -90,3 +99,4 @@ node_modules/
 .echo-desktop/
 echo.db
 echo.log
+

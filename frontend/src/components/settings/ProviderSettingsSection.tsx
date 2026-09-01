@@ -251,6 +251,14 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </label>
           )}
 
+          {settings.settingsProvider === "Google" && (
+            <div className="vsSettingsNotice ok" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6 }}>
+              <div><strong>{t("💡 Google Gemini 双模式已全面支持：", "💡 Google Gemini Dual Mode Supported:")}</strong></div>
+              <div style={{ marginTop: 4 }}>• 🟢 <strong>Google AI Studio Key（AIzaSy... 开头）</strong>：{t("用于实时双向语音通话（gemini-3.1-flash-live-preview）、实时同传（gemini-3.5-live-translate-preview），走每日免费配额。", "Used for realtime voice chat (gemini-3.1-flash-live-preview), live translation, with daily free quota.")}</div>
+              <div style={{ marginTop: 2 }}>• 🔵 <strong>Google Cloud Vertex AI Key（AQ... 开头）</strong>：{t("用于流式打字聊天与大模型推理（gemini-2.5-flash / gemini-2.5-pro），100% 消耗您的 $340 美元赠金！", "Used for streaming chat & reasoning (gemini-2.5-flash / pro), billing directly to your $340 Google Cloud credits!")}</div>
+            </div>
+          )}
+
           {settings.settingsProvider === "DashScope" && (
             <label className="vsField">
               <span className="vsFieldLabel">Qwen Realtime WebSocket URL</span>

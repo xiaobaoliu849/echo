@@ -553,6 +553,9 @@ class RealtimeVoiceService(
         """
         if command_type == "config":
             memory_session.configure(payload.get("memory"))
+            # Fetch recent memories in the background so the first turn can
+            # inject what earlier sessions discussed (see kickoff docstring).
+            memory_session.kickoff_startup_context()
             await self._send_event(
                 websocket,
                 "memory_config",

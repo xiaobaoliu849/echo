@@ -252,6 +252,48 @@ class LLMService:
                             reply_parts.append(text)
         return "\n".join(reply_parts).strip()
 
+    @staticmethod
+    def _is_vertex_ai(settings: dict[str, str]) -> bool:
+        api_key = settings.get("api_key", "").strip()
+        base_url = settings.get("base_url", "").strip()
+        return (
+            api_key.startswith("AQ.")
+            or "aiplatform.googleapis.com" in base_url
+        )
+
+    @staticmethod
+    def _build_vertex_payload(
+        messages: list[dict[str, Any]],
+        temperature: float = 0.7,
+    ) -> dict[str, Any]:
+        contents: list[dict[str, Any]] = []
+        system_instruction_text = ""
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "system":
+                if isinstance(content, str):
+                    system_instruction_text += content + "\n"
+                continue
+            v_role = "model" if role == "assistant" else "user"
+            if isinstance(content, str):
+                contents.append({"role": v_role, "parts": [{"text": content}]})
+            elif isinstance(content, list):
+                parts = []
+                for p in content:
+                    if isinstance(p, dict) and p.get("type") == "text":
+                        parts.append({"text": p.get("text", "")})
+                if parts:
+                    contents.append({"role": v_role, "parts": parts})
+        if not contents:
+            contents.append({"role": "user", "parts": [{"text": "Hello"}]})
+        payload: dict[str, Any] = {"contents": contents}
+        if system_instruction_text.strip():
+            payload["systemInstruction"] = {"parts": [{"text": system_instruction_text.strip()}]}
+        if temperature is not None:
+            payload["generationConfig"] = {"temperature": float(temperature)}
+        return payload
+
     async def _chat_completion_google(
         self,
         *,
@@ -260,7 +302,42 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 1024,
     ) -> dict[str, Any]:
-        """Non-streaming chat completion via Google Interactions API."""
+        """Non-streaming chat completion via Google Interactions API or Vertex AI."""
+        if self._is_vertex_ai(settings):
+            project_id = "gen-lang-client-0313108616"
+            location = "us-central1"
+            model = settings.get("model", "").strip() or "gemini-2.5-flash"
+            api_key = settings["api_key"]
+            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:generateContent?key={api_key}"
+            payload = self._build_vertex_payload(messages, temperature)
+            headers = {"Content-Type": "application/json"}
+            try:
+                async with httpx.AsyncClient(timeout=90.0) as client:
+                    response = await client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                detail = exc.response.text[:500] if exc.response is not None else str(exc)
+                raise RuntimeError(f"Google Vertex AI API error: {detail}") from exc
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"Network error: {exc}") from exc
+
+            from typing import cast
+            data = cast(dict[str, Any], response.json())
+            candidates = data.get("candidates", [])
+            reply = ""
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                reply = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+            if not reply:
+                raise RuntimeError("Google Vertex AI returned empty response.")
+
+            return {
+                "provider": "Google",
+                "model": model,
+                "reply": reply,
+                "raw": data,
+            }
+
         url = f"{settings['base_url']}/interactions"
         input_data, system_instruction = self._build_interactions_input(messages)
 
@@ -307,7 +384,59 @@ class LLMService:
         temperature: float = 0.7,
         max_tokens: int = 1024,
     ) -> AsyncGenerator[dict[str, Any], None]:
-        """Streaming chat completion via Google Interactions API (SSE)."""
+        """Streaming chat completion via Google Interactions API or Vertex AI (SSE)."""
+        if self._is_vertex_ai(settings):
+            project_id = "gen-lang-client-0313108616"
+            location = "us-central1"
+            model = settings.get("model", "").strip() or "gemini-2.5-flash"
+            api_key = settings["api_key"]
+            url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
+            payload = self._build_vertex_payload(messages, temperature)
+            headers = {"Content-Type": "application/json"}
+
+            yield {"type": "meta", "provider": "Google", "model": model}
+            chunks: list[str] = []
+            try:
+                timeout = httpx.Timeout(timeout=120.0, read=120.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream("POST", url, json=payload, headers=headers) as response:
+                        response.raise_for_status()
+                        async for raw_line in response.aiter_lines():
+                            line = raw_line.strip()
+                            if line.startswith("data:"):
+                                raw_data = line[5:].strip()
+                                if not raw_data:
+                                    continue
+                                try:
+                                    data = json.loads(raw_data)
+                                    candidates = data.get("candidates", [])
+                                    if candidates:
+                                        parts = candidates[0].get("content", {}).get("parts", [])
+                                        for p in parts:
+                                            if isinstance(p, dict) and "text" in p:
+                                                text = p["text"]
+                                                if text:
+                                                    chunks.append(text)
+                                                    yield {"type": "delta", "content": text}
+                                except Exception:
+                                    continue
+            except httpx.HTTPStatusError as exc:
+                detail = exc.response.text[:500] if exc.response is not None else str(exc)
+                raise RuntimeError(f"Google Vertex AI stream error: {detail}") from exc
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"Stream network error: {exc}") from exc
+
+            reply = "".join(chunks).strip()
+            if not reply:
+                raise RuntimeError("Google Vertex AI returned empty stream response.")
+
+            yield {
+                "type": "done",
+                "provider": "Google",
+                "model": model,
+                "reply": reply,
+            }
+            return
         url = f"{settings['base_url']}/interactions?alt=sse"
         input_data, system_instruction = self._build_interactions_input(messages)
 

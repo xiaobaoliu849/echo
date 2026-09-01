@@ -1,13 +1,16 @@
 """
-EverMemOS Service
+EverMemOS Service (EverOS Cloud API v1)
 Service for interacting with EverMemOS long-term memory system.
-Supports both Cloud (https://api.evermind.ai) and self-hosted instances.
+
+Targets the Cloud v1 endpoints (``/api/v1/...``): v0 was removed upstream on
+2026-06-17, and this account is gated to v1 (v2 returns VERSION_NOT_ALLOWED).
+Supports both Cloud (https://api.evermind.ai) and compatible self-hosted
+instances.
 """
 from __future__ import annotations
 
-import asyncio
-import datetime
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -21,6 +24,18 @@ class EverMemService:
         self.api_url = (api_url or "https://api.evermind.ai").rstrip("/")
         self.api_key = api_key
 
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    @staticmethod
+    def _session_id_for(user_id: str, group_id: str | None) -> str:
+        """Map the legacy group_id concept onto the v1 session_id partition."""
+        resolved_group = str(group_id or "").strip()
+        return resolved_group or f"{user_id}_default"
+
     async def add_memory(
         self,
         content: str,
@@ -30,41 +45,60 @@ class EverMemService:
         flush: bool = False,
         group_id: str | None = None,
     ) -> dict[str, Any] | None:
-        """Add a memory to EverMemOS (v0 API)."""
+        """Add a memory message to EverOS (v1 personal memories endpoint)."""
         if not self.api_key:
             logger.warning("EverMemService: Missing API key. Cannot add memory.")
             return None
 
-        message_id = str(uuid.uuid4())
-        create_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        # EverMind uses sender as part of memory ownership internally.
+        session_id = self._session_id_for(user_id, group_id)
+        # EverOS uses sender_id as memory ownership internally.
         # Keep it aligned with user_id/scope so writes and reads land in the same namespace.
-        actual_sender = user_id
-
-        url = f"{self.api_url}/api/v0/memories"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "message_id": message_id,
-            "create_time": create_time,
-            "user_id": user_id,
-            "sender": actual_sender,
-            "sender_name": sender_name,
+        role = "assistant" if str(sender_name).strip().lower() == "assistant" else "user"
+        message: dict[str, Any] = {
+            "sender_id": user_id,
+            "role": role,
+            "timestamp": int(time.time() * 1000),
             "content": content,
-            "flush": flush,
         }
-        if group_id:
-            payload["group_id"] = group_id
+        if str(sender_name).strip():
+            message["sender_name"] = str(sender_name).strip()
+
+        payload = {
+            "user_id": user_id,
+            "session_id": session_id,
+            "async_mode": True,
+            "messages": [message],
+        }
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-                resp.raise_for_status()
+                resp = await client.post(
+                    f"{self.api_url}/api/v1/memories",
+                    headers=self._headers(),
+                    json=payload,
+                )
+                if resp.status_code not in (200, 201, 202):
+                    logger.error(
+                        "Failed to add memory to EverOS: %s %s",
+                        resp.status_code,
+                        resp.text[:200],
+                    )
+                    return None
+                if flush:
+                    flush_resp = await client.post(
+                        f"{self.api_url}/api/v1/memories/flush",
+                        headers=self._headers(),
+                        json={"user_id": user_id, "session_id": session_id},
+                    )
+                    if flush_resp.status_code != 200:
+                        logger.warning(
+                            "EverOS flush returned %s: %s",
+                            flush_resp.status_code,
+                            flush_resp.text[:200],
+                        )
             return {"status": "success"}
         except Exception as e:
-            logger.error(f"Failed to add memory to EverMemOS: {e}")
+            logger.error(f"Failed to add memory to EverOS: {e}")
             return None
 
     async def create_conversation_meta(
@@ -73,35 +107,38 @@ class EverMemService:
         user_id: str = "guest",
         group_id: str | None = None,
     ) -> dict[str, Any] | None:
-        """Create or register a conversation group in EverMemOS (v0 API)."""
+        """Register a conversation group (v1 groups endpoint, best-effort).
+
+        v1 group/session identifiers are client-chosen, so a usable
+        ``group_id`` is always returned even if the upstream registration
+        fails (e.g. the group already exists) — writes/reads only need the id.
+        """
         if not self.api_key:
             logger.warning("EverMemService: Missing API key. Cannot create conversation meta.")
             return None
 
-        url = f"{self.api_url}/api/v0/memories/conversation-meta"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {"user_id": user_id}
-        if group_id:
-            payload["group_id"] = group_id
-
+        resolved_group_id = str(group_id or "").strip() or f"conv_{uuid.uuid4().hex[:16]}"
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
+                resp = await client.post(
+                    f"{self.api_url}/api/v1/groups",
+                    headers=self._headers(),
+                    json={
+                        "group_id": resolved_group_id,
+                        "name": f"Echo conversation {resolved_group_id}",
+                        "description": "Realtime voice / chat conversation group",
+                    },
+                )
+                if resp.status_code not in (200, 201, 202, 409):
+                    logger.warning(
+                        "EverOS group registration returned %s: %s",
+                        resp.status_code,
+                        resp.text[:200],
+                    )
         except Exception as e:
-            logger.error(f"Failed to create EverMemOS conversation meta: {e}")
-            return None
+            logger.warning(f"EverOS group registration failed (continuing anyway): {e}")
 
-        if isinstance(data, dict):
-            result = data.get("result")
-            if isinstance(result, dict):
-                return result
-            return data
-        return None
+        return {"group_id": resolved_group_id, "user_id": user_id}
 
     async def search_memories(
         self,
@@ -112,45 +149,57 @@ class EverMemService:
         group_ids: list[str] | None = None,
         memory_types: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Search for relevant memories in EverMemOS (v0 API)."""
+        """Search for relevant memories in EverOS (v1 search endpoint)."""
         if not self.api_key:
             logger.warning("EverMemService: Missing API key. Cannot search memories.")
             return []
 
-        search_url = f"{self.api_url}/api/v0/memories/search"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        params: dict[str, Any] = {
-            "user_id": user_id,
+        filters: dict[str, Any] = {"user_id": user_id}
+        resolved_group_ids = [str(g).strip() for g in (group_ids or []) if str(g).strip()]
+        if len(resolved_group_ids) == 1:
+            filters["session_id"] = resolved_group_ids[0]
+
+        payload: dict[str, Any] = {
             "query": query,
-            "retrieve_method": "hybrid",
+            "filters": filters,
+            "method": "hybrid",
             "top_k": 5,
         }
-        if group_ids:
-            params["group_ids"] = group_ids
         if memory_types:
-            params["memory_types"] = memory_types
+            payload["memory_types"] = memory_types
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get(search_url, headers=headers, params=params)
+                resp = await client.post(
+                    f"{self.api_url}/api/v1/memories/search",
+                    headers=self._headers(),
+                    json=payload,
+                )
                 if resp.status_code != 200:
-                    logger.error(f"EverMem search returned {resp.status_code}: {resp.text[:200]}")
+                    logger.error(f"EverOS search returned {resp.status_code}: {resp.text[:200]}")
                     return []
+                body = resp.json()
 
-                data = resp.json()
-
-            result = data.get("result", {})
-            if not result:
+            data = body.get("data") or body.get("result") or {}
+            if not isinstance(data, dict):
                 return []
 
-            memories_list = result.get("memories", [])
-            profiles_list = result.get("profiles", [])
-            pending_messages = result.get("pending_messages", [])
+            episodes_list = data.get("episodes") or data.get("memories") or []
+            profiles_list = data.get("profiles") or []
+            raw_messages = data.get("raw_messages") or data.get("pending_messages") or []
 
-            extracted_memories = []
+            extracted_memories: list[dict[str, Any]] = []
 
             for profile in profiles_list:
+                if not isinstance(profile, dict):
+                    continue
                 desc = profile.get("description")
+                if not desc and isinstance(profile.get("profile_data"), dict):
+                    pairs = [
+                        f"{k}: {v}"
+                        for k, v in list(profile["profile_data"].items())[:8]
+                    ]
+                    desc = "；".join(pairs)
                 if desc:
                     extracted_memories.append(
                         {
@@ -160,15 +209,23 @@ class EverMemService:
                         }
                     )
 
-            for mem in memories_list:
-                score = mem.get("score", 0.0)
-                if score < min_score:
+            for mem in episodes_list:
+                if not isinstance(mem, dict):
+                    continue
+                score = mem.get("score", 1.0)
+                if isinstance(score, (int, float)) and score < min_score:
                     continue
                 mem_type = mem.get("memory_type", "episodic_memory")
-                content = mem.get("episode") or mem.get("summary") or mem.get("content")
+                content = (
+                    mem.get("episode")
+                    or mem.get("summary")
+                    or mem.get("subject")
+                    or mem.get("content")
+                )
                 if content:
                     type_label = {
                         "episodic_memory": "历史对话",
+                        "episode": "历史对话",
                         "foresight": "提醒/行动",
                         "profile": "用户画像",
                     }.get(mem_type, "记忆")
@@ -176,7 +233,9 @@ class EverMemService:
                         {"content": f"[{type_label}] {content}", "type": mem_type, "score": score}
                     )
 
-            for pending in pending_messages:
+            for pending in raw_messages:
+                if not isinstance(pending, dict):
+                    continue
                 content = str(pending.get("content", "")).strip()
                 if content:
                     extracted_memories.append(
@@ -189,42 +248,48 @@ class EverMemService:
 
             return extracted_memories
         except Exception as e:
-            logger.error(f"Failed to search memories in EverMemOS: {e}")
+            logger.error(f"Failed to search memories in EverOS: {e}")
             return []
 
     async def get_memories(self, user_id: str = "guest") -> list[dict[str, Any]]:
-        """Get all core memories for a user (v0 API)."""
+        """Get episodic memories for a user (v1 get endpoint)."""
         if not self.api_key:
             logger.warning("EverMemService: Missing API key. Cannot get memories.")
             return []
 
-        search_url = f"{self.api_url}/api/v0/memories"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        params = {
-            "user_id": user_id,
+        payload = {
+            "filters": {"user_id": user_id},
             "memory_type": "episodic_memory",
+            "page": 1,
+            "page_size": 20,
         }
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get(search_url, headers=headers, params=params)
+                resp = await client.post(
+                    f"{self.api_url}/api/v1/memories/get",
+                    headers=self._headers(),
+                    json=payload,
+                )
                 if resp.status_code != 200:
                     return []
-                data = resp.json()
+                body = resp.json()
 
-            result = data.get("result", {})
-            if not result:
+            data = body.get("data") or body.get("result") or {}
+            if not isinstance(data, dict):
                 return []
 
-            memories_list = result.get("memories", [])
+            episodes_list = data.get("episodes") or data.get("memories") or []
             extracted_memories = []
-            for mem in memories_list:
+            for mem in episodes_list:
+                if not isinstance(mem, dict):
+                    continue
                 content = mem.get("episode") or mem.get("summary") or mem.get("content")
                 if content:
                     extracted_memories.append({"content": content})
             return extracted_memories
         except Exception as e:
-            logger.error(f"Failed to get memories from EverMemOS: {e}")
+            logger.error(f"Failed to get memories from EverOS: {e}")
             return []
 
     _SKIP_PATTERNS = {

@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
@@ -342,7 +343,25 @@ class GoogleStreamingAsrSession:
         if self._base_url and self._base_url != "https://generativelanguage.googleapis.com/v1beta":
             http_options["base_url"] = self._base_url
 
-        self._client = genai.Client(api_key=self._api_key, http_options=http_options)
+        api_key = self._api_key.strip()
+        is_vertex = api_key.startswith("AQ.") or (self._base_url and "aiplatform.googleapis.com" in self._base_url)
+        sa_file = "gen-lang-client-0313108616-b62670b6c2cb.json"
+
+        if is_vertex or os.path.exists(sa_file) and not api_key.startswith("AIza"):
+            if os.path.exists(sa_file):
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
+                self._client = genai.Client(
+                    vertexai=True,
+                    project="gen-lang-client-0313108616",
+                    location="us-central1",
+                )
+            else:
+                self._client = genai.Client(
+                    vertexai=True,
+                    api_key=api_key,
+                )
+        else:
+            self._client = genai.Client(api_key=api_key, http_options=http_options)
         live_config = types.LiveConnectConfig(
             response_modalities=["TEXT"],
             input_audio_transcription=types.AudioTranscriptionConfig(),

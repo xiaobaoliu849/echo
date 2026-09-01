@@ -6,6 +6,7 @@ import base64
 import inspect
 import json
 import logging
+import os
 import re
 import time
 from typing import Any
@@ -1017,7 +1018,25 @@ class GoogleRealtimeMixin:
         if settings["base_url"]:
             http_options["base_url"] = settings["base_url"]
 
-        client = genai.Client(api_key=settings["api_key"], http_options=http_options)
+        api_key = settings["api_key"].strip()
+        is_vertex = api_key.startswith("AQ.") or "aiplatform.googleapis.com" in settings.get("base_url", "")
+        sa_file = "gen-lang-client-0313108616-b62670b6c2cb.json"
+
+        if is_vertex or os.path.exists(sa_file) and not api_key.startswith("AIza"):
+            if os.path.exists(sa_file):
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
+                client = genai.Client(
+                    vertexai=True,
+                    project="gen-lang-client-0313108616",
+                    location="us-central1",
+                )
+            else:
+                client = genai.Client(
+                    vertexai=True,
+                    api_key=api_key,
+                )
+        else:
+            client = genai.Client(api_key=api_key, http_options=http_options)
         is_live_translate = _is_google_live_translate_model(settings["model"])
         live_config = (
             self._build_live_translate_config(

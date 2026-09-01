@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
 import os
@@ -225,7 +226,19 @@ class RealtimeMemorySession:
     )
     _RETRIEVE_TIMEOUT_SECONDS = 0.12
     _FORCED_RETRIEVE_TIMEOUT_SECONDS = 0.35
-    _PENDING_MEMORY_TTL_SECONDS = 1800
+    _STARTUP_RETRIEVE_TIMEOUT_SECONDS = 3.0
+    _STARTUP_WAIT_SECONDS = 1.2
+    _STARTUP_QUERY = "最近的对话讨论了什么 用户偏好 当前任务 待办事项 会话摘要"
+    _SESSION_MAX_USER_EXCERPTS = 30
+    _SESSION_MAX_ASSISTANT_EXCERPTS = 12
+    _SESSION_MAX_KEY_ENTRIES = 8
+    _SESSION_SUMMARY_MAX_CHARS = 700
+    # Cloud extraction is asynchronous and boundary-triggered — short voice
+    # sessions may take hours (or longer) to become searchable episodes.  The
+    # local pending cache is therefore the primary bridge to "next session",
+    # so its TTL must cover realistic gaps between conversations, not just
+    # extraction lag.
+    _PENDING_MEMORY_TTL_SECONDS = 3 * 24 * 3600
     _PENDING_MEMORY_MAX_PER_SCOPE = 24
     _PENDING_MEMORY_CACHE: dict[str, list[dict[str, Any]]] = {}
     _PENDING_CACHE_PATH: Path = _resolve_pending_cache_path()
@@ -241,6 +254,16 @@ class RealtimeMemorySession:
         self._last_local_pending_count = 0
         self._last_cloud_count = 0
         self._last_retrieve_attempted = False
+        # Session-level accumulation (drives the end-of-session summary) and
+        # startup memory injection state.
+        self._session_user_excerpts: list[str] = []
+        self._session_assistant_excerpts: list[str] = []
+        self._session_key_entries: list[str] = []
+        self._startup_task: asyncio.Task[None] | None = None
+        self._startup_context = ""
+        self._startup_count = 0
+        self._startup_consumed = False
+        self._session_finalized = False
 
     def _pending_cache_key(self) -> str:
         return str(self._config.group_id or self._config.memory_scope).strip()
@@ -253,6 +276,14 @@ class RealtimeMemorySession:
             self._config = EverMemConfig()
             self._current_user_text = ""
             self._current_assistant_text = ""
+            # Memory was explicitly disabled — drop anything accumulated so a
+            # later finalize cannot write excerpts from a disabled session.
+            self._session_user_excerpts = []
+            self._session_assistant_excerpts = []
+            self._session_key_entries = []
+            self._startup_context = ""
+            self._startup_count = 0
+            self._startup_consumed = True
             logger.info("voice_memory_config disabled")
             return
 
@@ -302,8 +333,10 @@ class RealtimeMemorySession:
     async def flush_turn(self) -> dict[str, Any]:
         service = self._config.get_service()
         user_text = self._current_user_text.strip()
+        assistant_text = self._current_assistant_text.strip()
         self._current_user_text = ""
         self._current_assistant_text = ""
+        self._record_turn_excerpts(user_text, assistant_text)
 
         if not service or not user_text:
             logger.info(
@@ -341,6 +374,7 @@ class RealtimeMemorySession:
         scope_key = self._scope_pending_cache_key()
         if scope_key and scope_key != cache_key:
             self._queue_pending_entries(scope_key, memory_entries)
+        self._note_key_entries(memory_entries)
         result = await self._persist_entries(entries=memory_entries)
         result["enabled"] = True
         result["local_pending_count"] = queued_count
@@ -356,7 +390,191 @@ class RealtimeMemorySession:
         )
         return result
 
+    # -- session-level accumulation -----------------------------------------
+
+    def _record_turn_excerpts(self, user_text: str, assistant_text: str) -> None:
+        """Keep bounded per-turn excerpts for the end-of-session summary."""
+        if user_text:
+            excerpt = re.sub(r"\s+", " ", user_text).strip()[:160]
+            if excerpt and (not self._session_user_excerpts or self._session_user_excerpts[-1] != excerpt):
+                self._session_user_excerpts.append(excerpt)
+                del self._session_user_excerpts[: -self._SESSION_MAX_USER_EXCERPTS]
+        if assistant_text:
+            excerpt = re.sub(r"\s+", " ", assistant_text).strip()[:120]
+            if excerpt and (
+                not self._session_assistant_excerpts or self._session_assistant_excerpts[-1] != excerpt
+            ):
+                self._session_assistant_excerpts.append(excerpt)
+                del self._session_assistant_excerpts[: -self._SESSION_MAX_ASSISTANT_EXCERPTS]
+
+    def _note_key_entries(self, entries: list[str]) -> None:
+        seen = {self._content_dedupe_key(item) for item in self._session_key_entries}
+        for entry in entries:
+            key = self._content_dedupe_key(entry)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            self._session_key_entries.append(entry)
+        del self._session_key_entries[: -self._SESSION_MAX_KEY_ENTRIES]
+
+    @staticmethod
+    def _pick_excerpts(excerpts: list[str], *, head: int, tail: int, max_chars: int) -> list[str]:
+        """Pick the first ``head`` and last ``tail`` excerpts (deduped, trimmed)."""
+        picked: list[str] = []
+        seen: set[str] = set()
+        for candidate in [*excerpts[:head], *excerpts[-tail:]]:
+            trimmed = candidate[:max_chars].strip()
+            if not trimmed or trimmed in seen:
+                continue
+            seen.add(trimmed)
+            picked.append(trimmed)
+        return picked
+
+    def _compose_session_summary(self) -> str:
+        """Build a heuristic session summary (no LLM required)."""
+        date_str = datetime.date.today().isoformat()
+        turn_count = len(self._session_user_excerpts)
+        parts = [f"会话摘要({date_str}): 本次实时语音对话共 {turn_count} 轮。"]
+        topics = self._pick_excerpts(self._session_user_excerpts, head=2, tail=2, max_chars=60)
+        if topics:
+            parts.append("用户谈到: " + "；".join(topics) + "。")
+        if self._session_key_entries:
+            parts.append("关键记忆: " + "；".join(self._session_key_entries[:6]) + "。")
+        replies = self._pick_excerpts(self._session_assistant_excerpts, head=1, tail=1, max_chars=50)
+        if replies:
+            parts.append("助手回复要点: " + "；".join(replies) + "。")
+        return "".join(parts)[: self._SESSION_SUMMARY_MAX_CHARS]
+
+    async def finalize_session(self) -> dict[str, Any]:
+        """Write a whole-session summary memory when the realtime session ends.
+
+        Called from ``drain()`` (every provider's session teardown), so the
+        conversation record persists even on abrupt disconnects. Idempotent.
+        """
+        if self._session_finalized:
+            return {"saved": False, "reason": "already_finalized"}
+        self._session_finalized = True
+
+        service = self._config.get_service()
+        if not service:
+            return {"saved": False, "reason": "disabled"}
+        if not self._session_user_excerpts:
+            return {"saved": False, "reason": "empty_session"}
+
+        summary = self._compose_session_summary()
+        # Queue locally first so the summary is immediately retrievable next
+        # session even if the cloud write fails or replication lags.
+        queued = self._queue_pending_entries(self._pending_cache_key(), [summary])
+        try:
+            result = await service.add_memory(
+                content=summary,
+                user_id=self._config.memory_scope,
+                sender=self._config.memory_scope,
+                sender_name="User",
+                group_id=self._config.group_id or None,
+                flush=True,
+            )
+        except Exception:
+            logger.exception(
+                "voice_memory_session_summary_failed scope=%s", self._config.memory_scope
+            )
+            result = None
+        saved = bool(result)
+        logger.info(
+            "voice_memory_session_summary scope=%s group=%s saved=%s queued=%s summary=%r",
+            self._config.memory_scope,
+            self._config.group_id,
+            saved,
+            queued,
+            summary[:200],
+        )
+        return {
+            "saved": saved,
+            "queued_local": queued,
+            "reason": "" if saved else "cloud_write_failed",
+            "summary": summary,
+        }
+
+    # -- startup memory injection --------------------------------------------
+
+    def kickoff_startup_context(self) -> None:
+        """Begin a background fetch of recent memories for session-start injection.
+
+        Triggered when the client sends its memory ``config`` (right after the
+        WebSocket opens).  The result is prepended to the first turn's memory
+        context so the assistant knows what prior sessions discussed — even if
+        the first utterance is too trivial to trigger per-turn retrieval.
+        """
+        service = self._config.get_service()
+        if not service or self._startup_task is not None or self._startup_consumed:
+            return
+        task = asyncio.create_task(self._load_startup_context(service))
+        self._startup_task = task
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
+
+    async def _load_startup_context(self, service: EverMemService) -> None:
+        local_memories: list[dict[str, Any]] = []
+        cloud_memories: list[dict[str, Any]] = []
+        try:
+            local_memories = self._search_pending_entries(
+                self._pending_cache_key(), self._STARTUP_QUERY
+            )
+            cloud_memories = await asyncio.wait_for(
+                self._search_cloud_memories(service=service, query=self._STARTUP_QUERY),
+                timeout=self._STARTUP_RETRIEVE_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "voice_memory_startup timeout scope=%s", self._config.memory_scope
+            )
+        except Exception:
+            logger.exception(
+                "voice_memory_startup error scope=%s", self._config.memory_scope
+            )
+
+        combined = self._merge_retrieved_memories(
+            local_memories=local_memories, cloud_memories=cloud_memories
+        )
+        lines: list[str] = []
+        for memory in combined[:5]:
+            content = str(memory.get("content", "")).strip()
+            if content:
+                lines.append(f"{len(lines) + 1}. {content[:180]}")
+        if lines:
+            self._startup_context = "【上次对话以来的记忆】\n" + "\n".join(lines)
+            self._startup_count = len(lines)
+        logger.info(
+            "voice_memory_startup scope=%s group=%s count=%s local=%s cloud=%s",
+            self._config.memory_scope,
+            self._config.group_id,
+            self._startup_count,
+            len(local_memories),
+            len(cloud_memories),
+        )
+
+    async def _consume_startup_context(self) -> str:
+        """Return the startup memory block exactly once (first turn of the session)."""
+        if self._startup_consumed:
+            return ""
+        task = self._startup_task
+        if task is None:
+            # No config received yet — leave the one-shot unused in case the
+            # client's config command arrives before the first real turn.
+            return ""
+        if not task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=self._STARTUP_WAIT_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+        self._startup_consumed = True
+        return self._startup_context
+
     async def drain(self) -> None:
+        try:
+            await self.finalize_session()
+        except Exception:
+            logger.exception("voice_memory_finalize_session_failed")
         if not self._pending_tasks:
             return
         await asyncio.gather(*list(self._pending_tasks), return_exceptions=True)
@@ -468,6 +686,25 @@ class RealtimeMemorySession:
         return self._matches_any(candidate, self._RETRIEVE_HINT_PATTERNS)
 
     async def retrieve_memory_context(self) -> dict[str, Any]:
+        """Per-turn memory context, with the session-start block prepended once.
+
+        The startup block (recent summaries / preferences fetched when the
+        client configured memory) rides the first turn's injection so the
+        assistant opens the session knowing what earlier conversations covered,
+        regardless of how trivial the first utterance is.
+        """
+        startup_context = await self._consume_startup_context()
+        result = await self._retrieve_turn_context()
+        if startup_context:
+            turn_context = str(result.get("context", ""))
+            result["context"] = (
+                f"{startup_context}\n{turn_context}" if turn_context else startup_context
+            )
+            result["memories_retrieved"] = int(result.get("memories_retrieved", 0)) + self._startup_count
+            result["attempted"] = True
+        return result
+
+    async def _retrieve_turn_context(self) -> dict[str, Any]:
         service = self._config.get_service()
         query = self._current_user_text.strip()
         if not service or not query or not self.should_retrieve_context(query):

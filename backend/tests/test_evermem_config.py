@@ -70,6 +70,57 @@ class EverMemConfigTests(unittest.TestCase):
         self.assertEqual(config.url, DEFAULT_EVERMEM_URL)
         self.assertIsNotNone(config.get_service())
 
+    def test_masked_secret_header_key_is_treated_as_absent(self) -> None:
+        with patch(
+            "services.evermem_config._load_server_evermem_settings",
+            return_value=("", "server-key"),
+        ):
+            config = EverMemConfig()
+            config.update_from_headers(
+                {"x-evermem-enabled": "true", "x-evermem-key": "__MASKED__"}
+            )
+            # The placeholder must not become the credential; the server-side
+            # fallback key applies instead.
+            self.assertEqual(config.key, "server-key")
+            self.assertIsNotNone(config.get_service())
+
+    def test_server_config_key_used_when_client_sends_no_key(self) -> None:
+        with patch(
+            "services.evermem_config._load_server_evermem_settings",
+            return_value=("https://memory.example.com", "server-key"),
+        ):
+            config = EverMemConfig()
+            config.update_from_headers({"x-evermem-enabled": "true"})
+            self.assertEqual(config.url, "https://memory.example.com")
+            self.assertEqual(config.key, "server-key")
+            self.assertIsNotNone(config.get_service())
+
+    def test_server_config_key_is_never_sent_to_client_chosen_url(self) -> None:
+        with patch(
+            "services.evermem_config._load_server_evermem_settings",
+            return_value=("", "server-key"),
+        ):
+            config = EverMemConfig()
+            config.update_from_headers(
+                {
+                    "x-evermem-enabled": "true",
+                    "x-evermem-url": "https://evil.example.com/v1",
+                }
+            )
+            self.assertIsNone(config.key)
+            self.assertIsNone(config.get_service())
+
+    def test_invalid_server_config_url_is_ignored(self) -> None:
+        with patch(
+            "services.evermem_config._load_server_evermem_settings",
+            return_value=("file:///etc/passwd", "server-key"),
+        ):
+            config = EverMemConfig()
+            config.update_from_headers({"x-evermem-enabled": "true"})
+            self.assertEqual(config.url, DEFAULT_EVERMEM_URL)
+            # Key still attaches: the effective URL is the trusted default.
+            self.assertEqual(config.key, "server-key")
+
 
 if __name__ == "__main__":
     unittest.main()

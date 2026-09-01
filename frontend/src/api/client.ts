@@ -250,7 +250,13 @@ export function configureEverMemRuntime(config: {
   safeStorageSet(EVERMEM_STORE_TRANSCRIPT_FULLTEXT_STORAGE_KEY, String(config.store_transcript_fulltext ?? false));
 
   safeStorageRemove(EVERMEM_LEGACY_KEY_STORAGE_KEY);
-  evermemRuntimeKey = (config.api_key || "").trim();
+  // GET /api/settings masks stored credentials as "__MASKED__".  Never adopt
+  // the placeholder as the runtime key — keep whatever key we already had
+  // (or none, letting the backend fall back to its server-side config).
+  evermemRuntimeKey =
+    (config.api_key || "").trim() === "__MASKED__"
+      ? evermemRuntimeKey
+      : (config.api_key || "").trim();
 }
 
 export function getEverMemRuntimeConfig() {
