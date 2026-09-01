@@ -221,6 +221,71 @@ class TestGradiumTtsChunking(unittest.TestCase):
         self.assertEqual(remaining2, "")
 
 
+class TestGradiumTranscriptJoining(unittest.TestCase):
+    def test_join_transcript_pieces(self):
+        from services.realtime_gradium_provider import _join_transcript_pieces
+
+        # English words
+        en = _join_transcript_pieces(["Hello,", "how", "is", "the", "weather", "today?"])
+        self.assertEqual(en, "Hello, how is the weather today?")
+
+        # Chinese words
+        zh = _join_transcript_pieces(["你好", "，", "今天", "天气", "怎么样", "？"])
+        self.assertEqual(zh, "你好，今天天气怎么样？")
+
+        # Single word
+        self.assertEqual(_join_transcript_pieces(["Hello"]), "Hello")
+        self.assertEqual(_join_transcript_pieces([]), "")
+
+
+class TestGradiumSttLoop(unittest.IsolatedAsyncioTestCase):
+    async def test_stt_loop_emits_interim_transcripts_smoothly(self):
+        svc = DummyGradiumService()
+        svc._gradium_start_turn = AsyncMock()
+
+        events = [
+            {"type": "text", "text": "take"},
+            {"type": "text", "text": "a"},
+            {"type": "text", "text": "chat."},
+        ]
+        fake_stt_ws = FakeWs(events=events)
+        client_ws = CollectingWebSocket()
+        state = _GradiumSessionState(
+            tts_model="default",
+            voice=DEFAULT_GRADIUM_VOICE,
+            llm_model="deepseek-v4-flash",
+            api_key="gsk_test",
+            ws_base="wss://api.gradium.ai",
+            stt_ws=fake_stt_ws,
+        )
+
+        mock_llm = MagicMock()
+        mock_mem = MagicMock()
+        mock_tool = MagicMock()
+        stt_task = asyncio.create_task(
+            svc._gradium_stt_loop(client_ws, state, mock_llm, "DeepSeek", mock_mem, mock_tool, None)
+        )
+        # Give loop time to process events and let flush timer fire
+        await asyncio.sleep(1.2)
+        stt_task.cancel()
+        try:
+            await stt_task
+        except asyncio.CancelledError:
+            pass
+
+        # Check that interim transcripts were sent with interim=True
+        interim_events = [e for e in client_ws.events if e.get("type") == "user_transcript" and e.get("interim") is True]
+        self.assertTrue(len(interim_events) >= 3)
+        self.assertEqual(interim_events[0]["text"], "take")
+        self.assertEqual(interim_events[1]["text"], "take a")
+        self.assertEqual(interim_events[2]["text"], "take a chat.")
+
+        # Turn was started with full text
+        svc._gradium_start_turn.assert_awaited_with(
+            client_ws, state, "take a chat.", mock_llm, "DeepSeek", mock_mem, mock_tool, None
+        )
+
+
 class TestGradiumSessionEntryPoint(unittest.IsolatedAsyncioTestCase):
     @patch("websockets.connect")
     async def test_stream_gradium_session_starts_and_validates_voice(self, mock_ws_connect):

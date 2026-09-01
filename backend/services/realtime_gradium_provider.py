@@ -70,6 +70,28 @@ def _split_gradium_tts_chunks(buffer: str, is_final: bool = False) -> tuple[list
     return chunks, remaining
 
 
+def _join_transcript_pieces(pieces: list[str]) -> str:
+    """Join recognized words/tokens cleanly into a natural sentence."""
+    if not pieces:
+        return ""
+    out: list[str] = []
+    for piece in pieces:
+        p = piece.strip()
+        if not p:
+            continue
+        if not out:
+            out.append(p)
+            continue
+        prev = out[-1]
+        is_prev_cjk = bool(re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]$", prev))
+        is_next_cjk = bool(re.search(r"^[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", p))
+        if is_prev_cjk or is_next_cjk or p in {",", ".", "!", "?", ";", ":", "，", "。", "！", "？", "；", "："}:
+            out.append(p)
+        else:
+            out.append(" " + p)
+    return "".join(out).strip()
+
+
 @dataclass
 class _GradiumTurn:
     seq: int
@@ -339,7 +361,7 @@ class GradiumRealtimeMixin:
         voice_turn_id = ""
         if recorder is not None:
             voice_turn_id = await recorder.note_user_transcript(user_text)
-        await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id, final=True)
+        await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
 
         retrieval = await memory_session.retrieve_memory_context()
         if retrieval.get("attempted"):
@@ -433,10 +455,11 @@ class GradiumRealtimeMixin:
         assert state.stt_ws is not None
         accumulated_text: list[str] = []
         silence_flush_task: asyncio.Task[None] | None = None
+        consecutive_silence_count: int = 0
 
         async def flush_turn_after_pause() -> None:
             await asyncio.sleep(0.9)
-            full_text = "".join(accumulated_text).strip()
+            full_text = _join_transcript_pieces(accumulated_text)
             if full_text:
                 accumulated_text.clear()
                 await self._gradium_start_turn(
@@ -456,32 +479,38 @@ class GradiumRealtimeMixin:
                     if text_piece:
                         if state.active is not None:
                             await self._gradium_barge_in(websocket, state, memory_session, recorder)
-                        accumulated_text.append(text_piece + " ")
-                        interim_text = "".join(accumulated_text).strip()
-                        await self._send_event(websocket, "user_transcript", text=interim_text, final=False)
+                        accumulated_text.append(text_piece)
+                        interim_text = _join_transcript_pieces(accumulated_text)
+                        await self._send_event(websocket, "user_transcript", text=interim_text, interim=True)
+                        consecutive_silence_count = 0
                         if silence_flush_task is not None and not silence_flush_task.done():
                             silence_flush_task.cancel()
                         silence_flush_task = asyncio.create_task(flush_turn_after_pause())
                 elif event_type == "step":
                     vad = event.get("vad")
-                    if isinstance(vad, list) and len(vad) >= 3 and accumulated_text:
-                        inact_2s = float(vad[2].get("inactivity_prob", 0.0)) if len(vad) > 2 else 0.0
-                        inact_3s = float(vad[-1].get("inactivity_prob", 0.0))
-                        if inact_2s > 0.7 or inact_3s > 0.8:
-                            if silence_flush_task is not None and not silence_flush_task.done():
-                                silence_flush_task.cancel()
-                            full_text = "".join(accumulated_text).strip()
-                            if full_text:
-                                accumulated_text.clear()
-                                await self._gradium_start_turn(
-                                    websocket, state, full_text,
-                                    llm, llm_provider, memory_session, tool_session, recorder,
-                                )
+                    if isinstance(vad, list) and len(vad) >= 4 and accumulated_text:
+                        inact_2s = float(vad[2].get("inactivity_prob", 0.0))
+                        inact_3s = float(vad[3].get("inactivity_prob", 0.0))
+                        if inact_2s >= 0.99 and inact_3s >= 0.98:
+                            consecutive_silence_count += 1
+                            if consecutive_silence_count >= 5:
+                                consecutive_silence_count = 0
+                                if silence_flush_task is not None and not silence_flush_task.done():
+                                    silence_flush_task.cancel()
+                                full_text = _join_transcript_pieces(accumulated_text)
+                                if full_text:
+                                    accumulated_text.clear()
+                                    await self._gradium_start_turn(
+                                        websocket, state, full_text,
+                                        llm, llm_provider, memory_session, tool_session, recorder,
+                                    )
+                        else:
+                            consecutive_silence_count = 0
                 elif event_type == "turn":
                     if event.get("turn_end"):
                         if silence_flush_task is not None and not silence_flush_task.done():
                             silence_flush_task.cancel()
-                        full_text = "".join(accumulated_text).strip()
+                        full_text = _join_transcript_pieces(accumulated_text)
                         if full_text:
                             accumulated_text.clear()
                             await self._gradium_start_turn(
