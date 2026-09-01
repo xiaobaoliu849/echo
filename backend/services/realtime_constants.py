@@ -15,6 +15,15 @@ import struct
 
 DEFAULT_GOOGLE_REALTIME_MODEL = "gemini-3.1-flash-live-preview"
 DEFAULT_GOOGLE_REALTIME_VOICE = "Puck"
+# Voices supported by Google Gemini Multimodal Live API (30 prebuilt voices).
+GOOGLE_REALTIME_VOICES = (
+    "Puck", "Aoede", "Charon", "Kore", "Fenrir",
+    "Zephyr", "Leda", "Orus", "Achernar", "Achird",
+    "Algenib", "Algieba", "Alnilam", "Autonoe", "Callirrhoe",
+    "Despina", "Enceladus", "Erinome", "Gacrux", "Iapetus",
+    "Laomedeia", "Pulcherrima", "Rasalgethi", "Sadachbia", "Sadaltager",
+    "Schedar", "Sulafat", "Umbriel", "Vindemiatrix", "Zubenelgenubi",
+)
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-plus-realtime"
 DEFAULT_DASHSCOPE_REALTIME_VOICE = "Tina"
 # Default voice for qwen3.5-livetranslate-*-realtime (official default: Tina).

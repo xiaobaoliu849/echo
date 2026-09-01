@@ -6,6 +6,7 @@ import {
   DOUBAO_PROVIDER,
   GLM4VOICE_PROVIDER,
   GOOGLE_PROVIDER,
+  GOOGLE_REALTIME_VOICES,
   OPENAI_PROVIDER,
   PERSONAPLEX_PROVIDER,
   PERSONAPLEX_REALTIME_VOICES,
@@ -108,3 +109,22 @@ describe("PersonaPlex voices", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Google Gemini Live voices
+// ---------------------------------------------------------------------------
+describe("Google Gemini Live voices", () => {
+  it("includes all 30 prebuilt voices with valid values and labels", () => {
+    expect(GOOGLE_REALTIME_VOICES).toHaveLength(30);
+    expect(GOOGLE_REALTIME_VOICES.some((v) => v.value === "Puck")).toBe(true);
+    expect(GOOGLE_REALTIME_VOICES.some((v) => v.value === "Aoede")).toBe(true);
+    expect(GOOGLE_REALTIME_VOICES.some((v) => v.value === "Charon")).toBe(true);
+    expect(GOOGLE_REALTIME_VOICES.some((v) => v.value === "Kore")).toBe(true);
+    expect(GOOGLE_REALTIME_VOICES.some((v) => v.value === "Fenrir")).toBe(true);
+  });
+
+  it("does not include invalid or unofficial voices", () => {
+    expect(GOOGLE_REALTIME_VOICES.some((v) => v.value === "Lyra")).toBe(false);
+  });
+});
+

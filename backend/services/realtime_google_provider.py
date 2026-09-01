@@ -24,6 +24,7 @@ from .realtime_constants import (
     BASE_REALTIME_INSTRUCTIONS,
     DEFAULT_GOOGLE_REALTIME_MODEL,
     DEFAULT_GOOGLE_REALTIME_VOICE,
+    GOOGLE_REALTIME_VOICES,
     _is_google_live_translate_model,
     _is_google_public_rest_base_url,
     _merge_streaming_text,
@@ -217,8 +218,8 @@ class GoogleRealtimeMixin:
             tools_list.append(types.Tool(google_search=types.GoogleSearch(), function_declarations=declarations))
         else:
             tools_list.append(types.Tool(function_declarations=declarations))
-        valid_voices = {"Puck", "Aoede", "Charon", "Kore", "Fenrir"}
-        safe_voice = voice if voice in valid_voices else "Puck"
+        voice_lookup = {v.lower(): v for v in GOOGLE_REALTIME_VOICES}
+        safe_voice = voice_lookup.get((voice or "").strip().lower(), DEFAULT_GOOGLE_REALTIME_VOICE)
 
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],

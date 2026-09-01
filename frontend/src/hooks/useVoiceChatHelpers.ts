@@ -77,13 +77,39 @@ export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
   "realtime",
 ];
 
+// Prebuilt voices supported by Google Gemini Multimodal Live API (30 prebuilt voices).
 export const GOOGLE_REALTIME_VOICES = [
-  "Puck",
-  "Aoede",
-  "Charon",
-  "Kore",
-  "Fenrir",
-].map((name) => ({ value: name, label: name }));
+  { value: "Puck", label: "Puck · 活泼灵动 (Male)", description: "活泼热烈的男声 (Upbeat)" },
+  { value: "Aoede", label: "Aoede · 轻松明快 (Female)", description: "轻松自然的女声 (Breezy)" },
+  { value: "Charon", label: "Charon · 知性沉稳 (Male)", description: "沉稳知性的男声 (Informative)" },
+  { value: "Kore", label: "Kore · 亲切坚定 (Female)", description: "亲切坚定的女声 (Firm)" },
+  { value: "Fenrir", label: "Fenrir · 热情洋溢 (Male)", description: "热情激昂的男声 (Excitable)" },
+  { value: "Zephyr", label: "Zephyr · 明亮清晰 (Female)", description: "明朗清晰的女声 (Bright)" },
+  { value: "Leda", label: "Leda · 青春灵动 (Female)", description: "青春活力的女声 (Youthful)" },
+  { value: "Orus", label: "Orus · 沉稳厚重 (Male)", description: "坚定厚重的男声 (Firm)" },
+  { value: "Autonoe", label: "Autonoe · 温和亲切 (Female)", description: "温和亲切的女声 (Warm)" },
+  { value: "Despina", label: "Despina · 柔和自然 (Female)", description: "柔和自然的女声 (Smooth)" },
+  { value: "Achernar", label: "Achernar · 清澈自然 (Female)", description: "清澈自然的女声 (Clear)" },
+  { value: "Achird", label: "Achird · 温暖从容 (Male)", description: "温暖亲切的男声 (Warm)" },
+  { value: "Algenib", label: "Algenib · 沉着权威 (Male)", description: "沉着权威的男声 (Authoritative)" },
+  { value: "Algieba", label: "Algieba · 动感活力 (Male)", description: "动感活力的男声 (Dynamic)" },
+  { value: "Alnilam", label: "Alnilam · 低沉磁性 (Male)", description: "低沉磁性的男声 (Deep)" },
+  { value: "Callirrhoe", label: "Callirrhoe · 活泼生动 (Female)", description: "活泼生动的女声 (Vibrant)" },
+  { value: "Enceladus", label: "Enceladus · 浑厚共鸣 (Male)", description: "浑厚共鸣的男声 (Resonant)" },
+  { value: "Erinome", label: "Erinome · 温柔甜美 (Female)", description: "温柔甜美的女声 (Gentle)" },
+  { value: "Gacrux", label: "Gacrux · 清爽利落 (Female)", description: "清爽利落的女声 (Crisp)" },
+  { value: "Iapetus", label: "Iapetus · 稳重大气 (Male)", description: "稳重大气的男声 (Steady)" },
+  { value: "Laomedeia", label: "Laomedeia · 生动表现 (Female)", description: "富有表现力的女声 (Expressive)" },
+  { value: "Pulcherrima", label: "Pulcherrima · 优雅知性 (Female)", description: "优雅知性的女声 (Elegant)" },
+  { value: "Rasalgethi", label: "Rasalgethi · 清朗阳光 (Male)", description: "清朗阳光的男声 (Clear)" },
+  { value: "Sadachbia", label: "Sadachbia · 随和舒适 (Male)", description: "随和舒适的男声 (Relaxed)" },
+  { value: "Sadaltager", label: "Sadaltager · 自信从容 (Male)", description: "自信从容的男声 (Confident)" },
+  { value: "Schedar", label: "Schedar · 细腻醇厚 (Male)", description: "丰富细腻的男声 (Rich)" },
+  { value: "Sulafat", label: "Sulafat · 平和宁静 (Female)", description: "平和宁静的女声 (Calm)" },
+  { value: "Umbriel", label: "Umbriel · 温文尔雅 (Male)", description: "温文尔雅的男声 (Gentle)" },
+  { value: "Vindemiatrix", label: "Vindemiatrix · 醇和温柔 (Female)", description: "醇和温柔的女声 (Mellow)" },
+  { value: "Zubenelgenubi", label: "Zubenelgenubi · 沉稳有力 (Male)", description: "沉稳有力的男声 (Vigorous)" },
+];
 
 export type TranslationMode = "bidirectional" | "unidirectional";
 

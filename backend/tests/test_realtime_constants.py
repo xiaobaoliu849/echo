@@ -9,6 +9,8 @@ Covers:
 import unittest
 
 from services.realtime_constants import (
+    DEFAULT_GOOGLE_REALTIME_VOICE,
+    GOOGLE_REALTIME_VOICES,
     _is_text_primarily_cjk,
     _merge_streaming_text,
 )
@@ -322,6 +324,26 @@ class SummaryRegressionTests(unittest.TestCase):
         self.assertEqual(delta, "Dota")
         # Must NOT have a space before Dota
         self.assertNotIn(" ", before)
+
+
+class GoogleRealtimeVoicesTests(unittest.TestCase):
+    """Tests for Google Gemini Live prebuilt voices configuration."""
+
+    def test_google_realtime_voices_has_all_30_voices(self):
+        self.assertEqual(len(GOOGLE_REALTIME_VOICES), 30)
+        self.assertIn("Puck", GOOGLE_REALTIME_VOICES)
+        self.assertIn("Aoede", GOOGLE_REALTIME_VOICES)
+        self.assertIn("Charon", GOOGLE_REALTIME_VOICES)
+        self.assertIn("Kore", GOOGLE_REALTIME_VOICES)
+        self.assertIn("Fenrir", GOOGLE_REALTIME_VOICES)
+        self.assertIn("Zephyr", GOOGLE_REALTIME_VOICES)
+
+    def test_default_google_voice_is_valid(self):
+        self.assertIn(DEFAULT_GOOGLE_REALTIME_VOICE, GOOGLE_REALTIME_VOICES)
+
+    def test_invalid_voices_excluded(self):
+        self.assertNotIn("Lyra", GOOGLE_REALTIME_VOICES)
+        self.assertNotIn("alloy", GOOGLE_REALTIME_VOICES)
 
 
 if __name__ == "__main__":
