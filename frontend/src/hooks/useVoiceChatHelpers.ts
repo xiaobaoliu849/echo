@@ -80,14 +80,9 @@ export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
 export const GOOGLE_REALTIME_VOICES = [
   "Puck",
   "Aoede",
-  "Zephyr",
-  "Lyra",
-  "Leda",
-  "Achird",
-  "Autonoe",
-  "Despina",
+  "Charon",
+  "Kore",
   "Fenrir",
-  "Sadachbia",
 ].map((name) => ({ value: name, label: name }));
 
 export type TranslationMode = "bidirectional" | "unidirectional";

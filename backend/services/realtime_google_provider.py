@@ -217,6 +217,9 @@ class GoogleRealtimeMixin:
             tools_list.append(types.Tool(google_search=types.GoogleSearch(), function_declarations=declarations))
         else:
             tools_list.append(types.Tool(function_declarations=declarations))
+        valid_voices = {"Puck", "Aoede", "Charon", "Kore", "Fenrir"}
+        safe_voice = voice if voice in valid_voices else "Puck"
+
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             system_instruction=system_inst,
@@ -225,7 +228,7 @@ class GoogleRealtimeMixin:
             tools=tools_list,
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice)
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=safe_voice)
                 )
             ),
             realtime_input_config=types.RealtimeInputConfig(
