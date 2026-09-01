@@ -388,7 +388,8 @@ class LLMService:
         if self._is_vertex_ai(settings):
             project_id = "gen-lang-client-0313108616"
             location = "us-central1"
-            model = settings.get("model", "").strip() or "gemini-2.5-flash"
+            raw_model = settings.get("model", "").strip() or "gemini-2.5-flash"
+            model = "gemini-2.5-flash" if raw_model in {"gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"} else raw_model
             api_key = settings["api_key"]
             url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:streamGenerateContent?key={api_key}&alt=sse"
             payload = self._build_vertex_payload(messages, temperature)
@@ -421,7 +422,11 @@ class LLMService:
                                 except Exception:
                                     continue
             except httpx.HTTPStatusError as exc:
-                detail = exc.response.text[:500] if exc.response is not None else str(exc)
+                try:
+                    await exc.response.aread()
+                    detail = exc.response.text[:500]
+                except Exception:
+                    detail = str(exc)
                 raise RuntimeError(f"Google Vertex AI stream error: {detail}") from exc
             except httpx.HTTPError as exc:
                 raise RuntimeError(f"Stream network error: {exc}") from exc
@@ -502,7 +507,11 @@ class LLMService:
                                 data_lines.append(data_str)
                             continue
         except httpx.HTTPStatusError as exc:
-            detail = exc.response.text[:500] if exc.response is not None else str(exc)
+            try:
+                await exc.response.aread()
+                detail = exc.response.text[:500]
+            except Exception:
+                detail = str(exc)
             raise RuntimeError(f"Google Interactions stream error: {detail}") from exc
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Stream network error: {exc}") from exc
@@ -730,7 +739,11 @@ class LLMService:
                             chunks.append(delta)
                             yield {"type": "delta", "content": delta}
         except httpx.HTTPStatusError as exc:
-            detail = exc.response.text[:500] if exc.response is not None else str(exc)
+            try:
+                await exc.response.aread()
+                detail = exc.response.text[:500]
+            except Exception:
+                detail = str(exc)
             raise RuntimeError(f"Provider stream request failed: {detail}") from exc
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Stream network error: {exc}") from exc
