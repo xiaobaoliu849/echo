@@ -709,7 +709,12 @@ export function resolveRealtimeModelOptions(
     ? preferredDefault
     : resolveRealtimeFallbackModel(provider);
   const googleBuiltIns = provider === GOOGLE_PROVIDER
-    ? [GOOGLE_FLASH_LIVE_MODEL, GOOGLE_LIVE_TRANSLATE_MODEL]
+    ? [
+        "gemini-3.1-flash-live-preview",
+        "gemini-3.5-live-translate-preview",
+        "gemini-3.5-transcribe-live",
+        "gemini-2.5-flash-native-audio-preview-12-2025",
+      ]
     : [];
   const openaiBuiltIns = provider === OPENAI_PROVIDER
     ? [DEFAULT_OPENAI_MODEL]
