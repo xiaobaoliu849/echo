@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 from typing import Any, AsyncGenerator
 import base64
 
 import httpx # type: ignore
+
+logger = logging.getLogger(__name__)
 
 from .config_loader import BackendConfig
 from .evermem_config import EverMemConfig
