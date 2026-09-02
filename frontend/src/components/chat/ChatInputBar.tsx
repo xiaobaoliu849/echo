@@ -389,23 +389,6 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
                 {formatDuration(voiceChat.voiceChatDuration || 0)}
               </span>
             )}
-
-            {voiceChat.voiceChatConnected && (
-              <span className="vsVoiceModelBadge" title={`${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`}>
-                {voiceChat.voiceChatProvider} / {voiceChat.voiceChatModel} ·{" "}
-                {formatVoiceChatSecondaryLabel({
-                  liveTranslate: voiceChat.voiceChatLiveTranslate,
-                  voiceCloneEnabled: Boolean(voiceChat.voiceChatEnableVoiceClone),
-                  translationMode: voiceChat.voiceChatTranslationMode,
-                  sourceLanguageCode: voiceChat.voiceChatSourceLanguageCode,
-                  targetLanguageCode: voiceChat.voiceChatTargetLanguageCode,
-                  voiceLabel: voiceChat.voiceChatVoiceLabel,
-                  provider: voiceChat.voiceChatProvider,
-                  model: voiceChat.voiceChatModel,
-                  t,
-                })}
-              </span>
-            )}
           </div>
 
           <div className={`vsVoiceVisualizerContainer ${visualizerState}`} id="vs-voice-visualizer">
@@ -527,14 +510,47 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
             <PaperclipIcon />
           </button>
 
-          {/* Unified provider → model → voice picker */}
-          <VoiceCallSettingsPopover
-            voiceChat={voiceChat}
-            chat={chat}
-            t={t}
-            disabled={isVoiceActive}
-            onOpenSettings={onOpenSettings}
-          />
+          {/* Unified provider → model → voice picker (or read-only chip during active call) */}
+          {isVoiceActive ? (
+            <span
+              className="vsVoiceReadOnlyChip"
+              title={`${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel} · ${formatVoiceChatSecondaryLabel({
+                liveTranslate: voiceChat.voiceChatLiveTranslate,
+                voiceCloneEnabled: Boolean(voiceChat.voiceChatEnableVoiceClone),
+                translationMode: voiceChat.voiceChatTranslationMode,
+                sourceLanguageCode: voiceChat.voiceChatSourceLanguageCode,
+                targetLanguageCode: voiceChat.voiceChatTargetLanguageCode,
+                voiceLabel: voiceChat.voiceChatVoiceLabel,
+                provider: voiceChat.voiceChatProvider,
+                model: voiceChat.voiceChatModel,
+                t,
+              })}`}
+            >
+              <MicOnIcon />
+              <span>
+                {voiceChat.voiceChatProvider} / {voiceChat.voiceChatModel} ·{" "}
+                {formatVoiceChatSecondaryLabel({
+                  liveTranslate: voiceChat.voiceChatLiveTranslate,
+                  voiceCloneEnabled: Boolean(voiceChat.voiceChatEnableVoiceClone),
+                  translationMode: voiceChat.voiceChatTranslationMode,
+                  sourceLanguageCode: voiceChat.voiceChatSourceLanguageCode,
+                  targetLanguageCode: voiceChat.voiceChatTargetLanguageCode,
+                  voiceLabel: voiceChat.voiceChatVoiceLabel,
+                  provider: voiceChat.voiceChatProvider,
+                  model: voiceChat.voiceChatModel,
+                  t,
+                })}
+              </span>
+            </span>
+          ) : (
+            <VoiceCallSettingsPopover
+              voiceChat={voiceChat}
+              chat={chat}
+              t={t}
+              disabled={false}
+              onOpenSettings={onOpenSettings}
+            />
+          )}
         </div>
 
         <div className="vsComposerToolbarRight">

@@ -9809,7 +9809,9 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 130px;
+  flex: 1;
+  max-width: 220px;
+  min-width: 120px;
   height: 30px;
   background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
   border-radius: 12px;
@@ -9817,6 +9819,38 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-shrink: 0;
   border: 1px solid color-mix(in oklab, var(--accent) 10%, var(--line));
   transition: all 0.25s ease;
+}
+
+.vsVoiceReadOnlyChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-card));
+  border: 1px solid color-mix(in oklab, var(--accent) 20%, var(--line));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+  cursor: default;
+  user-select: none;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.18s ease;
+}
+
+.vsVoiceReadOnlyChip svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.vsVoiceReadOnlyChip span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vsVoiceVisualizerWave {

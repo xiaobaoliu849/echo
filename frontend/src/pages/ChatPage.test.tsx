@@ -223,10 +223,11 @@ describe('ChatPage', () => {
             />
         );
 
-        expect(screen.getByTitle('通话设置')).toBeDisabled();
-        // Live-translate badge shows the target language only (source is
+        // Dropdown popover is replaced with non-interactive read-only chip during call
+        expect(screen.queryByTitle('通话设置')).not.toBeInTheDocument();
+        // Live-translate read-only chip shows the target language only (source is
         // auto-detected), not the stale TTS voice label
-        expect(document.querySelector('.vsVoiceModelBadge')).toHaveTextContent(
+        expect(document.querySelector('.vsVoiceReadOnlyChip')).toHaveTextContent(
             'Google / gemini-3.5-live-translate-preview · 单向翻译 (→ 中文)'
         );
         expect(screen.getByText('原文实时转写')).toBeInTheDocument();
