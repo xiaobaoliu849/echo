@@ -792,6 +792,10 @@ class ApiSmokeTests(unittest.TestCase):
                 _ = kwargs
                 return {"status": "success"}
 
+            async def flush_pending_memories(self, **kwargs: Any) -> dict[str, Any] | None:
+                _ = kwargs
+                return {"status": "success"}
+
         request = Request(
             {
                 "type": "http",

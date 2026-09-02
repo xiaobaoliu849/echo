@@ -14,7 +14,7 @@ def _make_client_mock(method_mock: AsyncMock) -> tuple[Mock, AsyncMock]:
 
 
 class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_add_memory_aligns_sender_with_user_scope(self) -> None:
+    async def test_add_memory_uses_v2_endpoint_and_session_id(self) -> None:
         service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
 
         response = Mock()
@@ -34,9 +34,11 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result, {"status": "success"})
-        _, kwargs = post.call_args
+        args, kwargs = post.call_args
+        self.assertTrue(args[0].endswith("/api/v2/memory/add"))
         payload = kwargs["json"]
-        self.assertEqual(payload["user_id"], "scope-main")
+        # v2 does not send user_id in the add body — only session_id
+        self.assertNotIn("user_id", payload)
         self.assertEqual(payload["session_id"], "scope-main_default")
         self.assertTrue(payload["async_mode"])
         message = payload["messages"][0]
@@ -45,9 +47,8 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(message["content"], "remember this")
         self.assertIsInstance(message["timestamp"], int)
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key")
-        self.assertTrue(kwargs["url"].endswith("/api/v1/memories") if "url" in kwargs else True)
 
-    async def test_add_memory_maps_group_id_to_session_and_flushes(self) -> None:
+    async def test_add_memory_maps_group_id_to_session_and_flushes_v2(self) -> None:
         service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
 
         response = Mock()
@@ -70,13 +71,17 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(post.call_count, 2)
-        add_kwargs = post.call_args_list[0].kwargs
+        # First call: add
+        add_args, add_kwargs = post.call_args_list[0]
+        self.assertTrue(add_args[0].endswith("/api/v2/memory/add"))
         self.assertEqual(add_kwargs["json"]["session_id"], "group-chat-001")
         self.assertEqual(add_kwargs["json"]["messages"][0]["role"], "assistant")
-        flush_kwargs = post.call_args_list[1].kwargs
+        # Second call: flush — v2 uses session_id only, no user_id
+        flush_args, flush_kwargs = post.call_args_list[1]
+        self.assertTrue(flush_args[0].endswith("/api/v2/memory/flush"))
         self.assertEqual(
             flush_kwargs["json"],
-            {"user_id": "scope-main", "session_id": "group-chat-001"},
+            {"session_id": "group-chat-001"},
         )
 
     async def test_add_memory_returns_none_on_upstream_error(self) -> None:
@@ -96,7 +101,7 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
 
-    async def test_create_conversation_meta_generates_group_id(self) -> None:
+    async def test_flush_pending_memories_posts_to_v2_flush_endpoint(self) -> None:
         service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
 
         response = Mock()
@@ -108,34 +113,68 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
             client.post = post
             client_cls.return_value = client
 
-            result = await service.create_conversation_meta(user_id="scope-main")
+            result = await service.flush_pending_memories(
+                user_id="scope-main", session_id="group-chat-001"
+            )
 
-        self.assertIsNotNone(result)
-        assert result is not None
-        self.assertTrue(result["group_id"].startswith("conv_"))
-        self.assertEqual(result["user_id"], "scope-main")
-        _, kwargs = post.call_args
-        self.assertEqual(kwargs["json"]["group_id"], result["group_id"])
+        self.assertEqual(result, {"status": "success"})
+        self.assertEqual(post.await_count, 1)
+        args, kwargs = post.call_args
+        self.assertTrue(args[0].endswith("/api/v2/memory/flush"))
+        # v2 flush body uses session_id only, not user_id
+        self.assertEqual(
+            kwargs["json"],
+            {"session_id": "group-chat-001"},
+        )
 
-    async def test_create_conversation_meta_survives_upstream_failure(self) -> None:
+    async def test_flush_pending_memories_returns_none_on_error(self) -> None:
         service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
 
-        post = AsyncMock(side_effect=RuntimeError("network down"))
+        response = Mock()
+        response.status_code = 500
+        response.text = "internal error"
+        post = AsyncMock(return_value=response)
 
         with patch("services.evermem_service.httpx.AsyncClient") as client_cls:
             client, _ = _make_client_mock(post)
             client.post = post
             client_cls.return_value = client
 
-            result = await service.create_conversation_meta(
-                user_id="scope-main", group_id="group-chat-001"
+            result = await service.flush_pending_memories(
+                user_id="scope-main", session_id="group-chat-001"
             )
 
-        # group/session ids are client-chosen in v1, so registration failure
-        # must not break the conversation flow.
+        self.assertIsNone(result)
+
+    async def test_flush_pending_memories_without_api_key_returns_none(self) -> None:
+        service = EverMemService(api_url="https://memory.example.com", api_key=None)
+
+        result = await service.flush_pending_memories(user_id="scope-main")
+
+        self.assertIsNone(result)
+
+    async def test_create_conversation_meta_generates_group_id(self) -> None:
+        service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
+
+        # v2 has no group-registration endpoint; create_conversation_meta is
+        # a pure local id generator.
+        result = await service.create_conversation_meta(user_id="scope-main")
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result["group_id"].startswith("conv_"))
+        self.assertEqual(result["user_id"], "scope-main")
+
+    async def test_create_conversation_meta_returns_provided_group_id(self) -> None:
+        service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
+
+        result = await service.create_conversation_meta(
+            user_id="scope-main", group_id="group-chat-001"
+        )
+
         self.assertEqual(result, {"group_id": "group-chat-001", "user_id": "scope-main"})
 
-    async def test_search_memories_parses_v1_envelope(self) -> None:
+    async def test_search_memories_parses_v2_envelope(self) -> None:
         service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
 
         response = Mock()
@@ -149,10 +188,11 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
                 "profiles": [
                     {"profile_data": {"preference": "黑咖啡", "trait": "早起"}},
                 ],
-                "raw_messages": [
+                "unprocessed_messages": [
                     {"content": "本周重点是比赛提交"},
                 ],
-                "agent_memory": None,
+                "agent_cases": [],
+                "agent_skills": [],
             }
         }
         post = AsyncMock(return_value=response)
@@ -174,18 +214,24 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("用户画像" in c and "黑咖啡" in c for c in contents))
         self.assertTrue(any("待处理消息" in c for c in contents))
 
-        _, kwargs = post.call_args
+        args, kwargs = post.call_args
+        self.assertTrue(args[0].endswith("/api/v2/memory/search"))
         payload = kwargs["json"]
-        self.assertEqual(payload["filters"], {"user_id": "scope-main"})
+        # v2: user_id is top-level, not in filters
+        self.assertEqual(payload["user_id"], "scope-main")
+        self.assertNotIn("filters", payload)  # no group_id given
         self.assertEqual(payload["method"], "hybrid")
-        self.assertEqual(payload["memory_types"], ["episodic_memory", "profile"])
+        # v2 does not accept memory_types on search
+        self.assertNotIn("memory_types", payload)
 
     async def test_search_memories_maps_single_group_to_session_filter(self) -> None:
         service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
 
         response = Mock()
         response.status_code = 200
-        response.json.return_value = {"data": {"episodes": [], "profiles": [], "raw_messages": []}}
+        response.json.return_value = {
+            "data": {"episodes": [], "profiles": [], "unprocessed_messages": []}
+        }
         post = AsyncMock(return_value=response)
 
         with patch("services.evermem_service.httpx.AsyncClient") as client_cls:
@@ -199,13 +245,13 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
                 group_ids=["group-chat-001"],
             )
 
-        _, kwargs = post.call_args
-        self.assertEqual(
-            kwargs["json"]["filters"],
-            {"user_id": "scope-main", "session_id": "group-chat-001"},
-        )
+        args, kwargs = post.call_args
+        self.assertTrue(args[0].endswith("/api/v2/memory/search"))
+        # v2: user_id top-level, session_id in filters
+        self.assertEqual(kwargs["json"]["user_id"], "scope-main")
+        self.assertEqual(kwargs["json"]["filters"], {"session_id": "group-chat-001"})
 
-    async def test_get_memories_uses_v1_get_endpoint(self) -> None:
+    async def test_get_memories_uses_v2_get_endpoint(self) -> None:
         service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
 
         response = Mock()
@@ -223,8 +269,11 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
             result = await service.get_memories(user_id="scope-main")
 
         self.assertEqual(result, [{"content": "讨论了语音助手项目"}])
-        _, kwargs = post.call_args
-        self.assertEqual(kwargs["json"]["filters"], {"user_id": "scope-main"})
+        args, kwargs = post.call_args
+        self.assertTrue(args[0].endswith("/api/v2/memory/get"))
+        # v2: user_id is top-level, memory_type is "episode" (not "episodic_memory")
+        self.assertEqual(kwargs["json"]["user_id"], "scope-main")
+        self.assertEqual(kwargs["json"]["memory_type"], "episode")
 
 
 if __name__ == "__main__":

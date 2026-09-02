@@ -623,6 +623,24 @@ class RealtimeMemorySession:
                     failed_count += 1
             except Exception:
                 failed_count += 1
+        # Cloud extraction is async (HTTP 202): unflushed messages stay in the
+        # session's raw buffer and are only reachable as pending_messages via
+        # session-pinned search, never as extracted episodic_memory. A single
+        # batched flush per turn forces extraction so the memory becomes
+        # searchable cross-session. Fail-open: a flush error must not surface
+        # as a write failure — the pending buffer is retried next turn.
+        if saved_count > 0:
+            try:
+                await service.flush_pending_memories(
+                    user_id=scope,
+                    session_id=self._config.group_id or None,
+                )
+            except Exception:
+                logger.warning(
+                    "voice_memory_flush_failed scope=%s group=%s",
+                    scope,
+                    self._config.group_id,
+                )
         return {
             "attempted_count": len(entries),
             "saved_count": saved_count,
