@@ -690,7 +690,7 @@ describe("App interactions", () => {
       })
     );
 
-    expect(await screen.findByText("已保存 DashScope 的设置。")).toBeInTheDocument();
+    expect(await screen.findByText("设置已保存。")).toBeInTheDocument();
   });
 
   it("generates an audio overview script", async () => {
