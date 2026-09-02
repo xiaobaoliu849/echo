@@ -251,7 +251,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
             ):
                 await session.retrieve_memory_context()
 
-        self.assertEqual(captured_timeout, 0.35)
+        self.assertEqual(captured_timeout, 1.0)
 
     async def test_retrieve_memory_context_skips_trivial_turns(self) -> None:
         session = RealtimeMemorySession()
