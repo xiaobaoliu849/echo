@@ -2081,6 +2081,29 @@ class ApiSmokeTests(unittest.TestCase):
             finally:
                 settings_router.desktop_diagnostics_service = original_service
 
+    def test_desktop_status_endpoint_is_exempt_from_admin_auth(self) -> None:
+        # desktop-status returns local runtime diagnostics (filesystem paths +
+        # preflight/launch-error summaries), not credentials, so it must stay
+        # readable without a token even when admin auth is enabled. Regression
+        # guard: the broad "/api/settings" sensitive-read rule previously swept
+        # this endpoint into the admin gate, causing AUTH_ADMIN_TOKEN_MISSING.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_dir = Path(tmp_dir) / "Echo"
+            diagnostics_dir = runtime_dir / "diagnostics"
+            diagnostics_dir.mkdir(parents=True, exist_ok=True)
+            original_service = settings_router.desktop_diagnostics_service
+            patched_service = settings_router.DesktopDiagnosticsService()
+            patched_service.runtime_dir = runtime_dir
+            patched_service.diagnostics_dir = diagnostics_dir
+            patched_service.preflight_path = diagnostics_dir / "desktop_preflight_latest.json"
+            patched_service.launch_error_path = diagnostics_dir / "desktop_launch_error_latest.json"
+            settings_router.desktop_diagnostics_service = patched_service
+            try:
+                response = self._request("GET", "/api/settings/desktop-status", default_auth=False)
+                self.assertEqual(response.status_code, 200)
+            finally:
+                settings_router.desktop_diagnostics_service = original_service
+
     def test_audio_overview_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             db_path = Path(tmp_dir) / "voice_spirit_test.db"
