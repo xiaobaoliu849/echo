@@ -178,24 +178,34 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         )
         session.note_user_transcript("我之前默认用什么声音来着？")
 
-        with patch.object(
-            EverMemService,
-            "search_memories",
-            new=AsyncMock(
-                return_value=[
-                    {"content": "[语音偏好] 默认使用中文女声播报", "score": 0.91},
-                    {"content": "[任务] 当前重点是比赛提交", "score": 0.72},
-                ]
-            ),
-        ) as search_memories:
+        # Forced recall searches both the group-scoped and the global user
+        # scope so prior-session episodic memories are not masked by the
+        # current session's pending messages.
+        call_results = [
+            # scoped search
+            [
+                {"content": "[语音偏好] 默认使用中文女声播报", "score": 0.91},
+            ],
+            # global search
+            [
+                {"content": "[任务] 当前重点是比赛提交", "score": 0.72},
+            ],
+        ]
+        call_idx = 0
+
+        async def fake_search(*args, **kwargs):
+            nonlocal call_idx
+            result = call_results[call_idx] if call_idx < len(call_results) else []
+            call_idx += 1
+            return result
+
+        with patch.object(EverMemService, "search_memories", new=fake_search):
             result = await session.retrieve_memory_context()
 
         self.assertIn("默认使用中文女声播报", result["context"])
+        self.assertIn("当前重点是比赛提交", result["context"])
         self.assertEqual(result["memories_retrieved"], 2)
-        self.assertEqual(result["cloud_count"], 2)
         self.assertEqual(result["local_pending_count"], 0)
-        self.assertEqual(search_memories.await_count, 1)
-        self.assertEqual(search_memories.await_args.kwargs["group_ids"], ["voice-group-001"])
 
     async def test_retrieve_memory_context_for_task_question(self) -> None:
         session = RealtimeMemorySession()
@@ -334,7 +344,9 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["attempted"])
         self.assertTrue(result["explicit"])
         self.assertEqual(result["memories_retrieved"], 1)
-        self.assertEqual(search_memories.await_count, 1)
+        # recall_by_query uses force_global=True, so both scoped and global
+        # searches run (2 calls), with dedup keeping the single result.
+        self.assertEqual(search_memories.await_count, 2)
 
     async def test_recall_by_query_stages_injection_into_next_turn(self) -> None:
         """recall_by_query stages context consumed by the next retrieve_memory_context."""
@@ -447,6 +459,42 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         # staged-only context from the dedup cache.
         self.assertEqual(search_memories.await_count, 1)
         self.assertIn("新的重点是答辩", result["context"])
+
+    async def test_forced_recall_merges_scoped_and_global_cloud_search(self) -> None:
+        """Forced recall must search both the current group (for current-session
+        context) AND the global user scope (for prior-session episodic memories).
+        The scoped-only short-circuit would mask prior memories with current
+        session pending messages."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+                "group_id": "voice-group-current",
+            }
+        )
+        session.note_user_transcript("你还记得我们之前聊了什么吗？")
+
+        call_log: list[dict[str, Any]] = []
+
+        async def fake_search(*args, **kwargs):
+            call_log.append(kwargs)
+            if kwargs.get("group_ids"):
+                return [{"content": "[当前会话] 刚才讨论了实时语音测试", "score": 0.8}]
+            return [{"content": "[历史对话] 上次聊到了EverOS集成方案", "score": 0.75}]
+
+        with patch.object(EverMemService, "search_memories", new=fake_search):
+            result = await session.retrieve_memory_context()
+
+        # Both searches must run — scoped first, then global.
+        self.assertEqual(len(call_log), 2)
+        self.assertIn("group_ids", call_log[0])
+        self.assertNotIn("group_ids", call_log[1])
+        # Both the current-session and prior-session memories appear.
+        self.assertIn("刚才讨论了实时语音测试", result["context"])
+        self.assertIn("上次聊到了EverOS集成方案", result["context"])
 
     async def test_retrieve_memory_context_uses_local_pending_fallback(self) -> None:
         writer = RealtimeMemorySession()

@@ -759,7 +759,7 @@ class RealtimeMemorySession:
             )
         try:
             memories = await asyncio.wait_for(
-                self._search_cloud_memories(service=service, query=cleaned),
+                self._search_cloud_memories(service=service, query=cleaned, force_global=True),
                 timeout=self._EXPLICIT_RECALL_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
@@ -867,15 +867,17 @@ class RealtimeMemorySession:
             )
 
         try:
+            forced = self.is_forced_recall_query(query)
             timeout_seconds = (
                 self._FORCED_RETRIEVE_TIMEOUT_SECONDS
-                if self.is_forced_recall_query(query)
+                if forced
                 else self._RETRIEVE_TIMEOUT_SECONDS
             )
             memories = await asyncio.wait_for(
                 self._search_cloud_memories(
                     service=service,
                     query=query,
+                    force_global=forced,
                 ),
                 timeout=timeout_seconds,
             )
@@ -936,7 +938,21 @@ class RealtimeMemorySession:
         *,
         service: EverMemService,
         query: str,
+        force_global: bool = False,
     ) -> list[dict[str, Any]]:
+        """Search EverOS for memories.
+
+        When ``force_global`` is False (default per-turn behavior), the
+        group-scoped search short-circuits if it returns anything — this
+        keeps latency low for normal turns where the current conversation
+        context is usually what matters.
+
+        When ``force_global`` is True (forced recall — the user is asking
+        "do you remember what we said earlier"), both the scoped and the
+        global user-level searches are run and merged. This prevents the
+        current session's pending/raw messages from masking prior
+        episodic memories that live at the user scope.
+        """
         base_kwargs = {
             "query": query,
             "user_id": self._config.memory_scope,
@@ -945,6 +961,25 @@ class RealtimeMemorySession:
         }
         group_id = str(self._config.group_id or "").strip()
         if group_id:
+            if force_global:
+                # Run both searches concurrently so they share the wall-clock
+                # timeout budget instead of starving the global call.
+                scoped, global_results = await asyncio.gather(
+                    service.search_memories(group_ids=[group_id], **base_kwargs),
+                    service.search_memories(**base_kwargs),
+                )
+                # Tag scoped cloud results so the merge labels them correctly
+                # (they are cloud results from the current session group, not
+                # local pending entries).
+                for mem in scoped:
+                    if "source" not in mem:
+                        mem["source"] = "cloud_scoped"
+                for mem in global_results:
+                    if "source" not in mem:
+                        mem["source"] = "cloud"
+                return self._merge_retrieved_memories(
+                    local_memories=scoped, cloud_memories=global_results
+                )
             scoped = await service.search_memories(
                 group_ids=[group_id],
                 **base_kwargs,
