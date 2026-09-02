@@ -224,9 +224,11 @@ class RealtimeVoiceService(
         base_inst = RealtimeVoiceService._get_base_instructions()
         return (
             f"{base_inst}\n\n"
-            "The user is explicitly asking you to recall prior conversation memory, but no matching long-term "
-            "memory was retrieved for this turn. Do not pretend you remember specific prior facts. "
-            "State briefly that you could not retrieve a matching saved memory, then ask the user to restate "
+            "The user is explicitly asking you to recall prior conversation memory, but the memory search "
+            "returned no matching results. This may mean the earlier conversation has not yet been indexed "
+            "into long-term memory, or no relevant memory was stored. Do not pretend you remember specific "
+            "prior facts. Tell the user briefly that you searched but could not find a matching saved memory, "
+            "and that recent conversations may take time to become searchable. Then ask the user to restate "
             "the detail if needed.\n"
             f"Current user query: {user_query}"
         )

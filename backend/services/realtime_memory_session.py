@@ -225,7 +225,14 @@ class RealtimeMemorySession:
         r"重点工作",
     )
     _RETRIEVE_TIMEOUT_SECONDS = 0.12
-    _FORCED_RETRIEVE_TIMEOUT_SECONDS = 0.35
+    # Forced recall mid-conversation: the user asked "do you remember…?" — give
+    # the cloud more than the trivial 0.12s but keep it short enough for realtime
+    # voice latency (the pitfalls doc warns against long waits). The explicit
+    # ``recall`` command uses _EXPLICIT_RECALL_TIMEOUT_SECONDS instead.
+    _FORCED_RETRIEVE_TIMEOUT_SECONDS = 1.0
+    # Explicit recall via the ``recall`` command is user-initiated — a multi-
+    # second wait is acceptable because the user explicitly asked to search.
+    _EXPLICIT_RECALL_TIMEOUT_SECONDS = 3.0
     _STARTUP_RETRIEVE_TIMEOUT_SECONDS = 3.0
     _STARTUP_WAIT_SECONDS = 1.2
     _STARTUP_QUERY = "最近的对话讨论了什么 用户偏好 当前任务 待办事项 会话摘要"
@@ -753,8 +760,15 @@ class RealtimeMemorySession:
         try:
             memories = await asyncio.wait_for(
                 self._search_cloud_memories(service=service, query=cleaned),
-                timeout=self._FORCED_RETRIEVE_TIMEOUT_SECONDS,
+                timeout=self._EXPLICIT_RECALL_TIMEOUT_SECONDS,
             )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "voice_memory_recall cloud_timeout scope=%s query=%r",
+                self._config.memory_scope,
+                cleaned[:120],
+            )
+            memories = []
         except Exception:
             logger.exception(
                 "voice_memory_recall error scope=%s query=%r",
@@ -865,6 +879,14 @@ class RealtimeMemorySession:
                 ),
                 timeout=timeout_seconds,
             )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "voice_memory_retrieve cloud_timeout scope=%s timeout=%s query=%r",
+                self._config.memory_scope,
+                timeout_seconds,
+                query[:120],
+            )
+            memories = []
         except Exception:
             logger.exception(
                 "voice_memory_retrieve error scope=%s query=%r",
