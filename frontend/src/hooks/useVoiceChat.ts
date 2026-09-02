@@ -131,6 +131,8 @@ export default function useVoiceChat({
   const [voiceChatInterruptionState, setVoiceChatInterruptionState] =
     useState<VoiceChatInterruptionState>({ phase: "idle" });
   const [voiceChatAssistantInterrupted, setVoiceChatAssistantInterrupted] = useState(false);
+  const [voiceChatMuted, setVoiceChatMuted] = useState(false);
+  const [voiceChatDuration, setVoiceChatDuration] = useState(0);
   const [voiceChatMetrics, setVoiceChatMetrics] = useState<VoiceChatMetrics>(EMPTY_VOICE_CHAT_METRICS);
   const [voiceChatMemoryGroupId, setVoiceChatMemoryGroupId] = useState(
     () => getPersistedEverMemConversationGroupId("voice_chat")
@@ -145,6 +147,9 @@ export default function useVoiceChat({
     useState<VoiceAgentMetricsSummary | null>(null);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
   const [assistantAnalyser, setAssistantAnalyser] = useState<AnalyserNode | null>(null);
+
+  const isMutedRef = useRef(false);
+  isMutedRef.current = voiceChatMuted;
 
   const websocketRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -421,6 +426,8 @@ export default function useVoiceChat({
     setVoiceChatConnected(false);
     setVoiceChatRecording(false);
     setVoiceChatBusy(false);
+    setVoiceChatMuted(false);
+    isMutedRef.current = false;
     clearInterruptionTimeout();
     clearLiveTranslateBoundaryTimer();
     pendingInterruptionRef.current = null;
@@ -1605,7 +1612,7 @@ export default function useVoiceChat({
         let localSilenceFrames = 0;
 
         processor.onaudioprocess = (audioEvent) => {
-          if (sessionEpochRef.current !== sessionEpoch || ws.readyState !== WebSocket.OPEN) {
+          if (sessionEpochRef.current !== sessionEpoch || ws.readyState !== WebSocket.OPEN || isMutedRef.current) {
             return;
           }
           if (!audioInputReadyRef.current) {
@@ -1698,6 +1705,30 @@ export default function useVoiceChat({
     }
     await startSession();
   }
+
+  const onToggleMute = useCallback(() => {
+    setVoiceChatMuted((prev) => {
+      const next = !prev;
+      isMutedRef.current = next;
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getAudioTracks().forEach((track) => {
+          track.enabled = !next;
+        });
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!voiceChatConnected) {
+      setVoiceChatDuration(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setVoiceChatDuration((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [voiceChatConnected]);
 
   async function onLoadVoiceAgentHistory(limit = 20) {
     setVoiceAgentHistoryBusy(true);
@@ -1996,9 +2027,15 @@ export default function useVoiceChat({
       setVoiceChatAssistantInterrupted(false);
       setVoiceChatInterruptionState({ phase: "idle" });
       setVoiceChatMetrics(EMPTY_VOICE_CHAT_METRICS);
+      setVoiceChatMuted(false);
+      setVoiceChatDuration(0);
+      isMutedRef.current = false;
       clearPersistedEverMemConversationGroupId("voice_chat");
       setVoiceChatMemoryGroupId("");
     },
+    voiceChatMuted,
+    voiceChatDuration,
+    onToggleMute,
     voiceChatMemoryWriteStatus,
     voiceChatMemorySourceStatus,
     voiceChatMemoryScope,

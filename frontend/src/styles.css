@@ -9692,7 +9692,8 @@ button.vsPasswordToggleBtn:focus-visible {
   border-radius: 20px;
   background: color-mix(in oklab, var(--bg-card) 96%, var(--accent-soft));
   border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--line));
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 0 12px color-mix(in oklab, var(--accent) 12%, transparent);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 0 16px color-mix(in oklab, var(--accent) 15%, transparent);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vsLiveVoiceStatusBanner {
@@ -9701,21 +9702,25 @@ button.vsPasswordToggleBtn:focus-visible {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 14px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   width: 100%;
   box-sizing: border-box;
-  background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
+  background: color-mix(in oklab, var(--surface) 65%, var(--bg-card));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-radius: 14px;
-  border: 1px solid color-mix(in oklab, var(--accent) 15%, var(--line));
+  border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--line));
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
 }
 
 .vsVoiceStatusSection {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 13px;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .vsVoiceStatusText {
@@ -9723,10 +9728,10 @@ button.vsPasswordToggleBtn:focus-visible {
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 13px;
+  letter-spacing: -0.1px;
 }
 
 .vsVoiceStatusDot {
@@ -9735,35 +9740,68 @@ button.vsPasswordToggleBtn:focus-visible {
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-block;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .vsVoiceStatusDot.connecting {
   background-color: var(--accent);
   animation: breathe-opacity 1.5s ease-in-out infinite;
-  box-shadow: 0 0 6px var(--accent);
+  box-shadow: 0 0 8px var(--accent);
 }
 
 .vsVoiceStatusDot.connected {
   background-color: #10b981;
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+  animation: breathe-opacity 2.2s ease-in-out infinite;
 }
 
-@keyframes breathe-opacity {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
+.vsVoiceStatusDot.replying {
+  background-color: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.7);
+  animation: breathe-opacity 1.8s ease-in-out infinite;
+}
+
+.vsVoiceStatusDot.muted {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+}
+
+.vsVoiceTimerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: color-mix(in oklab, var(--bg-card) 90%, var(--surface));
+  color: var(--text-muted);
+  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.vsVoiceTimerDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #10b981;
+  opacity: 0.8;
 }
 
 .vsVoiceModelBadge {
   background: color-mix(in oklab, var(--accent) 10%, var(--bg-card));
   color: var(--accent-strong);
   padding: 3px 8px;
-  border-radius: 16px;
+  border-radius: 14px;
   font-size: 11px;
   font-weight: 600;
   border: 1px solid color-mix(in oklab, var(--accent) 15%, var(--line));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 220px;
 }
 
 .vsVoiceVisualizerContainer {
@@ -9771,58 +9809,136 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 90px;
-  height: 28px;
-  background: color-mix(in oklab, var(--surface) 30%, var(--bg-card));
-  border-radius: 10px;
+  width: 130px;
+  height: 30px;
+  background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
+  border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
-  border: 1px solid color-mix(in oklab, var(--accent) 8%, var(--line));
+  border: 1px solid color-mix(in oklab, var(--accent) 10%, var(--line));
+  transition: all 0.25s ease;
 }
 
 .vsVoiceVisualizerWave {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  height: 20px;
+  gap: 3.5px;
+  height: 22px;
   z-index: 2;
+  width: 100%;
+  padding: 0 8px;
+  box-sizing: border-box;
 }
 
 .vsWaveBar {
-  width: 3px;
-  height: 20%;
-  background: linear-gradient(to top, var(--brand), color-mix(in oklab, var(--brand) 60%, var(--accent)));
+  flex: 1;
+  max-width: 4px;
+  height: 18%;
+  min-height: 4px;
   border-radius: 3px;
-  transition: height 0.08s ease;
+  transition: height 0.08s cubic-bezier(0.2, 0.9, 0.3, 1), background 0.3s ease;
+  background: linear-gradient(to top, #10b981, #34d399);
+}
+
+.vsVoiceVisualizerContainer.state-listening .vsWaveBar {
+  background: linear-gradient(to top, #10b981, #34d399);
+}
+
+.vsVoiceVisualizerContainer.state-replying .vsWaveBar {
+  background: linear-gradient(to top, #3b82f6, #6366f1);
+}
+
+.vsVoiceVisualizerContainer.state-thinking .vsWaveBar {
+  background: linear-gradient(to top, #8b5cf6, #ec4899);
+}
+
+.vsVoiceVisualizerContainer.state-muted .vsWaveBar {
+  background: #9ca3af;
+  height: 4px !important;
+  opacity: 0.5;
 }
 
 .vsWaveBar:not([style]) {
   animation: wave-breathe 2s ease-in-out infinite;
 }
 .vsWaveBar.bar-1 { animation-delay: 0.0s; }
-.vsWaveBar.bar-2 { animation-delay: 0.25s; }
-.vsWaveBar.bar-3 { animation-delay: 0.5s; }
-.vsWaveBar.bar-4 { animation-delay: 0.75s; }
-.vsWaveBar.bar-5 { animation-delay: 0.5s; }
-.vsWaveBar.bar-6 { animation-delay: 0.25s; }
-.vsWaveBar.bar-7 { animation-delay: 0.0s; }
+.vsWaveBar.bar-2 { animation-delay: 0.15s; }
+.vsWaveBar.bar-3 { animation-delay: 0.3s; }
+.vsWaveBar.bar-4 { animation-delay: 0.45s; }
+.vsWaveBar.bar-5 { animation-delay: 0.6s; }
+.vsWaveBar.bar-6 { animation-delay: 0.75s; }
+.vsWaveBar.bar-7 { animation-delay: 0.75s; }
+.vsWaveBar.bar-8 { animation-delay: 0.6s; }
+.vsWaveBar.bar-9 { animation-delay: 0.45s; }
+.vsWaveBar.bar-10 { animation-delay: 0.3s; }
+.vsWaveBar.bar-11 { animation-delay: 0.15s; }
+.vsWaveBar.bar-12 { animation-delay: 0.0s; }
 
 @keyframes wave-breathe {
-  0%, 100% { height: 20%; }
-  50% { height: 60%; }
+  0%, 100% { height: 18%; }
+  50% { height: 65%; }
 }
 
 .vsVoiceGlow {
   position: absolute;
-  width: 60px;
-  height: 60px;
-  background: radial-gradient(circle, color-mix(in oklab, var(--brand) 20%, transparent) 0%, transparent 70%);
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
   border-radius: 50%;
   z-index: 1;
-  filter: blur(8px);
+  filter: blur(10px);
   pointer-events: none;
-  transition: transform 0.1s ease, opacity 0.1s ease;
+  transition: transform 0.12s ease, opacity 0.15s ease, background 0.3s ease;
+}
+
+.vsVoiceVisualizerContainer.state-replying .vsVoiceGlow {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%);
+}
+
+.vsVoiceVisualizerContainer.state-thinking .vsVoiceGlow {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
+}
+
+.vsVoiceControlsGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vsVoiceCallMuteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: color-mix(in oklab, var(--surface) 75%, var(--bg-card));
+  color: var(--text);
+  border: 1px solid color-mix(in oklab, var(--line) 90%, transparent);
+  padding: 6px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.vsVoiceCallMuteBtn:hover {
+  background: color-mix(in oklab, var(--accent) 15%, var(--surface));
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--line));
+  transform: translateY(-0.5px);
+}
+
+.vsVoiceCallMuteBtn.muted {
+  background: color-mix(in oklab, #ef4444 14%, var(--bg-card));
+  color: #ef4444;
+  border-color: color-mix(in oklab, #ef4444 40%, var(--line));
+}
+
+.vsVoiceCallMuteBtn.muted:hover {
+  background: color-mix(in oklab, #ef4444 22%, var(--bg-card));
+  border-color: #ef4444;
 }
 
 .vsVoiceCallHangupMiniBtn {
@@ -9833,8 +9949,8 @@ button.vsPasswordToggleBtn:focus-visible {
   background: #ef4444;
   color: white;
   border: none;
-  padding: 6px 14px;
-  border-radius: 16px;
+  padding: 6px 13px;
+  border-radius: 14px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -9845,7 +9961,7 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsVoiceCallHangupMiniBtn:hover {
   background: #dc2626;
-  transform: scale(1.03);
+  transform: translateY(-0.5px);
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
 }
 

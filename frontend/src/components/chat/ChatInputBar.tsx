@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { extractPdfText } from "../../api";
 import VoiceCallSettingsPopover from "../VoiceCallSettingsPopover";
 import { isVoiceRealtimeModel } from "../../hooks/useChat";
@@ -21,11 +21,17 @@ const PaperclipIcon = () => (
 const MicIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>
 );
-const StopIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"></rect></svg>
+const MicOnIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>
+);
+const MicOffIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="2" x2="22" y1="2" y2="22"></line><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"></path><path d="M5 10v2a7 7 0 0 0 12 5"></path><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"></path><path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>
 );
 const PhoneIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.78 19.78 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.78 19.78 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.77.62 2.6a2 2 0 0 1-.45 2.11L8.09 9.62a16 16 0 0 0 6.29 6.29l1.19-1.19a2 2 0 0 1 2.11-.45c.83.29 1.7.5 2.6.62A2 2 0 0 1 22 16.92Z"></path></svg>
+);
+const PhoneOffIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path><line x1="22" x2="2" y1="2" y2="22"></line></svg>
 );
 const VideoIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"></path><rect width="14" height="12" x="2" y="6" rx="2"></rect></svg>
@@ -36,6 +42,12 @@ const SendIcon = () => (
 const SpinnerIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="vsSpin"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
 );
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
 
 type SpeechRecognitionResultLike = {
   readonly isFinal: boolean;
@@ -76,7 +88,32 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
   const [dictationError, setDictationError] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
-  // Soundwave visualizer requestAnimationFrame animation loop
+  // Keyboard shortcut: 'M' to toggle mute during active live voice calls
+  useEffect(() => {
+    if (!isVoiceActive) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditingText = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (isEditingText && !e.altKey && !e.ctrlKey && !e.metaKey) return;
+      if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        voiceChat.onToggleMute?.();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isVoiceActive, voiceChat]);
+
+  // Determine conversational state for visualizer
+  const visualizerState = useMemo(() => {
+    if (voiceChat.voiceChatMuted) return "state-muted";
+    if (voiceChat.voiceChatReply) return "state-replying";
+    if (voiceChat.voiceChatTranscript) return "state-listening";
+    if (voiceChat.voiceChatBusy) return "state-thinking";
+    return "state-listening";
+  }, [voiceChat.voiceChatMuted, voiceChat.voiceChatReply, voiceChat.voiceChatTranscript, voiceChat.voiceChatBusy]);
+
+  // Soundwave visualizer requestAnimationFrame animation loop (12 bars, symmetric)
   useEffect(() => {
     if (!voiceChat.voiceChatConnected) return;
 
@@ -89,11 +126,14 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
     const micDataArray = micAnalyser ? new Uint8Array(micAnalyser.frequencyBinCount) : null;
     const assistantDataArray = assistantAnalyser ? new Uint8Array(assistantAnalyser.frequencyBinCount) : null;
 
+    // Symmetrical bar distribution indices for 12 bars
+    const symmetricIndices = [0, 2, 4, 6, 8, 10, 11, 9, 7, 5, 3, 1];
+
     const updateVisualizer = () => {
       let micVolume = 0;
       let assistantVolume = 0;
 
-      if (micAnalyser && micDataArray) {
+      if (micAnalyser && micDataArray && !voiceChat.voiceChatMuted) {
         micAnalyser.getByteFrequencyData(micDataArray);
         let sum = 0;
         for (let i = 0; i < micDataArray.length; i++) {
@@ -114,29 +154,34 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       const visualizerEl = document.getElementById("vs-voice-visualizer");
       if (visualizerEl) {
         const activeVolume = assistantVolume > 0 ? assistantVolume : micVolume;
-        const dataArray = assistantVolume > 0 ? assistantDataArray : micDataArray;
+        const dataArray = assistantVolume > 0 ? assistantDataArray : (voiceChat.voiceChatMuted ? null : micDataArray);
 
         const glowEl = visualizerEl.querySelector(".vsVoiceGlow") as HTMLElement;
         if (glowEl) {
-          const scale = 0.9 + (activeVolume / 255) * 0.5;
-          const opacity = 0.5 + (activeVolume / 255) * 0.5;
-          glowEl.style.transform = `scale(${scale})`;
-          glowEl.style.opacity = `${opacity}`;
+          if (voiceChat.voiceChatMuted) {
+            glowEl.style.transform = "scale(0.8)";
+            glowEl.style.opacity = "0";
+          } else {
+            const scale = 0.85 + (activeVolume / 255) * 0.65;
+            const opacity = 0.35 + (activeVolume / 255) * 0.65;
+            glowEl.style.transform = `scale(${scale})`;
+            glowEl.style.opacity = `${opacity}`;
+          }
         }
 
         const bars = visualizerEl.querySelectorAll(".vsWaveBar");
-        if (activeVolume > 2 && dataArray && bars.length > 0) {
-          const step = Math.floor(dataArray.length / bars.length) || 1;
+        if (!voiceChat.voiceChatMuted && activeVolume > 2 && dataArray && bars.length > 0) {
           bars.forEach((bar, index) => {
-            const val = dataArray[index * step] || 0;
-            const height = 15 + (val / 255) * 85;
+            const sampleIdx = symmetricIndices[index % symmetricIndices.length] || 0;
+            const val = dataArray[sampleIdx] || 0;
+            const height = 18 + (val / 255) * 82;
             (bar as HTMLElement).style.height = `${height}%`;
           });
         } else {
           bars.forEach((bar) => {
             (bar as HTMLElement).style.height = "";
           });
-          if (glowEl) {
+          if (glowEl && !voiceChat.voiceChatMuted) {
             glowEl.style.transform = "";
             glowEl.style.opacity = "";
           }
@@ -154,7 +199,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       clearTimeout(timerId);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [voiceChat.voiceChatConnected, voiceChat.micAnalyser, voiceChat.assistantAnalyser]);
+  }, [voiceChat.voiceChatConnected, voiceChat.voiceChatMuted, voiceChat.micAnalyser, voiceChat.assistantAnalyser]);
 
   function appendDictationText(text: string) {
     const clean = text.trim();
@@ -313,22 +358,40 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
   return (
     <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""}`}>
-      {/* ── Live Voice Top Status Banner during active call ── */}
+      {/* ── Live Voice Dynamic Call Capsule Banner ── */}
       {isVoiceActive && (
         <div className="vsLiveVoiceStatusBanner">
           <div className="vsVoiceStatusSection">
             <span className="vsVoiceStatusText">
-              <span className={`vsVoiceStatusDot ${voiceChat.voiceChatConnected ? "connected" : "connecting"}`} />
-              {voiceChat.voiceChatConnected
-                ? (voiceChat.voiceChatReply
-                    ? t("正在回复...", "Replying...")
-                    : (voiceChat.voiceChatTranscript
-                        ? t("正在聆听...", "Listening...")
-                        : t("已连接，您可以说话或打字", "Connected: speak or type freely")))
-                : t("正在建立安全连接...", "Connecting live session...")}
+              <span
+                className={`vsVoiceStatusDot ${
+                  voiceChat.voiceChatMuted
+                    ? "muted"
+                    : voiceChat.voiceChatConnected
+                      ? (voiceChat.voiceChatReply ? "replying" : "connected")
+                      : "connecting"
+                }`}
+              />
+              {voiceChat.voiceChatMuted
+                ? t("已静音", "Muted")
+                : voiceChat.voiceChatConnected
+                  ? (voiceChat.voiceChatReply
+                      ? t("正在回复...", "Replying...")
+                      : (voiceChat.voiceChatTranscript
+                          ? t("正在聆听...", "Listening...")
+                          : t("已连接，您可以说话或打字", "Connected: speak or type freely")))
+                  : t("正在建立安全连接...", "Connecting live session...")}
             </span>
+
             {voiceChat.voiceChatConnected && (
-              <span className="vsVoiceModelBadge">
+              <span className="vsVoiceTimerBadge" title={t("通话时长", "Call Duration")}>
+                <span className="vsVoiceTimerDot" />
+                {formatDuration(voiceChat.voiceChatDuration || 0)}
+              </span>
+            )}
+
+            {voiceChat.voiceChatConnected && (
+              <span className="vsVoiceModelBadge" title={`${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`}>
                 {voiceChat.voiceChatProvider} / {voiceChat.voiceChatModel} ·{" "}
                 {formatVoiceChatSecondaryLabel({
                   liveTranslate: voiceChat.voiceChatLiveTranslate,
@@ -345,7 +408,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
             )}
           </div>
 
-          <div className="vsVoiceVisualizerContainer" id="vs-voice-visualizer">
+          <div className={`vsVoiceVisualizerContainer ${visualizerState}`} id="vs-voice-visualizer">
             <div className="vsVoiceVisualizerWave">
               <div className="vsWaveBar bar-1"></div>
               <div className="vsWaveBar bar-2"></div>
@@ -354,19 +417,38 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
               <div className="vsWaveBar bar-5"></div>
               <div className="vsWaveBar bar-6"></div>
               <div className="vsWaveBar bar-7"></div>
+              <div className="vsWaveBar bar-8"></div>
+              <div className="vsWaveBar bar-9"></div>
+              <div className="vsWaveBar bar-10"></div>
+              <div className="vsWaveBar bar-11"></div>
+              <div className="vsWaveBar bar-12"></div>
             </div>
             <div className="vsVoiceGlow"></div>
           </div>
 
-          <button
-            type="button"
-            className="vsVoiceCallHangupMiniBtn"
-            onClick={() => void voiceChat.onToggleRecording()}
-            title={t("挂断实时通话", "Hang up call")}
-          >
-            <StopIcon />
-            <span>{t("挂断", "Hang up")}</span>
-          </button>
+          <div className="vsVoiceControlsGroup">
+            <button
+              type="button"
+              className={`vsVoiceCallMuteBtn ${voiceChat.voiceChatMuted ? "muted" : ""}`}
+              onClick={voiceChat.onToggleMute}
+              title={voiceChat.voiceChatMuted ? t("取消静音 (M)", "Unmute mic (M)") : t("静音麦克风 (M)", "Mute mic (M)")}
+              aria-label={voiceChat.voiceChatMuted ? t("取消静音", "Unmute mic") : t("静音麦克风", "Mute mic")}
+            >
+              {voiceChat.voiceChatMuted ? <MicOffIcon /> : <MicOnIcon />}
+              <span>{voiceChat.voiceChatMuted ? t("已静音", "Muted") : t("静音", "Mute")}</span>
+            </button>
+
+            <button
+              type="button"
+              className="vsVoiceCallHangupMiniBtn"
+              onClick={() => void voiceChat.onToggleRecording()}
+              title={t("挂断实时通话", "Hang up call")}
+              aria-label={t("挂断实时通话", "Hang up call")}
+            >
+              <PhoneOffIcon />
+              <span>{t("挂断", "Hang up")}</span>
+            </button>
+          </div>
         </div>
       )}
 

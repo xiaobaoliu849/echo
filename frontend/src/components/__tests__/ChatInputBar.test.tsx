@@ -176,6 +176,40 @@ describe("ChatInputBar", () => {
     expect(voiceChat.onToggleRecording).toHaveBeenCalledTimes(1);
   });
 
+  it("handles mute/unmute and displays formatted call duration during active voice call", () => {
+    const onToggleMute = vi.fn();
+    const chat = createChatController();
+    const voiceChat = createVoiceChatController({
+      voiceChatRecording: true,
+      voiceChatConnected: true,
+      voiceChatMuted: false,
+      voiceChatDuration: 125, // 02:05
+      onToggleMute,
+    });
+
+    const { rerender } = render(<ChatInputBar chat={chat} voiceChat={voiceChat} />);
+
+    // Shows timer 02:05
+    expect(screen.getByText("02:05")).toBeInTheDocument();
+
+    // Shows Mute button
+    const muteBtn = screen.getByLabelText("静音麦克风");
+    expect(muteBtn).toBeInTheDocument();
+    fireEvent.click(muteBtn);
+    expect(onToggleMute).toHaveBeenCalledTimes(1);
+
+    // Rerender as muted
+    const mutedVoiceChat = createVoiceChatController({
+      ...voiceChat,
+      voiceChatMuted: true,
+      onToggleMute,
+    });
+    rerender(<ChatInputBar chat={chat} voiceChat={mutedVoiceChat} />);
+
+    expect(screen.getByLabelText("取消静音")).toBeInTheDocument();
+    expect(screen.getAllByText("已静音").length).toBeGreaterThanOrEqual(1);
+  });
+
   it("shows dictation unsupported error hint when browser SpeechRecognition is absent", () => {
     const chat = createChatController({
       chatProvider: "Google",
