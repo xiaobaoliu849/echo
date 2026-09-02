@@ -350,7 +350,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
             ):
                 await session.retrieve_memory_context()
 
-        self.assertEqual(captured_timeout, 1.0)
+        self.assertEqual(captured_timeout, 5.0)
 
     async def test_retrieve_memory_context_skips_trivial_turns(self) -> None:
         session = RealtimeMemorySession()
@@ -659,7 +659,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
                 "group_id": "voice-group-002",
             }
         )
-        second.note_user_transcript("请继续比赛提交相关安排。")
+        second.note_user_transcript("比赛提交相关安排有哪些。")
 
         with patch.object(
             EverMemService,

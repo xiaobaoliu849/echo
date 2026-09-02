@@ -365,6 +365,38 @@ class DoubaoRealtimeMixin:
                 state["user_final_sent"] = True
                 if memory_session is not None:
                     memory_session.note_user_transcript(transcript)
+                    # Retrieve cloud memories and inject as context before the
+                    # model auto-generates its reply. Doubao's full-duplex
+                    # protocol does not support re-configuring instructions
+                    # mid-session, so we inject retrieved memories as a
+                    # system-side conversation item the model can reference.
+                    try:
+                        retrieval = await memory_session.retrieve_memory_context()
+                        memory_context = str(retrieval.get("context", ""))
+                        memory_count = int(retrieval.get("memories_retrieved", 0))
+                        local_pending_count = int(retrieval.get("local_pending_count", 0))
+                        cloud_count = int(retrieval.get("cloud_count", 0))
+                        if retrieval.get("attempted"):
+                            await self._send_event(
+                                websocket,
+                                "memory_context",
+                                memories_retrieved=memory_count,
+                                local_pending_count=local_pending_count,
+                                cloud_count=cloud_count,
+                                attempted=True,
+                            )
+                        if memory_context:
+                            await doubao_ws.send(json.dumps({
+                                "type": "conversation.item.create",
+                                "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+                                "items": [{
+                                    "type": "message",
+                                    "role": "system",
+                                    "content": [{"type": "input_text", "text": f"以下是从长期记忆中检索到的相关历史信息，请参考这些内容回答用户的问题：\n{memory_context}"}],
+                                }],
+                            }, ensure_ascii=False))
+                    except Exception:
+                        logger.exception("doubao_memory_retrieve_failed")
                 voice_turn_id = ""
                 if recorder is not None:
                     voice_turn_id = await recorder.note_user_transcript(transcript)
@@ -613,6 +645,54 @@ class DoubaoRealtimeMixin:
         interruption = InterruptionDecisionCoordinator()
         memory_session = memory_session or RealtimeMemorySession()
         tool_session = tool_session or VoiceAgentToolSession()
+
+        # Pre-load a compact summary of recent memories into the session
+        # instructions BEFORE the duplex handshake. Doubao's full-duplex
+        # protocol auto-generates a response the moment the user stops
+        # speaking, so injecting context after transcription.completed is too
+        # late. By folding a *concise* memory summary into the initial
+        # instructions here, the model knows prior topics exist and can
+        # naturally reference them when the user asks — without bloating
+        # every reply with history the user didn't ask about.
+        base_instructions = instructions or BASE_REALTIME_INSTRUCTIONS
+        if memory_session._config.get_service() is None and not memory_session._explicitly_configured:
+            memory_session.configure_from_server()
+        if memory_session._config.get_service() is not None:
+            try:
+                from .realtime_memory_session import RealtimeMemorySession as _RMS
+                service = memory_session._config.get_service()
+                local_entries = _RMS._all_pending_entries_any_scope()
+                cloud_entries: list[dict[str, Any]] = []
+                try:
+                    import asyncio as _aio
+                    cloud_entries = await _aio.wait_for(
+                        memory_session._search_cloud_memories(
+                            service=service,
+                            query=memory_session._STARTUP_QUERY,
+                            force_global=True,
+                        ),
+                        timeout=memory_session._STARTUP_RETRIEVE_TIMEOUT_SECONDS,
+                    )
+                except Exception:
+                    pass
+                combined = memory_session._merge_retrieved_memories(
+                    local_memories=local_entries,
+                    cloud_memories=cloud_entries,
+                )
+                lines: list[str] = []
+                for mem in combined[:5]:
+                    content = str(mem.get("content", "")).strip()
+                    if content:
+                        lines.append(f"- {content[:120]}")
+                if lines:
+                    pre_ctx = "\n".join(lines)
+                    base_instructions = (
+                        f"{base_instructions}\n\n"
+                        f"以下是用户之前的长期记忆摘要（仅在用户询问历史对话时引用，不要主动复述）：\n{pre_ctx}"
+                    )
+                    logger.info("voice_memory_handshake_inject local=%s cloud=%s", len(local_entries), len(cloud_entries))
+            except Exception:
+                logger.exception("doubao_memory_handshake_prefetch_failed")
         # Turn lifecycle state, owned here and consumed by the downlink loop.
         turn_state: dict[str, Any] = {
             "active_turn_id": None,       # recorder 话轮 id(用户转写打标用)
@@ -632,7 +712,7 @@ class DoubaoRealtimeMixin:
                     dialog_id = await self._duplex_handshake(
                         doubao_ws,
                         voice=voice_name,
-                        instructions=instructions,
+                        instructions=base_instructions,
                         dialog_model=settings["dialog_model"],
                         websearch_key=settings["websearch_key"],
                     )
