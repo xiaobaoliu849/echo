@@ -643,6 +643,8 @@ export type VoiceChatServerEvent =
       local_pending_count?: number;
       cloud_count?: number;
       attempted?: boolean;
+      explicit?: boolean;
+      query?: string;
     }
   | {
       type: "memory_write";

@@ -184,6 +184,7 @@ export default function useVoiceChat({
   const currentMemoryRetrieveAttemptedRef = useRef(false);
   const currentLocalPendingCountRef = useRef(0);
   const currentCloudCountRef = useRef(0);
+  const currentMemoryExplicitRef = useRef(false);
   const currentToolRecordsRef = useRef<VoiceAgentToolRecord[]>([]);
   const currentTurnIdRef = useRef("");
   const currentAssistantInterruptedRef = useRef(false);
@@ -597,6 +598,7 @@ export default function useVoiceChat({
       total: memoriesUsed,
       localPendingCount: currentLocalPendingCountRef.current,
       cloudCount: currentCloudCountRef.current,
+      explicit: currentMemoryExplicitRef.current,
     });
     if (!userText && !assistantText && toolCalls.length === 0) {
       currentTurnIdRef.current = "";
@@ -634,6 +636,7 @@ export default function useVoiceChat({
     currentMemoryRetrieveAttemptedRef.current = false;
     currentLocalPendingCountRef.current = 0;
     currentCloudCountRef.current = 0;
+    currentMemoryExplicitRef.current = false;
     setVoiceChatTranscript("");
     setVoiceChatReply("");
   }
@@ -674,6 +677,7 @@ export default function useVoiceChat({
     total: number;
     localPendingCount: number;
     cloudCount: number;
+    explicit?: boolean;
   }): string {
     const local = Math.max(0, params.localPendingCount);
     const cloud = Math.max(0, params.cloudCount);
@@ -686,10 +690,11 @@ export default function useVoiceChat({
         `Source: local pending ${local}, cloud ${cloud}`
       );
     }
-    return t(
-      `已尝试回忆：本地待同步 ${local} 条，云端 ${cloud} 条`,
-      `Attempted recall: local pending ${local}, cloud ${cloud}`
-    );
+    // Zero-hit: stay silent unless this was an explicit recall.
+    if (params.explicit) {
+      return t("没有找到相关记忆", "No matching memories found");
+    }
+    return "";
   }
 
   function describeMemoryContext(event: Extract<VoiceChatServerEvent, { type: "memory_context" }>): string {
@@ -701,11 +706,8 @@ export default function useVoiceChat({
         `Recalled ${event.memories_retrieved} long-term memories (local pending ${local}, cloud ${cloud})`
       );
     }
-    if (event.attempted) {
-      return t(
-        `已尝试回忆，但未命中匹配记忆（本地待同步 ${local}，云端 ${cloud}）`,
-        `Attempted recall but found no matching memories (local pending ${local}, cloud ${cloud})`
-      );
+    if (event.attempted && event.explicit) {
+      return t("没有找到相关记忆", "No matching memories found");
     }
     return "";
   }
@@ -935,6 +937,7 @@ export default function useVoiceChat({
         currentMemoryRetrieveAttemptedRef.current = false;
         currentLocalPendingCountRef.current = 0;
         currentCloudCountRef.current = 0;
+        currentMemoryExplicitRef.current = false;
         setVoiceChatTranscript(event.text);
         currentMemoriesRetrievedRef.current = 0;
         setVoiceChatMemoriesRetrieved(0);
@@ -957,22 +960,38 @@ export default function useVoiceChat({
           setVoiceChatStatus(t("正在生成本句译文…", "Translating this sentence…"));
         }
         return;
-      case "memory_context":
+      case "memory_context": {
+        const isExplicit = Boolean(event.explicit);
         currentMemoryRetrieveAttemptedRef.current = Boolean(event.attempted);
+        currentMemoryExplicitRef.current = isExplicit;
         currentMemoriesRetrievedRef.current = event.memories_retrieved;
         currentLocalPendingCountRef.current = event.local_pending_count || 0;
         currentCloudCountRef.current = event.cloud_count || 0;
         setVoiceChatMemoriesRetrieved(event.memories_retrieved);
         setVoiceChatMemorySourceStatus(describeMemoryContext(event));
-        setVoiceChatStatus(
-          event.memories_retrieved > 0
-            ? t(
-              `已回忆 ${event.memories_retrieved} 条长期记忆，准备回答…`,
-              `Recalled ${event.memories_retrieved} long-term memories, preparing a reply…`
-            )
-            : t("已尝试回忆，准备继续回答…", "Recall attempted, preparing the reply…")
-        );
+        if (event.memories_retrieved > 0) {
+          // For a standalone recall command (query present, no reply being
+          // generated yet), don't claim "preparing a reply" — nothing is.
+          if (event.query) {
+            setVoiceChatStatus(
+              t(
+                `已回忆 ${event.memories_retrieved} 条长期记忆`,
+                `Recalled ${event.memories_retrieved} long-term memories`
+              )
+            );
+          } else {
+            setVoiceChatStatus(
+              t(
+                `已回忆 ${event.memories_retrieved} 条长期记忆，准备回答…`,
+                `Recalled ${event.memories_retrieved} long-term memories, preparing a reply…`
+              )
+            );
+          }
+        } else if (isExplicit) {
+          setVoiceChatStatus(t("没有找到相关记忆，继续回答…", "No matching memories found, continuing…"));
+        }
         return;
+      }
       case "memory_write":
         currentMemorySavedRef.current = event.saved_count > 0;
         setVoiceChatMemoryWriteStatus(describeMemoryWriteResult(event));
@@ -1832,6 +1851,7 @@ export default function useVoiceChat({
           total: currentMemoriesRetrievedRef.current,
           localPendingCount: currentLocalPendingCountRef.current,
           cloudCount: currentCloudCountRef.current,
+          explicit: currentMemoryExplicitRef.current,
         }) || undefined,
         memoryRetrievalAttempted: currentMemoryRetrieveAttemptedRef.current,
         turnId: currentTurnIdRef.current || undefined,
@@ -1898,6 +1918,19 @@ export default function useVoiceChat({
   const startRecordingWithInitialPrompt = useCallback(async (prompt: string, attachments: ChatAttachment[] = []) => {
     pendingInitialPromptRef.current = { prompt, attachments };
     await startSession();
+  }, []);
+
+  const recallMemory = useCallback((query: string): boolean => {
+    const ws = websocketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    const cleanQuery = (query || "").trim();
+    if (!cleanQuery) {
+      return false;
+    }
+    ws.send(JSON.stringify({ type: "recall", query: cleanQuery }));
+    return true;
   }, []);
 
   function replaceSession(messages: ChatMessage[], memoryGroupId = "") {
@@ -2018,6 +2051,7 @@ export default function useVoiceChat({
       currentMemoryRetrieveAttemptedRef.current = false;
       currentLocalPendingCountRef.current = 0;
       currentCloudCountRef.current = 0;
+      currentMemoryExplicitRef.current = false;
       resetCurrentToolRecords();
       setVoiceChatTranscript("");
       setVoiceChatReply("");
@@ -2063,6 +2097,7 @@ export default function useVoiceChat({
     onExportVoiceAgentSession,
     replaceSession,
     sendTextMessage,
+    recallMemory,
     startRecordingWithInitialPrompt,
     micAnalyser,
     assistantAnalyser,

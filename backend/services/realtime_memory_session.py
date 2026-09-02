@@ -254,6 +254,10 @@ class RealtimeMemorySession:
         self._last_local_pending_count = 0
         self._last_cloud_count = 0
         self._last_retrieve_attempted = False
+        # Explicit recall requested via the ``recall`` command is injected into
+        # the next turn's context exactly once (mirrors startup injection).
+        self._pending_recall_context = ""
+        self._pending_recall_count = 0
         # Session-level accumulation (drives the end-of-session summary) and
         # startup memory injection state.
         self._session_user_excerpts: list[str] = []
@@ -609,6 +613,14 @@ class RealtimeMemorySession:
         }
 
     def should_retrieve_context(self, text: str | None = None) -> bool:
+        """Gate per-turn automatic recall.
+
+        Recall is an explicit act: only fire when the user expresses a memory
+        intent (hint words) or asks a question that targets memory topics. We
+        deliberately do NOT recall on long-but-plain statements nor on
+        classifiable-but-non-question utterances — those are worth *storing*,
+        not worth interrupting the reply with a (usually empty) recall.
+        """
         service = self._config.get_service()
         candidate = str(text or self._current_user_text or "").strip()
         if not service or not candidate:
@@ -635,20 +647,6 @@ class RealtimeMemorySession:
             )
             return True
 
-        for sentence in self._split_sentences(candidate):
-            normalized = self._normalize_candidate(sentence)
-            if not normalized:
-                continue
-            kind = self._classify_candidate(normalized)
-            if kind in {"voice_preference", "user_preference", "constraint", "action_item", "task_context"}:
-                logger.info(
-                    "voice_memory_retrieve trigger=classified kind=%s scope=%s query=%r",
-                    kind,
-                    self._config.memory_scope,
-                    candidate[:120],
-                )
-                return True
-
         if self._looks_like_question(candidate):
             question_targets_memory = (
                 self._matches_any(candidate, self._TASK_PATTERNS)
@@ -671,11 +669,12 @@ class RealtimeMemorySession:
             )
             return False
         logger.info(
-            "voice_memory_retrieve trigger=length scope=%s query=%r",
+            "voice_memory_retrieve skipped reason=%s scope=%s query=%r",
+            "non_question_statement",
             self._config.memory_scope,
             candidate[:120],
         )
-        return len(candidate) >= 18
+        return False
 
     def is_forced_recall_query(self, text: str | None = None) -> bool:
         candidate = str(text or self._current_user_text or "").strip()
@@ -691,10 +690,12 @@ class RealtimeMemorySession:
         The startup block (recent summaries / preferences fetched when the
         client configured memory) rides the first turn's injection so the
         assistant opens the session knowing what earlier conversations covered,
-        regardless of how trivial the first utterance is.
+        regardless of how trivial the first utterance is. An explicit
+        ``recall`` command stages a one-shot block consumed here as well.
         """
         startup_context = await self._consume_startup_context()
         result = await self._retrieve_turn_context()
+        recall_context, recall_count = self._consume_recall_context()
         if startup_context:
             turn_context = str(result.get("context", ""))
             result["context"] = (
@@ -702,7 +703,105 @@ class RealtimeMemorySession:
             )
             result["memories_retrieved"] = int(result.get("memories_retrieved", 0)) + self._startup_count
             result["attempted"] = True
+        if recall_context:
+            turn_context = str(result.get("context", ""))
+            result["context"] = (
+                f"【回忆】\n{recall_context}\n{turn_context}" if turn_context else f"【回忆】\n{recall_context}"
+            )
+            result["memories_retrieved"] = int(result.get("memories_retrieved", 0)) + recall_count
+            result["attempted"] = True
+            result["explicit"] = True
         return result
+
+    async def recall_by_query(self, query: str) -> dict[str, Any]:
+        """Explicit recall requested by the user (via the ``recall`` command).
+
+        Bypasses ``should_retrieve_context`` — the user asked, so we search.
+        Uses the longer forced-recall timeout and searches both the group and
+        scope pending caches. Returns the same shape as ``retrieve_memory_context``.
+        """
+        service = self._config.get_service()
+        cleaned = str(query or "").strip()
+        if not service or not cleaned:
+            return {
+                "context": "",
+                "memories_retrieved": 0,
+                "local_pending_count": 0,
+                "cloud_count": 0,
+                "attempted": False,
+                "explicit": True,
+            }
+        # Use the explicit query for retrieval (not the current turn text).
+        cache_key = self._pending_cache_key()
+        local_memories = self._search_pending_entries(cache_key, cleaned)
+        scope_key = self._scope_pending_cache_key()
+        if scope_key and scope_key != cache_key:
+            local_memories = self._merge_retrieved_memories(
+                local_memories=local_memories,
+                cloud_memories=self._search_pending_entries(scope_key, cleaned),
+            )
+        try:
+            memories = await asyncio.wait_for(
+                self._search_cloud_memories(service=service, query=cleaned),
+                timeout=self._FORCED_RETRIEVE_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            logger.exception(
+                "voice_memory_recall error scope=%s query=%r",
+                self._config.memory_scope,
+                cleaned[:120],
+            )
+            memories = []
+        combined = self._merge_retrieved_memories(local_memories=local_memories, cloud_memories=memories)
+        lines: list[str] = []
+        local_count = len(local_memories)
+        cloud_count = len(memories)
+        for idx, memory in enumerate(combined[:3], start=1):
+            content = str(memory.get("content", "")).strip()
+            if not content:
+                continue
+            source = str(memory.get("source", "")).strip()
+            if source == "local_pending":
+                lines.append(f"{idx}. [本地待同步记忆] {content[:180]}")
+            else:
+                lines.append(f"{idx}. [云端长期记忆] {content[:180]}")
+        logger.info(
+            "voice_memory_recall result scope=%s count=%s local_pending=%s cloud=%s query=%r",
+            self._config.memory_scope,
+            len(lines),
+            local_count,
+            cloud_count,
+            cleaned[:120],
+        )
+        context = "\n".join(lines)
+        # Stage for one-shot injection into the next turn.
+        self._pending_recall_context = context
+        self._pending_recall_count = len(lines)
+        return {
+            "context": context,
+            "memories_retrieved": len(lines),
+            "local_pending_count": local_count,
+            "cloud_count": cloud_count,
+            "attempted": True,
+            "explicit": True,
+        }
+
+    def _consume_recall_context(self) -> tuple[str, int]:
+        """Return the explicit-recall context and its line count exactly once.
+
+        Does NOT touch the ``_last_*`` per-query dedup cache: the staged block
+        is a transient one-shot injection (like startup), not a cacheable
+        result for the current query. Writing ``_last_*`` here would poison the
+        dedup cache so a repeated query returns recall-only context and drops
+        fresh per-turn search results.
+        """
+        if not self._pending_recall_context:
+            return "", 0
+        context = self._pending_recall_context
+        count = self._pending_recall_count
+        self._pending_recall_context = ""
+        self._pending_recall_count = 0
+        return context, count
 
     async def _retrieve_turn_context(self) -> dict[str, Any]:
         service = self._config.get_service()
