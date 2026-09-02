@@ -1,5 +1,11 @@
 import pytest
-from services.tts_service import TTSService, DEFAULT_EDGE_VOICE, DEFAULT_EDGE_EN_VOICE
+from services.tts_service import (
+    TTSService,
+    DEFAULT_EDGE_VOICE,
+    DEFAULT_EDGE_EN_VOICE,
+    TTS_ENGINE_EDGE,
+    TTS_ENGINE_GRADIUM,
+)
 
 def test_detect_edge_voice_language():
     service = TTSService()
@@ -56,4 +62,23 @@ def test_resolve_edge_voice_for_text():
     # Japanese text with Japanese voice requested -> keeps requested Japanese voice
     res = service._resolve_edge_voice_for_text(ja_text, "ja-JP-KeitaNeural")
     assert res == "ja-JP-KeitaNeural"
+
+
+def test_detect_engine_does_not_route_edge_voices_to_gradium():
+    # Regression: the Gradium opaque-token regex once matched Edge voice names
+    # (e.g. "en-US-AvaNeural"), so detect_engine_by_voice returned "gradium"
+    # and the request failed with "Embeddings not found for en-US-AvaNeural".
+    service = TTSService()
+    for edge_voice in (
+        "en-US-AvaNeural",
+        DEFAULT_EDGE_EN_VOICE,
+        DEFAULT_EDGE_VOICE,
+        "zh-CN-YunxiNeural",
+        "ja-JP-NanamiNeural",
+    ):
+        assert service.detect_engine_by_voice(edge_voice) == TTS_ENGINE_EDGE
+
+    # Gradium voices must still resolve to the Gradium engine.
+    for gradium_voice in ("YTpq7expH9539ERJ", "3jUdJyOi9pgbxBTK"):
+        assert service.detect_engine_by_voice(gradium_voice) == TTS_ENGINE_GRADIUM
 

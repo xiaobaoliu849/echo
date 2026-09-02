@@ -39,13 +39,28 @@ DEFAULT_GRADIUM_VOICE = GRADIUM_VOICES[0]["name"]
 _KNOWN_GRADIUM_VOICE_IDS = {v["name"] for v in GRADIUM_VOICES}
 _GRADIUM_VOICE_ID_RE = re.compile(r"^[0-9a-zA-Z_\-]{14,24}$")
 
+# Edge TTS voice names follow a "<locale>-<Name>Neural" pattern, e.g.
+# "en-US-AvaNeural" or "zh-CN-XiaoxiaoNeural". Gradium voice IDs are opaque
+# tokens that never carry a BCP-47 locale prefix or the "Neural" suffix, so
+# these guard against the permissive opaque-token regex claiming Edge voices.
+_EDGE_VOICE_PREFIX_RE = re.compile(r"^[a-z]{2,3}-[A-Z]{2,3}-")
+_EDGE_VOICE_SUFFIX = "Neural"
+
 
 def is_gradium_voice(voice: str) -> bool:
     """Check if a voice identifier belongs to Gradium."""
     if not voice:
         return False
     v = voice.strip()
-    return v in _KNOWN_GRADIUM_VOICE_IDS or bool(_GRADIUM_VOICE_ID_RE.match(v))
+    if not v:
+        return False
+    if v in _KNOWN_GRADIUM_VOICE_IDS:
+        return True
+    # Reject Edge TTS voice names so the opaque-token regex below cannot
+    # claim them and route an Edge request to the Gradium provider.
+    if v.endswith(_EDGE_VOICE_SUFFIX) or _EDGE_VOICE_PREFIX_RE.match(v):
+        return False
+    return bool(_GRADIUM_VOICE_ID_RE.match(v))
 
 
 def gradium_headers(api_key: str) -> dict[str, str]:
