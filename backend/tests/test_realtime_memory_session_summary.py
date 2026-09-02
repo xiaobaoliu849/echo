@@ -49,6 +49,7 @@ class RealtimeMemorySessionTestBase(unittest.IsolatedAsyncioTestCase):
 
     def _make_session(self, service: _FakeEverMemService | None) -> RealtimeMemorySession:
         session = RealtimeMemorySession()
+        session._explicitly_configured = True
         session._config.enabled = service is not None
         session._config.key = "test-key" if service is not None else None
         session._config.memory_scope = "test_scope"

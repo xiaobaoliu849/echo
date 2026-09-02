@@ -216,6 +216,8 @@ class RealtimeMemorySession:
         r"still",
         r"same",
         r"remember",
+        r"retrieve",
+        r"recall",
         r"检索",
         r"搜索",
         r"回忆",
@@ -223,16 +225,20 @@ class RealtimeMemorySession:
         r"提到",
         r"刚才说",
         r"重点工作",
+        r"讨论过",
+        r"聊过",
+        r"说过",
+        r"we talked about",
+        r"discussed",
     )
-    _RETRIEVE_TIMEOUT_SECONDS = 0.12
-    # Forced recall mid-conversation: the user asked "do you remember…?" — give
-    # the cloud more than the trivial 0.12s but keep it short enough for realtime
-    # voice latency (the pitfalls doc warns against long waits). The explicit
-    # ``recall`` command uses _EXPLICIT_RECALL_TIMEOUT_SECONDS instead.
-    _FORCED_RETRIEVE_TIMEOUT_SECONDS = 1.0
-    # Explicit recall via the ``recall`` command is user-initiated — a multi-
-    # second wait is acceptable because the user explicitly asked to search.
-    _EXPLICIT_RECALL_TIMEOUT_SECONDS = 3.0
+    _RETRIEVE_TIMEOUT_SECONDS = 3.0
+    # Forced recall mid-conversation: the user asked "do you remember…?" — the
+    # cloud typically responds in 2–3s, so allow a generous budget while keeping
+    # it short enough for realtime voice latency.
+    _FORCED_RETRIEVE_TIMEOUT_SECONDS = 5.0
+    # Explicit recall via the ``recall`` command is user-initiated — the user
+    # explicitly asked to search, so a generous wait is acceptable.
+    _EXPLICIT_RECALL_TIMEOUT_SECONDS = 5.0
     _STARTUP_RETRIEVE_TIMEOUT_SECONDS = 3.0
     _STARTUP_WAIT_SECONDS = 1.2
     _STARTUP_QUERY = "最近的对话讨论了什么 用户偏好 当前任务 待办事项 会话摘要"
@@ -252,6 +258,7 @@ class RealtimeMemorySession:
 
     def __init__(self) -> None:
         self._config = EverMemConfig()
+        self._explicitly_configured = False
         self._current_user_text = ""
         self._current_assistant_text = ""
         self._pending_tasks: set[asyncio.Task[None]] = set()
@@ -282,7 +289,62 @@ class RealtimeMemorySession:
     def _scope_pending_cache_key(self) -> str:
         return str(self._config.memory_scope or "").strip()
 
+    def configure_from_server(self) -> bool:
+        """Auto-configure from server-side config.json when the client never
+        sent a ``config`` command.  This lets memory work even when the
+        frontend's localStorage gate (``evermem_enabled``) is stale or out of
+        sync with the backend's ``memory_settings.enabled``.  No-op if the
+        client already explicitly configured memory (enabled or disabled) so
+        an explicit client config always wins.
+        """
+        if self._explicitly_configured or self._config.get_service() is not None:
+            return False
+        from .evermem_config import _load_server_evermem_settings, DEFAULT_EVERMEM_URL
+
+        try:
+            from .config_loader import BackendConfig
+
+            cfg = BackendConfig()
+            memory_section = cfg.get("memory_settings")
+            if not isinstance(memory_section, dict) or not memory_section.get("enabled"):
+                return False
+        except Exception:
+            return False
+
+        server_url, server_key = _load_server_evermem_settings()
+        url = server_url or DEFAULT_EVERMEM_URL
+        # Resolve scope from server config; if absent, derive a stable scope
+        # from the API key so writes and reads always land in the same
+        # namespace (not "anonymous" which may collide across users).
+        scope = ""
+        group = ""
+        try:
+            scope = str(memory_section.get("scope_id", "") or "").strip()
+        except Exception:
+            pass
+        if not scope and server_key:
+            from .evermem_config import _hash_scope
+
+            scope = _hash_scope("server", server_key)
+        self._config.update_from_headers(
+            {
+                "X-EverMem-Enabled": "true",
+                "X-EverMem-Url": url,
+                "X-EverMem-Key": server_key,
+                "X-EverMem-Scope": scope,
+                "X-EverMem-Group-ID": group,
+            }
+        )
+        logger.info(
+            "voice_memory_config auto_from_server scope=%s group=%s url=%s",
+            self._config.memory_scope,
+            self._config.group_id,
+            self._config.url,
+        )
+        return True
+
     def configure(self, payload: dict[str, Any] | None) -> None:
+        self._explicitly_configured = True
         if not isinstance(payload, dict) or not payload.get("enabled"):
             self._config = EverMemConfig()
             self._current_user_text = ""
@@ -316,6 +378,10 @@ class RealtimeMemorySession:
 
     def note_user_transcript(self, text: str) -> None:
         cleaned = str(text or "").strip()
+        # Auto-configure from server config on first user input if the client
+        # never sent a ``config`` command (e.g. frontend localStorage stale).
+        if cleaned and not self._explicitly_configured and self._config.get_service() is None:
+            self.configure_from_server()
         if cleaned != self._current_user_text:
             self._last_retrieved_query = ""
             self._last_memory_context = ""
@@ -715,8 +781,9 @@ class RealtimeMemorySession:
         candidate = str(text or self._current_user_text or "").strip()
         if not candidate:
             return False
-        if not self._looks_like_question(candidate):
-            return False
+        # A hint word alone ("earlier", "记得", "之前") signals recall intent
+        # even without a question marker — treat it as forced so it gets the
+        # longer cloud timeout instead of timing out at the trivial budget.
         return self._matches_any(candidate, self._RETRIEVE_HINT_PATTERNS)
 
     async def retrieve_memory_context(self) -> dict[str, Any]:
@@ -1117,6 +1184,34 @@ class RealtimeMemorySession:
         cls._PENDING_MEMORY_CACHE[scope] = existing[-cls._PENDING_MEMORY_MAX_PER_SCOPE :]
         cls._save_pending_cache_to_disk()
         return appended
+
+    @classmethod
+    def _all_pending_entries(cls, scope: str) -> list[dict[str, Any]]:
+        """Return all pending cache entries for a scope without scoring."""
+        pending = cls._prune_pending_entries(scope)
+        return [
+            {"content": str(item.get("content", "")).strip(), "source": "local_pending"}
+            for item in pending
+            if str(item.get("content", "")).strip()
+        ]
+
+    @classmethod
+    def _all_pending_entries_any_scope(cls) -> list[dict[str, Any]]:
+        """Return all pending cache entries across ALL scopes (no scoring).
+
+        Used at handshake time when the scope may not yet match the one the
+        client will configure — this ensures we see history regardless.
+        """
+        cls._load_pending_cache_from_disk()
+        result: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for scope, items in cls._PENDING_MEMORY_CACHE.items():
+            for item in items:
+                content = str(item.get("content", "")).strip()
+                if content and content not in seen:
+                    seen.add(content)
+                    result.append({"content": content, "source": "local_pending"})
+        return result
 
     @classmethod
     def _search_pending_entries(cls, scope: str, query: str) -> list[dict[str, Any]]:
