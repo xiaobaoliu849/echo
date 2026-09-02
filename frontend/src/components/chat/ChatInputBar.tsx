@@ -130,8 +130,8 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
     const micDataArray = micAnalyser ? new Uint8Array(micAnalyser.frequencyBinCount) : null;
     const assistantDataArray = assistantAnalyser ? new Uint8Array(assistantAnalyser.frequencyBinCount) : null;
 
-    // Symmetrical bar distribution indices for 12 bars
-    const symmetricIndices = [0, 2, 4, 6, 8, 10, 11, 9, 7, 5, 3, 1];
+    // Symmetrical bar distribution indices for 20 bars
+    const symmetricIndices = [0, 1, 2, 3, 5, 7, 9, 11, 13, 15, 15, 13, 11, 9, 7, 5, 3, 2, 1, 0];
 
     const updateVisualizer = () => {
       let micVolume = 0;
@@ -404,18 +404,9 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
           <div className={`vsVoiceVisualizerContainer ${visualizerState}`} id="vs-voice-visualizer">
             <div className="vsVoiceVisualizerWave">
-              <div className="vsWaveBar bar-1"></div>
-              <div className="vsWaveBar bar-2"></div>
-              <div className="vsWaveBar bar-3"></div>
-              <div className="vsWaveBar bar-4"></div>
-              <div className="vsWaveBar bar-5"></div>
-              <div className="vsWaveBar bar-6"></div>
-              <div className="vsWaveBar bar-7"></div>
-              <div className="vsWaveBar bar-8"></div>
-              <div className="vsWaveBar bar-9"></div>
-              <div className="vsWaveBar bar-10"></div>
-              <div className="vsWaveBar bar-11"></div>
-              <div className="vsWaveBar bar-12"></div>
+              {Array.from({ length: 20 }).map((_, i) => (
+                <div key={i} className={`vsWaveBar bar-${i + 1}`}></div>
+              ))}
             </div>
             <div className="vsVoiceGlow"></div>
           </div>

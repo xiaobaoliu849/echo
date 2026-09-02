@@ -9822,9 +9822,9 @@ button.vsPasswordToggleBtn:focus-visible {
   align-items: center;
   justify-content: center;
   flex: 1;
-  max-width: 220px;
-  min-width: 120px;
-  height: 30px;
+  max-width: 320px;
+  min-width: 160px;
+  height: 32px;
   background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
   border-radius: 12px;
   overflow: hidden;
@@ -9869,17 +9869,18 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3.5px;
-  height: 22px;
+  gap: 4px;
+  height: 24px;
   z-index: 2;
   width: 100%;
-  padding: 0 8px;
+  padding: 0 12px;
   box-sizing: border-box;
 }
 
 .vsWaveBar {
   flex: 1;
-  max-width: 4px;
+  max-width: 5px;
+  min-width: 3px;
   height: 18%;
   min-height: 4px;
   border-radius: 3px;
@@ -9908,18 +9909,26 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsWaveBar:not([style]) {
   animation: wave-breathe 2s ease-in-out infinite;
 }
-.vsWaveBar.bar-1 { animation-delay: 0.0s; }
-.vsWaveBar.bar-2 { animation-delay: 0.15s; }
-.vsWaveBar.bar-3 { animation-delay: 0.3s; }
-.vsWaveBar.bar-4 { animation-delay: 0.45s; }
-.vsWaveBar.bar-5 { animation-delay: 0.6s; }
-.vsWaveBar.bar-6 { animation-delay: 0.75s; }
-.vsWaveBar.bar-7 { animation-delay: 0.75s; }
-.vsWaveBar.bar-8 { animation-delay: 0.6s; }
-.vsWaveBar.bar-9 { animation-delay: 0.45s; }
-.vsWaveBar.bar-10 { animation-delay: 0.3s; }
-.vsWaveBar.bar-11 { animation-delay: 0.15s; }
-.vsWaveBar.bar-12 { animation-delay: 0.0s; }
+.vsWaveBar.bar-1  { animation-delay: 0.00s; }
+.vsWaveBar.bar-2  { animation-delay: 0.08s; }
+.vsWaveBar.bar-3  { animation-delay: 0.16s; }
+.vsWaveBar.bar-4  { animation-delay: 0.24s; }
+.vsWaveBar.bar-5  { animation-delay: 0.32s; }
+.vsWaveBar.bar-6  { animation-delay: 0.40s; }
+.vsWaveBar.bar-7  { animation-delay: 0.48s; }
+.vsWaveBar.bar-8  { animation-delay: 0.56s; }
+.vsWaveBar.bar-9  { animation-delay: 0.64s; }
+.vsWaveBar.bar-10 { animation-delay: 0.72s; }
+.vsWaveBar.bar-11 { animation-delay: 0.72s; }
+.vsWaveBar.bar-12 { animation-delay: 0.64s; }
+.vsWaveBar.bar-13 { animation-delay: 0.56s; }
+.vsWaveBar.bar-14 { animation-delay: 0.48s; }
+.vsWaveBar.bar-15 { animation-delay: 0.40s; }
+.vsWaveBar.bar-16 { animation-delay: 0.32s; }
+.vsWaveBar.bar-17 { animation-delay: 0.24s; }
+.vsWaveBar.bar-18 { animation-delay: 0.16s; }
+.vsWaveBar.bar-19 { animation-delay: 0.08s; }
+.vsWaveBar.bar-20 { animation-delay: 0.00s; }
 
 @keyframes wave-breathe {
   0%, 100% { height: 18%; }
@@ -9928,12 +9937,12 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsVoiceGlow {
   position: absolute;
-  width: 80px;
-  height: 80px;
+  width: 140px;
+  height: 140px;
   background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
   border-radius: 50%;
   z-index: 1;
-  filter: blur(10px);
+  filter: blur(14px);
   pointer-events: none;
   transition: transform 0.12s ease, opacity 0.15s ease, background 0.3s ease;
 }
