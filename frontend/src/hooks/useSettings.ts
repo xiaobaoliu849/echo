@@ -899,12 +899,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
       setSettingsData(result.settings);
       setSettingsConfigPath(result.config_path);
       setSettingsProviders(result.providers);
-      setSettingsInfo(
-        t(
-          `已保存 ${settingsProvider} 的设置。`,
-          `Saved settings for ${settingsProvider}.`
-        )
-      );
+      setSettingsInfo(t("设置已保存。", "Settings saved."));
     } catch (err) {
       setSettingsError(formatErrorMessage(err, t("保存设置失败。", "Failed to save settings.")));
     } finally {
