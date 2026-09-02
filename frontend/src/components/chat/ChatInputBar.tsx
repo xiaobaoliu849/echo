@@ -14,7 +14,12 @@ type Props = {
   onOpenPal?: () => void;
 };
 
+import LiveCaptionDrawer from "./LiveCaptionDrawer";
+
 /* ── Inline SVG icons ── */
+const CaptionIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg>
+);
 const PaperclipIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
 );
@@ -86,9 +91,10 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
   const [dictating, setDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
+  const [showCaptions, setShowCaptions] = useState(true);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
-  // Keyboard shortcut: 'M' to toggle mute during active live voice calls
+  // Keyboard shortcut: 'M' to toggle mute, 'C' to toggle live caption drawer during active live voice calls
   useEffect(() => {
     if (!isVoiceActive) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -98,6 +104,9 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       if (e.key === "m" || e.key === "M") {
         e.preventDefault();
         voiceChat.onToggleMute?.();
+      } else if (e.key === "c" || e.key === "C") {
+        e.preventDefault();
+        setShowCaptions((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -432,6 +441,17 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
           <div className="vsVoiceControlsGroup">
             <button
               type="button"
+              className={`vsVoiceCallCaptionBtn ${showCaptions ? "active" : ""}`}
+              onClick={() => setShowCaptions((prev) => !prev)}
+              title={showCaptions ? t("收起字幕 (C)", "Hide captions (C)") : t("展开字幕 (C)", "Show captions (C)")}
+              aria-label={showCaptions ? t("收起字幕", "Hide captions") : t("展开字幕", "Show captions")}
+            >
+              <CaptionIcon />
+              <span>{t("字幕", "Captions")}</span>
+            </button>
+
+            <button
+              type="button"
               className={`vsVoiceCallMuteBtn ${voiceChat.voiceChatMuted ? "muted" : ""}`}
               onClick={voiceChat.onToggleMute}
               title={voiceChat.voiceChatMuted ? t("取消静音 (M)", "Unmute mic (M)") : t("静音麦克风 (M)", "Mute mic (M)")}
@@ -453,6 +473,15 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
             </button>
           </div>
         </div>
+      )}
+
+      {/* ── Live Voice Subtitle Drawer ── */}
+      {isVoiceActive && (
+        <LiveCaptionDrawer
+          voiceChat={voiceChat}
+          isOpen={showCaptions}
+          onToggle={() => setShowCaptions((prev) => !prev)}
+        />
       )}
 
       {/* ── Input Box (Always active) ── */}
