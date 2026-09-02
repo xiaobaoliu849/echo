@@ -86,6 +86,24 @@ class TestGradiumTtsProvider(unittest.TestCase):
         self.assertFalse(is_gradium_voice(""))
         self.assertFalse(is_gradium_voice("short"))
 
+    def test_edge_voices_are_not_gradium(self):
+        # Edge TTS voice names ("en-US-AvaNeural", "zh-CN-XiaoxiaoNeural", ...)
+        # must not match the Gradium opaque-token regex, otherwise an Edge
+        # request gets misrouted to the Gradium provider and fails with
+        # "Embeddings not found for en-US-AvaNeural".
+        for edge_voice in (
+            "en-US-AvaNeural",
+            "zh-CN-XiaoxiaoNeural",
+            "ja-JP-NanamiNeural",
+            "en-GB-LibbyNeural",
+            "ru-RU-SvetlanaNeural",
+            "zh-TW-HsiaoChenNeural",
+        ):
+            self.assertFalse(
+                is_gradium_voice(edge_voice),
+                f"Edge voice {edge_voice!r} must not be treated as a Gradium voice",
+            )
+
     def test_headers(self):
         h = gradium_headers("test-key")
         self.assertEqual(h["x-api-key"], "test-key")
