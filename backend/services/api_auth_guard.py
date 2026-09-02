@@ -74,6 +74,14 @@ def should_enforce_auth(method: str, path: str) -> bool:
         return False
     if path.startswith("/api/auth/"):
         return False
+    # Desktop runtime diagnostics (local filesystem paths + preflight/launch
+    # error summaries) carry no credentials and are read by the settings UI
+    # before the user authenticates, so they stay public like /api/auth/*.
+    # Without this exemption the broad "/api/settings" sensitive-read rule
+    # below would admin-gate it, causing AUTH_ADMIN_TOKEN_MISSING spam even
+    # though the endpoint never returns secrets.
+    if path == "/api/settings/desktop-status":
+        return False
     # Media stream and static download endpoints for HTML5 <audio>/<video> elements cannot send Authorization headers
     if path.startswith("/api/transcription/jobs/") and (
         path.endswith("/audio")
