@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchSpeakAudio, type ChatMessage, type TtsEngine } from "../api";
 import ErrorNotice from "../components/ErrorNotice";
 import ChatInputBar from "../components/chat/ChatInputBar";
+import MarkdownContent from "../components/chat/MarkdownContent";
 import { isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import type { UseSettingsResult } from "../hooks/useSettings";
@@ -129,8 +130,8 @@ function MessageBubbleImpl({
   messageKey,
   index,
   chatBusy,
-  isStreamingPlaceholder: _isStreamingPlaceholder,
-  isThinkingActive: _isThinkingActive,
+  isStreamingPlaceholder,
+  isThinkingActive,
   copied,
   playing,
   loadingTts,
@@ -264,7 +265,15 @@ function MessageBubbleImpl({
         </div>
       )}
 
-      <p>{msg.content}</p>
+      {msg.role === "assistant" && isThinkingActive ? (
+        <div className="vsThinkingDots" aria-label={t("正在思考", "Thinking")}>
+          <span /><span /><span />
+        </div>
+      ) : msg.role === "assistant" ? (
+        <MarkdownContent content={msg.content} isStreaming={isStreamingPlaceholder && msg.content.length > 0} />
+      ) : (
+        <p>{msg.content}</p>
+      )}
 
       <div className="vsBubbleActions">
         <button
