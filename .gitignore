@@ -94,6 +94,7 @@ gradium.txt
 全模态.txt
 时时语音对话.txt
 端到端实时语音*.txt
+新建文本文档*.txt
 python3.7_duplex_demo*
 node_modules/
 .echo-state/
