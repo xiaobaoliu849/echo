@@ -14,10 +14,18 @@ class _FakeEverMemService:
 
     def __init__(self, search_results: list[dict] | None = None) -> None:
         self.added: list[dict] = []
+        self.flush_calls: list[dict] = []
         self.search_results = list(search_results or [])
+        self.flush_error: Exception | None = None
 
     async def add_memory(self, **kwargs):
         self.added.append(kwargs)
+        return {"status": "success"}
+
+    async def flush_pending_memories(self, **kwargs):
+        if self.flush_error is not None:
+            raise self.flush_error
+        self.flush_calls.append(kwargs)
         return {"status": "success"}
 
     async def search_memories(self, **kwargs):

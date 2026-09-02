@@ -93,6 +93,16 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         self.temp_dir = TemporaryDirectory()
         RealtimeMemorySession._PENDING_CACHE_PATH = Path(self.temp_dir.name) / "pending.json"
         RealtimeMemorySession._PENDING_MEMORY_CACHE.clear()
+        # flush_pending_memories hits the network in production; patch it at
+        # the class level so tests that call flush_turn don't make real HTTP
+        # calls. Tests that assert on flush behavior override this patch.
+        self._flush_patcher = patch.object(
+            EverMemService,
+            "flush_pending_memories",
+            new=AsyncMock(return_value={"status": "success"}),
+        )
+        self._flush_mock = self._flush_patcher.start()
+        self.addCleanup(self._flush_patcher.stop)
 
     def tearDown(self) -> None:
         RealtimeMemorySession._PENDING_MEMORY_CACHE.clear()
@@ -127,6 +137,85 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_call.kwargs["sender"], "voice-demo")
         self.assertEqual(first_call.kwargs["group_id"], "voice-group-001")
         self.assertIn("语音偏好", first_call.kwargs["content"])
+
+    async def test_flush_turn_flushes_cloud_after_writing_entries(self) -> None:
+        """flush_turn must call flush_pending_memories after saving entries so
+        EverOS extracts them from the raw buffer into searchable episodes."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+                "group_id": "voice-group-001",
+            }
+        )
+        session.note_user_transcript("以后比赛提交阶段默认都用中文女声来播报。")
+
+        with patch.object(
+            EverMemService,
+            "add_memory",
+            new=AsyncMock(return_value={"status": "success"}),
+        ):
+            await session.flush_turn()
+
+        self._flush_mock.assert_awaited_once()
+        flush_kwargs = self._flush_mock.await_args.kwargs
+        self.assertEqual(flush_kwargs["user_id"], "voice-demo")
+        self.assertEqual(flush_kwargs["session_id"], "voice-group-001")
+
+    async def test_flush_turn_does_not_flush_when_nothing_saved(self) -> None:
+        """No flush when there are no candidate memories — nothing to extract."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+            }
+        )
+        session.note_user_transcript("现在几点了？")
+
+        with patch.object(
+            EverMemService,
+            "add_memory",
+            new=AsyncMock(return_value={"status": "success"}),
+        ):
+            await session.flush_turn()
+
+        self._flush_mock.assert_not_awaited()
+
+    async def test_flush_failure_is_fail_open(self) -> None:
+        """A flush exception must not surface as a write failure — the pending
+        buffer is retried next turn, and saved_count reflects the writes."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+            }
+        )
+        session.note_user_transcript("以后默认用中文女声播报。")
+
+        flush_error = patch.object(
+            EverMemService,
+            "flush_pending_memories",
+            new=AsyncMock(side_effect=RuntimeError("network down")),
+        )
+        with flush_error:
+            with patch.object(
+                EverMemService,
+                "add_memory",
+                new=AsyncMock(return_value={"status": "success"}),
+            ):
+                result = await session.flush_turn()
+
+        self.assertEqual(result["saved_count"], 1)
+        self.assertEqual(result["failed_count"], 0)
 
     async def test_trivial_question_does_not_persist_memory(self) -> None:
         session = RealtimeMemorySession()
