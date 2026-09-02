@@ -131,6 +131,7 @@ export default function useVoiceChat({
   const [voiceChatInterruptionState, setVoiceChatInterruptionState] =
     useState<VoiceChatInterruptionState>({ phase: "idle" });
   const [voiceChatAssistantInterrupted, setVoiceChatAssistantInterrupted] = useState(false);
+  const [voiceChatAssistantSpeaking, setVoiceChatAssistantSpeaking] = useState(false);
   const [voiceChatMuted, setVoiceChatMuted] = useState(false);
   const [voiceChatDuration, setVoiceChatDuration] = useState(0);
   const [voiceChatMetrics, setVoiceChatMetrics] = useState<VoiceChatMetrics>(EMPTY_VOICE_CHAT_METRICS);
@@ -338,6 +339,7 @@ export default function useVoiceChat({
       }
     });
     playingSourcesRef.current = [];
+    setVoiceChatAssistantSpeaking(false);
     if (audioContextRef.current) {
       nextPlaybackTimeRef.current = audioContextRef.current.currentTime;
     }
@@ -427,6 +429,7 @@ export default function useVoiceChat({
     setVoiceChatRecording(false);
     setVoiceChatBusy(false);
     setVoiceChatMuted(false);
+    setVoiceChatAssistantSpeaking(false);
     isMutedRef.current = false;
     clearInterruptionTimeout();
     clearLiveTranslateBoundaryTimer();
@@ -745,8 +748,12 @@ export default function useVoiceChat({
       source.start(startAt);
       nextPlaybackTimeRef.current = startAt + buffer.duration;
       playingSourcesRef.current.push(source);
+      setVoiceChatAssistantSpeaking(true);
       source.addEventListener("ended", () => {
         playingSourcesRef.current = playingSourcesRef.current.filter((item) => item !== source);
+        if (playingSourcesRef.current.length === 0) {
+          setVoiceChatAssistantSpeaking(false);
+        }
       });
     } catch (err) {
       // Log but do NOT propagate — a single corrupt chunk must not kill the
@@ -2029,12 +2036,14 @@ export default function useVoiceChat({
       setVoiceChatMetrics(EMPTY_VOICE_CHAT_METRICS);
       setVoiceChatMuted(false);
       setVoiceChatDuration(0);
+      setVoiceChatAssistantSpeaking(false);
       isMutedRef.current = false;
       clearPersistedEverMemConversationGroupId("voice_chat");
       setVoiceChatMemoryGroupId("");
     },
     voiceChatMuted,
     voiceChatDuration,
+    voiceChatAssistantSpeaking,
     onToggleMute,
     voiceChatMemoryWriteStatus,
     voiceChatMemorySourceStatus,

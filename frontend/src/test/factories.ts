@@ -140,6 +140,7 @@ export function createVoiceChatController(
     voiceChatConnected: false,
     voiceChatMuted: overrides.voiceChatMuted ?? false,
     voiceChatDuration: overrides.voiceChatDuration ?? 0,
+    voiceChatAssistantSpeaking: overrides.voiceChatAssistantSpeaking ?? false,
     voiceChatSupported: true,
     voiceChatStatus: "点击开始实时语音聊天",
     voiceChatError: "",

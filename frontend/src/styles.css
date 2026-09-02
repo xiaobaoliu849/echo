@@ -9744,9 +9744,9 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsVoiceStatusDot.connecting {
-  background-color: var(--accent);
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
   animation: breathe-opacity 1.5s ease-in-out infinite;
-  box-shadow: 0 0 8px var(--accent);
 }
 
 .vsVoiceStatusDot.connected {
@@ -9755,10 +9755,22 @@ button.vsPasswordToggleBtn:focus-visible {
   animation: breathe-opacity 2.2s ease-in-out infinite;
 }
 
+.vsVoiceStatusDot.listening {
+  background-color: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.85);
+  animation: breathe-opacity 1.2s ease-in-out infinite;
+}
+
+.vsVoiceStatusDot.thinking {
+  background-color: #8b5cf6;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.85);
+  animation: breathe-opacity 1.4s ease-in-out infinite;
+}
+
 .vsVoiceStatusDot.replying {
   background-color: #3b82f6;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.7);
-  animation: breathe-opacity 1.8s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.85);
+  animation: breathe-opacity 1.2s ease-in-out infinite;
 }
 
 .vsVoiceStatusDot.muted {

@@ -104,14 +104,18 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isVoiceActive, voiceChat]);
 
+  const isAssistantSpeaking = Boolean(voiceChat.voiceChatAssistantSpeaking || voiceChat.voiceChatReply);
+  const isUserSpeaking = !isAssistantSpeaking && Boolean(voiceChat.voiceChatTranscript);
+  const isThinking = !isAssistantSpeaking && !isUserSpeaking && Boolean(voiceChat.voiceChatBusy);
+
   // Determine conversational state for visualizer
   const visualizerState = useMemo(() => {
     if (voiceChat.voiceChatMuted) return "state-muted";
-    if (voiceChat.voiceChatReply) return "state-replying";
-    if (voiceChat.voiceChatTranscript) return "state-listening";
-    if (voiceChat.voiceChatBusy) return "state-thinking";
+    if (isAssistantSpeaking) return "state-replying";
+    if (isUserSpeaking) return "state-listening";
+    if (isThinking) return "state-thinking";
     return "state-listening";
-  }, [voiceChat.voiceChatMuted, voiceChat.voiceChatReply, voiceChat.voiceChatTranscript, voiceChat.voiceChatBusy]);
+  }, [voiceChat.voiceChatMuted, isAssistantSpeaking, isUserSpeaking, isThinking]);
 
   // Soundwave visualizer requestAnimationFrame animation loop (12 bars, symmetric)
   useEffect(() => {
@@ -153,8 +157,9 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
       const visualizerEl = document.getElementById("vs-voice-visualizer");
       if (visualizerEl) {
-        const activeVolume = assistantVolume > 0 ? assistantVolume : micVolume;
-        const dataArray = assistantVolume > 0 ? assistantDataArray : (voiceChat.voiceChatMuted ? null : micDataArray);
+        const isAssistantActive = isAssistantSpeaking || assistantVolume > 1.5;
+        const activeVolume = isAssistantActive ? assistantVolume : (voiceChat.voiceChatMuted ? 0 : micVolume);
+        const dataArray = isAssistantActive ? assistantDataArray : (voiceChat.voiceChatMuted ? null : micDataArray);
 
         const glowEl = visualizerEl.querySelector(".vsVoiceGlow") as HTMLElement;
         if (glowEl) {
@@ -199,7 +204,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       clearTimeout(timerId);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [voiceChat.voiceChatConnected, voiceChat.voiceChatMuted, voiceChat.micAnalyser, voiceChat.assistantAnalyser]);
+  }, [voiceChat.voiceChatConnected, voiceChat.voiceChatMuted, isAssistantSpeaking, voiceChat.micAnalyser, voiceChat.assistantAnalyser]);
 
   function appendDictationText(text: string) {
     const clean = text.trim();
@@ -368,18 +373,24 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
                   voiceChat.voiceChatMuted
                     ? "muted"
                     : voiceChat.voiceChatConnected
-                      ? (voiceChat.voiceChatReply ? "replying" : "connected")
+                      ? (isAssistantSpeaking
+                          ? "replying"
+                          : (isUserSpeaking
+                              ? "listening"
+                              : (isThinking ? "thinking" : "connected")))
                       : "connecting"
                 }`}
               />
               {voiceChat.voiceChatMuted
                 ? t("已静音", "Muted")
                 : voiceChat.voiceChatConnected
-                  ? (voiceChat.voiceChatReply
+                  ? (isAssistantSpeaking
                       ? t("正在回复...", "Replying...")
-                      : (voiceChat.voiceChatTranscript
+                      : (isUserSpeaking
                           ? t("正在聆听...", "Listening...")
-                          : t("已连接，您可以说话或打字", "Connected: speak or type freely")))
+                          : (isThinking
+                              ? t("正在思考...", "Thinking...")
+                              : t("已连接，您可以说话或打字", "Connected: speak or type freely"))))
                   : t("正在建立安全连接...", "Connecting live session...")}
             </span>
 
