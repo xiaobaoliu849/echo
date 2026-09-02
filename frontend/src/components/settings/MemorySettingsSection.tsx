@@ -28,7 +28,7 @@ export default function MemorySettingsSection({ settings }: Props) {
         <label className="vsToggleLabel">
           <div className="vsToggleInfo">
             <span className="vsToggleTitle">{t("启用长期记忆支持", "Enable Long-Term Memory")}</span>
-            <span className="vsToggleDesc">{t("激活与 EverMemOS 的连接通讯。", "Enable the connection to EverMemOS.")}</span>
+            <span className="vsToggleDesc">{t("激活与 EverOS 的连接通讯。", "Enable the connection to EverOS.")}</span>
           </div>
           <input
             type="checkbox"
@@ -71,7 +71,7 @@ export default function MemorySettingsSection({ settings }: Props) {
                 <SecretInput
                   value={settings.evermemApiKey}
                   onChange={settings.onEvermemApiKeyChange}
-                  placeholder={t("EverMemOS 访问密钥", "EverMemOS access key")}
+                  placeholder={t("EverOS 访问密钥", "EverOS access key")}
                   section="memory_settings"
                   secretKey="api_key"
                 />
