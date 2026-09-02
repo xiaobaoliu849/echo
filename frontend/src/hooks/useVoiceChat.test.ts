@@ -1845,6 +1845,91 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatMessages[1].attachments).toHaveLength(1);
   });
 
+  it("sends a recall command with the query over the websocket", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-recall");
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        providerOptions: ["Google"],
+        preferredProvider: "Google",
+        preferredModel: "gemini-3.1-flash-live-preview",
+        providerModelCatalog: {
+          Google: {
+            defaultModel: "gemini-3.1-flash-live-preview",
+            availableModels: ["gemini-3.1-flash-live-preview"],
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+
+    const ws = FakeWebSocket.instances[0];
+    expect(ws).toBeDefined();
+
+    act(() => {
+      ws.emitOpen();
+      ws.emitMessage({ type: "session_open", model: "gemini-3.1-flash-live-preview" });
+    });
+
+    act(() => {
+      const sent = result.current.recallMemory("上次聊的重点工作");
+      expect(sent).toBe(true);
+    });
+
+    expect(ws.sent).toContain(
+      JSON.stringify({ type: "recall", query: "上次聊的重点工作" })
+    );
+  });
+
+  it("renders explicit zero-hit memory_context as 'no matching memories found'", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-recall-miss");
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        providerOptions: ["Google"],
+        preferredProvider: "Google",
+        preferredModel: "gemini-3.1-flash-live-preview",
+        providerModelCatalog: {
+          Google: {
+            defaultModel: "gemini-3.1-flash-live-preview",
+            availableModels: ["gemini-3.1-flash-live-preview"],
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+
+    const ws = FakeWebSocket.instances[0];
+    expect(ws).toBeDefined();
+
+    act(() => {
+      ws.emitOpen();
+      ws.emitMessage({ type: "session_open", model: "gemini-3.1-flash-live-preview" });
+    });
+
+    act(() => {
+      ws.emitMessage({
+        type: "memory_context",
+        memories_retrieved: 0,
+        local_pending_count: 0,
+        cloud_count: 0,
+        attempted: true,
+        explicit: true,
+        query: "上次聊的",
+      });
+    });
+
+    expect(result.current.voiceChatMemorySourceStatus).toContain("没有找到相关记忆");
+  });
+
   it("exposes reactive micAnalyser and assistantAnalyser instances on session start and clears them on stop", async () => {
     const formatErrorMessage = createFormatErrorMessageStub();
     const { result } = renderHook(() =>

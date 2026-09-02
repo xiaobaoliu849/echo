@@ -284,6 +284,170 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         session.note_user_transcript("今天上海天气怎么样？")
         self.assertFalse(session.is_forced_recall_query())
 
+    async def test_long_plain_statement_does_not_trigger_recall(self) -> None:
+        """A ≥18-char plain statement with no memory intent must not recall."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+            }
+        )
+        session.note_user_transcript("今天天气很好我们一起去公园散步吧顺便买点水果。")
+
+        with patch.object(
+            EverMemService,
+            "search_memories",
+            new=AsyncMock(return_value=[]),
+        ) as search_memories:
+            result = await session.retrieve_memory_context()
+
+        self.assertFalse(result["attempted"])
+        search_memories.assert_not_awaited()
+
+    async def test_recall_by_query_bypasses_gate(self) -> None:
+        """Explicit recall command searches even for plain statements."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+                "group_id": "voice-group-001",
+            }
+        )
+
+        with patch.object(
+            EverMemService,
+            "search_memories",
+            new=AsyncMock(
+                return_value=[
+                    {"content": "[语音偏好] 默认使用中文女声播报", "score": 0.91},
+                ]
+            ),
+        ) as search_memories:
+            result = await session.recall_by_query("默认声音是什么")
+
+        self.assertTrue(result["attempted"])
+        self.assertTrue(result["explicit"])
+        self.assertEqual(result["memories_retrieved"], 1)
+        self.assertEqual(search_memories.await_count, 1)
+
+    async def test_recall_by_query_stages_injection_into_next_turn(self) -> None:
+        """recall_by_query stages context consumed by the next retrieve_memory_context."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+            }
+        )
+
+        with patch.object(
+            EverMemService,
+            "search_memories",
+            new=AsyncMock(
+                return_value=[{"content": "[任务] 当前重点是比赛提交", "score": 0.88}]
+            ),
+        ):
+            await session.recall_by_query("重点工作")
+
+        # The next turn — even a trivial one — should inject the staged recall.
+        session.note_user_transcript("嗯。")
+        with patch.object(
+            EverMemService,
+            "search_memories",
+            new=AsyncMock(return_value=[]),
+        ):
+            result = await session.retrieve_memory_context()
+
+        self.assertTrue(result["attempted"])
+        self.assertIn("当前重点是比赛提交", result["context"])
+        # The staged recall block is labeled and counted.
+        self.assertEqual(result["memories_retrieved"], 1)
+        self.assertTrue(result.get("context", "").startswith("【回忆】"))
+
+    async def test_classifiable_non_question_statement_does_not_trigger_recall(self) -> None:
+        """A memory-worthy statement (no hint word, not a question) stores but
+        does not trigger per-turn recall. This pins the post-regression
+        behavior so the removed classified-statements branch is not silently
+        re-added."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+            }
+        )
+        # Contains task_context signal but no hint word and no question mark.
+        session.note_user_transcript("当前在做比赛提交，先安排好节点。")
+
+        with patch.object(
+            EverMemService,
+            "search_memories",
+            new=AsyncMock(return_value=[]),
+        ) as search_memories:
+            result = await session.retrieve_memory_context()
+
+        self.assertFalse(result["attempted"])
+        search_memories.assert_not_awaited()
+
+    async def test_recall_staging_does_not_poison_dedup_cache(self) -> None:
+        """After recall stages + a trivial turn consumes it, repeating the
+        recall query must still perform a fresh search, not return the stale
+        staged-only context from the dedup cache."""
+        session = RealtimeMemorySession()
+        session.configure(
+            {
+                "enabled": True,
+                "api_url": "https://memory.example.com",
+                "api_key": "memory-key",
+                "scope_id": "voice-demo",
+            }
+        )
+
+        # Stage a recall result.
+        with patch.object(
+            EverMemService,
+            "search_memories",
+            new=AsyncMock(
+                return_value=[{"content": "[任务] 当前重点是比赛提交", "score": 0.88}]
+            ),
+        ):
+            await session.recall_by_query("重点工作")
+
+        # Consume the staged block on a trivial turn.
+        session.note_user_transcript("嗯。")
+        with patch.object(
+            EverMemService,
+            "search_memories",
+            new=AsyncMock(return_value=[]),
+        ):
+            await session.retrieve_memory_context()
+
+        # Now issue a real turn that would trigger per-turn recall.
+        session.note_user_transcript("你还记得重点工作是什么吗？")
+        with patch.object(
+            EverMemService,
+            "search_memories",
+            new=AsyncMock(
+                return_value=[{"content": "[任务] 新的重点是答辩", "score": 0.9}]
+            ),
+        ) as search_memories:
+            result = await session.retrieve_memory_context()
+
+        # The fresh search must run and its result must surface — not a stale
+        # staged-only context from the dedup cache.
+        self.assertEqual(search_memories.await_count, 1)
+        self.assertIn("新的重点是答辩", result["context"])
+
     async def test_retrieve_memory_context_uses_local_pending_fallback(self) -> None:
         writer = RealtimeMemorySession()
         writer.configure(

@@ -193,6 +193,7 @@ export function createVoiceChatController(
     onExportVoiceAgentSession: vi.fn(),
     replaceSession: vi.fn(),
     sendTextMessage: vi.fn(),
+    recallMemory: vi.fn(() => true),
     startRecordingWithInitialPrompt: vi.fn(),
     micAnalyser: null,
     assistantAnalyser: null,

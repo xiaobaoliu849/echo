@@ -569,6 +569,21 @@ class RealtimeVoiceService(
             )
             return "handled"
 
+        if command_type == "recall":
+            query = str(payload.get("query", "") or "").strip()
+            retrieval = await memory_session.recall_by_query(query)
+            await self._send_event(
+                websocket,
+                "memory_context",
+                memories_retrieved=int(retrieval.get("memories_retrieved", 0)),
+                local_pending_count=int(retrieval.get("local_pending_count", 0)),
+                cloud_count=int(retrieval.get("cloud_count", 0)),
+                attempted=bool(retrieval.get("attempted", False)),
+                explicit=True,
+                query=query,
+            )
+            return "handled"
+
         if command_type == "ping":
             await self._send_event(websocket, "pong")
             return "handled"
