@@ -117,7 +117,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
     return "state-listening";
   }, [voiceChat.voiceChatMuted, isAssistantSpeaking, isUserSpeaking, isThinking]);
 
-  // Soundwave visualizer requestAnimationFrame animation loop (12 bars, symmetric)
+  // Soundwave visualizer requestAnimationFrame animation loop (20 bars, symmetric with Lerp/Damping)
   useEffect(() => {
     if (!voiceChat.voiceChatConnected) return;
 
@@ -132,6 +132,9 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
     // Symmetrical bar distribution indices for 20 bars
     const symmetricIndices = [0, 1, 2, 3, 5, 7, 9, 11, 13, 15, 15, 13, 11, 9, 7, 5, 3, 2, 1, 0];
+    const currentBarHeights = new Float32Array(20).fill(18);
+    let currentGlowScale = 0.85;
+    let currentGlowOpacity = 0.35;
 
     const updateVisualizer = () => {
       let micVolume = 0;
@@ -161,35 +164,50 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
         const activeVolume = isAssistantActive ? assistantVolume : (voiceChat.voiceChatMuted ? 0 : micVolume);
         const dataArray = isAssistantActive ? assistantDataArray : (voiceChat.voiceChatMuted ? null : micDataArray);
 
+        // Ambient glow damping lerp
         const glowEl = visualizerEl.querySelector(".vsVoiceGlow") as HTMLElement;
         if (glowEl) {
+          let targetScale = 0.85;
+          let targetOpacity = 0.25;
+
           if (voiceChat.voiceChatMuted) {
-            glowEl.style.transform = "scale(0.8)";
-            glowEl.style.opacity = "0";
-          } else {
-            const scale = 0.85 + (activeVolume / 255) * 0.65;
-            const opacity = 0.35 + (activeVolume / 255) * 0.65;
-            glowEl.style.transform = `scale(${scale})`;
-            glowEl.style.opacity = `${opacity}`;
+            targetScale = 0.8;
+            targetOpacity = 0;
+          } else if (activeVolume > 2) {
+            targetScale = 0.85 + (activeVolume / 255) * 0.65;
+            targetOpacity = 0.35 + (activeVolume / 255) * 0.65;
           }
+
+          currentGlowScale += (targetScale - currentGlowScale) * 0.18;
+          currentGlowOpacity += (targetOpacity - currentGlowOpacity) * 0.18;
+          glowEl.style.transform = `scale(${currentGlowScale.toFixed(3)})`;
+          glowEl.style.opacity = `${currentGlowOpacity.toFixed(3)}`;
         }
 
+        // 20-track soundwave lerp physics
         const bars = visualizerEl.querySelectorAll(".vsWaveBar");
-        if (!voiceChat.voiceChatMuted && activeVolume > 2 && dataArray && bars.length > 0) {
+        if (bars.length > 0) {
+          const isSoundActive = !voiceChat.voiceChatMuted && activeVolume > 1.8 && dataArray;
+          const attackAlpha = 0.42;  // Quick attack for acoustic responsiveness
+          const decayAlpha = 0.16;   // Smooth natural exponential release
+
           bars.forEach((bar, index) => {
-            const sampleIdx = symmetricIndices[index % symmetricIndices.length] || 0;
-            const val = dataArray[sampleIdx] || 0;
-            const height = 18 + (val / 255) * 82;
-            (bar as HTMLElement).style.height = `${height}%`;
+            let targetHeight = 18;
+            if (isSoundActive) {
+              const sampleIdx = symmetricIndices[index % symmetricIndices.length] || 0;
+              const val = dataArray[sampleIdx] || 0;
+              targetHeight = 18 + (val / 255) * 82;
+            } else if (voiceChat.voiceChatMuted) {
+              targetHeight = 14;
+            }
+
+            const current = currentBarHeights[index] ?? 18;
+            const alpha = targetHeight > current ? attackAlpha : decayAlpha;
+            const nextHeight = current + (targetHeight - current) * alpha;
+            currentBarHeights[index] = nextHeight;
+
+            (bar as HTMLElement).style.height = `${nextHeight.toFixed(1)}%`;
           });
-        } else {
-          bars.forEach((bar) => {
-            (bar as HTMLElement).style.height = "";
-          });
-          if (glowEl && !voiceChat.voiceChatMuted) {
-            glowEl.style.transform = "";
-            glowEl.style.opacity = "";
-          }
         }
       }
 
@@ -198,7 +216,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
     const timerId = setTimeout(() => {
       updateVisualizer();
-    }, 100);
+    }, 50);
 
     return () => {
       clearTimeout(timerId);
