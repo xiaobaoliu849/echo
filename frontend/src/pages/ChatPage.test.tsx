@@ -388,5 +388,74 @@ describe('ChatPage', () => {
         fireEvent.click(screen.getByText('深度思考'));
         expect(screen.queryByText(/第一步：分析用户需求/)).not.toBeInTheDocument();
     });
+
+    it('renders inline translation on assistant message when clicking translate button', async () => {
+        const translateMock = vi.spyOn(await import('../api'), 'translateText').mockResolvedValueOnce({
+            translated_text: '这是助手的中文翻译内容。',
+            provider: 'DashScope',
+            model: 'test-model'
+        });
+
+        render(
+            <ChatPage
+                chat={createChatController({
+                    chatMessages: [
+                        { role: 'assistant', content: 'This is an English assistant reply.' }
+                    ]
+                })}
+                voiceChat={createVoiceChatController()}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const translateBtn = screen.getByTitle('翻译回答');
+        expect(translateBtn).toBeInTheDocument();
+
+        fireEvent.click(translateBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('这是助手的中文翻译内容。')).toBeInTheDocument();
+            expect(screen.getByText('译文')).toBeInTheDocument();
+        });
+        expect(translateMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                text: 'This is an English assistant reply.',
+                target_language: 'zh'
+            })
+        );
+    });
+
+    it('allows clicking an interactive word in live speech to look up definition', async () => {
+        vi.spyOn(await import('../api'), 'translateText').mockResolvedValueOnce({
+            translated_text: '词汇量，词汇',
+            provider: 'DashScope',
+            model: 'test-model'
+        });
+
+        render(
+            <ChatPage
+                chat={createChatController()}
+                voiceChat={createVoiceChatController({
+                    voiceChatRecording: true,
+                    voiceChatTranscript: 'I want to build my vocabulary'
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const wordEl = screen.getByText('vocabulary');
+        expect(wordEl).toHaveClass('vsWordInteractive');
+
+        fireEvent.click(wordEl);
+        expect(screen.getByText('正在查询释义...')).toBeInTheDocument();
+
+        await waitFor(() => {
+            expect(screen.getByText('词汇量，词汇')).toBeInTheDocument();
+        });
+
+        const closeBtn = screen.getByTitle('关闭');
+        fireEvent.click(closeBtn);
+        expect(screen.queryByText('词汇量，词汇')).not.toBeInTheDocument();
+    });
 });
 

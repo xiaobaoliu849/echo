@@ -9975,36 +9975,6 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-shrink: 0;
 }
 
-.vsVoiceCallCaptionBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: color-mix(in oklab, var(--surface) 75%, var(--bg-card));
-  color: var(--text-muted);
-  border: 1px solid color-mix(in oklab, var(--line) 90%, transparent);
-  padding: 6px 12px;
-  border-radius: 14px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.18s ease;
-}
-
-.vsVoiceCallCaptionBtn:hover {
-  background: color-mix(in oklab, var(--accent) 15%, var(--surface));
-  color: var(--text);
-  border-color: color-mix(in oklab, var(--accent) 30%, var(--line));
-  transform: translateY(-0.5px);
-}
-
-.vsVoiceCallCaptionBtn.active {
-  background: color-mix(in oklab, var(--accent) 18%, var(--bg-card));
-  color: var(--accent-strong);
-  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
-}
-
 .vsVoiceCallMuteBtn {
   display: inline-flex;
   align-items: center;
@@ -10067,245 +10037,39 @@ button.vsPasswordToggleBtn:focus-visible {
   transform: scale(0.97);
 }
 
-/* ── Live Caption Drawer (HUD) ── */
-.vsLiveCaptionDrawer {
-  width: 100%;
-  margin-bottom: 10px;
-  background: color-mix(in oklab, var(--bg-card) 92%, var(--surface));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--line));
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 0 1px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+/* ── Inline Bubble Translation & Vocabulary Coach ── */
+.vsBubbleTranslation {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in oklab, var(--line) 60%, transparent);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
   display: flex;
   flex-direction: column;
-  animation: vs-caption-drawer-enter 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  transform-origin: top center;
-  position: relative;
+  gap: 3px;
+  animation: fadeUp 0.2s ease forwards;
 }
 
-@keyframes vs-caption-drawer-enter {
-  0% {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.99);
-    max-height: 0;
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    max-height: 380px;
-  }
-}
-
-.vsLiveCaptionHeader {
+.vsBubbleTransHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 14px;
-  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
-  background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
-  gap: 12px;
-}
-
-.vsCaptionHeaderLeft {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.vsCaptionBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent-strong);
   letter-spacing: -0.1px;
 }
 
-.vsCaptionLivePulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-  animation: breathe-opacity 1.4s ease-in-out infinite;
-}
-
-.vsCaptionSubHint {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.vsCaptionHeaderRight {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.vsCaptionToolBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
-  background: color-mix(in oklab, var(--surface) 60%, var(--bg-card));
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  padding: 0;
-}
-
-.vsCaptionToolBtn:hover {
-  background: color-mix(in oklab, var(--accent) 15%, var(--bg-card));
+.vsBubbleTranslation p {
+  margin: 0;
   color: var(--text);
-  border-color: color-mix(in oklab, var(--accent) 30%, var(--line));
-}
-
-.vsCaptionToolBtn.active {
-  background: color-mix(in oklab, var(--accent) 25%, var(--bg-card));
-  color: var(--accent-strong);
-  border-color: var(--accent);
-}
-
-.vsLiveCaptionBody {
-  max-height: 220px;
-  overflow-y: auto;
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  scroll-behavior: smooth;
-}
-
-.vsLiveCaptionDrawer.vsFontLarge .vsCaptionOriginalText {
-  font-size: 17px;
-  line-height: 1.6;
-}
-
-.vsLiveCaptionDrawer.vsFontLarge .vsCaptionTranslationText {
-  font-size: 14px;
-}
-
-.vsCaptionEmptyNotice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 24px 16px;
-  color: var(--text-muted);
-  font-size: 13px;
-  text-align: center;
-}
-
-.vsCaptionEmptyIcon {
-  font-size: 18px;
-  opacity: 0.8;
-}
-
-.vsCaptionList {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.vsCaptionItem {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: color-mix(in oklab, var(--surface) 35%, var(--bg-card));
-  border: 1px solid color-mix(in oklab, var(--line) 40%, transparent);
-  transition: all 0.18s ease;
-}
-
-.vsCaptionItem.user {
-  background: color-mix(in oklab, #10b981 6%, var(--bg-card));
-  border-color: color-mix(in oklab, #10b981 18%, var(--line));
-}
-
-.vsCaptionItem.assistant {
-  background: color-mix(in oklab, var(--accent) 6%, var(--bg-card));
-  border-color: color-mix(in oklab, var(--accent) 18%, var(--line));
-}
-
-.vsCaptionItem.liveStreaming {
-  box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 12%, transparent);
-  border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
-}
-
-.vsCaptionSpeakerTag {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-top: 2px;
-  flex-shrink: 0;
-  min-width: 60px;
-}
-
-.vsSpeakerDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.vsSpeakerDot.user {
-  background: #10b981;
-}
-
-.vsSpeakerDot.user.breathing {
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
-  animation: breathe-opacity 1s ease-in-out infinite;
-}
-
-.vsSpeakerDot.assistant {
-  background: #3b82f6;
-}
-
-.vsSpeakerDot.assistant.pulsing {
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.8);
-  animation: breathe-opacity 1s ease-in-out infinite;
-}
-
-.vsSpeakerLabel {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.vsCaptionTextWrapper {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.vsCaptionOriginalText {
-  font-size: 14.5px;
+  font-size: 13.5px;
   line-height: 1.5;
-  color: var(--text);
-  font-weight: 500;
-  word-break: break-word;
 }
 
-.vsCaptionOriginalText.streaming {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.vsCaptionInteractiveWord {
+/* ── Interactive English Word Token for Lookup ── */
+.vsWordInteractive {
   display: inline-block;
   cursor: pointer;
   border-radius: 3px;
@@ -10313,69 +10077,15 @@ button.vsPasswordToggleBtn:focus-visible {
   transition: all 0.12s ease;
 }
 
-.vsCaptionInteractiveWord:hover {
-  background: color-mix(in oklab, var(--accent) 25%, transparent);
+.vsWordInteractive:hover {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
   color: var(--accent-strong);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.vsCaptionTranslationText {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 12.5px;
-  color: var(--text-muted);
-  line-height: 1.4;
-  padding-top: 2px;
-}
-
-.vsCaptionTransLabel {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent-strong);
-  flex-shrink: 0;
-}
-
-.vsCaptionItemActions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  opacity: 0.7;
-  transition: opacity 0.15s ease;
-}
-
-.vsCaptionItem:hover .vsCaptionItemActions {
-  opacity: 1;
-}
-
-.vsCaptionActionIconBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  padding: 0;
-}
-
-.vsCaptionActionIconBtn:hover {
-  background: color-mix(in oklab, var(--surface) 80%, var(--bg-card));
-  color: var(--text);
-}
-
-.vsCaptionActionIconBtn.copied {
-  color: #10b981;
-}
-
-/* ── Word Lookup Floating Popover ── */
-.vsCaptionWordPopover {
+/* ── Lightweight Word Lookup Popover ── */
+.vsWordLookupPopover {
   position: fixed;
   z-index: 1000;
   background: color-mix(in oklab, var(--bg-card) 96%, var(--surface));
@@ -10383,14 +10093,15 @@ button.vsPasswordToggleBtn:focus-visible {
   border-radius: 12px;
   padding: 10px 14px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  min-width: 180px;
+  min-width: 170px;
   max-width: 280px;
   animation: vs-fade-in 0.15s ease forwards;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  pointer-events: auto;
 }
 
-.vsWordPopoverHead {
+.vsWordLookupHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -10400,13 +10111,13 @@ button.vsPasswordToggleBtn:focus-visible {
   padding-bottom: 4px;
 }
 
-.vsWordPopoverTerm {
+.vsWordLookupTerm {
   font-weight: 700;
   font-size: 13px;
   color: var(--accent-strong);
 }
 
-.vsWordPopoverClose {
+.vsWordLookupClose {
   background: transparent;
   border: none;
   font-size: 14px;
@@ -10416,30 +10127,68 @@ button.vsPasswordToggleBtn:focus-visible {
   padding: 0 2px;
 }
 
-.vsWordPopoverClose:hover {
+.vsWordLookupClose:hover {
   color: var(--text);
 }
 
-.vsWordPopoverBody {
+.vsWordLookupBody {
   font-size: 12.5px;
   color: var(--text);
   line-height: 1.4;
 }
 
-.vsWordLoading {
+.vsWordLookupLoading {
   font-size: 11.5px;
   color: var(--text-muted);
   font-style: italic;
 }
 
-.vsWordError {
+.vsWordLookupError {
   font-size: 11.5px;
   color: #ef4444;
 }
 
-.vsWordDef {
+.vsWordLookupDef {
   font-weight: 500;
   color: var(--text);
+}
+
+/* ── Streaming Speaking & Replying Breathing Pulse ── */
+.bubble.user.live {
+  border: 1.5px dashed color-mix(in oklab, #10b981 55%, var(--line)) !important;
+  background: color-mix(in oklab, #10b981 8%, var(--bg-card)) !important;
+  box-shadow: 0 2px 14px color-mix(in oklab, #10b981 12%, transparent);
+  animation: vs-live-user-breathe 2s ease-in-out infinite;
+  opacity: 0.94;
+}
+
+.bubble.assistant.live {
+  border: 1.5px dashed color-mix(in oklab, var(--accent) 55%, var(--line)) !important;
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-card)) !important;
+  box-shadow: 0 2px 14px color-mix(in oklab, var(--accent) 15%, transparent);
+  animation: vs-live-assistant-breathe 2s ease-in-out infinite;
+}
+
+@keyframes vs-live-user-breathe {
+  0%, 100% {
+    border-color: color-mix(in oklab, #10b981 40%, var(--line));
+    box-shadow: 0 2px 10px color-mix(in oklab, #10b981 8%, transparent);
+  }
+  50% {
+    border-color: color-mix(in oklab, #10b981 75%, var(--line));
+    box-shadow: 0 2px 18px color-mix(in oklab, #10b981 22%, transparent);
+  }
+}
+
+@keyframes vs-live-assistant-breathe {
+  0%, 100% {
+    border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+    box-shadow: 0 2px 10px color-mix(in oklab, var(--accent) 8%, transparent);
+  }
+  50% {
+    border-color: color-mix(in oklab, var(--accent) 75%, var(--line));
+    box-shadow: 0 2px 18px color-mix(in oklab, var(--accent) 22%, transparent);
+  }
 }
 
 /* ── Attachment Image Preview Pills in Composer ── */

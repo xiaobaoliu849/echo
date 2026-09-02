@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchSpeakAudio, type ChatMessage, type TtsEngine } from "../api";
+import { fetchSpeakAudio, translateText, type ChatMessage, type TtsEngine } from "../api";
 import ErrorNotice from "../components/ErrorNotice";
 import ChatInputBar from "../components/chat/ChatInputBar";
 import MarkdownContent from "../components/chat/MarkdownContent";
@@ -18,9 +18,21 @@ type Props = {
   onOpenPal?: () => void;
 };
 
+type WordLookupState = {
+  word: string;
+  definition?: string;
+  loading: boolean;
+  error?: string;
+  x: number;
+  y: number;
+};
+
 /* ── Inline SVG icons ── */
 const CopyIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+);
+const TranslateIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 8 6 6"></path><path d="m4 14 6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="m22 22-5-10-5 10"></path><path d="M14 18h6"></path></svg>
 );
 const SpeakerIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
@@ -114,9 +126,12 @@ type MessageBubbleProps = {
   loadingTts: boolean;
   sourcesOpen: boolean;
   reasoningCollapsed: boolean;
+  translation?: string;
+  translating?: boolean;
   t: TranslateFn;
   onCopy: (content: string, key: string) => void;
   onPlayTts: (content: string, key: string) => void;
+  onTranslate?: (content: string, key: string) => void;
   onRegenerate: (index: number) => void;
   onDelete: (index: number) => void;
   onToggleSources: (key: string) => void;
@@ -137,9 +152,12 @@ function MessageBubbleImpl({
   loadingTts,
   sourcesOpen,
   reasoningCollapsed,
+  translation,
+  translating,
   t,
   onCopy,
   onPlayTts,
+  onTranslate,
   onRegenerate,
   onDelete,
   onToggleSources,
@@ -275,6 +293,16 @@ function MessageBubbleImpl({
         <p>{msg.content}</p>
       )}
 
+      {translation && (
+        <div className="vsBubbleTranslation">
+          <div className="vsBubbleTransHeader">
+            <span>🌐</span>
+            <span>{t("译文", "Translation")}</span>
+          </div>
+          <p>{translation}</p>
+        </div>
+      )}
+
       <div className="vsBubbleActions">
         <button
           type="button"
@@ -285,6 +313,19 @@ function MessageBubbleImpl({
         >
           <CopyIcon />
         </button>
+
+        {msg.role === "assistant" && onTranslate && (
+          <button
+            type="button"
+            className={`vsBubbleActionBtn${translation ? " active" : ""}`}
+            aria-label={translating ? t("正在翻译...", "Translating...") : translation ? t("已翻译", "Translated") : t("翻译回答", "Translate reply")}
+            title={translating ? t("正在翻译...", "Translating...") : translation ? t("已翻译", "Translated") : t("翻译回答", "Translate reply")}
+            onClick={() => onTranslate(msg.content, messageKey)}
+            disabled={translating}
+          >
+            {translating ? <span className="spinner-mini" /> : <TranslateIcon />}
+          </button>
+        )}
 
         {msg.role === "assistant" && (
           <button
@@ -350,9 +391,13 @@ export default function ChatPage({
   const [ttsPlaybackError, setTtsPlaybackError] = useState<string>("");
   const [expandedSourcesKey, setExpandedSourcesKey] = useState<string | null>(null);
   const [collapsedReasoningKeys, setCollapsedReasoningKeys] = useState<Record<string, boolean>>({});
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translatingKeys, setTranslatingKeys] = useState<Record<string, boolean>>({});
+  const [wordLookup, setWordLookup] = useState<WordLookupState | null>(null);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lookupPopoverRef = useRef<HTMLDivElement>(null);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const isProgrammaticScrollRef = useRef(false);
   const shouldStickToBottomRef = useRef(true);
@@ -360,6 +405,25 @@ export default function ChatPage({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close word lookup on outside click or Escape
+  useEffect(() => {
+    if (!wordLookup) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (lookupPopoverRef.current && !lookupPopoverRef.current.contains(e.target as Node)) {
+        setWordLookup(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setWordLookup(null);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [wordLookup]);
 
   const isVoiceActive = voiceChat.voiceChatRecording || voiceChat.voiceChatConnected;
 
@@ -588,6 +652,81 @@ export default function ChatPage({
   const stableToggleReasoning = useCallback((key: string) => {
     setCollapsedReasoningKeys((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
+  const handleWordClick = useCallback(async (e: React.MouseEvent, rawWord: string) => {
+    e.stopPropagation();
+    const cleanWord = rawWord.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, "").trim();
+    if (!cleanWord || cleanWord.length <= 1) return;
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setWordLookup({
+      word: cleanWord,
+      loading: true,
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+    });
+
+    try {
+      const res = await translateText({
+        text: cleanWord,
+        source_language: "auto",
+        target_language: "zh",
+      });
+      setWordLookup((prev) =>
+        prev && prev.word === cleanWord
+          ? { ...prev, definition: res.translated_text, loading: false }
+          : prev
+      );
+    } catch {
+      setWordLookup((prev) =>
+        prev && prev.word === cleanWord
+          ? { ...prev, error: t("查词失败", "Lookup failed"), loading: false }
+          : prev
+      );
+    }
+  }, [t]);
+
+  const handleTranslateMessage = useCallback(async (text: string, messageKey: string) => {
+    const cleanText = cleanMarkdownForTts(text);
+    if (!cleanText || translations[messageKey]) return;
+    setTranslatingKeys((prev) => ({ ...prev, [messageKey]: true }));
+    try {
+      const res = await translateText({
+        text: cleanText,
+        source_language: "auto",
+        target_language: "zh",
+      });
+      setTranslations((prev) => ({ ...prev, [messageKey]: res.translated_text }));
+    } catch (err) {
+      console.error("Translate error:", err);
+    } finally {
+      setTranslatingKeys((prev) => ({ ...prev, [messageKey]: false }));
+    }
+  }, [translations]);
+
+  const stableTranslateMessage = useCallback((content: string, key: string) => {
+    void handleTranslateMessage(content, key);
+  }, [handleTranslateMessage]);
+
+  const renderInteractiveText = useCallback((text: string) => {
+    if (!text) return null;
+    const tokens = text.split(/(\s+)/);
+    return tokens.map((token, index) => {
+      const isWord = /^[a-zA-Z0-9'-]+$/.test(token.trim());
+      if (isWord) {
+        return (
+          <span
+            key={index}
+            className="vsWordInteractive"
+            onClick={(e) => void handleWordClick(e, token)}
+            title={t("点击查词", "Click to look up word")}
+          >
+            {token}
+          </span>
+        );
+      }
+      return <span key={index}>{token}</span>;
+    });
+  }, [handleWordClick, t]);
 
   function handleBodyScroll() {
     const el = bodyRef.current;
@@ -712,9 +851,12 @@ export default function ChatPage({
                   loadingTts={loadingTtsMessageKey === messageKey}
                   sourcesOpen={expandedSourcesKey === messageKey}
                   reasoningCollapsed={Boolean(collapsedReasoningKeys[messageKey])}
+                  translation={translations[messageKey]}
+                  translating={translatingKeys[messageKey]}
                   t={t}
                   onCopy={stableCopyMessage}
                   onPlayTts={stablePlayTts}
+                  onTranslate={stableTranslateMessage}
                   onRegenerate={stableRegenerateMessage}
                   onDelete={stableDeleteMessage}
                   onToggleSources={stableToggleSources}
@@ -725,11 +867,13 @@ export default function ChatPage({
 
             {/* ── Live Streaming Bubbles ── */}
             {isVoiceActive && voiceChat.voiceChatTranscript && (
-              <div className="bubble user live">
+              <div className="bubble user live isSpeaking">
                 <div className="vsBubbleMeta">
-                  <span className="vsStreamingIndicator">{voiceChat.voiceChatLiveTranslate ? t("原文实时转写", "Live source transcript") : t("(实时输入)", "(live input)")}</span>
+                  <span className="vsStreamingIndicator speaking">
+                    {voiceChat.voiceChatLiveTranslate ? t("原文实时转写", "Live source transcript") : t("🎙️ 正在说话中...", "🎙️ Speaking...")}
+                  </span>
                 </div>
-                <p>{voiceChat.voiceChatTranscript}</p>
+                <p>{renderInteractiveText(voiceChat.voiceChatTranscript)}</p>
                 <div className="vsBubbleActions">
                   <button
                     type="button"
@@ -768,11 +912,13 @@ export default function ChatPage({
               </div>
             )}
             {isVoiceActive && voiceChat.voiceChatReply && (
-              <div className="bubble assistant live">
+              <div className="bubble assistant live isReplying">
                 <div className="vsBubbleMeta">
-                  <span className="vsStreamingIndicator">{voiceChat.voiceChatLiveTranslate ? t(`译文：${voiceChat.voiceChatTargetLanguageLabel}`, `Translation: ${voiceChat.voiceChatTargetLanguageLabel}`) : t("(正在回复)", "(replying)")}</span>
+                  <span className="vsStreamingIndicator replying">
+                    {voiceChat.voiceChatLiveTranslate ? t(`译文：${voiceChat.voiceChatTargetLanguageLabel}`, `Translation: ${voiceChat.voiceChatTargetLanguageLabel}`) : t("🤖 正在回复...", "🤖 Replying...")}
+                  </span>
                 </div>
-                <p>{voiceChat.voiceChatReply}</p>
+                <p>{renderInteractiveText(voiceChat.voiceChatReply)}</p>
                 <div className="vsBubbleActions">
                   <button
                     type="button"
@@ -802,6 +948,39 @@ export default function ChatPage({
           <ChevronDownIcon />
           <span>{t("最新对话", "Latest")}</span>
         </button>
+      )}
+
+      {/* ── Instant Word Lookup Popover Tooltip ── */}
+      {wordLookup && (
+        <div
+          ref={lookupPopoverRef}
+          className="vsWordLookupPopover"
+          style={{
+            left: `${Math.max(20, Math.min(window.innerWidth - 220, wordLookup.x))}px`,
+            top: `${Math.max(10, wordLookup.y - 64)}px`,
+          }}
+        >
+          <div className="vsWordLookupHead">
+            <span className="vsWordLookupTerm">{wordLookup.word}</span>
+            <button
+              type="button"
+              className="vsWordLookupClose"
+              onClick={() => setWordLookup(null)}
+              title={t("关闭", "Close")}
+            >
+              ×
+            </button>
+          </div>
+          <div className="vsWordLookupBody">
+            {wordLookup.loading ? (
+              <span className="vsWordLookupLoading">{t("正在查询释义...", "Looking up definition...")}</span>
+            ) : wordLookup.error ? (
+              <span className="vsWordLookupError">{wordLookup.error}</span>
+            ) : (
+              <span className="vsWordLookupDef">{wordLookup.definition}</span>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ── Bottom composer ── */}
