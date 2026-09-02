@@ -57,9 +57,10 @@ Date: 2026-09-02
 
 | 触发点 | 位置 | 说明 |
 |---|---|---|
-| (A) 会话启动注入 | `kickoff_startup_context` (line 500) | WebSocket 打开后收到 `{type:"config",memory:...}` 即后台拉取「上次对话以来的记忆」，注入首轮。只覆盖**历史**会话，不覆盖当前轮内容。 |
-| (B) 每轮自动回忆 | `retrieve_memory_context` (line 688) | 每个满足 `should_retrieve_context` 的轮次自动触发，**非用户显式触发**。 |
+| (A) 会话启动注入 | `kickoff_startup_context` (line 500) | **已默认禁用**（`_STARTUP_INJECTION_ENABLED = False`）。开启时在 WebSocket 打开后后台拉取「上次对话以来的记忆」注入首轮；关闭时为 no-op，会话开场不再自动搜云端。 |
+| (B) 每轮自动回忆 | `retrieve_memory_context` (line 688) | 每个满足 `should_retrieve_context` 的轮次触发。**已收紧**：仅提示词命中或问句指向记忆主题才触发，删除了长度兜底和分类兜底。 |
 | (C) 强制回忆兜底 | `is_forced_recall_query` (line 680) | 问题命中「记得/上次/回忆」等提示词但回忆为空时，切换到 `_build_recall_miss_instructions`。 |
+| (D) 显式回忆命令 | `recall_by_query` + `recall` 命令 | 前端发送 `{type:"recall",query:"..."}`，后端绕过门控直接搜本地+云端，结果暂存为一次性注入块，下一轮注入回答。 |
 
 ### 1.4 `should_retrieve_context` 的门控逻辑（line 611）
 
@@ -154,12 +155,13 @@ Date: 2026-09-02
 
 ### 3.5 会话启动注入（A 路径）的去留
 
-启动注入（`kickoff_startup_context`）在**有历史记忆**时仍有价值——
-让模型开场就知道之前聊过什么。但它不应在新会话首轮产生「0 条」噪声：
+**已默认禁用**（`_STARTUP_INJECTION_ENABLED = False`）。用户的需求是「明确触发
+后才从云端调用」，启动注入在每次开语音会话时自动搜云端，与该需求矛盾。禁用后
+会话开场不再有任何 `memory_context` 事件或云端 search 调用，模型当作全新对话
+开始。用户可通过提示词（"记得/上次…"）或 `recall` 命令显式触发回忆。
 
-- 若 `_load_startup_context` 返回空 → **不发送 `memory_context` 事件**，
-  前端不展示任何记忆状态。
-- 仅在确实取到记忆时才提示「已回忆 N 条上次对话记忆」。
+如未来需要让模型开场自动知道上次聊了什么，可将 `_STARTUP_INJECTION_ENABLED`
+设为 `True` 重新开启，或在设置 UI 中暴露为用户可选开关。
 
 ---
 
@@ -179,9 +181,9 @@ Date: 2026-09-02
 - **修改** `retrieve_memory_context` / `_retrieve_turn_context`：
   - 仅在 `is_explicit_recall` 为真时执行本地+云端检索。
   - 非显式回忆时返回 `attempted: false`，不发事件。
-- **修改** `kickoff_startup_context` / `_load_startup_context`：
-  - 启动结果为空时不设置 `_startup_context`，`_consume_startup_context`
-    返回空字符串且 `attempted=false`，避免首轮「0 条」噪声。
+- **禁用** `kickoff_startup_context`：新增 `_STARTUP_INJECTION_ENABLED = False`
+  类级开关，默认禁用启动注入。`kickoff` 在关闭时为 no-op，不创建后台任务、
+  不搜云端、不发事件。如需恢复设为 `True` 即可。
 - **新增** `recall_by_query(query: str)`：供前端 `recall` 命令调用，
   强制走本地+云端检索，不受 `should_retrieve_context` 门控。
 
@@ -277,9 +279,9 @@ Date: 2026-09-02
 
 ## 六、实施顺序
 
-1. **后端门控收紧**：修改 `should_retrieve_context`，新增 `is_explicit_recall`，
-   `recall_by_query`。
-2. **后端启动注入静默化**：空结果不发事件。
+1. **后端门控收紧**：修改 `should_retrieve_context`，删除长度兜底和分类兜底，
+   新增 `recall_by_query`。
+2. **后端启动注入禁用**：`_STARTUP_INJECTION_ENABLED = False`，会话开场不自动搜云端。
 3. **后端 provider 接入**：`recall` 命令处理 + 轮首门控。
 4. **前端文案**：零命中静默 + 显式零命中文案。
 5. **前端 `recall` 命令**：`recallMemory(query)` + UI 入口（可选，先做命令通道）。
@@ -294,7 +296,7 @@ Date: 2026-09-02
 - [ ] 18 字以上的普通陈述句不触发自动回忆。
 - [ ] 命中「记得/上次/之前」等提示词时正常回忆并注入。
 - [ ] 前端 `recall` 命令能主动触发指定查询的回忆。
-- [ ] 启动注入为空时不产生记忆状态噪声。
+- [ ] 会话开场不再自动搜云端（启动注入默认禁用，无 `memory_context` 事件）。
 - [ ] 显式回忆零命中时模型回答「没有找到相关记忆」，而非「已尝试回忆 0 条」。
 - [ ] 后端 pytest、前端 vitest、前端 build 全部通过。
 - [ ] 各 provider 行为一致（至少 DashScope / OpenAI / Google 三条主线）。

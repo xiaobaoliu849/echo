@@ -501,14 +501,24 @@ class RealtimeMemorySession:
 
     # -- startup memory injection --------------------------------------------
 
+    # Startup injection is disabled by default: opening a voice session should
+    # NOT auto-search the cloud. The user asks for recall explicitly (hint words
+    # or the ``recall`` command). Set this to True to re-enable the historical
+    # "know what prior sessions discussed" background fetch on session open.
+    _STARTUP_INJECTION_ENABLED = False
+
     def kickoff_startup_context(self) -> None:
         """Begin a background fetch of recent memories for session-start injection.
 
-        Triggered when the client sends its memory ``config`` (right after the
-        WebSocket opens).  The result is prepended to the first turn's memory
-        context so the assistant knows what prior sessions discussed — even if
-        the first utterance is too trivial to trigger per-turn retrieval.
+        Disabled by default (``_STARTUP_INJECTION_ENABLED``). When enabled, the
+        result is prepended to the first turn's memory context so the assistant
+        knows what prior sessions discussed — even if the first utterance is
+        too trivial to trigger per-turn retrieval. When disabled, this is a
+        no-op so sessions start clean and the cloud is only searched on
+        explicit recall.
         """
+        if not self._STARTUP_INJECTION_ENABLED:
+            return
         service = self._config.get_service()
         if not service or self._startup_task is not None or self._startup_consumed:
             return
