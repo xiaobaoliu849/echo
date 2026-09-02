@@ -37,6 +37,7 @@ class RealtimeMemorySessionTestBase(unittest.IsolatedAsyncioTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.addCleanup(setattr, RealtimeMemorySession, "_PENDING_MEMORY_CACHE", {})
+        self.addCleanup(setattr, RealtimeMemorySession, "_STARTUP_INJECTION_ENABLED", False)
 
     def _make_session(self, service: _FakeEverMemService | None) -> RealtimeMemorySession:
         session = RealtimeMemorySession()
@@ -118,11 +119,27 @@ class SessionSummaryTests(RealtimeMemorySessionTestBase):
 
 
 class StartupContextTests(RealtimeMemorySessionTestBase):
-    async def test_startup_context_injected_on_first_turn_even_for_trivial_query(self) -> None:
+    async def test_startup_injection_disabled_by_default(self) -> None:
+        """By default, kickoff does not launch a background cloud search."""
         service = _FakeEverMemService(
             search_results=[{"content": "[历史对话] 会话摘要: 上次讨论了语音助手上线计划", "score": 0.9}]
         )
         session = self._make_session(service)
+        session.kickoff_startup_context()
+        # No startup task is created when injection is disabled.
+        self.assertIsNone(session._startup_task)
+        # A trivial greeting yields no context — the session starts clean.
+        session.note_user_transcript("你好")
+        retrieval = await session.retrieve_memory_context()
+        self.assertEqual(retrieval["context"], "")
+        self.assertFalse(retrieval["attempted"])
+
+    async def test_startup_context_injected_when_enabled_on_first_turn(self) -> None:
+        service = _FakeEverMemService(
+            search_results=[{"content": "[历史对话] 会话摘要: 上次讨论了语音助手上线计划", "score": 0.9}]
+        )
+        session = self._make_session(service)
+        session._STARTUP_INJECTION_ENABLED = True
         session.kickoff_startup_context()
         self.assertIsNotNone(session._startup_task)
         await session._startup_task  # type: ignore[misc]
@@ -141,11 +158,12 @@ class StartupContextTests(RealtimeMemorySessionTestBase):
         followup = await session.retrieve_memory_context()
         self.assertNotIn("【上次对话以来的记忆】", str(followup.get("context", "")))
 
-    async def test_startup_context_combines_with_turn_retrieval(self) -> None:
+    async def test_startup_context_combines_with_turn_retrieval_when_enabled(self) -> None:
         service = _FakeEverMemService(
             search_results=[{"content": "[历史对话] 会话摘要: 上次讨论了项目计划", "score": 0.9}]
         )
         session = self._make_session(service)
+        session._STARTUP_INJECTION_ENABLED = True
         session.kickoff_startup_context()
         await session._startup_task  # type: ignore[misc]
 
@@ -158,6 +176,7 @@ class StartupContextTests(RealtimeMemorySessionTestBase):
 
     async def test_kickoff_without_service_is_noop(self) -> None:
         session = self._make_session(None)
+        session._STARTUP_INJECTION_ENABLED = True
         session.kickoff_startup_context()
         self.assertIsNone(session._startup_task)
         session.note_user_transcript("你好")
