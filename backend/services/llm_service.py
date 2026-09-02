@@ -10,7 +10,7 @@ import httpx # type: ignore
 
 logger = logging.getLogger(__name__)
 
-from .config_loader import BackendConfig
+from .config_loader import BackendConfig, PROVIDER_KEY_MAP, PROVIDER_FALLBACK_MODELS
 from .evermem_config import EverMemConfig
 from .evermem_helper import prepare_memory_context, save_assistant_memory
 from .background_tasks import spawn_background_task
@@ -789,6 +789,50 @@ class LLMService:
             "memory_saved": mem_ctx.memory_saved,
         }
 
+    def _resolve_available_provider(self, requested_provider: str | None = None, requested_model: str | None = None) -> tuple[str, str | None]:
+        self.config.reload()
+        all_cfg = self.config.get_all()
+
+        # 1. If requested provider has API key (or is Ollama), use it
+        if requested_provider:
+            try:
+                settings = self.config.get_provider_settings(requested_provider, model=requested_model)
+                if settings.get("api_key") or requested_provider == "Ollama":
+                    return requested_provider, settings.get("model") or requested_model
+            except Exception:
+                pass
+
+        # 2. Check user's preferred chat_settings provider
+        chat_cfg = all_cfg.get("chat_settings", {})
+        preferred_provider = chat_cfg.get("provider")
+        preferred_model = chat_cfg.get("model")
+        if preferred_provider:
+            try:
+                settings = self.config.get_provider_settings(preferred_provider, model=preferred_model)
+                if settings.get("api_key") or preferred_provider == "Ollama":
+                    return preferred_provider, settings.get("model") or preferred_model
+            except Exception:
+                pass
+
+        # 3. Check any configured provider with an API key
+        api_keys = all_cfg.get("api_keys", {})
+        for p, key_field in PROVIDER_KEY_MAP.items():
+            if str(api_keys.get(key_field, "")).strip():
+                try:
+                    settings = self.config.get_provider_settings(p)
+                    return p, settings.get("model") or None
+                except Exception:
+                    continue
+
+        # 4. Check custom providers
+        for cp in all_cfg.get("custom_providers", []):
+            if isinstance(cp, dict) and cp.get("id") and cp.get("api_key"):
+                return str(cp["id"]), str(cp.get("default_model", "")) or None
+
+        # Fallback to default
+        prov = requested_provider or "DashScope"
+        return prov, requested_model or PROVIDER_FALLBACK_MODELS.get(prov, "qwen-plus")
+
     async def translate_text(
         self,
         *,
@@ -817,9 +861,10 @@ class LLMService:
             f"Target language: {target}\n"
             f"Text:\n{cleaned}"
         )
+        resolved_provider, resolved_model = self._resolve_available_provider(provider, model)
         result = await self.chat_completion(
-            provider=provider,
-            model=model,
+            provider=resolved_provider,
+            model=resolved_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -652,17 +652,13 @@ export default function ChatPage({
   const stableToggleReasoning = useCallback((key: string) => {
     setCollapsedReasoningKeys((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
-  const handleWordClick = useCallback(async (e: React.MouseEvent, rawWord: string) => {
-    e.stopPropagation();
-    const cleanWord = rawWord.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, "").trim();
+  const handleLookupWordText = useCallback(async (cleanWord: string, x: number, y: number) => {
     if (!cleanWord || cleanWord.length <= 1) return;
-
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setWordLookup({
       word: cleanWord,
       loading: true,
-      x: rect.left + rect.width / 2,
-      y: rect.top,
+      x,
+      y,
     });
 
     try {
@@ -684,6 +680,33 @@ export default function ChatPage({
       );
     }
   }, [t]);
+
+  const handleWordClick = useCallback(async (e: React.MouseEvent, rawWord: string) => {
+    e.stopPropagation();
+    const cleanWord = rawWord.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, "").trim();
+    if (!cleanWord || cleanWord.length <= 1) return;
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    void handleLookupWordText(cleanWord, rect.left + rect.width / 2, rect.top);
+  }, [handleLookupWordText]);
+
+  const handleMessageListMouseUp = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    const rawSelected = selection.toString().trim();
+    const cleanWord = rawSelected.replace(/^[^\w\u4e00-\u9fa5]+|[^\w\u4e00-\u9fa5]+$/g, "").trim();
+    if (!cleanWord || cleanWord.length <= 1 || cleanWord.split(/\s+/).length > 6) return;
+
+    try {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        void handleLookupWordText(cleanWord, rect.left + rect.width / 2, rect.top);
+      }
+    } catch {
+      // Ignore range calculation error
+    }
+  }, [handleLookupWordText]);
 
   const handleTranslateMessage = useCallback(async (text: string, messageKey: string) => {
     const cleanText = cleanMarkdownForTts(text);
@@ -830,7 +853,7 @@ export default function ChatPage({
           </div>
         ) : (
           /* ═══ MESSAGE LIST ═══ */
-          <div className="vsMessageList">
+          <div className="vsMessageList" onMouseUp={handleMessageListMouseUp}>
             {combinedMessages.map((msg, idx) => {
               const messageKey = msg.id ?? `${idx}-${msg.role}`;
               return (

@@ -94,6 +94,19 @@ DEFAULT_BASE_URLS = {
     "GPT-SoVITS": "http://127.0.0.1:9880",
 }
 
+PROVIDER_FALLBACK_MODELS = {
+    "DashScope": "qwen-plus",
+    "DeepSeek": "deepseek-chat",
+    "OpenRouter": "deepseek/deepseek-chat",
+    "SiliconFlow": "Qwen/Qwen2.5-7B-Instruct",
+    "Groq": "llama-3.3-70b-versatile",
+    "OpenAI": "gpt-4o-mini",
+    "Google": "gemini-2.5-flash",
+    "Doubao": "doubao-pro-32k",
+    "Xiaomi": "mimo-v2-chat",
+    "Ollama": "qwen2.5:7b",
+}
+
 
 class BackendConfig:
     def __init__(self, config_path: Path | None = None):
@@ -248,13 +261,16 @@ class BackendConfig:
     def _extract_default_model(self, provider: str) -> str:
         models = self._config.get("default_models", {})
         value = models.get(provider)
-        if isinstance(value, str):
-            return value
+        if isinstance(value, str) and value.strip():
+            return value.strip()
         if isinstance(value, dict):
             default_model = value.get("default")
-            if isinstance(default_model, str):
-                return default_model
-        return ""
+            if isinstance(default_model, str) and default_model.strip():
+                return default_model.strip()
+        chat_settings = self._config.get("chat_settings", {})
+        if chat_settings.get("provider") == provider and isinstance(chat_settings.get("model"), str) and chat_settings.get("model").strip():
+            return chat_settings["model"].strip()
+        return PROVIDER_FALLBACK_MODELS.get(provider, "")
 
     def get_provider_settings(self, provider: str, model: str | None = None) -> dict[str, str]:
         self.reload()
