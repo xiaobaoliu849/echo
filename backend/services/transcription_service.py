@@ -71,6 +71,10 @@ OPENAI_WHISPER_MODEL = "whisper-1"
 
 # AssemblyAI ASR
 ASSEMBLYAI_BASE_URL = "https://api.assemblyai.com"
+
+# Soniox ASR
+SONIOX_BASE_URL = "https://api.soniox.com/v1"
+SONIOX_DEFAULT_MODEL = "stt-async-v5"
 SUPPORTED_AUDIO_SUFFIXES = {
     ".wav",
     ".mp3",
@@ -234,6 +238,17 @@ class TranscriptionService:
     def _assemblyai_key(self) -> str:
         self.config.reload()
         return str(self.config.peek_setting("assemblyai_api_key", "")).strip()
+
+    def _soniox_key(self) -> str:
+        self.config.reload()
+        return str(self.config.peek_setting("soniox_api_key", "")).strip()
+
+    def _soniox_base_url(self) -> str:
+        if hasattr(self, "config") and self.config is not None:
+            base_url = self.config.get_provider_settings("Soniox").get("base_url", "").strip()
+            if base_url:
+                return base_url.rstrip("/")
+        return SONIOX_BASE_URL
 
     def _doubao_key(self) -> str:
         self.config.reload()
@@ -942,6 +957,11 @@ class TranscriptionService:
                 if not api_key:
                     raise ValueError("AssemblyAI API key not configured.")
                 result = await self._transcribe_with_assemblyai(path, api_key)
+            elif provider == "soniox":
+                api_key = self._soniox_key()
+                if not api_key:
+                    raise ValueError("Soniox API key not configured. Set soniox_api_key in Settings.")
+                result = await self._transcribe_with_soniox(path, api_key)
             elif provider == "doubao":
                 api_key = self._doubao_key()
                 if not api_key:
@@ -955,7 +975,7 @@ class TranscriptionService:
             return result
 
         # Auto-select: try providers in priority order
-        # Deepgram, Google Gemini, OpenAI Whisper, and AssemblyAI support word-level timestamps
+        # Deepgram, Google Gemini, OpenAI Whisper, AssemblyAI, and Soniox support word-level timestamps
         deepgram_key = self._deepgram_key()
         if deepgram_key:
             result = await self._transcribe_with_deepgram(path, deepgram_key)
@@ -983,6 +1003,12 @@ class TranscriptionService:
         if assemblyai_key:
             result = await self._transcribe_with_assemblyai(path, assemblyai_key)
             result["provider"] = "assemblyai"
+            return result
+
+        soniox_key = self._soniox_key()
+        if soniox_key:
+            result = await self._transcribe_with_soniox(path, soniox_key)
+            result["provider"] = "soniox"
             return result
 
         doubao_key = self._doubao_key()
@@ -1439,6 +1465,133 @@ class TranscriptionService:
 
         return {
             "text": transcript,
+            "duration_seconds": duration_seconds,
+            "words": words if words else None,
+        }
+
+    async def _transcribe_with_soniox(
+        self,
+        path: Path,
+        api_key: str,
+        model: str | None = None,
+    ) -> dict:
+        """Transcribe with Soniox API. Supports word-level timestamps (tokens)."""
+        base_url = self._soniox_base_url()
+        audio_bytes = await asyncio.to_thread(path.read_bytes)
+        filename = path.name
+        extension = path.suffix.lower().lstrip(".")
+        if extension == "mp3":
+            content_type = "audio/mpeg"
+        elif extension == "m4a":
+            content_type = "audio/mp4"
+        else:
+            content_type = f"audio/{extension}"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+        }
+        target_model = model or SONIOX_DEFAULT_MODEL
+        file_id: str | None = None
+
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            try:
+                # Step 1: Upload audio file
+                files = {
+                    "file": (filename, audio_bytes, content_type),
+                }
+                upload_resp = await client.post(
+                    f"{base_url}/files",
+                    headers=headers,
+                    files=files,
+                )
+                try:
+                    upload_resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    detail = exc.response.text.strip()
+                    raise RuntimeError(f"Soniox file upload failed: {detail}") from exc
+
+                file_id = upload_resp.json().get("id")
+                if not file_id:
+                    raise RuntimeError("Soniox upload failed: no file id returned")
+
+                # Step 2: Create transcription job
+                submit_resp = await client.post(
+                    f"{base_url}/transcriptions",
+                    headers={**headers, "Content-Type": "application/json"},
+                    json={
+                        "file_id": file_id,
+                        "model": target_model,
+                    },
+                )
+                try:
+                    submit_resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    detail = exc.response.text.strip()
+                    raise RuntimeError(f"Soniox transcription creation failed: {detail}") from exc
+
+                transcription_id = submit_resp.json().get("id")
+                if not transcription_id:
+                    raise RuntimeError("Soniox transcription failed: no transcription id returned")
+
+                # Step 3: Poll until completed
+                max_polls = 120  # 120 * 2s = 4 min max
+                for _ in range(max_polls):
+                    await asyncio.sleep(2)
+                    poll_resp = await client.get(
+                        f"{base_url}/transcriptions/{transcription_id}",
+                        headers=headers,
+                    )
+                    poll_resp.raise_for_status()
+                    job_info = poll_resp.json()
+                    status = str(job_info.get("status", "")).lower()
+                    if status == "completed":
+                        break
+                    if status in {"failed", "error"}:
+                        err = job_info.get("error_message") or job_info.get("error") or "Unknown error"
+                        raise RuntimeError(f"Soniox transcription failed: {err}")
+                else:
+                    raise RuntimeError("Soniox transcription timed out after 4 minutes")
+
+                # Step 4: Fetch transcript with word-level tokens
+                transcript_resp = await client.get(
+                    f"{base_url}/transcriptions/{transcription_id}/transcript",
+                    headers=headers,
+                )
+                transcript_resp.raise_for_status()
+                transcript_data = transcript_resp.json()
+            finally:
+                # Step 5: Clean up uploaded audio file from Soniox storage
+                if file_id:
+                    try:
+                        del_resp = await client.delete(
+                            f"{base_url}/files/{file_id}",
+                            headers=headers,
+                        )
+                        del_resp.raise_for_status()
+                    except Exception as e:
+                        logger.warning("Failed to delete temporary Soniox file %s: %s", file_id, e)
+
+        # Extract text and words
+        full_text = transcript_data.get("text", "") or ""
+        tokens_raw = transcript_data.get("tokens", [])
+        words = []
+        for tok in tokens_raw:
+            tok_text = tok.get("text", "")
+            start_ms = tok.get("start_ms")
+            end_ms = tok.get("end_ms")
+            if tok_text and start_ms is not None and end_ms is not None:
+                words.append({
+                    "text": tok_text,
+                    "start": float(start_ms) / 1000.0,
+                    "end": float(end_ms) / 1000.0,
+                })
+
+        duration_seconds = None
+        if words:
+            duration_seconds = max(w["end"] for w in words)
+
+        return {
+            "text": full_text,
             "duration_seconds": duration_seconds,
             "words": words if words else None,
         }

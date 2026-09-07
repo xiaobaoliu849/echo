@@ -36,6 +36,7 @@ export const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   Ollama: "ollama_api_key",
   ElevenLabs: "elevenlabs_api_key",
   Deepgram: "deepgram_api_key",
+  Soniox: "soniox_api_key",
   "GPT-SoVITS": "gpt_sovits_api_key",
 };
 

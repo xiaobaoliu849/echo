@@ -198,6 +198,9 @@ export function detectSuggestedProvider(message: string): SuggestedProviderTarge
   if (text.includes("tavus")) {
     return { provider: "Tavus", category: "provider", labelZh: "Tavus", labelEn: "Tavus" };
   }
+  if (text.includes("soniox")) {
+    return { provider: "Soniox", category: "provider", labelZh: "Soniox", labelEn: "Soniox" };
+  }
   if (text.includes("transcription") || text.includes("asr")) {
     return { provider: "Google", category: "provider", labelZh: "语音识别服务商", labelEn: "ASR Providers" };
   }
@@ -259,6 +262,12 @@ export function buildErrorHints(message: string): string[] {
       return [
         "Check deepgram_api_key in Settings → Deepgram.",
         "Verify Deepgram account quota and model nova-3 availability."
+      ];
+    }
+    if (/soniox/i.test(text)) {
+      return [
+        "Check soniox_api_key in Settings → Soniox.",
+        "Ensure Soniox account is active and model stt-async-v5 is accessible."
       ];
     }
     if (/openai|whisper/i.test(text)) {

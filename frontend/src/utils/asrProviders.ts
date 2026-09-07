@@ -25,8 +25,8 @@ export const ASR_ENGINES: AsrEngine[] = [
     group: "auto",
     zh: "自动选择",
     en: "Auto",
-    noteZh: "按你已配置的密钥依次尝试（Deepgram → Google → OpenAI → AssemblyAI → 豆包 → Qwen → MiMo），选第一个可用的。",
-    noteEn: "Tries your configured keys in order (Deepgram → Google → OpenAI → AssemblyAI → Doubao → Qwen → MiMo) and uses the first available.",
+    noteZh: "按你已配置的密钥依次尝试（Deepgram → Google → OpenAI → AssemblyAI → Soniox → 豆包 → Qwen → MiMo），选第一个可用的。",
+    noteEn: "Tries your configured keys in order (Deepgram → Google → OpenAI → AssemblyAI → Soniox → Doubao → Qwen → MiMo) and uses the first available.",
   },
   {
     id: "google",
@@ -51,6 +51,14 @@ export const ASR_ENGINES: AsrEngine[] = [
     en: "Deepgram Nova-3",
     noteZh: "字级时间戳，可导出精确字幕；英文识别强。",
     noteEn: "Word-level timestamps for precise subtitles; strong English accuracy.",
+  },
+  {
+    id: "soniox",
+    group: "timestamps",
+    zh: "Soniox STT（多语言高精度）",
+    en: "Soniox STT (High-accuracy Multilingual)",
+    noteZh: "字级时间戳，可导出精确字幕；60+ 语种超低字错误率，支持复杂混杂语种识别。",
+    noteEn: "Word-level timestamps for precise subtitles; 60+ languages with exceptional accuracy in challenging audio.",
   },
   {
     id: "openai",
@@ -178,6 +186,7 @@ export const ASR_ENGINE_PROVIDER_MAP: Record<string, { providerName: string; key
   google: { providerName: "Google", keyField: "google_api_key", labelZh: "Google Gemini", labelEn: "Google Gemini" },
   dashscope: { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
   deepgram: { providerName: "Deepgram", keyField: "deepgram_api_key", labelZh: "Deepgram", labelEn: "Deepgram" },
+  soniox: { providerName: "Soniox", keyField: "soniox_api_key", labelZh: "Soniox", labelEn: "Soniox" },
   openai: { providerName: "OpenAI", keyField: "openai_api_key", labelZh: "OpenAI", labelEn: "OpenAI" },
   assemblyai: { providerName: "AssemblyAI", keyField: "assemblyai_api_key", labelZh: "AssemblyAI", labelEn: "AssemblyAI" },
   doubao: { providerName: "Doubao", keyField: "doubao_api_key", labelZh: "豆包 (火山引擎)", labelEn: "Doubao (Volcengine)" },

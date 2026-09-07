@@ -66,6 +66,7 @@ PROVIDER_KEY_MAP = {
     "ElevenLabs": "elevenlabs_api_key",
     "Deepgram": "deepgram_api_key",
     "AssemblyAI": "assemblyai_api_key",
+    "Soniox": "soniox_api_key",
     "GPT-SoVITS": "gpt_sovits_api_key",
 }
 
@@ -91,6 +92,7 @@ DEFAULT_BASE_URLS = {
     "ElevenLabs": "https://api.elevenlabs.io/v1",
     "Deepgram": "https://api.deepgram.com/v1",
     "AssemblyAI": "https://api.assemblyai.com",
+    "Soniox": "https://api.soniox.com/v1",
     "GPT-SoVITS": "http://127.0.0.1:9880",
 }
 

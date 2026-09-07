@@ -92,6 +92,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "cartesia_api_key": "",
         "gradium_api_key": "",
         "tavus_api_key": "",
+        "soniox_api_key": "",
     },
     "api_urls": {
         "Google": "",
@@ -106,6 +107,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "ElevenLabs": "",
         "Ollama": "",
         "Deepgram": "",
+        "Soniox": "",
         "GPT-SoVITS": "",
         "Doubao": "",
         "Cartesia": "",
@@ -131,6 +133,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "ElevenLabs": {"default": "eleven_multilingual_v2", "available": ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_monolingual_v1"], "enabled": ["eleven_multilingual_v2", "eleven_turbo_v2_5"], "tts_default": "eleven_multilingual_v2", "tts_available": ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_monolingual_v1"], "tts_enabled": ["eleven_multilingual_v2", "eleven_turbo_v2_5"]},
         "Ollama": {"default": "", "available": [], "enabled": []},
         "Deepgram": {"default": "", "available": [], "enabled": []},
+        "Soniox": {"default": "stt-async-v5", "available": ["stt-async-v5"], "enabled": ["stt-async-v5"]},
         "GPT-SoVITS": {"default": "", "available": [], "enabled": []},
         "Doubao": {"default": "doubao-realtime", "available": ["doubao-realtime"], "enabled": ["doubao-realtime"]},
         "Cartesia": {"default": "cartesia-realtime", "available": ["cartesia-realtime"], "enabled": ["cartesia-realtime"], "tts_default": "sonic-preview", "tts_available": ["sonic-preview", "sonic-3.5", "sonic-3"], "tts_enabled": ["sonic-preview", "sonic-3.5"]},

@@ -41,6 +41,7 @@ export const PROVIDERS = [
   "PersonaPlex",
   "GLM4Voice",
   "Ollama",
+  "Soniox",
 ];
 
 export function getDefaultText(t: TranslatePair): string {

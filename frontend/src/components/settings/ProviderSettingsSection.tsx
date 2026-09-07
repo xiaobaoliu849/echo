@@ -21,6 +21,7 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   ElevenLabs: t("ElevenLabs TTS", "ElevenLabs TTS"),
   Ollama: t("本地 Ollama", "Local Ollama"),
   Deepgram: t("Deepgram ASR", "Deepgram ASR"),
+  Soniox: t("Soniox ASR", "Soniox ASR"),
   "GPT-SoVITS": t("本地 GPT-SoVITS API", "Local GPT-SoVITS API"),
   Tavus: t("Tavus 视频分身", "Tavus Video PAL"),
   Cartesia: t("Cartesia 极速语音", "Cartesia Sonic Voice"),
@@ -45,6 +46,7 @@ const getLobeProviderKey = (name: string): string => {
   if (lower === "zenmux") return "zenmux";
   if (lower === "ollama") return "ollama";
   if (lower === "deepgram") return "deepgram";
+  if (lower === "soniox") return "soniox";
   if (lower === "tavus") return "tavus";
   if (lower === "cartesia") return "cartesia";
   if (lower === "gradium") return "gradium";
@@ -55,7 +57,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   qwen: "#6366f1", deepseek: "#4f46e5", google: "#4285f4", openai: "#10a37f",
   groq: "#f55036", openrouter: "#8b5cf6", siliconcloud: "#7c3aed",
   xiaomimimo: "#ff6900", anthropic: "#d4a574", nvidia: "#76b900",
-  ollama: "#6b7280", deepgram: "#13ef93", zenmux: "#a855f7", tavus: "#6c5ce7",
+  ollama: "#6b7280", deepgram: "#13ef93", soniox: "#0052cc", zenmux: "#a855f7", tavus: "#6c5ce7",
   cartesia: "#00c389", gradium: "#3b82f6",
 };
 
@@ -391,7 +393,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </>
           )}
 
-          {settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && settings.settingsProvider !== "Tavus" && (
+          {settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && settings.settingsProvider !== "Tavus" && settings.settingsProvider !== "Soniox" && (
             <label className="vsField">
               <span className="vsFieldLabel">{t("默认主模型", "Default Model")}</span>
               <select
@@ -455,10 +457,12 @@ export default function ProviderSettingsSection({ settings }: Props) {
               )}
             </div>
           </div>
-        ) : settings.settingsProvider === "Deepgram" || settings.settingsProvider === "OpenAI" ? (
+        ) : settings.settingsProvider === "Deepgram" || settings.settingsProvider === "OpenAI" || settings.settingsProvider === "Soniox" ? (
           <div className="vsProviderModelSection">
             <div className="vsSettingsNotice ok">
-              {settings.settingsProvider === "Deepgram"
+              {settings.settingsProvider === "Soniox"
+                ? t("Soniox 用于多语言高精度语音识别 (ASR)，使用 stt-async-v5 模型，支持精确字词级时间戳与说话人识别。", "Soniox is used for speech recognition (ASR) with the stt-async-v5 model, supporting precise word-level timestamps and speaker diarization.")
+                : settings.settingsProvider === "Deepgram"
                 ? t("Deepgram 用于语音识别 (ASR)，使用 nova-3 模型，支持精确单词级时间戳。", "Deepgram is used for speech recognition (ASR) with the nova-3 model, supporting precise word-level timestamps.")
                 : t("OpenAI 用于语音识别 (ASR)，使用 Whisper 模型。", "OpenAI is used for speech recognition (ASR) with the Whisper model.")}
             </div>
