@@ -80,6 +80,10 @@ const DEFAULT_ENGINE_MODELS: Record<TtsEngine, { defaultModel: string; available
     defaultModel: "sonic-preview",
     availableModels: ["sonic-preview", "sonic-3.5", "sonic-3"]
   },
+  soniox: {
+    defaultModel: "tts-rt-v2",
+    availableModels: ["tts-rt-v2"]
+  },
 };
 
 export default function useTts({ defaultText, formatErrorMessage, language = "zh-CN" }: Options) {
@@ -207,6 +211,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
       { value: "gpt_sovits" as TtsEngine, label: "GPT-SoVITS (本地)", hint: t("本地 GPT-SoVITS API，支持高质量个性化声音克隆。", "Local GPT-SoVITS API, supports high-quality personalized voice cloning.") },
       { value: "doubao" as TtsEngine, label: "豆包 TTS (火山引擎)", hint: t("火山引擎豆包语音合成，支持大模型音色、情感控制与流式合成。", "Volcengine Doubao TTS with large-model voices, emotion control and streaming synthesis.") },
       { value: "cartesia" as TtsEngine, label: "Cartesia Sonic", hint: t("Cartesia Sonic 超低延迟合成，支持 44 种语言与自然情感表达。", "Cartesia Sonic ultra-low-latency synthesis across 44 languages with natural expressiveness.") },
+      { value: "soniox" as TtsEngine, label: "Soniox TTS", hint: t("Soniox 超低延迟 Speech AI 合成，tts-rt-v2 60+ 多语言自然音色与情绪标签。", "Soniox ultra-low latency Speech AI synthesis, tts-rt-v2 60+ multilingual natural voices with audio tags.") },
     ],
     [t]
   );

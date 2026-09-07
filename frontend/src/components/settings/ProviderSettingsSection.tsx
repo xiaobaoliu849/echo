@@ -116,7 +116,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
   const availableModels = settings.settingsAvailableModels || [];
   const ttsAvailableModels = settings.settingsTtsAvailableModels || [];
   const isTtsSupported =
-    ["DashScope", "MiniMax", "Xiaomi", "OpenAI", "ElevenLabs", "Cartesia"].includes(settings.settingsProvider) ||
+    ["DashScope", "MiniMax", "Xiaomi", "OpenAI", "ElevenLabs", "Cartesia", "Soniox"].includes(settings.settingsProvider) ||
     ttsAvailableModels.length > 0;
 
   return (
@@ -461,7 +461,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
           <div className="vsProviderModelSection">
             <div className="vsSettingsNotice ok">
               {settings.settingsProvider === "Soniox"
-                ? t("Soniox 用于多语言高精度语音识别 (ASR)，使用 stt-async-v5 模型，支持精确字词级时间戳与说话人识别。", "Soniox is used for speech recognition (ASR) with the stt-async-v5 model, supporting precise word-level timestamps and speaker diarization.")
+                ? t("Soniox 支持高精度多语言语音识别 (ASR，stt-async-v5) 与超低延迟语音合成 (TTS，tts-rt-v2)。配置 API Key 后，可在转录中心与语音中心直接调用。", "Soniox provides high-accuracy multilingual ASR (stt-async-v5) and ultra-low-latency TTS (tts-rt-v2). Once configured, use it directly in Transcription and Voice Center.")
                 : settings.settingsProvider === "Deepgram"
                 ? t("Deepgram 用于语音识别 (ASR)，使用 nova-3 模型，支持精确单词级时间戳。", "Deepgram is used for speech recognition (ASR) with the nova-3 model, supporting precise word-level timestamps.")
                 : t("OpenAI 用于语音识别 (ASR)，使用 Whisper 模型。", "OpenAI is used for speech recognition (ASR) with the Whisper model.")}

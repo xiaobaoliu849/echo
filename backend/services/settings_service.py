@@ -133,7 +133,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "ElevenLabs": {"default": "eleven_multilingual_v2", "available": ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_monolingual_v1"], "enabled": ["eleven_multilingual_v2", "eleven_turbo_v2_5"], "tts_default": "eleven_multilingual_v2", "tts_available": ["eleven_multilingual_v2", "eleven_turbo_v2_5", "eleven_monolingual_v1"], "tts_enabled": ["eleven_multilingual_v2", "eleven_turbo_v2_5"]},
         "Ollama": {"default": "", "available": [], "enabled": []},
         "Deepgram": {"default": "", "available": [], "enabled": []},
-        "Soniox": {"default": "stt-async-v5", "available": ["stt-async-v5"], "enabled": ["stt-async-v5"]},
+        "Soniox": {"default": "stt-async-v5", "available": ["stt-async-v5"], "enabled": ["stt-async-v5"], "tts_default": "tts-rt-v2", "tts_available": ["tts-rt-v2"], "tts_enabled": ["tts-rt-v2"]},
         "GPT-SoVITS": {"default": "", "available": [], "enabled": []},
         "Doubao": {"default": "doubao-realtime", "available": ["doubao-realtime"], "enabled": ["doubao-realtime"]},
         "Cartesia": {"default": "cartesia-realtime", "available": ["cartesia-realtime"], "enabled": ["cartesia-realtime"], "tts_default": "sonic-preview", "tts_available": ["sonic-preview", "sonic-3.5", "sonic-3"], "tts_enabled": ["sonic-preview", "sonic-3.5"]},

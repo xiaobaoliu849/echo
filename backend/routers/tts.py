@@ -45,7 +45,7 @@ async def list_voices(
     locale: str | None = Query(default=None, description="Locale prefix, e.g. zh-CN"),
     engine: str = Query(
         default="edge",
-        description="TTS engine: edge, qwen_flash, minimax, xiaomi, openai, elevenlabs, chattts, gpt_sovits, doubao, cartesia",
+        description="TTS engine: edge, qwen_flash, minimax, xiaomi, openai, elevenlabs, chattts, gpt_sovits, doubao, cartesia, soniox",
     ),
     model: str | None = Query(
         default=None,

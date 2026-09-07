@@ -44,6 +44,14 @@ from .gradium_tts_provider import (
     fetch_gradium_voices,
     is_gradium_voice,
 )
+from .soniox_tts_provider import (
+    SONIOX_TTS_VOICES,
+    DEFAULT_SONIOX_TTS_MODEL,
+    DEFAULT_SONIOX_TTS_VOICE,
+    soniox_tts_synthesize,
+    fetch_soniox_voices,
+    is_soniox_voice,
+)
 
 try:
     import edge_tts
@@ -98,6 +106,7 @@ TTS_ENGINE_AZURE = "azure"
 TTS_ENGINE_DOUBAO = "doubao"
 TTS_ENGINE_CARTESIA = "cartesia"
 TTS_ENGINE_GRADIUM = "gradium"
+TTS_ENGINE_SONIOX = "soniox"
 
 SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_EDGE,
@@ -112,6 +121,7 @@ SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_DOUBAO,
     TTS_ENGINE_CARTESIA,
     TTS_ENGINE_GRADIUM,
+    TTS_ENGINE_SONIOX,
 }
 
 OPENAI_VOICES = [
@@ -695,6 +705,51 @@ class TTSService:
             pass
         return GRADIUM_VOICES
 
+    def _soniox_settings(self) -> tuple[str, str, str]:
+        """Return (api_key, tts_base_url, api_base_url) for Soniox."""
+        self.config.reload()
+        cfg = self.config.get_all()
+        api_key = str(cfg.get("api_keys", {}).get("soniox_api_key", "")).strip()
+        tts_base_url = str(cfg.get("api_urls", {}).get("SonioxTTS", "")).strip()
+        if not tts_base_url:
+            from .soniox_tts_provider import DEFAULT_SONIOX_TTS_BASE_URL
+            tts_base_url = DEFAULT_SONIOX_TTS_BASE_URL
+        if not tts_base_url.startswith(("http://", "https://")):
+            tts_base_url = f"https://{tts_base_url}"
+
+        api_base_url = str(cfg.get("api_urls", {}).get("Soniox", "")).strip()
+        if not api_base_url:
+            from .soniox_tts_provider import DEFAULT_SONIOX_API_BASE_URL
+            api_base_url = DEFAULT_SONIOX_API_BASE_URL
+        if not api_base_url.startswith(("http://", "https://")):
+            api_base_url = f"https://{api_base_url}"
+        return api_key, tts_base_url.rstrip("/"), api_base_url.rstrip("/")
+
+    async def _generate_soniox_audio(self, text: str, voice: str, path: Path, model: str | None = None) -> None:
+        api_key, tts_base_url, _ = self._soniox_settings()
+        if not api_key:
+            raise RuntimeError("Soniox API Key is not configured. 请在 设置 → Soniox 中填写 soniox_api_key。")
+        audio_bytes = await soniox_tts_synthesize(
+            text=text,
+            voice=voice,
+            api_key=api_key,
+            base_url=tts_base_url,
+            model=model or DEFAULT_SONIOX_TTS_MODEL,
+        )
+        self._atomic_write_bytes(path, audio_bytes)
+
+    async def _fetch_soniox_voices(self) -> list[dict[str, Any]]:
+        api_key, _, api_base_url = self._soniox_settings()
+        if not api_key:
+            return SONIOX_TTS_VOICES
+        try:
+            voices = await fetch_soniox_voices(api_key, api_base_url)
+            if voices:
+                return voices
+        except Exception:
+            pass
+        return SONIOX_TTS_VOICES
+
     def _doubao_settings(self) -> tuple[str, str, str]:
         """Return (access_token, app_id, cluster) for Doubao OpenSpeech TTS."""
         self.config.reload()
@@ -1228,6 +1283,9 @@ class TTSService:
         # Check Gradium voices
         if is_gradium_voice(voice):
             return TTS_ENGINE_GRADIUM
+        # Check Soniox voices
+        if is_soniox_voice(voice):
+            return TTS_ENGINE_SONIOX
         # 2. Check MiniMax voices
         if any(v["name"] == voice for v in MINIMAX_VOICES):
             return TTS_ENGINE_MINIMAX
@@ -1286,6 +1344,8 @@ class TTSService:
             selected_voice = voice or DEFAULT_CARTESIA_VOICE
         elif normalized_engine == TTS_ENGINE_GRADIUM:
             selected_voice = voice or DEFAULT_GRADIUM_VOICE
+        elif normalized_engine == TTS_ENGINE_SONIOX:
+            selected_voice = voice or DEFAULT_SONIOX_TTS_VOICE
         else:
             selected_voice = voice or XIAOMI_VOICES[0]["name"]
 
@@ -1323,6 +1383,8 @@ class TTSService:
             await self._generate_cartesia_audio(cleaned, selected_voice, path, model=model)
         elif normalized_engine == TTS_ENGINE_GRADIUM:
             await self._generate_gradium_audio(cleaned, selected_voice, path, model=model)
+        elif normalized_engine == TTS_ENGINE_SONIOX:
+            await self._generate_soniox_audio(cleaned, selected_voice, path, model=model)
         else:
             await self._generate_xiaomi_audio(cleaned, selected_voice, path, model=model)
 
@@ -1446,6 +1508,9 @@ class TTSService:
             return self._filter_by_locale(voices, locale)
         if normalized_engine == TTS_ENGINE_GRADIUM:
             voices = await self._fetch_gradium_voices()
+            return self._filter_by_locale(voices, locale)
+        if normalized_engine == TTS_ENGINE_SONIOX:
+            voices = await self._fetch_soniox_voices()
             return self._filter_by_locale(voices, locale)
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
             # The two Qwen TTS families use incompatible voice sets; when the
