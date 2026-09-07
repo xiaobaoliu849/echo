@@ -65,9 +65,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       }
     }
 
-    // 2. Merge all chatModelChoices (if available)
+    // 2. Merge any realtime chatModelChoices (if available)
     if (chat && chat.chatModelChoices.length > 0) {
       for (const choice of chat.chatModelChoices) {
+        if (!isVoiceRealtimeModel(choice.provider, choice.model)) {
+          continue;
+        }
         if (!map.has(choice.provider)) {
           map.set(choice.provider, new Map());
         }
@@ -76,7 +79,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           providerMap.set(choice.model, {
             model: choice.model,
             value: choice.value,
-            isRealtime: isVoiceRealtimeModel(choice.provider, choice.model),
+            isRealtime: true,
           });
         }
       }
@@ -91,7 +94,14 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       .sort((a, b) => getProviderSortOrder(a.provider) - getProviderSortOrder(b.provider));
   }, [chat?.chatModelChoices, voiceChat.voiceChatRealtimeChoicesByProvider]);
 
-  const currentProviderName = activeProvider || (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
+  const candidateProvider =
+    activeProvider ||
+    (voiceChat.voiceChatProvider && providerGroups.some((g) => g.provider === voiceChat.voiceChatProvider)
+      ? voiceChat.voiceChatProvider
+      : chat?.chatProvider && providerGroups.some((g) => g.provider === chat.chatProvider)
+        ? chat.chatProvider
+        : providerGroups[0]?.provider || "");
+  const currentProviderName = candidateProvider;
   const currentProviderGroup = providerGroups.find((g) => g.provider === currentProviderName) || providerGroups[0];
 
   // The Level-2 flyout aligns with the row of the browsed provider (falling back
@@ -102,14 +112,24 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   // committed model only when it belongs to that provider (no mixed pairs).
   const currentModelName = useMemo(() => {
     if (hoveredModel) return hoveredModel;
-    if (chat && currentProviderName === chat.chatProvider && chat.chatModel) {
-      return chat.chatModel;
-    }
-    if (currentProviderName === voiceChat.voiceChatProvider && voiceChat.voiceChatModel) {
+    if (
+      currentProviderName === voiceChat.voiceChatProvider &&
+      voiceChat.voiceChatModel &&
+      currentProviderGroup?.models.some((m) => m.model === voiceChat.voiceChatModel)
+    ) {
       return voiceChat.voiceChatModel;
     }
-    return "";
-  }, [hoveredModel, currentProviderName, chat?.chatProvider, chat?.chatModel, voiceChat.voiceChatProvider, voiceChat.voiceChatModel]);
+    if (
+      chat &&
+      currentProviderName === chat.chatProvider &&
+      chat.chatModel &&
+      isVoiceRealtimeModel(chat.chatProvider, chat.chatModel) &&
+      currentProviderGroup?.models.some((m) => m.model === chat.chatModel)
+    ) {
+      return chat.chatModel;
+    }
+    return currentProviderGroup?.models[0]?.model || "";
+  }, [hoveredModel, currentProviderName, chat?.chatProvider, chat?.chatModel, voiceChat.voiceChatProvider, voiceChat.voiceChatModel, currentProviderGroup]);
   const isCurrentModelRealtime = isVoiceRealtimeModel(currentProviderName, currentModelName);
 
   // Realtime model whose voices the Level-3 list previews while the user browses
