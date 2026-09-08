@@ -205,6 +205,56 @@ GLM4VOICE_REALTIME_INSTRUCTIONS = (
 
 
 # ---------------------------------------------------------------------------
+# Agent Platform (Google Cloud, formerly Vertex AI) credential discovery
+# ---------------------------------------------------------------------------
+
+AGENT_PLATFORM_SA_FILENAME = "gen-lang-client-0313108616-b62670b6c2cb.json"
+
+
+def resolve_agent_platform_service_account_file(sa_file: str = "") -> str:
+    """Return a usable Agent Platform service-account JSON path, or "".
+
+    Agent Platform authenticates by Google Cloud service account / ADC, not
+    just an API key. The router's credential pre-check and the provider's
+    client construction MUST agree on what counts as "configured" — when they
+    disagreed, the pre-check rejected every AgentPlatform call with
+    "缺少 API Key" even though the provider would have connected fine using the
+    discovered service-account file.
+
+    NOTE on naming: the provider key is "AgentPlatform", but the *config field*
+    holding its credential is still ``api_keys.vertex_api_key`` — see
+    ``PROVIDER_KEY_MAP`` in config_loader. Renaming that field would break
+    existing config.json files, so a9db477 kept it deliberately.
+    """
+    import os
+    from pathlib import Path
+
+    candidate = (
+        os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+        or str(sa_file or "").strip()
+    )
+    if candidate and os.path.exists(candidate):
+        return str(Path(candidate).resolve())
+
+    here = Path(__file__).resolve()
+    search_dirs = [here.parent.parent.parent, here.parent.parent, Path.cwd()]
+    for directory in search_dirs:
+        exact = directory / AGENT_PLATFORM_SA_FILENAME
+        if exact.exists():
+            return str(exact.resolve())
+    # Fall back to any service-account JSON dropped in the same places, so a
+    # different GCP project does not need a code change.
+    for directory in search_dirs:
+        try:
+            for found in sorted(directory.glob("gen-lang-client-*.json")):
+                if found.is_file():
+                    return str(found.resolve())
+        except OSError:
+            continue
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # Model-detection helpers
 # ---------------------------------------------------------------------------
 

@@ -201,6 +201,7 @@ async def voice_chat_ws(
     echo_target_language: bool = True,
     enable_voice_clone: bool = False,
     voice_clone_frequency: str = "once",
+    client_trace: str = "",
     token: str | None = None,
 ) -> None:
     # The HTTP auth middleware does not cover WebSocket scopes; enforce auth
@@ -216,6 +217,25 @@ async def voice_chat_ws(
 
     from services.config_loader import normalize_provider_name
     selected_provider = normalize_provider_name((provider or "DashScope").strip())
+    # Log what the client actually asked for, before any fallback logic runs.
+    # Without this there is no way to tell a frontend selection bug apart from a
+    # backend model-resolution fallback when a call ends up on the wrong model.
+    logger.info(
+        "realtime_ws_open: provider_raw=%r provider=%s model=%r voice=%r "
+        "translation_mode=%r source_lang=%r target_lang=%r",
+        provider,
+        selected_provider,
+        model,
+        voice,
+        translation_mode,
+        source_language_code,
+        target_language_code,
+    )
+    if client_trace:
+        # Frontend breadcrumb trail of realtime-selection transitions leading up
+        # to this connect, so a wrong provider can be attributed to the exact
+        # state change that overwrote the user's pick.
+        logger.info("realtime_ws_client_trace: %s", client_trace[:1200])
     if selected_provider == "Tavus":
         await websocket.send_json(
             {
@@ -258,8 +278,19 @@ async def voice_chat_ws(
         if not _cfg.get_setting("google_api_key"):
             _missing.append("Google API Key")
     elif selected_provider == "AgentPlatform":
-        if not _cfg.get_setting("vertex_api_key") and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            _missing.append("Google Agent Platform API Key")
+        # Agent Platform authenticates by service account / ADC as well as by
+        # key. Mirror the provider's own discovery, otherwise a perfectly
+        # working service-account setup is rejected here as "missing key".
+        from services.realtime_constants import resolve_agent_platform_service_account_file
+        _sa = resolve_agent_platform_service_account_file(_cfg.get_setting("vertex_sa_file") or "")
+        if not _cfg.get_setting("vertex_api_key") and not _sa:
+            _missing.append("Google Agent Platform API Key 或服务账号 JSON")
+        else:
+            logger.info(
+                "agent_platform_auth: api_key=%s service_account=%s",
+                bool(_cfg.get_setting("vertex_api_key")),
+                _sa or "<none>",
+            )
     elif selected_provider == "OpenAI":
         if not _cfg.get_setting("openai_api_key"):
             _missing.append("OpenAI API Key")

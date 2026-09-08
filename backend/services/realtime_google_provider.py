@@ -17,6 +17,37 @@ from fastapi import WebSocket, WebSocketDisconnect
 try:
     from google import genai
     from google.genai import types
+    import google.genai._live_converters as _gc_live_converters
+    from google.genai._common import set_value_by_path as _gc_setv
+
+    _orig_LiveConnectConfig_to_vertex = _gc_live_converters._LiveConnectConfig_to_vertex
+
+    def _patched_LiveConnectConfig_to_vertex(api_client, from_object, parent_object=None):
+        tc = None
+        if isinstance(from_object, dict):
+            tc = from_object.pop("translation_config", None)
+        elif hasattr(from_object, "translation_config"):
+            tc = getattr(from_object, "translation_config", None)
+            if tc is not None:
+                try:
+                    object.__setattr__(from_object, "translation_config", None)
+                except Exception:
+                    pass
+        to_obj = _orig_LiveConnectConfig_to_vertex(api_client, from_object, parent_object)
+        if tc is not None:
+            if isinstance(tc, types.TranslationConfig):
+                tc_dict = tc.model_dump(exclude_none=True)
+            elif isinstance(tc, dict):
+                tc_dict = tc
+            else:
+                tc_dict = {
+                    "target_language_code": getattr(tc, "target_language_code", "en"),
+                    "echo_target_language": getattr(tc, "echo_target_language", True),
+                }
+            _gc_setv(parent_object, ["setup", "generationConfig", "translationConfig"], tc_dict)
+        return to_obj
+
+    _gc_live_converters._LiveConnectConfig_to_vertex = _patched_LiveConnectConfig_to_vertex
 except ImportError:  # pragma: no cover
     genai = None
     types = None
@@ -29,6 +60,7 @@ from .realtime_constants import (
     _is_google_live_translate_model,
     _is_google_public_rest_base_url,
     _merge_streaming_text,
+    resolve_agent_platform_service_account_file,
 )
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
 from .realtime_memory_session import RealtimeMemorySession, _merge_memory_text
@@ -1061,6 +1093,17 @@ class GoogleRealtimeMixin:
         echo_target_language: bool = True,
     ) -> None:
         settings = self._resolve_google_settings(model, provider=provider)
+        # requested vs resolved makes a silent model fallback visible in the log
+        # instead of only surfacing as a confusing upstream 1008 error.
+        logger.info(
+            "google_session_start: provider=%s requested_model=%r resolved_model=%r "
+            "base_url=%r has_api_key=%s",
+            provider,
+            model,
+            settings.get("model"),
+            settings.get("base_url", ""),
+            bool(settings.get("api_key")),
+        )
         memory_session = RealtimeMemorySession()
         if memory_session._config.get_service() is None and not memory_session._explicitly_configured:
             memory_session.configure_from_server()
@@ -1076,19 +1119,19 @@ class GoogleRealtimeMixin:
 
         api_key = settings["api_key"].strip()
         base_url = settings.get("base_url", "").strip()
+        is_live_translate = _is_google_live_translate_model(settings["model"])
         is_vertex = provider in {"AgentPlatform", "VertexAI"}
-        sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip() or settings.get("sa_file", "").strip()
-        if not sa_file or not os.path.exists(sa_file):
-            for candidate in [
-                Path(__file__).resolve().parent.parent.parent / "gen-lang-client-0313108616-b62670b6c2cb.json",
-                Path(__file__).resolve().parent.parent / "gen-lang-client-0313108616-b62670b6c2cb.json",
-                Path("gen-lang-client-0313108616-b62670b6c2cb.json").resolve(),
-            ]:
-                if candidate.exists():
-                    sa_file = str(candidate.resolve())
-                    break
+
+        sa_file = resolve_agent_platform_service_account_file(settings.get("sa_file", ""))
 
         if is_vertex:
+            # For Gemini Live Translate models on Vertex AI / Agent Platform, official docs specify location="global".
+            default_location = "global" if is_live_translate else "us-central1"
+            location = settings.get("location", "").strip() or default_location
+            if is_live_translate and location != "global":
+                logger.info("agent_platform_live_translate: overriding location %s to global as required by Google Cloud", location)
+                location = "global"
+
             has_sa = bool(sa_file and os.path.exists(sa_file))
             if has_sa:
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
@@ -1105,11 +1148,14 @@ class GoogleRealtimeMixin:
                     project_id = configured_proj
                 else:
                     project_id = sa_project or os.environ.get("VERTEX_PROJECT_ID", "").strip() or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip() or "gen-lang-client-0313108616"
-                location = settings.get("location", "").strip() or "us-central1"
                 client = genai.Client(
                     vertexai=True,
                     project=project_id,
                     location=location,
+                )
+                logger.info(
+                    "agent_platform_client: auth=service_account project=%s location=%s sa_file=%s",
+                    project_id, location, sa_file,
                 )
             elif api_key:
                 # Vertex AI Express Mode with API Key (no ADC required)
@@ -1117,6 +1163,7 @@ class GoogleRealtimeMixin:
                     vertexai=True,
                     api_key=api_key,
                 )
+                logger.info("agent_platform_client: auth=express_api_key")
             else:
                 project_id = (
                     settings.get("project_id", "").strip()
@@ -1124,16 +1171,16 @@ class GoogleRealtimeMixin:
                     or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
                     or "gen-lang-client-0313108616"
                 )
-                location = settings.get("location", "").strip() or "us-central1"
                 client = genai.Client(
                     vertexai=True,
                     project=project_id,
                     location=location,
                 )
+                logger.info("agent_platform_client: auth=adc project=%s location=%s", project_id, location)
+
         else:
             client_http_opts = http_options if http_options.get("base_url") else None
             client = genai.Client(api_key=api_key, http_options=client_http_opts)
-        is_live_translate = _is_google_live_translate_model(settings["model"])
 
         initial_memory_context = ""
         if not is_live_translate and memory_session._config.get_service() is not None:
@@ -1182,8 +1229,22 @@ class GoogleRealtimeMixin:
             else self._build_live_config(voice, instructions, model=settings["model"])
         )
 
+        live_model = settings["model"]
+        if is_vertex:
+            # If authenticated via express API key, Google Cloud Vertex live API requires the full resource name
+            # projects/{project}/locations/{location}/publishers/google/models/{model}
+            if not has_sa and api_key and not live_model.startswith("projects/"):
+                gcp_project = (
+                    settings.get("project_id", "").strip()
+                    or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                    or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                    or "gen-lang-client-0313108616"
+                )
+                live_model = f"projects/{gcp_project}/locations/{location}/publishers/google/models/{live_model}"
+                logger.info("agent_platform_live_model: expanded to full resource name %s", live_model)
+
         try:
-            async with client.aio.live.connect(model=settings["model"], config=live_config) as session:
+            async with client.aio.live.connect(model=live_model, config=live_config) as session:
                 await self._send_event(
                     websocket,
                     "session_open",
@@ -1237,6 +1298,12 @@ class GoogleRealtimeMixin:
                     f"Google 实时会话启动失败：Google Agent Platform 暂不支持模型「{settings['model']}」。"
                     "Agent Platform 官方支持的实时语音模型为「gemini-live-2.5-flash-native-audio」；"
                     "如需体验 preview/exp 等实验模型，请将供应商选择为「Google」(AI Studio)。"
+                )
+            elif "translation_config parameter is only supported" in error_text:
+                error_msg = (
+                    f"Google 实时会话启动失败：实时同传模型「{settings['model']}」基于 Google AI Studio Developer API。"
+                    "Google 官方尚未在企业级 Agent Platform (Vertex AI) 中开放同传参数。"
+                    "请在设置中心配置「Google」API Key，并将供应商直接选择为「Google」即可畅快同传。"
                 )
             else:
                 error_msg = f"Google 实时会话启动失败: {error_text}"

@@ -2848,6 +2848,72 @@ class ApiAuthHardeningTests(unittest.TestCase):
             ) as ws:
                 mock_stream.assert_awaited_once()
 
+    def test_voice_chat_ws_agent_platform_accepts_service_account(self) -> None:
+        """AgentPlatform authenticates by Google Cloud service account as well
+        as by key. The pre-check used to demand ``vertex_api_key`` (or the ADC
+        env var) and rejected every service-account setup with "缺少 API Key",
+        even though the provider discovers the SA file on its own."""
+        import json as _json
+        import tempfile
+        from pathlib import Path as _Path
+        from fastapi.testclient import TestClient
+        from unittest.mock import AsyncMock
+
+        client = TestClient(self.app)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sa_path = _Path(tmp_dir) / "gen-lang-client-test.json"
+            sa_path.write_text(
+                _json.dumps({"type": "service_account", "project_id": "test-project"}),
+                encoding="utf-8",
+            )
+
+            # 1. No key AND no service account -> structured error.
+            with patch.object(BackendConfig, "get_setting") as mock_get_setting, \
+                 patch(
+                     "services.realtime_constants.resolve_agent_platform_service_account_file",
+                     return_value="",
+                 ):
+                mock_get_setting.side_effect = lambda k, default="": {
+                    "vertex_api_key": "",
+                }.get(k, default)
+                with client.websocket_connect(
+                    "/api/voice-chat/ws?provider=AgentPlatform&token=test-api-token"
+                ) as ws:
+                    payload = ws.receive_json()
+                    self.assertEqual(payload.get("type"), "error")
+                    self.assertTrue(
+                        any("服务账号" in m for m in payload.get("missing", [])),
+                        payload,
+                    )
+
+            # 2. No key but a discoverable service account -> must connect.
+            with patch.object(BackendConfig, "get_setting") as mock_get_setting, \
+                 patch(
+                     "services.realtime_constants.resolve_agent_platform_service_account_file",
+                     return_value=str(sa_path),
+                 ), \
+                 patch.object(
+                     voice_chat_router.voice_chat_service,
+                     "stream_google_session",
+                     new_callable=AsyncMock,
+                 ) as mock_stream:
+                mock_get_setting.side_effect = lambda k, default="": {
+                    "vertex_api_key": "",
+                }.get(k, default)
+                with client.websocket_connect(
+                    "/api/voice-chat/ws?provider=AgentPlatform"
+                    "&model=gemini-3.5-live-translate-preview&token=test-api-token"
+                ) as ws:
+                    mock_stream.assert_awaited_once()
+                    self.assertEqual(
+                        mock_stream.await_args.kwargs.get("provider"), "AgentPlatform"
+                    )
+                    self.assertEqual(
+                        mock_stream.await_args.kwargs.get("model"),
+                        "gemini-3.5-live-translate-preview",
+                    )
+
     # -- realtime transcription WebSocket handshake auth -------------------
 
     def test_transcription_realtime_ws_rejects_missing_token(self) -> None:
