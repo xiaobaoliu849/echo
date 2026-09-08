@@ -64,8 +64,9 @@ export const GRADIUM_PROVIDER = "Gradium";
 export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
+export const VERTEXAI_FLASH_LIVE_MODEL = "gemini-live-2.5-flash-native-audio";
 export const DEFAULT_GOOGLE_MODEL = GOOGLE_FLASH_LIVE_MODEL;
-export const DEFAULT_VERTEXAI_MODEL = GOOGLE_FLASH_LIVE_MODEL;
+export const DEFAULT_VERTEXAI_MODEL = VERTEXAI_FLASH_LIVE_MODEL;
 export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
@@ -766,7 +767,7 @@ export function resolveRealtimeModelOptions(
     : [];
   const vertexBuiltIns = provider === VERTEXAI_PROVIDER
     ? [
-        "gemini-2.5-flash-native-audio-preview-12-2025",
+        "gemini-live-2.5-flash-native-audio",
         "gemini-3.1-flash-live-preview",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",

@@ -1167,7 +1167,16 @@ class GoogleRealtimeMixin:
             return
         except Exception as e:
             logger.exception("Google realtime session failed: %s", e)
-            await self._send_event(websocket, "error", message=f"Google 实时会话启动失败: {str(e)}")
+            error_text = str(e)
+            if "API keys are not supported by this API" in error_text or ("1008" in error_text and "OAuth2" in error_text):
+                error_msg = (
+                    "Google 实时会话启动失败：Google Cloud Vertex AI 实时语音接口仅支持 OAuth2 访问令牌或服务账号凭据（不支持普通 API Key）。"
+                    "如果您使用的是 Google AI Studio API Key，请将供应商直接选择为「Google」即可畅快通话；"
+                    "如果您使用企业 GCP 项目，请在终端执行 gcloud auth application-default login 或配置服务账号 JSON 密钥。"
+                )
+            else:
+                error_msg = f"Google 实时会话启动失败: {error_text}"
+            await self._send_event(websocket, "error", message=error_msg)
             await asyncio.sleep(0.2)
             return
         finally:

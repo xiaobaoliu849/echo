@@ -14,6 +14,7 @@ import struct
 # ---------------------------------------------------------------------------
 
 DEFAULT_GOOGLE_REALTIME_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+DEFAULT_VERTEXAI_REALTIME_MODEL = "gemini-live-2.5-flash-native-audio"
 DEFAULT_GOOGLE_REALTIME_VOICE = "Puck"
 # Voices supported by Google Gemini Multimodal Live API (30 prebuilt voices).
 GOOGLE_REALTIME_VOICES = (

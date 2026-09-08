@@ -78,6 +78,7 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     DEFAULT_DASHSCOPE_REALTIME_MODEL,
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_GOOGLE_REALTIME_MODEL,
+    DEFAULT_VERTEXAI_REALTIME_MODEL,
     DEFAULT_GOOGLE_REALTIME_VOICE,
     DEFAULT_OPENAI_REALTIME_MODEL,
     DEFAULT_OPENAI_REALTIME_VOICE,
@@ -264,7 +265,8 @@ class RealtimeVoiceService(
 
     def _resolve_google_settings(self, model: str | None, provider: str = "Google") -> dict[str, str]:
         provider_settings = self.config.get_provider_settings(provider, model)
-        resolved_model = provider_settings["model"].strip() or DEFAULT_GOOGLE_REALTIME_MODEL
+        default_realtime_model = DEFAULT_VERTEXAI_REALTIME_MODEL if provider == "VertexAI" else DEFAULT_GOOGLE_REALTIME_MODEL
+        resolved_model = provider_settings["model"].strip() or default_realtime_model
         api_key = provider_settings["api_key"].strip()
         base_url = provider_settings["base_url"].strip()
         if provider == "Google" and "aiplatform.googleapis.com" in base_url:
