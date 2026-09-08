@@ -267,11 +267,16 @@ class LLMService:
     def _get_vertex_auth(settings: dict[str, str] | None = None, api_key: str = "") -> tuple[dict[str, str], str]:
         settings = settings or {}
         resolved_key = api_key or settings.get("api_key", "")
-        sa_file = (
-            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-            or settings.get("sa_file", "").strip()
-            or "gen-lang-client-0313108616-b62670b6c2cb.json"
-        )
+        sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip() or settings.get("sa_file", "").strip()
+        if not sa_file or not os.path.exists(sa_file):
+            for candidate in [
+                Path(__file__).resolve().parent.parent.parent / "gen-lang-client-0313108616-b62670b6c2cb.json",
+                Path(__file__).resolve().parent.parent / "gen-lang-client-0313108616-b62670b6c2cb.json",
+                Path("gen-lang-client-0313108616-b62670b6c2cb.json").resolve(),
+            ]:
+                if candidate.exists():
+                    sa_file = str(candidate.resolve())
+                    break
         if sa_file and os.path.exists(sa_file):
             try:
                 from google.oauth2 import service_account

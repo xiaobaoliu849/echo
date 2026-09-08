@@ -1071,22 +1071,34 @@ class GoogleRealtimeMixin:
         api_key = settings["api_key"].strip()
         base_url = settings.get("base_url", "").strip()
         is_vertex = provider == "VertexAI"
-        sa_file = (
-            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-            or settings.get("sa_file", "").strip()
-            or "gen-lang-client-0313108616-b62670b6c2cb.json"
-        )
+        sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip() or settings.get("sa_file", "").strip()
+        if not sa_file or not os.path.exists(sa_file):
+            for candidate in [
+                Path(__file__).resolve().parent.parent.parent / "gen-lang-client-0313108616-b62670b6c2cb.json",
+                Path(__file__).resolve().parent.parent / "gen-lang-client-0313108616-b62670b6c2cb.json",
+                Path("gen-lang-client-0313108616-b62670b6c2cb.json").resolve(),
+            ]:
+                if candidate.exists():
+                    sa_file = str(candidate.resolve())
+                    break
 
         if is_vertex:
-            has_sa = bool((sa_file and os.path.exists(sa_file)) or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+            has_sa = bool(sa_file and os.path.exists(sa_file))
             if has_sa:
-                if sa_file and os.path.exists(sa_file):
-                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
                 project_id = (
                     settings.get("project_id", "").strip()
                     or os.environ.get("VERTEX_PROJECT_ID", "").strip()
                     or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
                 )
+                if not project_id:
+                    try:
+                        with open(sa_file, "r", encoding="utf-8") as f:
+                            sa_data = json.load(f)
+                            project_id = sa_data.get("project_id", "")
+                    except Exception:
+                        pass
+                project_id = project_id or "gen-lang-client-0313108616"
                 location = settings.get("location", "").strip() or "us-central1"
                 client = genai.Client(
                     vertexai=True,
@@ -1104,6 +1116,7 @@ class GoogleRealtimeMixin:
                     settings.get("project_id", "").strip()
                     or os.environ.get("VERTEX_PROJECT_ID", "").strip()
                     or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                    or "gen-lang-client-0313108616"
                 )
                 location = settings.get("location", "").strip() or "us-central1"
                 client = genai.Client(

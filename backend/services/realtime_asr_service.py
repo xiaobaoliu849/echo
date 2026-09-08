@@ -346,10 +346,16 @@ class GoogleStreamingAsrSession:
         api_key = self._api_key.strip()
         base_url = self._base_url or ""
         is_vertex = "aiplatform.googleapis.com" in base_url
-        sa_file = (
-            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-            or "gen-lang-client-0313108616-b62670b6c2cb.json"
-        )
+        sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+        if not sa_file or not os.path.exists(sa_file):
+            for candidate in [
+                Path(__file__).resolve().parent.parent.parent / "gen-lang-client-0313108616-b62670b6c2cb.json",
+                Path(__file__).resolve().parent.parent / "gen-lang-client-0313108616-b62670b6c2cb.json",
+                Path("gen-lang-client-0313108616-b62670b6c2cb.json").resolve(),
+            ]:
+                if candidate.exists():
+                    sa_file = str(candidate.resolve())
+                    break
 
         if is_vertex:
             project_id = (
