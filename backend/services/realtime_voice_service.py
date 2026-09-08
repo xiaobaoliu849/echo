@@ -110,6 +110,7 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     _is_dashscope_omni_realtime_model,
     _is_google_live_translate_model,
     _is_google_public_rest_base_url,
+    _is_google_realtime_model,
     _normalize_dashscope_realtime_voice,
     normalize_qwen_translate_language,
 )
@@ -207,7 +208,12 @@ class RealtimeVoiceService(
         return f"{BASE_REALTIME_INSTRUCTIONS}\nCurrent Date: {current_date}."
 
     @staticmethod
-    def _build_realtime_instructions(memory_context: str = "") -> str:
+    def _build_realtime_instructions(
+        memory_context: str = "",
+        initial_memory_context: str = "",
+        **kwargs: Any,
+    ) -> str:
+        ctx = (memory_context or initial_memory_context or "").strip()
         base_inst = RealtimeVoiceService._get_base_instructions()
         memory_rules = (
             "\n\n[Memory & Tool Calling Rules]\n"
@@ -217,7 +223,7 @@ class RealtimeVoiceService(
             "or the long-term memories provided below. NEVER use `search_web` to search the internet for user private memories or prior conversations.\n"
             "- Only call `search_web` for real-time external public information (news, weather, sports scores, public facts) when explicitly needed."
         )
-        if not memory_context:
+        if not ctx:
             return f"{base_inst}{memory_rules}"
         return (
             f"{base_inst}{memory_rules}\n\n"
@@ -226,7 +232,7 @@ class RealtimeVoiceService(
             "answer from this memory block directly. Do not claim you cannot remember, do not say each conversation is "
             "independent, and do not ignore the memory block when it is relevant. Only avoid quoting the block verbatim "
             "unless the user directly asks.\n"
-            f"{memory_context}"
+            f"{ctx}"
         )
 
     @staticmethod
@@ -276,7 +282,15 @@ class RealtimeVoiceService(
         provider = normalize_provider_name(provider)
         provider_settings = self.config.get_provider_settings(provider, model)
         default_realtime_model = DEFAULT_AGENT_PLATFORM_REALTIME_MODEL if provider == "AgentPlatform" else DEFAULT_GOOGLE_REALTIME_MODEL
-        resolved_model = provider_settings["model"].strip() or default_realtime_model
+        requested_model = (model or "").strip()
+        if requested_model and _is_google_realtime_model(requested_model):
+            resolved_model = requested_model
+        else:
+            configured_model = provider_settings["model"].strip()
+            if configured_model and _is_google_realtime_model(configured_model):
+                resolved_model = configured_model
+            else:
+                resolved_model = default_realtime_model
         api_key = provider_settings["api_key"].strip()
         base_url = provider_settings["base_url"].strip()
         if provider == "Google" and "aiplatform.googleapis.com" in base_url:

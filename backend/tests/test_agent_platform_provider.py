@@ -161,6 +161,51 @@ class AgentPlatformProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolved["api_key"], "AQ-mock-vertex-key")
         self.assertEqual(resolved["model"], "gemini-live-2.5-flash-native-audio")
 
+    def test_realtime_voice_service_falls_back_from_text_models_to_native_audio(self):
+        """When a text model (e.g. gemini-2.5-flash or gemini-3.8-flash) is passed
+        to _resolve_google_settings for AgentPlatform, it must safely fall back
+        to the canonical realtime model (gemini-live-2.5-flash-native-audio)."""
+        cfg = BackendConfig()
+        cfg.update({
+            "api_keys": {
+                "vertex_api_key": "AQ-mock-vertex-key",
+                "google_api_key": "AQ-mock-google-key",
+            },
+        })
+        service = RealtimeVoiceService(cfg)
+        # 1. Text model under AgentPlatform
+        resolved_ap = service._resolve_google_settings("gemini-2.5-flash", provider="AgentPlatform")
+        self.assertEqual(resolved_ap["model"], "gemini-live-2.5-flash-native-audio")
+
+        # 2. None model under AgentPlatform
+        resolved_none = service._resolve_google_settings(None, provider="AgentPlatform")
+        self.assertEqual(resolved_none["model"], "gemini-live-2.5-flash-native-audio")
+
+        # 3. Text model under Google
+        resolved_google = service._resolve_google_settings("gemini-2.5-flash", provider="Google")
+        self.assertEqual(resolved_google["model"], "gemini-2.5-flash-native-audio-preview-12-2025")
+
+    def test_build_realtime_instructions_accepts_initial_memory_context_kwarg(self):
+        """_build_realtime_instructions must accept memory_context, initial_memory_context
+        kwarg, or positional args without raising unexpected keyword argument errors."""
+        service = RealtimeVoiceService(BackendConfig())
+
+        # Positional
+        inst1 = service._build_realtime_instructions("- user likes tea")
+        self.assertIn("user likes tea", inst1)
+
+        # initial_memory_context kwarg
+        inst2 = service._build_realtime_instructions(initial_memory_context="- user likes coffee")
+        self.assertIn("user likes coffee", inst2)
+
+        # memory_context kwarg
+        inst3 = service._build_realtime_instructions(memory_context="- user likes water")
+        self.assertIn("user likes water", inst3)
+
+        # Empty / no args
+        inst4 = service._build_realtime_instructions()
+        self.assertIn("Memory & Tool Calling Rules", inst4)
+
 
 if __name__ == "__main__":
     unittest.main()

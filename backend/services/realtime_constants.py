@@ -212,6 +212,11 @@ def _is_google_live_translate_model(model: str | None) -> bool:
     return "live-translate" in str(model or "").strip().lower()
 
 
+def _is_google_realtime_model(model: str | None) -> bool:
+    m = str(model or "").strip().lower()
+    return any(pat in m for pat in ("native-audio", "live", "realtime", "flash-exp"))
+
+
 def _is_dashscope_audio_realtime_model(model: str | None) -> bool:
     return bool(
         re.fullmatch(

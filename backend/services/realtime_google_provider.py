@@ -1168,7 +1168,11 @@ class GoogleRealtimeMixin:
             except Exception:
                 logger.exception("google_realtime_startup_memory_failed")
 
-        instructions = self._build_realtime_instructions(initial_memory_context=initial_memory_context)
+        instructions = (
+            ""
+            if is_live_translate
+            else self._build_realtime_instructions(initial_memory_context)
+        )
         live_config = (
             self._build_live_translate_config(
                 target_language_code,
