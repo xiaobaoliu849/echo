@@ -53,6 +53,7 @@ type AudioContextWindow = Window & {
 };
 
 export const GOOGLE_PROVIDER = "Google";
+export const VERTEXAI_PROVIDER = "VertexAI";
 export const DASHSCOPE_PROVIDER = "DashScope";
 export const OPENAI_PROVIDER = "OpenAI";
 export const DOUBAO_PROVIDER = "Doubao";
@@ -64,6 +65,7 @@ export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 export const DEFAULT_GOOGLE_MODEL = GOOGLE_FLASH_LIVE_MODEL;
+export const DEFAULT_VERTEXAI_MODEL = GOOGLE_FLASH_LIVE_MODEL;
 export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
@@ -526,6 +528,7 @@ export function formatLiveTranslateLanguageOptions(language: UiLanguage): Array<
 export const CANONICAL_PROVIDER_ORDER = [
   "DashScope",
   "Google",
+  "VertexAI",
   "Tavus",
   "Doubao",
   "Cartesia",
@@ -572,6 +575,7 @@ export function getProviderBadge(
   if (
     norm === "dashscope" ||
     norm === "google" ||
+    norm === "vertexai" ||
     norm === "doubao" ||
     norm === "cartesia" ||
     norm === "gradium" ||
@@ -595,6 +599,7 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   const realtimeProviders = [
     DASHSCOPE_PROVIDER,
     GOOGLE_PROVIDER,
+    VERTEXAI_PROVIDER,
     TAVUS_PROVIDER,
     DOUBAO_PROVIDER,
     CARTESIA_PROVIDER,
@@ -611,6 +616,9 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   }
   if (providerOptions.includes(GOOGLE_PROVIDER)) {
     return GOOGLE_PROVIDER;
+  }
+  if (providerOptions.includes(VERTEXAI_PROVIDER)) {
+    return VERTEXAI_PROVIDER;
   }
   if (providerOptions.includes(TAVUS_PROVIDER)) {
     return TAVUS_PROVIDER;
@@ -666,7 +674,8 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
            /^qwen-audio-3\.0-realtime-(plus|flash)$/.test(normalizedModel) ||
            /^qwen3\.5-livetranslate-(flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel);
   }
-  if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase()) {
+  if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase() ||
+      normalizedProvider === VERTEXAI_PROVIDER.toLowerCase()) {
     return SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS.some((item) => normalizedModel.includes(item));
   }
   if (normalizedProvider === OPENAI_PROVIDER.toLowerCase()) {
@@ -678,7 +687,8 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
 export function isLiveTranslateModel(provider: string, model: string): boolean {
   const normalizedProvider = provider.trim().toLowerCase();
   const normalizedModel = model.trim().toLowerCase();
-  if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase()) {
+  if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase() ||
+      normalizedProvider === VERTEXAI_PROVIDER.toLowerCase()) {
     return normalizedModel.includes("live-translate");
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
@@ -698,6 +708,9 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   }
   if (provider === GOOGLE_PROVIDER) {
     return DEFAULT_GOOGLE_MODEL;
+  }
+  if (provider === VERTEXAI_PROVIDER) {
+    return DEFAULT_VERTEXAI_MODEL;
   }
   if (provider === OPENAI_PROVIDER) {
     return DEFAULT_OPENAI_MODEL;
@@ -751,6 +764,14 @@ export function resolveRealtimeModelOptions(
         "gemini-2.5-flash-native-audio-preview-12-2025",
       ]
     : [];
+  const vertexBuiltIns = provider === VERTEXAI_PROVIDER
+    ? [
+        "gemini-2.5-flash-native-audio-preview-12-2025",
+        "gemini-3.1-flash-live-preview",
+        "gemini-3.5-live-translate-preview",
+        "gemini-3.5-transcribe-live",
+      ]
+    : [];
   const openaiBuiltIns = provider === OPENAI_PROVIDER
     ? [DEFAULT_OPENAI_MODEL]
     : [];
@@ -782,6 +803,7 @@ export function resolveRealtimeModelOptions(
     : [];
   const allBuiltIns = [
     ...googleBuiltIns,
+    ...vertexBuiltIns,
     ...openaiBuiltIns,
     ...dashscopeBuiltIns,
     ...doubaoBuiltIns,

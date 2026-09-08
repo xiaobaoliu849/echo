@@ -28,6 +28,7 @@ import {
   DOUBAO_REALTIME_VOICES,
   EMPTY_VOICE_CHAT_METRICS,
   GOOGLE_PROVIDER,
+  VERTEXAI_PROVIDER,
   GOOGLE_REALTIME_VOICES,
   GLM4VOICE_PROVIDER,
   CARTESIA_PROVIDER,
@@ -80,6 +81,7 @@ export default function useVoiceChat({
     () => [
       DASHSCOPE_PROVIDER,
       GOOGLE_PROVIDER,
+      VERTEXAI_PROVIDER,
       TAVUS_PROVIDER,
       DOUBAO_PROVIDER,
       CARTESIA_PROVIDER,
@@ -299,7 +301,7 @@ export default function useVoiceChat({
       if (!PERSONAPLEX_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice(DEFAULT_PERSONAPLEX_VOICE);
       }
-    } else if (voiceChatProvider === GOOGLE_PROVIDER) {
+    } else if (voiceChatProvider === GOOGLE_PROVIDER || voiceChatProvider === VERTEXAI_PROVIDER) {
       if (!GOOGLE_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice("Puck");
       }
@@ -1645,7 +1647,7 @@ export default function useVoiceChat({
             return;
           }
           const input = audioEvent.inputBuffer.getChannelData(0);
-          if ((voiceChatProvider === GOOGLE_PROVIDER || voiceChatLiveTranslate) && input.length > 0) {
+          if ((voiceChatProvider === GOOGLE_PROVIDER || voiceChatProvider === VERTEXAI_PROVIDER || voiceChatLiveTranslate) && input.length > 0) {
             let energy = 0;
             for (let index = 0; index < input.length; index += 1) {
               energy += input[index] * input[index];

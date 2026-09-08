@@ -55,7 +55,7 @@ export function isVoiceRealtimeModel(provider: string, model: string): boolean {
   if (normalizedProvider === "dashscope") {
     return normalizedModel.includes("realtime") || normalizedModel.includes("livetranslate");
   }
-  if (normalizedProvider === "google") {
+  if (normalizedProvider === "google" || normalizedProvider === "vertexai") {
     return (
       normalizedModel.includes("native-audio") ||
       normalizedModel.includes("live") ||

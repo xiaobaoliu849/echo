@@ -12,6 +12,7 @@ import {
   PERSONAPLEX_PROVIDER,
   PERSONAPLEX_REALTIME_VOICES,
   TAVUS_PROVIDER,
+  VERTEXAI_PROVIDER,
   getProviderBadge,
   getProviderSortOrder,
   resolveRealtimeProvider,
@@ -30,6 +31,7 @@ describe("resolveRealtimeProvider", () => {
   const allProviders = [
     DASHSCOPE_PROVIDER,
     GOOGLE_PROVIDER,
+    VERTEXAI_PROVIDER,
     TAVUS_PROVIDER,
     DOUBAO_PROVIDER,
     CARTESIA_PROVIDER,
@@ -65,6 +67,15 @@ describe("resolveRealtimeProvider", () => {
     );
   });
 
+  it("keeps VertexAI instead of falling back to Google", () => {
+    // Without VertexAI in the allow-list the picker would show "VertexAI" but
+    // the socket would connect with provider=Google, burning AI Studio quota —
+    // the exact bug this test guards against.
+    expect(resolveRealtimeProvider(VERTEXAI_PROVIDER, allProviders)).toBe(
+      VERTEXAI_PROVIDER,
+    );
+  });
+
   it("falls back only when the preferred provider is unavailable", () => {
     expect(resolveRealtimeProvider(PERSONAPLEX_PROVIDER, [DOUBAO_PROVIDER])).toBe(
       DOUBAO_PROVIDER,
@@ -81,7 +92,8 @@ describe("resolveRealtimeProvider", () => {
 
   it("assigns proper provider sort orders and capability badges", () => {
     expect(getProviderSortOrder("DashScope")).toBeLessThan(getProviderSortOrder("Google"));
-    expect(getProviderSortOrder("Google")).toBeLessThan(getProviderSortOrder("Tavus"));
+    expect(getProviderSortOrder("Google")).toBeLessThan(getProviderSortOrder("VertexAI"));
+    expect(getProviderSortOrder("VertexAI")).toBeLessThan(getProviderSortOrder("Tavus"));
     expect(getProviderSortOrder("Tavus")).toBeLessThan(getProviderSortOrder("OpenAI"));
     expect(getProviderSortOrder("OpenAI")).toBeLessThan(getProviderSortOrder("PersonaPlex"));
 
@@ -89,6 +101,7 @@ describe("resolveRealtimeProvider", () => {
     expect(getProviderBadge("DashScope", t)).toEqual({ label: "实时语音", type: "realtime" });
     expect(getProviderBadge("Gradium", t)).toEqual({ label: "实时语音", type: "realtime" });
     expect(getProviderBadge("Cartesia", t)).toEqual({ label: "实时语音", type: "realtime" });
+    expect(getProviderBadge("VertexAI", t)).toEqual({ label: "实时语音", type: "realtime" });
     expect(getProviderBadge("Tavus", t)).toEqual({ label: "视频分身", type: "video" });
     expect(getProviderBadge("PersonaPlex", t)).toEqual({ label: "本地实时", type: "local" });
     expect(getProviderBadge("GLM4Voice", t)).toEqual({ label: "本地实时", type: "local" });
