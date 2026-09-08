@@ -31,6 +31,7 @@ vi.mock("@lobehub/icons", async () => {
     DeepSeek: createMockIcon(),
     Gemini: createMockIcon(),
     Google: createMockIcon(),
+    VertexAI: createMockIcon(),
     Groq: createMockIcon(),
     OpenRouter: createMockIcon(),
     SiliconCloud: createMockIcon(),

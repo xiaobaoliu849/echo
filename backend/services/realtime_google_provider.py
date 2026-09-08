@@ -1016,6 +1016,7 @@ class GoogleRealtimeMixin:
         self,
         websocket: WebSocket,
         *,
+        provider: str = "Google",
         model: str | None = None,
         voice: str = DEFAULT_GOOGLE_REALTIME_VOICE,
         translation_mode: str = "bidirectional",
@@ -1023,11 +1024,11 @@ class GoogleRealtimeMixin:
         target_language_code: str = "en",
         echo_target_language: bool = True,
     ) -> None:
-        settings = self._resolve_google_settings(model)
+        settings = self._resolve_google_settings(model, provider=provider)
         memory_session = RealtimeMemorySession()
-        tool_session = VoiceAgentToolSession(default_provider="Google")
+        tool_session = VoiceAgentToolSession(default_provider=provider)
         recorder = await self._create_voice_session_recorder(
-            provider="Google",
+            provider=provider,
             model=settings["model"],
             voice=voice,
         )
@@ -1037,24 +1038,36 @@ class GoogleRealtimeMixin:
 
         api_key = settings["api_key"].strip()
         base_url = settings.get("base_url", "").strip()
-        is_vertex = "aiplatform.googleapis.com" in base_url
-        sa_file = "gen-lang-client-0313108616-b62670b6c2cb.json"
+        is_vertex = provider == "VertexAI"
+        sa_file = (
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+            or settings.get("sa_file", "").strip()
+            or "gen-lang-client-0313108616-b62670b6c2cb.json"
+        )
 
         if is_vertex:
-            if os.path.exists(sa_file):
+            if sa_file and os.path.exists(sa_file):
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
+                project_id = (
+                    settings.get("project_id", "").strip()
+                    or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                    or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                    or "gen-lang-client-0313108616"
+                )
+                location = settings.get("location", "").strip() or "us-central1"
                 client = genai.Client(
                     vertexai=True,
-                    project="gen-lang-client-0313108616",
-                    location="us-central1",
+                    project=project_id,
+                    location=location,
                 )
             else:
                 client = genai.Client(
                     vertexai=True,
-                    api_key=api_key,
+                    api_key=api_key or None,
                 )
         else:
-            client = genai.Client(api_key=api_key, http_options=http_options)
+            client_http_opts = http_options if http_options.get("base_url") else None
+            client = genai.Client(api_key=api_key, http_options=client_http_opts)
         is_live_translate = _is_google_live_translate_model(settings["model"])
         live_config = (
             self._build_live_translate_config(
@@ -1070,7 +1083,7 @@ class GoogleRealtimeMixin:
                 await self._send_event(
                     websocket,
                     "session_open",
-                    provider="Google",
+                    provider=provider,
                     model=settings["model"],
                     voice=voice,
                     session_id=recorder.session_id if recorder is not None else "",
@@ -1109,6 +1122,7 @@ class GoogleRealtimeMixin:
         except Exception as e:
             logger.exception("Google realtime session failed: %s", e)
             await self._send_event(websocket, "error", message=f"Google 实时会话启动失败: {str(e)}")
+            await asyncio.sleep(0.2)
             return
         finally:
             memory_result = await memory_session.flush_turn()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from services.api_auth_guard import validate_websocket_token
@@ -221,7 +221,7 @@ async def voice_chat_ws(
         )
         await websocket.close(code=1003)
         return
-    if selected_provider not in {"Google", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia", "Gradium"}:
+    if selected_provider not in {"Google", "VertexAI", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia", "Gradium"}:
         await websocket.send_json(
             {
                 "type": "error",
@@ -252,6 +252,9 @@ async def voice_chat_ws(
     elif selected_provider == "Google":
         if not _cfg.get_setting("google_api_key"):
             _missing.append("Google API Key")
+    elif selected_provider == "VertexAI":
+        if not _cfg.get_setting("vertex_api_key") and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            _missing.append("Vertex AI API Key")
     elif selected_provider == "OpenAI":
         if not _cfg.get_setting("openai_api_key"):
             _missing.append("OpenAI API Key")
@@ -335,9 +338,10 @@ async def voice_chat_ws(
                 model=model,
                 voice=(voice or DEFAULT_GLM4VOICE_REALTIME_VOICE).strip(),
             )
-        else:
+        elif selected_provider in {"Google", "VertexAI"}:
             await voice_chat_service.stream_google_session(
                 websocket,
+                provider=selected_provider,
                 model=model,
                 voice=(voice or DEFAULT_GOOGLE_REALTIME_VOICE).strip(),
                 translation_mode=(translation_mode or "bidirectional").strip(),
@@ -348,11 +352,13 @@ async def voice_chat_ws(
     except WebSocketDisconnect:
         pass
     except Exception as exc:
+        logger.exception("voice_chat_session_failed: %s", exc)
         try:
             await websocket.send_json({"type": "error", "message": str(exc)})
+            await asyncio.sleep(0.2)
         except Exception:
             pass
         try:
-            await websocket.close(code=1011)
+            await websocket.close(code=1011, reason=str(exc)[:100])
         except Exception:
             pass

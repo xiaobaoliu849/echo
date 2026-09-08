@@ -221,8 +221,11 @@ class TranscriptionService:
             key = str(self.config.peek_setting("google_api_key", "")).strip()
             if key:
                 return key
+            vertex_key = str(self.config.peek_setting("vertex_api_key", "")).strip()
+            if vertex_key:
+                return vertex_key
         import os
-        return (os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")).strip()
+        return (os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("VERTEX_API_KEY", "")).strip()
 
     def _google_interactions_base_url(self) -> str:
         if hasattr(self, "config") and self.config is not None:
@@ -232,16 +235,22 @@ class TranscriptionService:
         return "https://generativelanguage.googleapis.com/v1beta"
 
     def _openai_key(self) -> str:
-        self.config.reload()
-        return str(self.config.peek_setting("openai_api_key", "")).strip()
+        if hasattr(self, "config") and self.config is not None:
+            self.config.reload()
+            return str(self.config.peek_setting("openai_api_key", "")).strip()
+        return ""
 
     def _assemblyai_key(self) -> str:
-        self.config.reload()
-        return str(self.config.peek_setting("assemblyai_api_key", "")).strip()
+        if hasattr(self, "config") and self.config is not None:
+            self.config.reload()
+            return str(self.config.peek_setting("assemblyai_api_key", "")).strip()
+        return ""
 
     def _soniox_key(self) -> str:
-        self.config.reload()
-        return str(self.config.peek_setting("soniox_api_key", "")).strip()
+        if hasattr(self, "config") and self.config is not None:
+            self.config.reload()
+            return str(self.config.peek_setting("soniox_api_key", "")).strip()
+        return ""
 
     def _soniox_base_url(self) -> str:
         if hasattr(self, "config") and self.config is not None:
@@ -251,14 +260,18 @@ class TranscriptionService:
         return SONIOX_BASE_URL
 
     def _doubao_key(self) -> str:
-        self.config.reload()
-        # Only the dedicated doubao_access_token field (voice-console API Key);
-        # doubao_api_key is the Ark text-chat key, a different credential system.
-        return str(self.config.peek_setting("doubao_access_token", "")).strip()
+        if hasattr(self, "config") and self.config is not None:
+            self.config.reload()
+            # Only the dedicated doubao_access_token field (voice-console API Key);
+            # doubao_api_key is the Ark text-chat key, a different credential system.
+            return str(self.config.peek_setting("doubao_access_token", "")).strip()
+        return ""
 
     def _doubao_app_id(self) -> str:
-        self.config.reload()
-        return str(self.config.peek_setting("doubao_app_id", "")).strip()
+        if hasattr(self, "config") and self.config is not None:
+            self.config.reload()
+            return str(self.config.peek_setting("doubao_app_id", "")).strip()
+        return ""
 
     def _doubao_resource_id(self) -> str:
         self.config.reload()

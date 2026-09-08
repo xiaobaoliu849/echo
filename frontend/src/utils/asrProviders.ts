@@ -184,6 +184,7 @@ export function asrProviderLabel(provider: string | null | undefined, language: 
 
 export const ASR_ENGINE_PROVIDER_MAP: Record<string, { providerName: string; keyField: string; labelZh: string; labelEn: string }> = {
   google: { providerName: "Google", keyField: "google_api_key", labelZh: "Google Gemini", labelEn: "Google Gemini" },
+  vertexai: { providerName: "VertexAI", keyField: "vertex_api_key", labelZh: "Google Vertex AI", labelEn: "Google Vertex AI" },
   dashscope: { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
   deepgram: { providerName: "Deepgram", keyField: "deepgram_api_key", labelZh: "Deepgram", labelEn: "Deepgram" },
   soniox: { providerName: "Soniox", keyField: "soniox_api_key", labelZh: "Soniox", labelEn: "Soniox" },
@@ -201,6 +202,12 @@ export const ASR_ENGINE_PROVIDER_MAP: Record<string, { providerName: string; key
 
 export function isAsrEngineConfigured(engineId: string, settingsObj?: Record<string, any> | null): boolean {
   if (!settingsObj || engineId === "auto") return true;
+  if (engineId === "google" || engineId === "gemini-3.5-transcribe-live") {
+    return Boolean(
+      (typeof settingsObj.google_api_key === "string" && settingsObj.google_api_key.trim()) ||
+      (typeof settingsObj.vertex_api_key === "string" && settingsObj.vertex_api_key.trim())
+    );
+  }
   const target = ASR_ENGINE_PROVIDER_MAP[engineId];
   if (!target) return true;
   const val = settingsObj[target.keyField];

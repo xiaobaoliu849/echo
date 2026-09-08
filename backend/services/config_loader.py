@@ -47,6 +47,7 @@ PROVIDER_KEY_MAP = {
     # 1. High-Performance Realtime Voice & Video Cloud Providers
     "DashScope": "dashscope_api_key",
     "Google": "google_api_key",
+    "VertexAI": "vertex_api_key",
     "Tavus": "tavus_api_key",
     "Doubao": "doubao_api_key",
     "Cartesia": "cartesia_api_key",
@@ -75,6 +76,7 @@ GOOGLE_INTERACTIONS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta
 DEFAULT_BASE_URLS = {
     "DashScope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "Google": GOOGLE_INTERACTIONS_BASE_URL,
+    "VertexAI": "https://us-central1-aiplatform.googleapis.com/v1",
     "Tavus": "https://tavusapi.com",
     "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
     "Cartesia": "https://api.cartesia.ai",
@@ -104,6 +106,7 @@ PROVIDER_FALLBACK_MODELS = {
     "Groq": "llama-3.3-70b-versatile",
     "OpenAI": "gpt-4o-mini",
     "Google": "gemini-2.5-flash",
+    "VertexAI": "gemini-2.5-flash",
     "Doubao": "doubao-pro-32k",
     "Xiaomi": "mimo-v2-chat",
     "Ollama": "qwen2.5:7b",
@@ -318,10 +321,24 @@ class BackendConfig:
 
         selected_model = (model or "").strip() or self._extract_default_model(provider)
 
-        return {
+        res = {
             "provider": provider,
             "api_key": api_key,
             "base_url": base_url,
             "realtime_base_url": str(realtime_api_urls.get(provider, "")).strip().rstrip("/"),
             "model": selected_model,
         }
+        if provider == "VertexAI":
+            res["project_id"] = (
+                str(api_keys.get("vertex_project_id", "")).strip()
+                or str(self._config.get("vertex_project_id", "")).strip()
+                or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+            )
+            res["location"] = (
+                str(api_keys.get("vertex_location", "")).strip()
+                or str(self._config.get("vertex_location", "")).strip()
+                or os.environ.get("VERTEX_LOCATION", "").strip()
+                or "us-central1"
+            )
+        return res

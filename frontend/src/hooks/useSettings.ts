@@ -18,6 +18,7 @@ export const PROVIDER_API_KEY_FIELD: Record<string, string> = {
   // 1. High-Performance Realtime Voice & Video Cloud Providers
   DashScope: "dashscope_api_key",
   Google: "google_api_key",
+  VertexAI: "vertex_api_key",
   Tavus: "tavus_api_key",
   Doubao: "doubao_api_key",
   Cartesia: "cartesia_api_key",

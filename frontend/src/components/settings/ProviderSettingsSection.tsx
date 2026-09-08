@@ -12,7 +12,8 @@ type Props = {
 const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<string, string> => ({
   DashScope: t("阿里云 DashScope", "Alibaba DashScope"),
   DeepSeek: t("DeepSeek 深度求索", "DeepSeek"),
-  Google: t("Google Gemini", "Google Gemini"),
+  Google: t("Google AI Studio", "Google AI Studio"),
+  VertexAI: t("Google Vertex AI", "Google Vertex AI"),
   Groq: t("Groq 极速 API", "Groq Fast API"),
   OpenRouter: t("OpenRouter 聚合", "OpenRouter Aggregator"),
   SiliconFlow: t("硅基流动 SiliconFlow", "SiliconFlow"),
@@ -37,6 +38,7 @@ const getLobeProviderKey = (name: string): string => {
   if (lower.includes("siliconflow")) return "siliconcloud";
   if (lower === "xiaomi") return "xiaomimimo";
   if (lower === "google") return "google";
+  if (lower === "vertexai") return "vertexai";
   if (lower === "openai") return "openai";
   if (lower === "anthropic") return "anthropic";
   if (lower === "deepseek") return "deepseek";
@@ -54,7 +56,7 @@ const getLobeProviderKey = (name: string): string => {
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
-  qwen: "#6366f1", deepseek: "#4f46e5", google: "#4285f4", openai: "#10a37f",
+  qwen: "#6366f1", deepseek: "#4f46e5", google: "#4285f4", vertexai: "#1a73e8", openai: "#10a37f",
   groq: "#f55036", openrouter: "#8b5cf6", siliconcloud: "#7c3aed",
   xiaomimimo: "#ff6900", anthropic: "#d4a574", nvidia: "#76b900",
   ollama: "#6b7280", deepgram: "#13ef93", soniox: "#0052cc", zenmux: "#a855f7", tavus: "#6c5ce7",
@@ -260,9 +262,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
 
           {settings.settingsProvider === "Google" && (
             <div className="vsSettingsNotice ok" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6 }}>
-              <div><strong>{t("💡 Google Gemini 双模式已全面支持：", "💡 Google Gemini Dual Mode Supported:")}</strong></div>
-              <div style={{ marginTop: 4 }}>• 🟢 <strong>Google AI Studio Key（AIzaSy... 开头）</strong>：{t("用于实时双向语音通话（gemini-3.1-flash-live-preview）、实时同传（gemini-3.5-live-translate-preview），走每日免费配额。", "Used for realtime voice chat (gemini-3.1-flash-live-preview), live translation, with daily free quota.")}</div>
-              <div style={{ marginTop: 2 }}>• 🔵 <strong>Google Cloud Vertex AI Key（AQ... 开头）</strong>：{t("用于流式打字聊天与大模型推理（gemini-2.5-flash / gemini-2.5-pro），100% 消耗您的 $340 美元赠金！", "Used for streaming chat & reasoning (gemini-2.5-flash / pro), billing directly to your $340 Google Cloud credits!")}</div>
+              <div><strong>{t("🟢 Google AI Studio（个人免费 · 实时语音前沿）", "🟢 Google AI Studio (Free Tier · Live Voice)")}</strong></div>
+              <div style={{ marginTop: 4 }}>• {t("填入 AI Studio Key（新版通常以 AQ. 开头，旧版以 AIza... 开头），用于实时全双工双向语音通话，享受官方每日免费配额。", "Enter your AI Studio API key (new keys start with AQ., legacy start with AIza...) for realtime bidirectional voice chat with daily free quota.")}</div>
+            </div>
+          )}
+
+          {settings.settingsProvider === "VertexAI" && (
+            <div className="vsSettingsNotice ok" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6 }}>
+              <div><strong>{t("🔵 Google Cloud Vertex AI（企业云 · 赠金抵扣专区）", "🔵 Google Cloud Vertex AI (Enterprise Cloud · Credits)")}</strong></div>
+              <div style={{ marginTop: 4 }}>• {t("填入 Vertex API Key 或云端配置，用于文字长对话、高并发推理及官方流式听写/同传，100% 消耗您的 Google Cloud 赠金！", "Enter your Vertex API key or cloud credentials for chat reasoning and official streaming transcribe/translate, 100% billing to your Google Cloud credits!")}</div>
             </div>
           )}
 

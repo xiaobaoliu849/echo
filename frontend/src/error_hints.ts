@@ -156,6 +156,9 @@ export interface SuggestedProviderTarget {
 export function detectSuggestedProvider(message: string): SuggestedProviderTarget | null {
   const text = String(message || "").toLowerCase();
 
+  if (text.includes("vertex")) {
+    return { provider: "VertexAI", category: "provider", labelZh: "Google Vertex AI", labelEn: "Google Vertex AI" };
+  }
   if (text.includes("google") || text.includes("gemini")) {
     return { provider: "Google", category: "provider", labelZh: "Google Gemini", labelEn: "Google Gemini" };
   }
@@ -252,6 +255,12 @@ export function buildErrorHints(message: string): string[] {
 
   // Dynamic context-aware hints for TRANSCRIPTION
   if (code.startsWith("TRANSCRIPTION_")) {
+    if (/vertex/i.test(text)) {
+      return [
+        "Check vertex_api_key in Settings → Google Vertex AI.",
+        "Ensure Google Cloud Vertex AI API is enabled and outbound network proxy can connect."
+      ];
+    }
     if (/google|gemini/i.test(text)) {
       return [
         "Check google_api_key in Settings → Google Gemini.",

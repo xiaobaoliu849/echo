@@ -346,20 +346,31 @@ class GoogleStreamingAsrSession:
         api_key = self._api_key.strip()
         base_url = self._base_url or ""
         is_vertex = "aiplatform.googleapis.com" in base_url
-        sa_file = "gen-lang-client-0313108616-b62670b6c2cb.json"
+        sa_file = (
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+            or "gen-lang-client-0313108616-b62670b6c2cb.json"
+        )
 
         if is_vertex:
-            if os.path.exists(sa_file):
+            project_id = (
+                os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                or "gen-lang-client-0313108616"
+            )
+            location = os.environ.get("VERTEX_LOCATION", "").strip() or "us-central1"
+            if sa_file and os.path.exists(sa_file):
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
                 self._client = genai.Client(
                     vertexai=True,
-                    project="gen-lang-client-0313108616",
-                    location="us-central1",
+                    project=project_id,
+                    location=location,
                 )
             else:
                 self._client = genai.Client(
                     vertexai=True,
-                    api_key=api_key,
+                    project=project_id if project_id else None,
+                    location=location,
+                    api_key=api_key or None,
                 )
         else:
             self._client = genai.Client(api_key=api_key, http_options=http_options)
@@ -530,9 +541,13 @@ def build_streaming_asr_session(
 
     if _is_google_streaming_asr_model(resolved_model):
         api_key = str(api_keys.get("google_api_key", "")).strip()
-        if not api_key:
-            raise ValueError("Google API key not configured. Set google_api_key in Settings.")
+        vertex_key = str(api_keys.get("vertex_api_key", "")).strip()
         base_url = config.get_provider_settings("Google").get("base_url", "").strip()
+        if not api_key and vertex_key:
+            api_key = vertex_key
+            base_url = config.get_provider_settings("VertexAI").get("base_url", "").strip()
+        if not api_key and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            raise ValueError("Google API key not configured. Set google_api_key or vertex_api_key in Settings.")
         hint_cap = STREAMING_MODEL_LANGUAGE_HINT_CAPS.get(resolved_model, STREAMING_MAX_LANGUAGE_HINTS)
         if language_hints:
             language_hints = language_hints[:hint_cap]

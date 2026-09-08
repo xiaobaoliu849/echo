@@ -262,22 +262,29 @@ class RealtimeVoiceService(
 
     # -- settings resolution (checks module-level SDK availability) --------
 
-    def _resolve_google_settings(self, model: str | None) -> dict[str, str]:
-        provider_settings = self.config.get_provider_settings("Google", model)
+    def _resolve_google_settings(self, model: str | None, provider: str = "Google") -> dict[str, str]:
+        provider_settings = self.config.get_provider_settings(provider, model)
         resolved_model = provider_settings["model"].strip() or DEFAULT_GOOGLE_REALTIME_MODEL
         api_key = provider_settings["api_key"].strip()
         base_url = provider_settings["base_url"].strip()
+        if provider == "Google" and "aiplatform.googleapis.com" in base_url:
+            base_url = ""
         if _is_google_public_rest_base_url(base_url):
             base_url = ""
-        if not api_key:
-            raise RuntimeError("Google API Key 未配置，无法启动实时语音会话。")
+        if not api_key and not (provider == "VertexAI" and os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")):
+            raise RuntimeError(f"{provider} API Key 未配置，无法启动实时语音会话。")
         if genai is None or types is None:
             raise RuntimeError("google-genai 依赖未安装，无法启动实时语音会话。")
-        return {
+        res = {
+            "provider": provider,
             "api_key": api_key,
             "base_url": base_url,
             "model": resolved_model,
         }
+        if provider == "VertexAI":
+            res["project_id"] = provider_settings.get("project_id", "")
+            res["location"] = provider_settings.get("location", "us-central1")
+        return res
 
     def _resolve_dashscope_settings(self, model: str | None) -> dict[str, str]:
         provider_settings = self.config.get_provider_settings("DashScope", model)

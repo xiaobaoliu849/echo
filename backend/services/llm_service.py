@@ -15,7 +15,7 @@ from .evermem_config import EverMemConfig
 from .evermem_helper import prepare_memory_context, save_assistant_memory
 from .background_tasks import spawn_background_task
 
-SUPPORTED_PROVIDERS = {"DeepSeek", "OpenRouter", "SiliconFlow", "Groq", "DashScope", "Ollama", "Google"}
+SUPPORTED_PROVIDERS = {"DeepSeek", "OpenRouter", "SiliconFlow", "Groq", "DashScope", "Ollama", "Google", "VertexAI"}
 
 
 class LLMService:
@@ -258,13 +258,21 @@ class LLMService:
 
     @staticmethod
     def _is_vertex_ai(settings: dict[str, str]) -> bool:
+        if settings.get("provider") == "VertexAI":
+            return True
         base_url = settings.get("base_url", "").strip()
         return "aiplatform.googleapis.com" in base_url
 
     @staticmethod
-    def _get_vertex_auth(api_key: str = "") -> tuple[dict[str, str], str]:
-        sa_file = "gen-lang-client-0313108616-b62670b6c2cb.json"
-        if os.path.exists(sa_file):
+    def _get_vertex_auth(settings: dict[str, str] | None = None, api_key: str = "") -> tuple[dict[str, str], str]:
+        settings = settings or {}
+        resolved_key = api_key or settings.get("api_key", "")
+        sa_file = (
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+            or settings.get("sa_file", "").strip()
+            or "gen-lang-client-0313108616-b62670b6c2cb.json"
+        )
+        if sa_file and os.path.exists(sa_file):
             try:
                 from google.oauth2 import service_account
                 from google.auth.transport.requests import Request
@@ -278,7 +286,7 @@ class LLMService:
             except Exception as e:
                 logger.warning("vertex_sa_oauth_failed: %s", e)
         headers = {"Content-Type": "application/json"}
-        key_param = f"key={api_key}" if api_key else ""
+        key_param = f"key={resolved_key}" if resolved_key else ""
         return headers, key_param
 
     @staticmethod
@@ -324,11 +332,19 @@ class LLMService:
     ) -> dict[str, Any]:
         """Non-streaming chat completion via Google Interactions API or Vertex AI."""
         if self._is_vertex_ai(settings):
-            project_id = "gen-lang-client-0313108616"
-            model = settings.get("model", "").strip() or "gemini-3.7-flash"
-            location = "global" if model.startswith("gemini-3") else "us-central1"
+            project_id = (
+                settings.get("project_id", "").strip()
+                or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                or "gen-lang-client-0313108616"
+            )
+            model = settings.get("model", "").strip() or "gemini-2.5-flash"
+            location = (
+                settings.get("location", "").strip()
+                or ("global" if model.startswith("gemini-3") else "us-central1")
+            )
             host = "aiplatform.googleapis.com" if location == "global" else f"{location}-aiplatform.googleapis.com"
-            headers, key_param = self._get_vertex_auth(settings.get("api_key", ""))
+            headers, key_param = self._get_vertex_auth(settings, settings.get("api_key", ""))
             param_str = f"?{key_param}" if key_param else ""
             url = f"https://{host}/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:generateContent{param_str}"
             payload = self._build_vertex_payload(messages, temperature)
@@ -352,8 +368,9 @@ class LLMService:
             if not reply:
                 raise RuntimeError("Google Vertex AI returned empty response.")
 
+            provider_label = "VertexAI" if settings.get("provider") == "VertexAI" else "Google"
             return {
-                "provider": "Google",
+                "provider": provider_label,
                 "model": model,
                 "reply": reply,
                 "raw": data,
@@ -407,16 +424,25 @@ class LLMService:
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Streaming chat completion via Google Interactions API or Vertex AI (SSE)."""
         if self._is_vertex_ai(settings):
-            project_id = "gen-lang-client-0313108616"
-            model = settings.get("model", "").strip() or "gemini-3.7-flash"
-            location = "global" if model.startswith("gemini-3") else "us-central1"
+            project_id = (
+                settings.get("project_id", "").strip()
+                or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                or "gen-lang-client-0313108616"
+            )
+            model = settings.get("model", "").strip() or "gemini-2.5-flash"
+            location = (
+                settings.get("location", "").strip()
+                or ("global" if model.startswith("gemini-3") else "us-central1")
+            )
             host = "aiplatform.googleapis.com" if location == "global" else f"{location}-aiplatform.googleapis.com"
-            headers, key_param = self._get_vertex_auth(settings.get("api_key", ""))
+            headers, key_param = self._get_vertex_auth(settings, settings.get("api_key", ""))
             param_str = f"?{key_param}&alt=sse" if key_param else "?alt=sse"
             url = f"https://{host}/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:streamGenerateContent{param_str}"
             payload = self._build_vertex_payload(messages, temperature)
 
-            yield {"type": "meta", "provider": "Google", "model": model}
+            provider_label = "VertexAI" if settings.get("provider") == "VertexAI" else "Google"
+            yield {"type": "meta", "provider": provider_label, "model": model}
             chunks: list[str] = []
             try:
                 timeout = httpx.Timeout(timeout=120.0, read=120.0)
@@ -458,7 +484,7 @@ class LLMService:
 
             yield {
                 "type": "done",
-                "provider": "Google",
+                "provider": provider_label,
                 "model": model,
                 "reply": reply,
             }
@@ -576,8 +602,8 @@ class LLMService:
             normalized_messages, use_memory=use_memory,
         )
 
-        # Route Google provider to Interactions API
-        if provider == "Google":
+        # Route Google / VertexAI provider
+        if provider in {"Google", "VertexAI"}:
             result = await self._chat_completion_google(
                 settings=settings,
                 messages=normalized_messages,
@@ -658,8 +684,8 @@ class LLMService:
 
         normalized_messages = self._normalize_messages(messages)
 
-        # Route Google provider to Interactions API
-        if provider == "Google":
+        # Route Google / VertexAI provider
+        if provider in {"Google", "VertexAI"}:
             # EverMem integration (shared helper, two-stage search for streaming)
             mem_ctx = await prepare_memory_context(
                 normalized_messages,
@@ -679,7 +705,7 @@ class LLMService:
                     save_assistant_memory(mem_ctx, reply, reasoner=self.reason_about_text)
                     yield {
                         "type": "done",
-                        "provider": "Google",
+                        "provider": provider,
                         "model": settings["model"],
                         "reply": reply,
                         "memories_retrieved": mem_ctx.memories_retrieved,
