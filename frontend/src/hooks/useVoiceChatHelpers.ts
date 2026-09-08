@@ -53,7 +53,9 @@ type AudioContextWindow = Window & {
 };
 
 export const GOOGLE_PROVIDER = "Google";
-export const VERTEXAI_PROVIDER = "VertexAI";
+// Google 已将 Vertex AI 更名为 Google Agent Platform；canonical provider key
+// 为 "AgentPlatform"（后端仍兼容旧 key "VertexAI"）。
+export const AGENT_PLATFORM_PROVIDER = "AgentPlatform";
 export const DASHSCOPE_PROVIDER = "DashScope";
 export const OPENAI_PROVIDER = "OpenAI";
 export const DOUBAO_PROVIDER = "Doubao";
@@ -64,9 +66,19 @@ export const GRADIUM_PROVIDER = "Gradium";
 export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
-export const VERTEXAI_FLASH_LIVE_MODEL = "gemini-live-2.5-flash-native-audio";
+export const AGENT_PLATFORM_FLASH_LIVE_MODEL = "gemini-live-2.5-flash-native-audio";
 export const DEFAULT_GOOGLE_MODEL = GOOGLE_FLASH_LIVE_MODEL;
-export const DEFAULT_VERTEXAI_MODEL = VERTEXAI_FLASH_LIVE_MODEL;
+export const DEFAULT_AGENT_PLATFORM_MODEL = AGENT_PLATFORM_FLASH_LIVE_MODEL;
+
+// 旧 provider key → canonical key（后端同样接受旧 key，前端边界处归一化）。
+const LEGACY_PROVIDER_ALIASES: Record<string, string> = {
+  VertexAI: AGENT_PLATFORM_PROVIDER,
+};
+
+export function normalizeProviderKey(provider: string): string {
+  const trimmed = (provider || "").trim();
+  return LEGACY_PROVIDER_ALIASES[trimmed] ?? trimmed;
+}
 export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
@@ -529,7 +541,7 @@ export function formatLiveTranslateLanguageOptions(language: UiLanguage): Array<
 export const CANONICAL_PROVIDER_ORDER = [
   "DashScope",
   "Google",
-  "VertexAI",
+  "AgentPlatform",
   "Tavus",
   "Doubao",
   "Cartesia",
@@ -627,7 +639,7 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   const realtimeProviders = [
     DASHSCOPE_PROVIDER,
     GOOGLE_PROVIDER,
-    VERTEXAI_PROVIDER,
+    AGENT_PLATFORM_PROVIDER,
     TAVUS_PROVIDER,
     DOUBAO_PROVIDER,
     CARTESIA_PROVIDER,
@@ -636,8 +648,11 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
   ];
-  if (preferredProvider && realtimeProviders.includes(preferredProvider) && providerOptions.includes(preferredProvider)) {
-    return preferredProvider;
+  // Legacy keys (e.g. "VertexAI" persisted by an older build) resolve to their
+  // canonical provider before matching against the realtime allow-list.
+  const preferred = preferredProvider ? normalizeProviderKey(preferredProvider) : preferredProvider;
+  if (preferred && realtimeProviders.includes(preferred) && providerOptions.includes(preferred)) {
+    return preferred;
   }
   if (providerOptions.includes(DASHSCOPE_PROVIDER)) {
     return DASHSCOPE_PROVIDER;
@@ -645,8 +660,8 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   if (providerOptions.includes(GOOGLE_PROVIDER)) {
     return GOOGLE_PROVIDER;
   }
-  if (providerOptions.includes(VERTEXAI_PROVIDER)) {
-    return VERTEXAI_PROVIDER;
+  if (providerOptions.includes(AGENT_PLATFORM_PROVIDER)) {
+    return AGENT_PLATFORM_PROVIDER;
   }
   if (providerOptions.includes(TAVUS_PROVIDER)) {
     return TAVUS_PROVIDER;
@@ -703,8 +718,8 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
            /^qwen3\.5-livetranslate-(flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel);
   }
   if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase() ||
-      normalizedProvider === VERTEXAI_PROVIDER.toLowerCase() ||
-      normalizedProvider === "agentplatform") {
+      normalizedProvider === AGENT_PLATFORM_PROVIDER.toLowerCase() ||
+      normalizedProvider === "vertexai") {
     return SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS.some((item) => normalizedModel.includes(item));
   }
   if (normalizedProvider === OPENAI_PROVIDER.toLowerCase()) {
@@ -717,8 +732,8 @@ export function isLiveTranslateModel(provider: string, model: string): boolean {
   const normalizedProvider = provider.trim().toLowerCase();
   const normalizedModel = model.trim().toLowerCase();
   if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase() ||
-      normalizedProvider === VERTEXAI_PROVIDER.toLowerCase() ||
-      normalizedProvider === "agentplatform") {
+      normalizedProvider === AGENT_PLATFORM_PROVIDER.toLowerCase() ||
+      normalizedProvider === "vertexai") {
     return normalizedModel.includes("live-translate");
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
@@ -733,34 +748,35 @@ export function isLiveTranslateModel(provider: string, model: string): boolean {
 }
 
 export function resolveRealtimeFallbackModel(provider: string): string {
-  if (provider === DASHSCOPE_PROVIDER) {
+  const normalized = normalizeProviderKey(provider);
+  if (normalized === DASHSCOPE_PROVIDER) {
     return DEFAULT_DASHSCOPE_MODEL;
   }
-  if (provider === GOOGLE_PROVIDER) {
+  if (normalized === GOOGLE_PROVIDER) {
     return DEFAULT_GOOGLE_MODEL;
   }
-  if (provider === VERTEXAI_PROVIDER) {
-    return DEFAULT_VERTEXAI_MODEL;
+  if (normalized === AGENT_PLATFORM_PROVIDER) {
+    return DEFAULT_AGENT_PLATFORM_MODEL;
   }
-  if (provider === OPENAI_PROVIDER) {
+  if (normalized === OPENAI_PROVIDER) {
     return DEFAULT_OPENAI_MODEL;
   }
-  if (provider === DOUBAO_PROVIDER) {
+  if (normalized === DOUBAO_PROVIDER) {
     return DEFAULT_DOUBAO_MODEL;
   }
-  if (provider === PERSONAPLEX_PROVIDER) {
+  if (normalized === PERSONAPLEX_PROVIDER) {
     return DEFAULT_PERSONAPLEX_MODEL;
   }
-  if (provider === GLM4VOICE_PROVIDER) {
+  if (normalized === GLM4VOICE_PROVIDER) {
     return DEFAULT_GLM4VOICE_MODEL;
   }
-  if (provider === CARTESIA_PROVIDER) {
+  if (normalized === CARTESIA_PROVIDER) {
     return DEFAULT_CARTESIA_MODEL;
   }
-  if (provider === GRADIUM_PROVIDER) {
+  if (normalized === GRADIUM_PROVIDER) {
     return DEFAULT_GRADIUM_MODEL;
   }
-  if (provider === TAVUS_PROVIDER) {
+  if (normalized === TAVUS_PROVIDER) {
     return DEFAULT_TAVUS_MODEL;
   }
   return "";
@@ -770,6 +786,8 @@ export function resolveRealtimeModelOptions(
   provider: string,
   providerModelCatalog: ProviderModelCatalog
 ): string[] {
+  // Canonicalize legacy keys so catalog lookups and built-ins keep working.
+  provider = normalizeProviderKey(provider);
   const providerMeta = providerModelCatalog[provider];
   const enabledModels = Array.isArray(providerMeta?.enabledModels)
     ? providerMeta.enabledModels.map((item) => item.trim()).filter(Boolean)
@@ -794,7 +812,7 @@ export function resolveRealtimeModelOptions(
         "gemini-2.5-flash-native-audio-preview-12-2025",
       ]
     : [];
-  const vertexBuiltIns = provider === VERTEXAI_PROVIDER
+  const agentPlatformBuiltIns = provider === AGENT_PLATFORM_PROVIDER
     ? [
         "gemini-live-2.5-flash-native-audio",
         "gemini-3.5-live-translate-preview",
@@ -832,7 +850,7 @@ export function resolveRealtimeModelOptions(
     : [];
   const allBuiltIns = [
     ...googleBuiltIns,
-    ...vertexBuiltIns,
+    ...agentPlatformBuiltIns,
     ...openaiBuiltIns,
     ...dashscopeBuiltIns,
     ...doubaoBuiltIns,

@@ -14,7 +14,9 @@ import struct
 # ---------------------------------------------------------------------------
 
 DEFAULT_GOOGLE_REALTIME_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
-DEFAULT_VERTEXAI_REALTIME_MODEL = "gemini-live-2.5-flash-native-audio"
+DEFAULT_AGENT_PLATFORM_REALTIME_MODEL = "gemini-live-2.5-flash-native-audio"
+# Back-compat alias (Vertex AI 已更名为 Google Agent Platform)。
+DEFAULT_VERTEXAI_REALTIME_MODEL = DEFAULT_AGENT_PLATFORM_REALTIME_MODEL
 DEFAULT_GOOGLE_REALTIME_VOICE = "Puck"
 # Voices supported by Google Gemini Multimodal Live API (30 prebuilt voices).
 GOOGLE_REALTIME_VOICES = (

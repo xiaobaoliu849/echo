@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 from fastapi import WebSocket
 
-from .config_loader import BackendConfig
+from .config_loader import BackendConfig, normalize_provider_name
 from .interruption_classifier import (
     InterruptionClassifier,
     InterruptionDecisionCoordinator,
@@ -78,6 +78,7 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     DEFAULT_DASHSCOPE_REALTIME_MODEL,
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_GOOGLE_REALTIME_MODEL,
+    DEFAULT_AGENT_PLATFORM_REALTIME_MODEL,
     DEFAULT_VERTEXAI_REALTIME_MODEL,
     DEFAULT_GOOGLE_REALTIME_VOICE,
     DEFAULT_OPENAI_REALTIME_MODEL,
@@ -272,8 +273,9 @@ class RealtimeVoiceService(
     # -- settings resolution (checks module-level SDK availability) --------
 
     def _resolve_google_settings(self, model: str | None, provider: str = "Google") -> dict[str, str]:
+        provider = normalize_provider_name(provider)
         provider_settings = self.config.get_provider_settings(provider, model)
-        default_realtime_model = DEFAULT_VERTEXAI_REALTIME_MODEL if provider == "VertexAI" else DEFAULT_GOOGLE_REALTIME_MODEL
+        default_realtime_model = DEFAULT_AGENT_PLATFORM_REALTIME_MODEL if provider == "AgentPlatform" else DEFAULT_GOOGLE_REALTIME_MODEL
         resolved_model = provider_settings["model"].strip() or default_realtime_model
         api_key = provider_settings["api_key"].strip()
         base_url = provider_settings["base_url"].strip()
@@ -281,7 +283,7 @@ class RealtimeVoiceService(
             base_url = ""
         if _is_google_public_rest_base_url(base_url):
             base_url = ""
-        if not api_key and not (provider == "VertexAI" and os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")):
+        if not api_key and not (provider == "AgentPlatform" and os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")):
             raise RuntimeError(f"{provider} API Key 未配置，无法启动实时语音会话。")
         if genai is None or types is None:
             raise RuntimeError("google-genai 依赖未安装，无法启动实时语音会话。")
@@ -291,7 +293,7 @@ class RealtimeVoiceService(
             "base_url": base_url,
             "model": resolved_model,
         }
-        if provider == "VertexAI":
+        if provider == "AgentPlatform":
             res["project_id"] = provider_settings.get("project_id", "")
             res["location"] = provider_settings.get("location", "us-central1")
         return res

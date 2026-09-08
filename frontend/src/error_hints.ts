@@ -157,7 +157,7 @@ export function detectSuggestedProvider(message: string): SuggestedProviderTarge
   const text = String(message || "").toLowerCase();
 
   if (text.includes("vertex") || text.includes("agent platform")) {
-    return { provider: "VertexAI", category: "provider", labelZh: "Google Agent Platform", labelEn: "Google Agent Platform" };
+    return { provider: "AgentPlatform", category: "provider", labelZh: "Google Agent Platform", labelEn: "Google Agent Platform" };
   }
   if (text.includes("google") || text.includes("gemini")) {
     return { provider: "Google", category: "provider", labelZh: "Google Gemini", labelEn: "Google Gemini" };

@@ -47,7 +47,7 @@ PROVIDER_KEY_MAP = {
     # 1. High-Performance Realtime Voice & Video Cloud Providers
     "DashScope": "dashscope_api_key",
     "Google": "google_api_key",
-    "VertexAI": "vertex_api_key",
+    "AgentPlatform": "vertex_api_key",
     "Tavus": "tavus_api_key",
     "Doubao": "doubao_api_key",
     "Cartesia": "cartesia_api_key",
@@ -71,12 +71,48 @@ PROVIDER_KEY_MAP = {
     "GPT-SoVITS": "gpt_sovits_api_key",
 }
 
+# Google 已将 Vertex AI 更名为 Google Agent Platform。canonical provider key
+# 为 "AgentPlatform"；旧 key "VertexAI"（历史 config.json / 旧版前端 WS 参数）
+# 在所有边界处归一化，保证向后兼容。
+AGENT_PLATFORM_PROVIDER = "AgentPlatform"
+PROVIDER_ALIASES = {
+    "VertexAI": AGENT_PLATFORM_PROVIDER,
+}
+
+
+def normalize_provider_name(provider: str) -> str:
+    """Map legacy provider keys to their canonical name (VertexAI → AgentPlatform)."""
+    stripped = (provider or "").strip()
+    return PROVIDER_ALIASES.get(stripped, stripped)
+
+
+# Sections whose top-level keys are provider names and therefore need
+# legacy-key migration when config.json is loaded.
+_PROVIDER_KEYED_SECTIONS = ("api_urls", "realtime_api_urls", "default_models")
+
+
+def migrate_provider_aliases(config: dict[str, Any]) -> None:
+    """Rename legacy provider keys inside provider-keyed config sections in place."""
+    for section in _PROVIDER_KEYED_SECTIONS:
+        data = config.get(section)
+        if not isinstance(data, dict):
+            continue
+        for legacy, canonical in PROVIDER_ALIASES.items():
+            if legacy not in data:
+                continue
+            if canonical not in data:
+                data[canonical] = data.pop(legacy)
+            else:
+                # canonical 已存在：以 canonical 为准，丢弃旧键避免双写。
+                data.pop(legacy)
+
+
 GOOGLE_INTERACTIONS_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 DEFAULT_BASE_URLS = {
     "DashScope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "Google": GOOGLE_INTERACTIONS_BASE_URL,
-    "VertexAI": "https://us-central1-aiplatform.googleapis.com/v1",
+    "AgentPlatform": "https://us-central1-aiplatform.googleapis.com/v1",
     "Tavus": "https://tavusapi.com",
     "Doubao": "https://ark.cn-beijing.volces.com/api/v3",
     "Cartesia": "https://api.cartesia.ai",
@@ -106,7 +142,7 @@ PROVIDER_FALLBACK_MODELS = {
     "Groq": "llama-3.3-70b-versatile",
     "OpenAI": "gpt-4o-mini",
     "Google": "gemini-2.5-flash",
-    "VertexAI": "gemini-2.5-flash",
+    "AgentPlatform": "gemini-2.5-flash",
     "Doubao": "doubao-pro-32k",
     "Xiaomi": "mimo-v2-chat",
     "Ollama": "qwen2.5:7b",
@@ -144,6 +180,7 @@ class BackendConfig:
             # 主文件缺失但备份还在（异常中断的极端情况）——从备份恢复。
             restored = self._load_json(self._backup_path) if self._backup_path.exists() else None
             if restored is not None:
+                migrate_provider_aliases(restored)
                 self._config = restored
                 self._disk_unreadable = False
             else:
@@ -167,6 +204,7 @@ class BackendConfig:
                     else None
                 )
                 if backup_loaded is not None:
+                    migrate_provider_aliases(backup_loaded)
                     self._config = backup_loaded
                     self._disk_unreadable = False
                 else:
@@ -175,6 +213,7 @@ class BackendConfig:
                     self._disk_unreadable = True
             # mtime 不更新：下次 reload 会重试读取，外部修复文件后能自动恢复。
             return
+        migrate_provider_aliases(loaded)
         self._config = loaded
         self._disk_unreadable = False
         self._mtime = mtime
@@ -279,11 +318,12 @@ class BackendConfig:
 
     def get_provider_settings(self, provider: str, model: str | None = None) -> dict[str, str]:
         self.reload()
-        
-        # Check custom providers first
+
+        # Check custom providers first (matched against the raw caller-supplied
+        # id; builtin alias normalization below must not hijack custom ids).
         custom_providers = self._config.get("custom_providers", [])
         custom_prov = next((p for p in custom_providers if isinstance(p, dict) and p.get("id") == provider), None)
-        
+
         if custom_prov:
             api_key = str(custom_prov.get("api_key", "")).strip()
             base_url = str(custom_prov.get("base_url", "")).strip()
@@ -311,6 +351,7 @@ class BackendConfig:
         api_urls = self._config.get("api_urls", {})
         realtime_api_urls = self._config.get("realtime_api_urls", {})
 
+        provider = normalize_provider_name(provider)
         key_field = PROVIDER_KEY_MAP.get(provider)
         api_key = str(api_keys.get(key_field, "")).strip() if key_field else ""
 
@@ -328,7 +369,7 @@ class BackendConfig:
             "realtime_base_url": str(realtime_api_urls.get(provider, "")).strip().rstrip("/"),
             "model": selected_model,
         }
-        if provider == "VertexAI":
+        if provider == AGENT_PLATFORM_PROVIDER:
             res["project_id"] = (
                 str(api_keys.get("vertex_project_id", "")).strip()
                 or str(self._config.get("vertex_project_id", "")).strip()

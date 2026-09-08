@@ -214,7 +214,8 @@ async def voice_chat_ws(
         return
     await websocket.accept()
 
-    selected_provider = (provider or "DashScope").strip()
+    from services.config_loader import normalize_provider_name
+    selected_provider = normalize_provider_name((provider or "DashScope").strip())
     if selected_provider == "Tavus":
         await websocket.send_json(
             {
@@ -225,7 +226,7 @@ async def voice_chat_ws(
         )
         await websocket.close(code=1003)
         return
-    if selected_provider not in {"Google", "VertexAI", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia", "Gradium"}:
+    if selected_provider not in {"Google", "AgentPlatform", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia", "Gradium"}:
         await websocket.send_json(
             {
                 "type": "error",
@@ -256,9 +257,9 @@ async def voice_chat_ws(
     elif selected_provider == "Google":
         if not _cfg.get_setting("google_api_key"):
             _missing.append("Google API Key")
-    elif selected_provider == "VertexAI":
+    elif selected_provider == "AgentPlatform":
         if not _cfg.get_setting("vertex_api_key") and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            _missing.append("Vertex AI API Key")
+            _missing.append("Google Agent Platform API Key")
     elif selected_provider == "OpenAI":
         if not _cfg.get_setting("openai_api_key"):
             _missing.append("OpenAI API Key")
@@ -342,7 +343,7 @@ async def voice_chat_ws(
                 model=model,
                 voice=(voice or DEFAULT_GLM4VOICE_REALTIME_VOICE).strip(),
             )
-        elif selected_provider in {"Google", "VertexAI"}:
+        elif selected_provider in {"Google", "AgentPlatform"}:
             await voice_chat_service.stream_google_session(
                 websocket,
                 provider=selected_provider,

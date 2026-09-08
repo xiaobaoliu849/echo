@@ -1076,7 +1076,7 @@ class GoogleRealtimeMixin:
 
         api_key = settings["api_key"].strip()
         base_url = settings.get("base_url", "").strip()
-        is_vertex = provider == "VertexAI"
+        is_vertex = provider in {"AgentPlatform", "VertexAI"}
         sa_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip() or settings.get("sa_file", "").strip()
         if not sa_file or not os.path.exists(sa_file):
             for candidate in [

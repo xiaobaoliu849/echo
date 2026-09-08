@@ -552,7 +552,7 @@ def build_streaming_asr_session(
         base_url = config.get_provider_settings("Google").get("base_url", "").strip()
         if not api_key and vertex_key:
             api_key = vertex_key
-            base_url = config.get_provider_settings("VertexAI").get("base_url", "").strip()
+            base_url = config.get_provider_settings("AgentPlatform").get("base_url", "").strip()
         if not api_key and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
             raise ValueError("Google API key not configured. Set google_api_key or vertex_api_key in Settings.")
         hint_cap = STREAMING_MODEL_LANGUAGE_HINT_CAPS.get(resolved_model, STREAMING_MAX_LANGUAGE_HINTS)

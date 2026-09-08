@@ -254,7 +254,7 @@ GRADIUM_MODEL_LIST_SUPPLEMENTS = [
     "gradium-realtime",
     "default",
 ]
-VERTEXAI_MODEL_LIST_SUPPLEMENTS = [
+AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS = [
     # Mainline and frontier text/multimodal models
     "gemini-3.8-flash",
     "gemini-3.7-flash",
@@ -268,6 +268,8 @@ VERTEXAI_MODEL_LIST_SUPPLEMENTS = [
     # Audio transcription models (Live API)
     "gemini-3.5-transcribe-live",
 ]
+# Back-compat alias (Vertex AI 已更名为 Google Agent Platform)。
+VERTEXAI_MODEL_LIST_SUPPLEMENTS = AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS
 GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
 
 
@@ -480,6 +482,8 @@ def _merge_dashscope_supplements(ds_entry: dict[str, Any]) -> None:
     },
 )
 async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModelsResponse:
+    from services.config_loader import normalize_provider_name
+    provider = normalize_provider_name(provider)
     cfg_settings = {}
     try:
         cfg_settings = settings_service.config.get_provider_settings(provider)
@@ -529,11 +533,11 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
-        if provider == "VertexAI":
+        if provider == "AgentPlatform":
             return FetchModelsResponse(
                 provider=provider,
-                models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
-                tts_models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+                models=[m for m in AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
         raise HTTPException(
             status_code=400,
@@ -594,11 +598,11 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             headers["HTTP-Referer"] = "https://echo.local"
             headers["X-Title"] = "Echo"
 
-    if provider == "VertexAI" and "aiplatform.googleapis.com" in base_url:
+    if provider == "AgentPlatform" and "aiplatform.googleapis.com" in base_url:
         return FetchModelsResponse(
             provider=provider,
-            models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
-            tts_models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            models=[m for m in AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+            tts_models=[m for m in AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
         )
 
     import httpx
@@ -628,13 +632,13 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
-        if provider == "VertexAI":
-            # Vertex AI has no un-scoped /v1/models endpoint.
-            # Fall back gracefully to curated VERTEXAI_MODEL_LIST_SUPPLEMENTS.
+        if provider == "AgentPlatform":
+            # Vertex AI (Google Agent Platform) has no un-scoped /v1/models endpoint.
+            # Fall back gracefully to curated AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS.
             return FetchModelsResponse(
                 provider=provider,
-                models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
-                tts_models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+                models=[m for m in AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
         detail = exc.response.text[:500] if exc.response is not None else str(exc)
         raise HTTPException(
@@ -705,8 +709,8 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             model_ids.extend(DASHSCOPE_MODEL_LIST_SUPPLEMENTS)
         elif provider == "Doubao":
             model_ids.extend(DOUBAO_MODEL_LIST_SUPPLEMENTS)
-        elif provider == "VertexAI":
-            model_ids.extend(VERTEXAI_MODEL_LIST_SUPPLEMENTS)
+        elif provider == "AgentPlatform":
+            model_ids.extend(AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS)
 
         model_ids = sorted(list(set(model_ids)))
         tts_ids = [m for m in model_ids if _is_tts_model_id(m)]

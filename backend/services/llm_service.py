@@ -11,12 +11,12 @@ import httpx # type: ignore
 
 logger = logging.getLogger(__name__)
 
-from .config_loader import BackendConfig, PROVIDER_KEY_MAP, PROVIDER_FALLBACK_MODELS
+from .config_loader import BackendConfig, PROVIDER_KEY_MAP, PROVIDER_FALLBACK_MODELS, normalize_provider_name
 from .evermem_config import EverMemConfig
 from .evermem_helper import prepare_memory_context, save_assistant_memory
 from .background_tasks import spawn_background_task
 
-SUPPORTED_PROVIDERS = {"DeepSeek", "OpenRouter", "SiliconFlow", "Groq", "DashScope", "Ollama", "Google", "VertexAI"}
+SUPPORTED_PROVIDERS = {"DeepSeek", "OpenRouter", "SiliconFlow", "Groq", "DashScope", "Ollama", "Google", "AgentPlatform"}
 
 
 class LLMService:
@@ -146,9 +146,14 @@ class LLMService:
     def _resolve_settings(self, provider: str, model: str | None) -> dict[str, str]:
         self.config.reload()
 
-        # Check if custom provider
+        # Check if custom provider (matched against the raw caller-supplied id;
+        # builtin alias normalization below must not hijack custom ids).
         custom_providers = self.config.get_all().get("custom_providers", [])
         is_custom = any(p.get("id") == provider for p in custom_providers if isinstance(p, dict))
+
+        # Legacy provider aliases (e.g. "VertexAI") resolve to the canonical key.
+        if not is_custom:
+            provider = normalize_provider_name(provider)
 
         if provider not in SUPPORTED_PROVIDERS and not is_custom:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -259,7 +264,7 @@ class LLMService:
 
     @staticmethod
     def _is_vertex_ai(settings: dict[str, str]) -> bool:
-        if settings.get("provider") == "VertexAI":
+        if settings.get("provider") in {"AgentPlatform", "VertexAI"}:
             return True
         base_url = settings.get("base_url", "").strip()
         return "aiplatform.googleapis.com" in base_url
@@ -374,7 +379,7 @@ class LLMService:
             if not reply:
                 raise RuntimeError("Google Vertex AI returned empty response.")
 
-            provider_label = "VertexAI" if settings.get("provider") == "VertexAI" else "Google"
+            provider_label = "AgentPlatform" if settings.get("provider") in {"AgentPlatform", "VertexAI"} else "Google"
             return {
                 "provider": provider_label,
                 "model": model,
@@ -447,7 +452,7 @@ class LLMService:
             url = f"https://{host}/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model}:streamGenerateContent{param_str}"
             payload = self._build_vertex_payload(messages, temperature)
 
-            provider_label = "VertexAI" if settings.get("provider") == "VertexAI" else "Google"
+            provider_label = "AgentPlatform" if settings.get("provider") in {"AgentPlatform", "VertexAI"} else "Google"
             yield {"type": "meta", "provider": provider_label, "model": model}
             chunks: list[str] = []
             try:
@@ -608,8 +613,8 @@ class LLMService:
             normalized_messages, use_memory=use_memory,
         )
 
-        # Route Google / VertexAI provider
-        if provider in {"Google", "VertexAI"}:
+        # Route Google / AgentPlatform provider
+        if provider in {"Google", "AgentPlatform", "VertexAI"}:
             result = await self._chat_completion_google(
                 settings=settings,
                 messages=normalized_messages,
@@ -690,8 +695,8 @@ class LLMService:
 
         normalized_messages = self._normalize_messages(messages)
 
-        # Route Google / VertexAI provider
-        if provider in {"Google", "VertexAI"}:
+        # Route Google / AgentPlatform provider
+        if provider in {"Google", "AgentPlatform", "VertexAI"}:
             # EverMem integration (shared helper, two-stage search for streaming)
             mem_ctx = await prepare_memory_context(
                 normalized_messages,

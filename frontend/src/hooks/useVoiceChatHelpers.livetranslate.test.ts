@@ -5,7 +5,7 @@ import {
   formatVoiceChatSecondaryLabel,
   DASHSCOPE_PROVIDER,
   GOOGLE_PROVIDER,
-  VERTEXAI_PROVIDER,
+  AGENT_PLATFORM_PROVIDER,
 } from "./useVoiceChatHelpers";
 
 describe("isLiveTranslateModel", () => {
@@ -13,8 +13,8 @@ describe("isLiveTranslateModel", () => {
     expect(isLiveTranslateModel(GOOGLE_PROVIDER, "gemini-3.5-live-translate-preview")).toBe(true);
   });
 
-  it("recognizes VertexAI live-translate models (same model catalog as Google)", () => {
-    expect(isLiveTranslateModel(VERTEXAI_PROVIDER, "gemini-3.5-live-translate-preview")).toBe(true);
+  it("recognizes AgentPlatform live-translate models (same model catalog as Google)", () => {
+    expect(isLiveTranslateModel(AGENT_PLATFORM_PROVIDER, "gemini-3.5-live-translate-preview")).toBe(true);
   });
 
   it("recognizes DashScope livetranslate models (3.5 only; legacy qwen3 removed)", () => {
@@ -48,15 +48,15 @@ describe("isRealtimeVoiceModel (DashScope livetranslate)", () => {
     expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen-plus")).toBe(false);
   });
 
-  it("recognizes VertexAI native-audio and live models as realtime", () => {
-    expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-live-2.5-flash-native-audio")).toBe(true);
-    expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-3.5-transcribe-live")).toBe(true);
-    expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-3.5-live-translate-preview")).toBe(true);
+  it("recognizes AgentPlatform native-audio and live models as realtime", () => {
+    expect(isRealtimeVoiceModel(AGENT_PLATFORM_PROVIDER, "gemini-live-2.5-flash-native-audio")).toBe(true);
+    expect(isRealtimeVoiceModel(AGENT_PLATFORM_PROVIDER, "gemini-3.5-transcribe-live")).toBe(true);
+    expect(isRealtimeVoiceModel(AGENT_PLATFORM_PROVIDER, "gemini-3.5-live-translate-preview")).toBe(true);
   });
 
-  it("rejects non-realtime VertexAI models", () => {
-    expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-2.5-flash")).toBe(false);
-    expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-2.5-pro")).toBe(false);
+  it("rejects non-realtime AgentPlatform models", () => {
+    expect(isRealtimeVoiceModel(AGENT_PLATFORM_PROVIDER, "gemini-2.5-flash")).toBe(false);
+    expect(isRealtimeVoiceModel(AGENT_PLATFORM_PROVIDER, "gemini-2.5-pro")).toBe(false);
   });
 });
 

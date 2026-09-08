@@ -312,7 +312,7 @@ export function createSettingsController(
     providerModelCatalog: {
       DashScope: { defaultModel: "qwen-plus", availableModels: ["qwen-plus", "qwen-max"], enabledModels: ["qwen-plus", "qwen-max"], ttsDefaultModel: "", ttsAvailableModels: [], ttsEnabledModels: [] },
       Google: { defaultModel: "gemini-2.5-flash", availableModels: ["gemini-2.5-flash"], enabledModels: ["gemini-2.5-flash"], ttsDefaultModel: "", ttsAvailableModels: [], ttsEnabledModels: [] },
-      VertexAI: { defaultModel: "gemini-2.5-flash", availableModels: ["gemini-2.5-flash"], enabledModels: ["gemini-2.5-flash"], ttsDefaultModel: "", ttsAvailableModels: [], ttsEnabledModels: [] },
+      AgentPlatform: { defaultModel: "gemini-2.5-flash", availableModels: ["gemini-2.5-flash"], enabledModels: ["gemini-2.5-flash"], ttsDefaultModel: "", ttsAvailableModels: [], ttsEnabledModels: [] },
       Xiaomi: { defaultModel: "mimo-v2.5-pro", availableModels: ["mimo-v2.5-pro", "mimo-v2.5"], enabledModels: ["mimo-v2.5-pro", "mimo-v2.5"], ttsDefaultModel: "", ttsAvailableModels: [], ttsEnabledModels: [] }
     },
     memorySection: {
