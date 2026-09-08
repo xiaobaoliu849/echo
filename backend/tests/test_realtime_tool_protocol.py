@@ -13,7 +13,7 @@ from services.realtime_tool_protocol import (
 class RealtimeToolProtocolTests(unittest.TestCase):
     def test_declarations_expose_only_non_side_effecting_tools(self) -> None:
         names = [item["name"] for item in native_tool_declarations()]
-        self.assertEqual(names, ["search_web"])
+        self.assertEqual(names, ["search_web", "recall_memory"])
         self.assertNotIn("translate_text", names)
         self.assertNotIn("summarize_transcript", names)
         self.assertNotIn("synthesize_tts", names)

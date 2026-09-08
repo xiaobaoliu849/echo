@@ -72,7 +72,8 @@ class GoogleRealtimeMixin:
             return
         try:
             await session.send_client_content(turns=turns, turn_complete=False)
-        except Exception:
+        except Exception as exc:
+            logger.warning("google_memory_prefill_failed: %s", exc)
             return
     async def _send_google_tool_response(
         self,
@@ -446,16 +447,18 @@ class GoogleRealtimeMixin:
             # In native audio models (Gemini Live 2.5/3.1), assistant audio output can start
             # before ASR text arrives. This initial prompt must NEVER be treated as a barge-in
             # against its own assistant response.
-            # However, if an interruption is already pending (e.g. from client VAD or server),
-            # or if the recorder already had an active user prompt for this turn, it is a barge-in.
-            has_existing_prompt = turn_has_user_prompt or (
-                recorder is not None and bool(recorder.current_turn_id) and bool(recorder.current_assistant_text)
+            # However, if the recorder already had an active user prompt AND assistant text from a previous
+            # turn, or if an interruption is pending from a true barge-in, handle it.
+            # If the recorder only has assistant audio from the CURRENT turn (no user prompt yet), it is initial.
+            recorder_has_prior_turn = bool(
+                recorder is not None
+                and bool(recorder.current_turn_id)
+                and bool(recorder.current_user_text)
+                and bool(recorder.current_assistant_text)
             )
-            is_initial_turn_prompt = (
-                not has_existing_prompt
-                and not google_provider_interrupted_early
-                and (interruption.pending is None)
-            )
+            is_initial_turn_prompt = not turn_has_user_prompt and not recorder_has_prior_turn
+            if is_initial_turn_prompt and interruption.pending is not None and not google_provider_interrupted_early:
+                interruption.complete_decision()
 
             if not is_initial_turn_prompt:
                 assistant_active = (
@@ -1059,7 +1062,9 @@ class GoogleRealtimeMixin:
     ) -> None:
         settings = self._resolve_google_settings(model, provider=provider)
         memory_session = RealtimeMemorySession()
-        tool_session = VoiceAgentToolSession(default_provider=provider)
+        if memory_session._config.get_service() is None and not memory_session._explicitly_configured:
+            memory_session.configure_from_server()
+        tool_session = VoiceAgentToolSession(default_provider=provider, memory_session=memory_session)
         recorder = await self._create_voice_session_recorder(
             provider=provider,
             model=settings["model"],
@@ -1129,13 +1134,48 @@ class GoogleRealtimeMixin:
             client_http_opts = http_options if http_options.get("base_url") else None
             client = genai.Client(api_key=api_key, http_options=client_http_opts)
         is_live_translate = _is_google_live_translate_model(settings["model"])
+
+        initial_memory_context = ""
+        if not is_live_translate and memory_session._config.get_service() is not None:
+            try:
+                from .realtime_memory_session import RealtimeMemorySession as _RMS
+                service = memory_session._config.get_service()
+                local_entries = _RMS._all_pending_entries_any_scope()
+                cloud_entries: list[dict[str, Any]] = []
+                try:
+                    cloud_entries = await asyncio.wait_for(
+                        memory_session._search_cloud_memories(
+                            service=service,
+                            query=memory_session._STARTUP_QUERY,
+                            force_global=True,
+                        ),
+                        timeout=1.5,
+                    )
+                except Exception:
+                    pass
+                combined = memory_session._merge_retrieved_memories(
+                    local_memories=local_entries,
+                    cloud_memories=cloud_entries,
+                )
+                lines: list[str] = []
+                for mem in combined[:6]:
+                    content = str(mem.get("content", "")).strip()
+                    if content:
+                        lines.append(f"- {content[:150]}")
+                if lines:
+                    initial_memory_context = "\n".join(lines)
+                    logger.info("google_realtime_startup_memory_loaded count=%s", len(lines))
+            except Exception:
+                logger.exception("google_realtime_startup_memory_failed")
+
+        instructions = self._build_realtime_instructions(initial_memory_context=initial_memory_context)
         live_config = (
             self._build_live_translate_config(
                 target_language_code,
                 echo_target_language,
             )
             if is_live_translate
-            else self._build_live_config(voice, self._build_realtime_instructions(), model=settings["model"])
+            else self._build_live_config(voice, instructions, model=settings["model"])
         )
 
         try:

@@ -19,10 +19,25 @@ class RealtimeToolCall:
 _TOOL_DECLARATIONS: tuple[dict[str, Any], ...] = (
     {
         "name": "search_web",
-        "description": "Search current public web information about news, facts, products, or events. Only invoke when the user explicitly asks you to search the web or needs real-time external information that you cannot answer directly. Do NOT use for translating words or phrases, defining terms, answering general knowledge questions, or any task you can answer directly from your training.",
+        "description": "Search current public web information about news, facts, products, or events. Only invoke when the user explicitly asks you to search the web or needs real-time external information that you cannot answer directly. Do NOT use for translating words or phrases, defining terms, answering general knowledge questions, or recalling personal memory / past conversations.",
         "parameters": {
             "type": "object",
             "properties": {"query": {"type": "string", "description": "A concise standalone search query."}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "recall_memory",
+        "description": "Recall and retrieve long-term memories, user personal preferences, past conversations, or historical topics from the user's private EverMem / EverOS memory center. Always call this tool when the user asks what was previously discussed, asks you to recall or remember past conversations, or asks about their saved profile or preferences. Never use search_web to look up user-specific past conversations or personal memories.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search keywords or topic to look up in the user's long-term memory.",
+                }
+            },
             "required": ["query"],
             "additionalProperties": False,
         },
@@ -74,6 +89,8 @@ def tool_call_to_request(call: RealtimeToolCall) -> VoiceToolRequest:
 
     if name == "search_web":
         return VoiceToolRequest(name, _required_text(arguments, "query", max_length=240), "搜索网页资料")
+    if name == "recall_memory":
+        return VoiceToolRequest(name, _required_text(arguments, "query", max_length=240), "检索长期记忆")
     if name == "translate_text":
         source = _required_text(arguments, "text", max_length=4000)
         target = _required_text(arguments, "target_language", max_length=80)

@@ -199,6 +199,8 @@ export default function useVoiceChat({
   const lastPreferredModelRef = useRef(preferredModel);
   const sessionEpochRef = useRef(0);
   const pendingInitialPromptRef = useRef<{ prompt: string; attachments?: ChatAttachment[] } | null>(null);
+  const lastCommittedUserTextRef = useRef("");
+  const lastCommittedTurnIdRef = useRef("");
 
   const voiceChatModelOptions = resolveRealtimeModelOptions(voiceChatProvider, providerModelCatalog);
   // Realtime-capable models for every configured provider, so pickers can offer
@@ -628,6 +630,10 @@ export default function useVoiceChat({
       }
       return next;
     });
+    if (userText) {
+      lastCommittedUserTextRef.current = userText;
+      lastCommittedTurnIdRef.current = turnId || "";
+    }
     currentUserTurnRef.current = "";
     currentUserTurnIsInterimRef.current = false;
     currentAssistantTurnRef.current = "";
@@ -900,12 +906,22 @@ export default function useVoiceChat({
         // would otherwise split one utterance into two bubbles.
         const replacingInterimPreview = currentUserTurnIsInterimRef.current;
         currentUserTurnIsInterimRef.current = false;
+        const trimmedIncoming = (event.text || "").trim();
+        if (
+          !replacingInterimPreview &&
+          trimmedIncoming &&
+          (trimmedIncoming === lastCommittedUserTextRef.current.trim() ||
+            (event.turn_id && event.turn_id === lastCommittedTurnIdRef.current)) &&
+          !currentUserTurnRef.current.trim()
+        ) {
+          return;
+        }
         if (
           !replacingInterimPreview &&
           event.turn_id &&
           currentUserTurnRef.current.trim() &&
-          (currentUserTurnRef.current.trim().endsWith(event.text.trim()) ||
-            event.text.trim().endsWith(currentUserTurnRef.current.trim()))
+          (currentUserTurnRef.current.trim().endsWith(trimmedIncoming) ||
+            trimmedIncoming.endsWith(currentUserTurnRef.current.trim()))
         ) {
           currentTurnIdRef.current = event.turn_id;
           return;
@@ -1653,10 +1669,17 @@ export default function useVoiceChat({
               energy += input[index] * input[index];
             }
             const rms = Math.sqrt(energy / input.length);
-            if (rms >= 0.025) {
+            const isAssistantActive =
+              !voiceChatLiveTranslate && (
+                playingSourcesRef.current.length > 0 ||
+                (audioContextRef.current && nextPlaybackTimeRef.current > audioContextRef.current.currentTime)
+              );
+            const speechRmsThreshold = isAssistantActive ? 0.055 : 0.025;
+            const requiredSpeechFrames = isAssistantActive ? 5 : 2;
+            if (rms >= speechRmsThreshold) {
               localSpeechFrames += 1;
               localSilenceFrames = 0;
-              if (!localSpeechActive && localSpeechFrames >= 2) {
+              if (!localSpeechActive && localSpeechFrames >= requiredSpeechFrames) {
                 localSpeechActive = true;
                 if (voiceChatLiveTranslate) {
                   markLiveTranslateSpeechStarted();

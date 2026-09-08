@@ -57,6 +57,10 @@ class VoiceAgentSessionRecorder:
         return self._current_turn_id
 
     @property
+    def current_user_text(self) -> str:
+        return self._pending_user_text
+
+    @property
     def current_assistant_text(self) -> str:
         return self._current_assistant_text
 

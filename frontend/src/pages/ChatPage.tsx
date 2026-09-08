@@ -180,6 +180,8 @@ function MessageBubbleImpl({
     toolLabel =
       lastTool.tool_name === "search_web"
         ? t("🔍 联网搜索", "🔍 Web Search")
+        : lastTool.tool_name === "recall_memory"
+        ? t("🧠 记忆检索", "🧠 Memory Recall")
         : lastTool.tool_name === "translate_text"
         ? t("🌐 翻译", "🌐 Translate")
         : lastTool.tool_name === "summarize_transcript"

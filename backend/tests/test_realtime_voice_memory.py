@@ -790,7 +790,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         declarations = config.tools[0].function_declarations
         self.assertEqual(
             [declaration.name for declaration in declarations],
-            ["search_web"],
+            ["search_web", "recall_memory"],
         )
 
     def test_google_live_translate_config_uses_translation_settings_only(self) -> None:

@@ -208,10 +208,18 @@ class RealtimeVoiceService(
     @staticmethod
     def _build_realtime_instructions(memory_context: str = "") -> str:
         base_inst = RealtimeVoiceService._get_base_instructions()
+        memory_rules = (
+            "\n\n[Memory & Tool Calling Rules]\n"
+            "You have access to long-term memory via the `recall_memory` tool and external search via `search_web`.\n"
+            "- When the user asks to recall or remember previous conversations, what you discussed days ago, "
+            "what the user said earlier, or personal preferences/profile, you MUST use the `recall_memory` tool "
+            "or the long-term memories provided below. NEVER use `search_web` to search the internet for user private memories or prior conversations.\n"
+            "- Only call `search_web` for real-time external public information (news, weather, sports scores, public facts) when explicitly needed."
+        )
         if not memory_context:
-            return base_inst
+            return f"{base_inst}{memory_rules}"
         return (
-            f"{base_inst}\n\n"
+            f"{base_inst}{memory_rules}\n\n"
             "Relevant long-term memories for personalization are provided below. Use them whenever they are relevant. "
             "If the user asks what they said earlier, what the current focus is, or asks you to recall/search memory, "
             "answer from this memory block directly. Do not claim you cannot remember, do not say each conversation is "

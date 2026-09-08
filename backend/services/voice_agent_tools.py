@@ -208,12 +208,14 @@ class VoiceAgentToolService:
         llm_service: LLMService | None = None,
         tts_service: TTSService | None = None,
         default_provider: str | None = None,
+        memory_session: Any | None = None,
     ) -> None:
         self.research_service = research_service or AudioResearchService()
         self.audio_agent_service = audio_agent_service or AudioAgentService()
         self.llm_service = llm_service or LLMService()
         self.tts_service = tts_service or TTSService()
         self.default_provider = default_provider
+        self.memory_session = memory_session
 
     def _get_llm_provider_and_model(self) -> tuple[str, str | None]:
         if not hasattr(self.llm_service, "config"):
@@ -388,6 +390,12 @@ class VoiceAgentToolService:
                 send_event=send_event,
                 turn_id=turn_id,
             )
+        if request.tool_name == "recall_memory":
+            return await self.run_recall_memory(
+                request.query,
+                send_event=send_event,
+                turn_id=turn_id,
+            )
         if request.tool_name == "translate_text":
             source_text, target_language = self._split_translate_query(request.query)
             return await self.run_translate_text(
@@ -411,6 +419,81 @@ class VoiceAgentToolService:
         if request.tool_name == "search_web":
             return await self.run_search(request.query, send_event=send_event, turn_id=turn_id)
         raise ValueError(f"Unsupported voice agent tool: {request.tool_name}")
+
+    async def run_recall_memory(
+        self,
+        query: str,
+        *,
+        send_event: SendEvent,
+        turn_id: str = "",
+    ) -> dict[str, Any]:
+        clean_query = str(query or "").strip()
+        if not clean_query:
+            clean_query = "recent conversation topics preferences"
+
+        started_at = time.perf_counter()
+        await send_event(
+            "tool_call_started",
+            {
+                "tool_name": "recall_memory",
+                "query": clean_query,
+                "turn_id": turn_id,
+                "message": "正在检索长期记忆...",
+            },
+        )
+
+        mem_session = self.memory_session
+        if mem_session is None:
+            from .realtime_memory_session import RealtimeMemorySession
+            mem_session = RealtimeMemorySession()
+            mem_session.configure_from_server()
+
+        retrieval: dict[str, Any] = {}
+        try:
+            retrieval = await mem_session.recall_memory_query(clean_query)
+        except Exception as exc:
+            logger.warning("run_recall_memory failed for query=%r: %s", clean_query, exc)
+
+        memories_count = int(retrieval.get("memories_retrieved", 0) or 0)
+        context_text = str(retrieval.get("context", "") or "").strip()
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+
+        if memories_count > 0 and context_text:
+            answer = f"从长期记忆中检索到 {memories_count} 条相关记录：\n{context_text}"
+        else:
+            answer = "未能从长期记忆中找到与该关键词相关的记录。"
+
+        await send_event(
+            "tool_call_completed",
+            {
+                "tool_name": "recall_memory",
+                "query": clean_query,
+                "turn_id": turn_id,
+                "source_count": memories_count,
+                "elapsed_ms": elapsed_ms,
+            },
+        )
+        await send_event(
+            "agent_result",
+            {
+                "tool_name": "recall_memory",
+                "query": clean_query,
+                "turn_id": turn_id,
+                "answer": answer,
+                "sources": [],
+                "source_count": memories_count,
+                "elapsed_ms": elapsed_ms,
+            },
+        )
+        return {
+            "tool_name": "recall_memory",
+            "query": clean_query,
+            "turn_id": turn_id,
+            "answer": answer,
+            "sources": [],
+            "source_count": memories_count,
+            "elapsed_ms": elapsed_ms,
+        }
 
     @staticmethod
     def _split_translate_query(query: str) -> tuple[str, str]:
@@ -1229,6 +1312,15 @@ class VoiceAgentToolService:
                 f"Text: {query}\nAudio path: {audio_path}\nVoice: {voice}\n\n"
                 f"Tool summary:\n{answer}"
             )
+        if tool_name == "recall_memory":
+            return (
+                "A long-term memory retrieval action has completed inside Echo. Continue the live voice conversation "
+                "naturally. Answer the user's question directly based on the recalled memories below. Do NOT claim "
+                "you cannot remember, and do NOT use web search.\n\n"
+                f"Memory Search Query: {query}\n"
+                f"Recalled Memories:\n{answer}\n\n"
+                f"Tool summary:\n{answer}"
+            )
         sources = result.get("sources", [])
         source_blocks: list[str] = []
         source_count = 0
@@ -1348,8 +1440,14 @@ class VoiceAgentToolSession:
         service: VoiceAgentToolService | None = None,
         *,
         default_provider: str | None = None,
+        memory_session: Any | None = None,
     ) -> None:
-        self.service = service or VoiceAgentToolService(default_provider=default_provider)
+        self.service = service or VoiceAgentToolService(
+            default_provider=default_provider,
+            memory_session=memory_session,
+        )
+        if memory_session is not None and getattr(self.service, "memory_session", None) is None:
+            self.service.memory_session = memory_session
         self._current_task: asyncio.Task[None] | None = None
         self._native_tasks: dict[str, asyncio.Task[None]] = {}
         self._native_turn_ids: dict[str, str] = {}
