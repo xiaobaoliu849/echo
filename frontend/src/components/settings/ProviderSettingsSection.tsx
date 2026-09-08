@@ -55,21 +55,15 @@ const getLobeProviderKey = (name: string): string => {
   return lower;
 };
 
-const PROVIDER_COLORS: Record<string, string> = {
-  qwen: "#6366f1", deepseek: "#4f46e5", google: "#4285f4", vertexai: "#1a73e8", openai: "#10a37f",
-  groq: "#f55036", openrouter: "#8b5cf6", siliconcloud: "#7c3aed",
-  xiaomimimo: "#ff6900", anthropic: "#d4a574", nvidia: "#76b900",
-  ollama: "#6b7280", deepgram: "#13ef93", soniox: "#0052cc", zenmux: "#a855f7", tavus: "#6c5ce7",
-  cartesia: "#00c389", gradium: "#3b82f6",
-};
-
 const LocalProviderIcon = ({ provider, size = 18 }: { provider: string; size?: number }) => (
-  <span style={{
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    width: size, height: size, borderRadius: "50%", flexShrink: 0,
-    backgroundColor: PROVIDER_COLORS[provider] || "#6b7280", color: "#fff",
-    fontSize: size * 0.55, fontWeight: 700, lineHeight: 1,
-  }}>
+  <span
+    className="vsProviderSquircleIcon"
+    style={{
+      width: size,
+      height: size,
+      fontSize: Math.round(size * 0.55),
+    }}
+  >
     {(provider || "").charAt(0).toUpperCase()}
   </span>
 );
@@ -136,8 +130,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
         </div>
         <button
           type="button"
-          className="vsBtnSecondary vsBtnSmall"
-          style={{ margin: "0 12px 12px 12px", display: "flex", justifyContent: "center", alignItems: "center", gap: "4px", padding: "6px 10px", height: "32px", fontSize: "13px" }}
+          className="vsAddCustomProviderBtn"
           onClick={() => {
             setCustomName("");
             setCustomBaseUrl("");
@@ -196,8 +189,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
             {settings.isCustomProvider && (
               <button
                 type="button"
-                className="vsBtnSecondary vsBtnSmall"
-                style={{ marginLeft: "auto", backgroundColor: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5", padding: "4px 8px" }}
+                className="vsDeleteProviderBtn"
                 onClick={() => {
                   if (confirm(t(`确定要删除服务商 "${providerDisplayNames[settings.settingsProvider]}" 吗？`, `Are you sure you want to delete provider "${providerDisplayNames[settings.settingsProvider]}"?`))) {
                     void settings.onDeleteCustomProvider(settings.settingsProvider);
@@ -261,15 +253,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
           )}
 
           {settings.settingsProvider === "Google" && (
-            <div className="vsSettingsNotice ok" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6 }}>
-              <div><strong>{t("🟢 Google AI Studio（个人免费 · 实时语音前沿）", "🟢 Google AI Studio (Free Tier · Live Voice)")}</strong></div>
+            <div className="vsProviderInfoCallout">
+              <div><strong>{t("Google AI Studio（个人免费 · 实时语音前沿）", "Google AI Studio (Free Tier · Live Voice)")}</strong></div>
               <div style={{ marginTop: 4 }}>• {t("填入 AI Studio Key（新版通常以 AQ. 开头，旧版以 AIza... 开头），用于实时全双工双向语音通话，享受官方每日免费配额。", "Enter your AI Studio API key (new keys start with AQ., legacy start with AIza...) for realtime bidirectional voice chat with daily free quota.")}</div>
             </div>
           )}
 
           {settings.settingsProvider === "VertexAI" && (
-            <div className="vsSettingsNotice ok" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6 }}>
-              <div><strong>{t("🔵 Google Cloud Vertex AI（企业云 · 赠金抵扣专区）", "🔵 Google Cloud Vertex AI (Enterprise Cloud · Credits)")}</strong></div>
+            <div className="vsProviderInfoCallout">
+              <div><strong>{t("Google Cloud Vertex AI（企业云 · 赠金抵扣专区）", "Google Cloud Vertex AI (Enterprise Cloud · Credits)")}</strong></div>
               <div style={{ marginTop: 4 }}>• {t("填入 Vertex API Key 或云端配置，用于文字长对话、高并发推理及官方流式听写/同传，100% 消耗您的 Google Cloud 赠金！", "Enter your Vertex API key or cloud credentials for chat reasoning and official streaming transcribe/translate, 100% billing to your Google Cloud credits!")}</div>
             </div>
           )}

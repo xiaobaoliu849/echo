@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ArrowLeft, Settings } from "lucide-react";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import SettingsPage from "../pages/SettingsPage";
 import type { ErrorRuntimeContext } from "../types/ui";
@@ -172,11 +173,23 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          style={{ cursor: "grab" }}
         >
-          <div className="vsSettingsModalHeaderTitleRow">
-            <span className="vsSettingsModalHeaderIcon">⚙️</span>
-            <h2>{t("偏好设置", "Preferences")}</h2>
+          <div className="vsSettingsModalHeaderLeft">
+            <button
+              type="button"
+              className="vsSettingsBackBtn"
+              onClick={onClose}
+              title={t("返回工作区", "Back to Workspace")}
+              aria-label={t("返回工作区", "Back to Workspace")}
+            >
+              <ArrowLeft size={16} />
+              <span>{t("返回工作区", "Back to Workspace")}</span>
+            </button>
+            <div className="vsSettingsHeaderDivider" />
+            <div className="vsSettingsModalHeaderTitleRow">
+              <span className="vsSettingsModalHeaderIcon"><Settings size={16} /></span>
+              <h2>{t("偏好设置", "Preferences")}</h2>
+            </div>
           </div>
           <div className="vsSettingsModalWindowControls">
             <button

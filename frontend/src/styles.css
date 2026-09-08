@@ -5295,27 +5295,47 @@ button.danger:focus-visible {
 }
 
 /* =========================================================
-   Settings Center Layout (Desktop UI)
+   Settings Center Layout (Desktop Full-window Workspace)
    ========================================================= */
 
 .vsSettingsLayout {
   display: flex;
+  flex: 1;
   height: 100%;
-  max-height: 100vh;
+  min-height: 0;
+  max-height: 100%;
   overflow: hidden;
-  background: var(--panel);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
+  background: var(--canvas);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .vsSettingsNav {
-  width: 160px;
-  background: #f8fafc;
-  border-right: 1px solid var(--line);
-  padding: 16px 8px;
+  width: 216px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-line);
+  padding: 16px 10px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.vsSettingsNavSection {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 14px;
+}
+
+.vsSettingsNavSectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px 6px;
+  margin: 0;
 }
 
 .vsSettingsNavTitle {
@@ -5341,52 +5361,53 @@ button.danger:focus-visible {
   align-items: center !important;
   justify-content: flex-start !important;
   gap: 10px !important;
-  padding: 8px 10px !important;
+  padding: 8px 12px !important;
   border: 0 !important;
-  border-radius: 6px !important;
+  border-radius: 8px !important;
   background: transparent !important;
-  color: var(--text) !important;
+  color: var(--sidebar-text) !important;
   text-align: left !important;
   cursor: pointer !important;
   box-shadow: none !important;
   transform: none !important;
-  font-weight: normal !important;
-  transition: background 0.15s ease, color 0.15s ease !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease !important;
 }
 
 .vsSettingsNavItem:hover {
-  background: #f1f5f9 !important;
-  color: var(--text) !important;
-  box-shadow: none !important;
+  background: var(--vs-sidebar-hover-bg) !important;
+  color: var(--sidebar-text-strong) !important;
+  box-shadow: var(--vs-sidebar-hover-shadow) !important;
   transform: none !important;
 }
 
 .vsSettingsNavItem.active {
-  background: #e0f2fe !important;
-  color: #0369a1 !important;
-  font-weight: 500 !important;
+  background: var(--brand-soft) !important;
+  color: var(--brand-dark) !important;
+  font-weight: 600 !important;
   box-shadow: none !important;
   transform: none !important;
 }
 
 .vsSettingsNavIcon {
-  font-size: 16px;
-  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  opacity: 0.8;
+  width: 18px;
+  height: 18px;
+  color: inherit;
+  opacity: 0.85;
 }
 
 .vsSettingsNavItem.active .vsSettingsNavIcon {
   opacity: 1;
+  color: var(--brand-dark);
 }
 
 .vsSettingsNavItemTitle {
   font-size: 13px !important;
-  font-weight: 500 !important;
+  font-weight: inherit !important;
 }
 
 .vsSettingsContent {
@@ -5394,18 +5415,19 @@ button.danger:focus-visible {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 32px 40px 60px;
-  background: #fbfbfe;
+  padding: 32px 48px 60px;
+  background: var(--canvas);
   display: flex;
   flex-direction: column;
 }
 
 .vsSettingsForm {
-  max-width: 800px;
+  max-width: 860px;
   margin: 0 auto;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .vsSettingsHeader {
@@ -5413,9 +5435,9 @@ button.danger:focus-visible {
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 8px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  margin-bottom: 4px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
 }
 
 .vsSettingsHeadInfo {
@@ -5423,16 +5445,17 @@ button.danger:focus-visible {
 }
 
 .vsSettingsTitle {
-  margin: 0 0 8px;
-  font-size: 24px;
+  margin: 0 0 6px;
+  font-size: 22px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .vsSettingsDesc {
   margin: 0;
-  font-size: 14px;
-  color: var(--muted);
+  font-size: 13px;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
@@ -5443,14 +5466,14 @@ button.danger:focus-visible {
 }
 
 .vsSettingsCard {
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+  padding: 22px 24px;
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .vsCardSection {
@@ -6397,7 +6420,7 @@ button.danger:focus-visible {
 }
 
 /* =========================================================
-   Provider Settings — True Three-Column Alma-Style Layout
+   Provider Settings — ZCode-Style Master-Detail Layout
    ========================================================= */
 .vsProviderSettingsGrid {
   display: flex;
@@ -6407,25 +6430,26 @@ button.danger:focus-visible {
 }
 
 .vsProviderListColumn {
-  width: 240px;
+  width: 250px;
   flex-shrink: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: transparent;
-  border-right: 1px solid var(--line);
-  padding: 20px 16px 20px 20px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-line);
+  padding: 16px 12px;
 }
 
 .vsProviderConfigColumn {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 20px 28px 20px 28px;
+  padding: 24px 40px 60px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
+  background: var(--canvas);
 }
 
 /* ── Provider tab: override content area for full-width layout ── */
@@ -6458,45 +6482,44 @@ button.danger:focus-visible {
 .vsSettingsContent.provider-tab .vsProviderSettingsGrid {
   flex: 1;
   min-height: 0;
-  /* NO padding here — columns handle their own */
 }
 
 .vsSettingsContent.provider-tab .vsSettingsFormFooter {
   margin: 0;
   position: static;
   border-top: 1px solid var(--line);
-  padding: 14px 24px;
-  background: #ffffff;
+  padding: 12px 28px;
+  background: var(--bg-card);
   flex-shrink: 0;
 }
 
 /* ── Provider list search bar ── */
 .vsProviderSearchBar {
   position: relative;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .vsProviderSearchBar input {
   width: 100%;
   height: 34px;
   padding: 0 10px 0 32px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: #f8f9fa;
+  background: var(--bg-card);
   font-size: 13px;
-  color: var(--text);
+  color: var(--text-primary);
   outline: none;
   transition: all 0.2s;
 }
 
 .vsProviderSearchBar input:focus {
-  border-color: var(--brand-light);
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(107, 76, 246, 0.06);
+  border-color: var(--brand);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 3px var(--brand-soft);
 }
 
 .vsProviderSearchBar input::placeholder {
-  color: var(--muted);
+  color: var(--text-soft);
 }
 
 .vsProviderSearchIcon {
@@ -6505,11 +6528,35 @@ button.danger:focus-visible {
   top: 50%;
   transform: translateY(-50%);
   font-size: 13px;
-  color: var(--muted);
+  color: var(--text-soft);
   pointer-events: none;
 }
 
-/* ── Provider list items (Alma-style single-row) ── */
+.vsAddCustomProviderBtn {
+  margin: 0 2px 10px 2px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  height: 34px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsAddCustomProviderBtn:hover {
+  background: var(--vs-sidebar-hover-bg);
+  border-color: var(--brand);
+  color: var(--brand-dark);
+}
+
+/* ── Provider list items ── */
 .vsProviderSelectGroup {
   display: flex;
   flex-direction: column;
@@ -6521,18 +6568,19 @@ button.danger:focus-visible {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 8px;
   border: none;
   background: transparent;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease;
-  color: var(--text);
+  color: var(--sidebar-text);
 }
 
 .vsProviderSelectorItem:hover {
-  background: rgba(107, 76, 246, 0.04);
+  background: var(--vs-sidebar-hover-bg);
+  color: var(--sidebar-text-strong);
 }
 
 .vsProviderSelectorItem.active {
@@ -6558,20 +6606,37 @@ button.danger:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 13px;
   flex-shrink: 0;
-  border-radius: 4px;
-  background: #f1f5f9;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
 }
 
-.vsProviderSelectorItem.active .vsProviderItemIcon {
-  background: rgba(107, 76, 246, 0.1);
+.vsProviderSquircleIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.vsProviderSelectorItem.active .vsProviderSquircleIcon {
+  background: var(--brand);
+  color: #ffffff;
+  border-color: var(--brand-dark);
 }
 
 .vsProviderNameText {
   font-size: 13px;
   font-weight: 500;
-  color: var(--text);
+  color: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6581,13 +6646,13 @@ button.danger:focus-visible {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #10b981;
+  background: var(--brand);
   flex-shrink: 0;
   margin-left: auto;
 }
 
 .vsActiveDot.inactive {
-  background: #cbd5e1;
+  background: var(--line-strong);
 }
 
 /* ── Provider Config Column (right pane) ── */
@@ -6596,7 +6661,8 @@ button.danger:focus-visible {
   align-items: center;
   justify-content: space-between;
   padding-bottom: 16px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--line);
 }
 
 .vsProviderConfigTitleRow {
@@ -6609,26 +6675,56 @@ button.danger:focus-visible {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--text-primary);
   letter-spacing: -0.02em;
 }
 
 .vsProviderStatusBadge {
   font-size: 11px;
   font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 12px;
-  background: #e2e8f0;
-  color: #64748b;
+  padding: 2px 10px;
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 .vsProviderStatusBadge.active {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  border-color: color-mix(in oklab, var(--brand) 25%, transparent);
+}
+
+.vsProviderInfoCallout {
+  background: var(--brand-soft);
+  border: 1px solid color-mix(in oklab, var(--brand) 25%, transparent);
+  color: var(--brand-dark);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.vsDeleteProviderBtn {
+  margin-left: auto;
+  background: color-mix(in oklab, #ef4444 10%, transparent);
+  color: #b91c1c;
+  border: 1px solid color-mix(in oklab, #ef4444 25%, transparent);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsDeleteProviderBtn:hover {
+  background: color-mix(in oklab, #ef4444 20%, transparent);
 }
 
 .vsProviderConfigDesc {
   font-size: 13px;
-  color: var(--muted);
+  color: var(--text-secondary);
   margin: 0 0 8px 0;
   line-height: 1.5;
 }
@@ -6637,7 +6733,12 @@ button.danger:focus-visible {
 .vsProviderConfigFields {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
 }
 
 .vsProviderConfigFields .vsField {
@@ -6728,36 +6829,31 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 /* =========================================================
-   Settings Modal Drawer (full-screen, Alma-style)
+   Settings Full-window Desktop Workspace (ZCode-Style)
    ========================================================= */
 
 .vsSettingsModalShell {
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--canvas);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  flex-direction: column;
+  padding: 0;
   animation: vsFadeIn 0.18s ease-out;
 }
 
 .vsSettingsModalStage {
   position: relative;
-  width: min(1340px, 96vw);
-  height: min(800px, 90vh);
-  border-radius: 14px;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  box-shadow: none;
   outline: none;
-  animation: vsSlideUp 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
-  background: var(--panel);
+  background: var(--canvas);
   display: flex;
   flex-direction: column;
-  will-change: transform;
 }
 
 .vsSettingsModalStage > .vsSettingsLayout {
@@ -6768,7 +6864,7 @@ button.vsPasswordToggleBtn:focus-visible {
   box-shadow: none;
 }
 
-/* Maximized settings panel: fill the app window instead of the centered card */
+/* Maximized settings panel (keeps test compatibility) */
 .vsSettingsModalShell.maximized {
   padding: 0;
 }
@@ -6784,47 +6880,79 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: 8px 18px;
+  height: 48px;
   border-bottom: 1px solid var(--line);
-  background: #ffffff;
+  background: var(--bg-card);
   user-select: none;
   flex-shrink: 0;
-  cursor: grab;
 }
 
-.vsSettingsModalHeader:active {
-  cursor: grabbing;
+.vsSettingsModalHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.vsSettingsBackBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsSettingsBackBtn:hover {
+  background: var(--vs-sidebar-hover-bg);
+  border-color: var(--line-strong);
+  color: var(--text);
+  transform: translateX(-1px);
+}
+
+.vsSettingsHeaderDivider {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
 }
 
 .vsSettingsModalHeaderTitleRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .vsSettingsModalHeaderIcon {
-  font-size: 16px;
-  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand);
 }
 
 .vsSettingsModalHeader h2 {
   margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: 0.02em;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .vsSettingsModalWindowControls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .vsWindowControlBtn {
   border: 0;
   background: transparent;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
   cursor: pointer;
   width: 28px;
@@ -6837,24 +6965,24 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsWindowControlBtn:hover {
-  background: var(--brand-soft);
-  color: var(--text);
+  background: var(--surface);
+  color: var(--text-primary);
 }
 
 .vsWindowControlBtn.close:hover {
-  background: #fee2e2;
-  color: #ef4444;
+  background: color-mix(in oklab, #ef4444 15%, transparent);
+  color: #dc2626;
 }
 
-/* Settings Form Footer matching Alma */
+/* Settings Form Footer matching Echo design tokens */
 .vsSettingsFormFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: 14px 48px;
   border-top: 1px solid var(--line);
-  background: #ffffff;
-  margin: auto -40px -60px -40px;
+  background: var(--bg-card);
+  margin: auto -48px -60px -48px;
   position: sticky;
   bottom: -60px;
   z-index: 10;
@@ -6878,7 +7006,7 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsSettingsFooterStatus .status-saved.ok {
-  color: #15803d;
+  color: var(--brand-dark);
   font-weight: 600;
 }
 
@@ -6896,7 +7024,19 @@ button.vsPasswordToggleBtn:focus-visible {
   height: 36px;
   padding: 0 16px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsFooterCloseBtn:hover:not(:disabled) {
+  background: var(--vs-sidebar-hover-bg);
+  color: var(--text-primary);
+  border-color: var(--line-strong);
 }
 
 .vsFooterSaveBtn {
@@ -6904,6 +7044,19 @@ button.vsPasswordToggleBtn:focus-visible {
   padding: 0 20px;
   font-size: 13px;
   font-weight: 600;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: #ffffff;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+}
+
+.vsFooterSaveBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  filter: brightness(1.04);
 }
 
 .vsModelsList {

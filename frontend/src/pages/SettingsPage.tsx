@@ -25,68 +25,83 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose }:
     <div className="vsSettingsLayout">
       {/* ── Left Navigation ── */}
       <nav className="vsSettingsNav">
-        <ul className="vsSettingsNavList">
-          <li>
-            <button
-              type="button"
-              className={`vsSettingsNavItem ${activeCategory === "general" ? "active" : ""}`}
-              onClick={() => setActiveCategory("general")}
-            >
-              <div className="vsSettingsNavIcon">
-                <Globe size={16} />
-              </div>
-              <div className="vsSettingsNavItemTitle">{t("通用", "General")}</div>
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              className={`vsSettingsNavItem ${activeCategory === "provider" ? "active" : ""}`}
-              onClick={() => setActiveCategory("provider")}
-            >
-              <div className="vsSettingsNavIcon">
-                <Cpu size={16} />
-              </div>
-              <div className="vsSettingsNavItemTitle">{t("提供商", "Providers")}</div>
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              className={`vsSettingsNavItem ${activeCategory === "memory" ? "active" : ""}`}
-              onClick={() => setActiveCategory("memory")}
-            >
-              <div className="vsSettingsNavIcon">
-                <Brain size={16} />
-              </div>
-              <div className="vsSettingsNavItemTitle">{t("记忆", "Memory")}</div>
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              className={`vsSettingsNavItem ${activeCategory === "transcription" ? "active" : ""}`}
-              onClick={() => setActiveCategory("transcription")}
-            >
-              <div className="vsSettingsNavIcon">
-                <Mic size={16} />
-              </div>
-              <div className="vsSettingsNavItemTitle">{t("转写", "Transcription")}</div>
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              className={`vsSettingsNavItem ${activeCategory === "desktop" ? "active" : ""}`}
-              onClick={() => setActiveCategory("desktop")}
-            >
-              <div className="vsSettingsNavIcon">
-                <Monitor size={16} />
-              </div>
-              <div className="vsSettingsNavItemTitle">{t("系统", "System")}</div>
-            </button>
-          </li>
-        </ul>
+        <div className="vsSettingsNavSection">
+          <div className="vsSettingsNavSectionTitle">{t("基础设置", "Basic Settings")}</div>
+          <ul className="vsSettingsNavList">
+            <li>
+              <button
+                type="button"
+                className={`vsSettingsNavItem ${activeCategory === "general" ? "active" : ""}`}
+                onClick={() => setActiveCategory("general")}
+              >
+                <div className="vsSettingsNavIcon">
+                  <Globe size={16} />
+                </div>
+                <div className="vsSettingsNavItemTitle">{t("通用", "General")}</div>
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                className={`vsSettingsNavItem ${activeCategory === "provider" ? "active" : ""}`}
+                onClick={() => setActiveCategory("provider")}
+              >
+                <div className="vsSettingsNavIcon">
+                  <Cpu size={16} />
+                </div>
+                <div className="vsSettingsNavItemTitle">{t("提供商", "Providers")}</div>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div className="vsSettingsNavSection">
+          <div className="vsSettingsNavSectionTitle">{t("Agent 能力", "Agent Capabilities")}</div>
+          <ul className="vsSettingsNavList">
+            <li>
+              <button
+                type="button"
+                className={`vsSettingsNavItem ${activeCategory === "memory" ? "active" : ""}`}
+                onClick={() => setActiveCategory("memory")}
+              >
+                <div className="vsSettingsNavIcon">
+                  <Brain size={16} />
+                </div>
+                <div className="vsSettingsNavItemTitle">{t("记忆", "Memory")}</div>
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                className={`vsSettingsNavItem ${activeCategory === "transcription" ? "active" : ""}`}
+                onClick={() => setActiveCategory("transcription")}
+              >
+                <div className="vsSettingsNavIcon">
+                  <Mic size={16} />
+                </div>
+                <div className="vsSettingsNavItemTitle">{t("转写", "Transcription")}</div>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div className="vsSettingsNavSection">
+          <div className="vsSettingsNavSectionTitle">{t("系统与环境", "System & Runtime")}</div>
+          <ul className="vsSettingsNavList">
+            <li>
+              <button
+                type="button"
+                className={`vsSettingsNavItem ${activeCategory === "desktop" ? "active" : ""}`}
+                onClick={() => setActiveCategory("desktop")}
+              >
+                <div className="vsSettingsNavIcon">
+                  <Monitor size={16} />
+                </div>
+                <div className="vsSettingsNavItemTitle">{t("系统", "System")}</div>
+              </button>
+            </li>
+          </ul>
+        </div>
       </nav>
 
       {/* ── Right Content Area ── */}
