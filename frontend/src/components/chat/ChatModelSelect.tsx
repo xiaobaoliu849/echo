@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatModelHint, type UseChatResult } from "../../hooks/useChat";
-import { getProviderBadge, getProviderSortOrder } from "../../hooks/useVoiceChatHelpers";
+import { getProviderBadge, getProviderDisplayName, getProviderSortOrder } from "../../hooks/useVoiceChatHelpers";
 import { useProviderFlyoutTop } from "../../hooks/useProviderFlyoutTop";
 
 type Translator = (zh: string, en: string) => string;
@@ -45,7 +45,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
   const activeGroup = groups.find((g) => g.provider === activeProvider) || null;
 
   const summaryText = chat.chatModel.trim()
-    ? `${chat.chatProvider} / ${chat.chatModel}`
+    ? `${getProviderDisplayName(chat.chatProvider, "short", t)} / ${chat.chatModel}`
     : t("选择模型", "Select model");
 
   function handleToggle() {
@@ -137,7 +137,9 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
                     <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
                       {isCurrentProvider ? "✓" : ""}
                     </span>
-                    <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
+                    <span className="vsVoiceSettingsRowLabel">
+                      {getProviderDisplayName(group.provider, "short", t)}
+                    </span>
                     {badge ? (
                       <span className={`vsProviderBadge ${badge.type}`}>{badge.label}</span>
                     ) : null}

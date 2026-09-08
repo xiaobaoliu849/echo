@@ -71,7 +71,7 @@ class VertexAIProviderTests(unittest.IsolatedAsyncioTestCase):
     def test_vertex_ai_catalog_includes_native_audio(self):
         """The native-audio realtime model must be in the VertexAI catalog so
         the frontend can route it through Google Cloud quota instead of AI
-        Studio quota."""
+        Studio quota, while studio-only preview models must not be included."""
         from services.settings_service import DEFAULT_SETTINGS_TEMPLATE
         vertex_models = DEFAULT_SETTINGS_TEMPLATE["default_models"]["VertexAI"]
         self.assertIn(
@@ -82,13 +82,13 @@ class VertexAIProviderTests(unittest.IsolatedAsyncioTestCase):
             "gemini-live-2.5-flash-native-audio",
             vertex_models["enabled"],
         )
-        self.assertIn(
-            "gemini-2.5-flash-native-audio-preview-12-2025",
+        self.assertNotIn(
+            "gemini-3.1-flash-live-preview",
             vertex_models["available"],
         )
-        self.assertIn(
+        self.assertNotIn(
             "gemini-2.5-flash-native-audio-preview-12-2025",
-            vertex_models["enabled"],
+            vertex_models["available"],
         )
 
     def test_realtime_voice_service_resolves_vertex_native_audio(self):
@@ -102,11 +102,11 @@ class VertexAIProviderTests(unittest.IsolatedAsyncioTestCase):
         })
         service = RealtimeVoiceService(cfg)
         resolved = service._resolve_google_settings(
-            "gemini-2.5-flash-native-audio-preview-12-2025", provider="VertexAI"
+            "gemini-live-2.5-flash-native-audio", provider="VertexAI"
         )
         self.assertEqual(resolved["provider"], "VertexAI")
         self.assertEqual(resolved["api_key"], "AQ-mock-vertex-key")
-        self.assertEqual(resolved["model"], "gemini-2.5-flash-native-audio-preview-12-2025")
+        self.assertEqual(resolved["model"], "gemini-live-2.5-flash-native-audio")
 
 
 if __name__ == "__main__":

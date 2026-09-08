@@ -156,8 +156,8 @@ export interface SuggestedProviderTarget {
 export function detectSuggestedProvider(message: string): SuggestedProviderTarget | null {
   const text = String(message || "").toLowerCase();
 
-  if (text.includes("vertex")) {
-    return { provider: "VertexAI", category: "provider", labelZh: "Google Vertex AI", labelEn: "Google Vertex AI" };
+  if (text.includes("vertex") || text.includes("agent platform")) {
+    return { provider: "VertexAI", category: "provider", labelZh: "Google Agent Platform", labelEn: "Google Agent Platform" };
   }
   if (text.includes("google") || text.includes("gemini")) {
     return { provider: "Google", category: "provider", labelZh: "Google Gemini", labelEn: "Google Gemini" };

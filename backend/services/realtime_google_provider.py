@@ -1224,9 +1224,15 @@ class GoogleRealtimeMixin:
             error_text = str(e)
             if "API keys are not supported by this API" in error_text or ("1008" in error_text and "OAuth2" in error_text):
                 error_msg = (
-                    "Google 实时会话启动失败：Google Cloud Vertex AI 实时语音接口仅支持 OAuth2 访问令牌或服务账号凭据（不支持普通 API Key）。"
+                    "Google 实时会话启动失败：Google Agent Platform 实时语音接口仅支持 OAuth2 访问令牌或服务账号凭据（不支持普通 API Key）。"
                     "如果您使用的是 Google AI Studio API Key，请将供应商直接选择为「Google」即可畅快通话；"
                     "如果您使用企业 GCP 项目，请在终端执行 gcloud auth application-default login 或配置服务账号 JSON 密钥。"
+                )
+            elif "1008" in error_text and "Publisher model" in error_text:
+                error_msg = (
+                    f"Google 实时会话启动失败：Google Agent Platform 暂不支持模型「{settings['model']}」。"
+                    "Agent Platform 官方支持的实时语音模型为「gemini-live-2.5-flash-native-audio」；"
+                    "如需体验 preview/exp 等实验模型，请将供应商选择为「Google」(AI Studio)。"
                 )
             else:
                 error_msg = f"Google 实时会话启动失败: {error_text}"

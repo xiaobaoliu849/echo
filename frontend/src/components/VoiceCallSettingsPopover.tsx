@@ -5,6 +5,7 @@ import {
   DASHSCOPE_PROVIDER,
   formatVoiceChatSecondaryLabel,
   getProviderBadge,
+  getProviderDisplayName,
   getProviderSortOrder,
   isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
@@ -251,7 +252,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const summaryText = isCurrentModelRealtime
     ? `${currentModelName} · ${secondaryLabel}`
     : currentModelName.trim()
-    ? `${currentProviderName} / ${currentModelName}`
+    ? `${getProviderDisplayName(currentProviderName, "short", t)} / ${currentModelName}`
     : t("选择模型", "Select model");
 
   return (
@@ -313,7 +314,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
                       {isSelectedProvider ? "✓" : ""}
                     </span>
-                    <span className="vsVoiceSettingsRowLabel">{group.provider}</span>
+                    <span className="vsVoiceSettingsRowLabel">
+                      {getProviderDisplayName(group.provider, "short", t)}
+                    </span>
                     {badge ? (
                       <span className={`vsProviderBadge ${badge.type}`}>{badge.label}</span>
                     ) : null}

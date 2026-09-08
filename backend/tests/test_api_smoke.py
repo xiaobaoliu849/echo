@@ -2048,7 +2048,8 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertIn("gemini-3.8-flash", data["models"])
         self.assertIn("gemini-2.5-flash", data["models"])
         self.assertIn("gemini-live-2.5-flash-native-audio", data["models"])
-        self.assertIn("gemini-2.5-flash-native-audio-preview-12-2025", data["models"])
+        self.assertNotIn("gemini-3.1-flash-live-preview", data["models"])
+        self.assertNotIn("gemini-2.5-flash-native-audio-preview-12-2025", data["models"])
 
     def test_fetch_models_vertex_ai_no_key(self) -> None:
         response = self._request(

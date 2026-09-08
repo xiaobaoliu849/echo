@@ -264,8 +264,6 @@ VERTEXAI_MODEL_LIST_SUPPLEMENTS = [
     "gemini-2.5-pro",
     # Realtime voice and live translation models (Live API)
     "gemini-live-2.5-flash-native-audio",
-    "gemini-2.5-flash-native-audio-preview-12-2025",
-    "gemini-3.1-flash-live-preview",
     "gemini-3.5-live-translate-preview",
     # Audio transcription models (Live API)
     "gemini-3.5-transcribe-live",

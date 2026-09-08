@@ -184,7 +184,7 @@ export function asrProviderLabel(provider: string | null | undefined, language: 
 
 export const ASR_ENGINE_PROVIDER_MAP: Record<string, { providerName: string; keyField: string; labelZh: string; labelEn: string }> = {
   google: { providerName: "Google", keyField: "google_api_key", labelZh: "Google Gemini", labelEn: "Google Gemini" },
-  vertexai: { providerName: "VertexAI", keyField: "vertex_api_key", labelZh: "Google Vertex AI", labelEn: "Google Vertex AI" },
+  vertexai: { providerName: "VertexAI", keyField: "vertex_api_key", labelZh: "Google Agent Platform", labelEn: "Google Agent Platform" },
   dashscope: { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
   deepgram: { providerName: "Deepgram", keyField: "deepgram_api_key", labelZh: "Deepgram", labelEn: "Deepgram" },
   soniox: { providerName: "Soniox", keyField: "soniox_api_key", labelZh: "Soniox", labelEn: "Soniox" },

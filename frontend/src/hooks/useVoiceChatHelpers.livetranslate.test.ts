@@ -49,8 +49,7 @@ describe("isRealtimeVoiceModel (DashScope livetranslate)", () => {
   });
 
   it("recognizes VertexAI native-audio and live models as realtime", () => {
-    expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-2.5-flash-native-audio-preview-12-2025")).toBe(true);
-    expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-3.1-flash-live-preview")).toBe(true);
+    expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-live-2.5-flash-native-audio")).toBe(true);
     expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-3.5-transcribe-live")).toBe(true);
     expect(isRealtimeVoiceModel(VERTEXAI_PROVIDER, "gemini-3.5-live-translate-preview")).toBe(true);
   });

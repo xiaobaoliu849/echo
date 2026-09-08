@@ -577,6 +577,7 @@ export function getProviderBadge(
     norm === "dashscope" ||
     norm === "google" ||
     norm === "vertexai" ||
+    norm === "agentplatform" ||
     norm === "doubao" ||
     norm === "cartesia" ||
     norm === "gradium" ||
@@ -594,6 +595,32 @@ export function getProviderBadge(
     return { label: t("文本", "Text"), type: "text" };
   }
   return null;
+}
+
+export function getProviderDisplayName(
+  provider: string,
+  variant: "short" | "full" = "short",
+  t?: (zh: string, en: string) => string
+): string {
+  const norm = (provider || "").trim().toLowerCase();
+  if (norm === "vertexai" || norm === "agentplatform") {
+    if (variant === "full") {
+      return t
+        ? t("Google Agent Platform", "Google Agent Platform")
+        : "Google Agent Platform";
+    }
+    return t ? t("Agent Platform", "Agent Platform") : "Agent Platform";
+  }
+  if (norm === "google") {
+    return variant === "full" && t ? t("Google AI Studio", "Google AI Studio") : "Google";
+  }
+  if (norm === "dashscope") {
+    return variant === "full" && t ? t("阿里云 DashScope", "Alibaba DashScope") : "DashScope";
+  }
+  if (norm === "doubao") {
+    return variant === "full" && t ? t("火山方舟 (豆包)", "ByteDance Doubao") : "Doubao";
+  }
+  return provider;
 }
 
 export function resolveRealtimeProvider(preferredProvider: string | undefined, providerOptions: string[]): string {
@@ -676,7 +703,8 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
            /^qwen3\.5-livetranslate-(flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel);
   }
   if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase() ||
-      normalizedProvider === VERTEXAI_PROVIDER.toLowerCase()) {
+      normalizedProvider === VERTEXAI_PROVIDER.toLowerCase() ||
+      normalizedProvider === "agentplatform") {
     return SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS.some((item) => normalizedModel.includes(item));
   }
   if (normalizedProvider === OPENAI_PROVIDER.toLowerCase()) {
@@ -689,7 +717,8 @@ export function isLiveTranslateModel(provider: string, model: string): boolean {
   const normalizedProvider = provider.trim().toLowerCase();
   const normalizedModel = model.trim().toLowerCase();
   if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase() ||
-      normalizedProvider === VERTEXAI_PROVIDER.toLowerCase()) {
+      normalizedProvider === VERTEXAI_PROVIDER.toLowerCase() ||
+      normalizedProvider === "agentplatform") {
     return normalizedModel.includes("live-translate");
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
@@ -768,7 +797,6 @@ export function resolveRealtimeModelOptions(
   const vertexBuiltIns = provider === VERTEXAI_PROVIDER
     ? [
         "gemini-live-2.5-flash-native-audio",
-        "gemini-3.1-flash-live-preview",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",
       ]

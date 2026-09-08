@@ -13,7 +13,7 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   DashScope: t("阿里云 DashScope", "Alibaba DashScope"),
   DeepSeek: t("DeepSeek 深度求索", "DeepSeek"),
   Google: t("Google AI Studio", "Google AI Studio"),
-  VertexAI: t("Google Vertex AI", "Google Vertex AI"),
+  VertexAI: t("Google Agent Platform", "Google Agent Platform"),
   Groq: t("Groq 极速 API", "Groq Fast API"),
   OpenRouter: t("OpenRouter 聚合", "OpenRouter Aggregator"),
   SiliconFlow: t("硅基流动 SiliconFlow", "SiliconFlow"),
@@ -261,8 +261,8 @@ export default function ProviderSettingsSection({ settings }: Props) {
 
           {settings.settingsProvider === "VertexAI" && (
             <div className="vsProviderInfoCallout">
-              <div><strong>{t("Google Cloud Vertex AI（企业云 · 赠金抵扣专区）", "Google Cloud Vertex AI (Enterprise Cloud · Credits)")}</strong></div>
-              <div style={{ marginTop: 4 }}>• {t("填入 Vertex API Key 或云端配置，用于文字长对话、高并发推理及官方流式听写/同传，100% 消耗您的 Google Cloud 赠金！", "Enter your Vertex API key or cloud credentials for chat reasoning and official streaming transcribe/translate, 100% billing to your Google Cloud credits!")}</div>
+              <div><strong>{t("Google Agent Platform（企业云专区）", "Google Agent Platform (Enterprise Cloud)")}</strong></div>
+              <div style={{ marginTop: 4 }}>• {t("填入 Agent Platform API Key（控制台 Get Agent Platform API key 获取）或服务账号凭据，用于文字对话、高并发推理及实时全双工语音通话，直接消耗您的 Google Cloud 项目配额/赠金！", "Enter your Agent Platform API key (from 'Get Agent Platform API key' in console) or service account credentials for chat reasoning and realtime voice calls, billed to your Google Cloud credits!")}</div>
             </div>
           )}
 
