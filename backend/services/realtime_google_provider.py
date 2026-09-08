@@ -1078,23 +1078,39 @@ class GoogleRealtimeMixin:
         )
 
         if is_vertex:
-            # The Vertex AI Live API does not accept API keys — it requires
-            # OAuth2 credentials (service account or Application Default
-            # Credentials).  Always build the client with project/location
-            # so the google-genai SDK resolves credentials via ADC.
-            if sa_file and os.path.exists(sa_file):
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
-            project_id = (
-                settings.get("project_id", "").strip()
-                or os.environ.get("VERTEX_PROJECT_ID", "").strip()
-                or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
-            )
-            location = settings.get("location", "").strip() or "us-central1"
-            client = genai.Client(
-                vertexai=True,
-                project=project_id,
-                location=location,
-            )
+            has_sa = bool((sa_file and os.path.exists(sa_file)) or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+            if has_sa:
+                if sa_file and os.path.exists(sa_file):
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
+                project_id = (
+                    settings.get("project_id", "").strip()
+                    or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                    or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                )
+                location = settings.get("location", "").strip() or "us-central1"
+                client = genai.Client(
+                    vertexai=True,
+                    project=project_id,
+                    location=location,
+                )
+            elif api_key:
+                # Vertex AI Express Mode with API Key (no ADC required)
+                client = genai.Client(
+                    vertexai=True,
+                    api_key=api_key,
+                )
+            else:
+                project_id = (
+                    settings.get("project_id", "").strip()
+                    or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                    or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                )
+                location = settings.get("location", "").strip() or "us-central1"
+                client = genai.Client(
+                    vertexai=True,
+                    project=project_id,
+                    location=location,
+                )
         else:
             client_http_opts = http_options if http_options.get("base_url") else None
             client = genai.Client(api_key=api_key, http_options=client_http_opts)

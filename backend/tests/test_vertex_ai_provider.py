@@ -75,6 +75,14 @@ class VertexAIProviderTests(unittest.IsolatedAsyncioTestCase):
         from services.settings_service import DEFAULT_SETTINGS_TEMPLATE
         vertex_models = DEFAULT_SETTINGS_TEMPLATE["default_models"]["VertexAI"]
         self.assertIn(
+            "gemini-live-2.5-flash-native-audio",
+            vertex_models["available"],
+        )
+        self.assertIn(
+            "gemini-live-2.5-flash-native-audio",
+            vertex_models["enabled"],
+        )
+        self.assertIn(
             "gemini-2.5-flash-native-audio-preview-12-2025",
             vertex_models["available"],
         )

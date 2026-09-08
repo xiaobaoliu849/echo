@@ -1901,6 +1901,7 @@ class ApiSmokeTests(unittest.TestCase):
                         "gemini-3.5-transcribe",
                         "gemini-3.5-transcribe-live",
                         "gemini-3.7-flash",
+                        "gemini-3.8-flash",
                     ],
                 )
             finally:
@@ -2034,6 +2035,47 @@ class ApiSmokeTests(unittest.TestCase):
             data = response.json()
             self.assertEqual(data["provider"], "Doubao")
             self.assertIn("doubao-realtime", data["models"])
+
+    def test_fetch_models_vertex_ai_default_endpoint(self) -> None:
+        response = self._request(
+            "POST",
+            "/api/settings/providers/VertexAI/fetch-models",
+            json={"api_key": "AQ-vertex-key", "base_url": "https://us-central1-aiplatform.googleapis.com/v1"}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["provider"], "VertexAI")
+        self.assertIn("gemini-3.8-flash", data["models"])
+        self.assertIn("gemini-2.5-flash", data["models"])
+        self.assertIn("gemini-live-2.5-flash-native-audio", data["models"])
+        self.assertIn("gemini-2.5-flash-native-audio-preview-12-2025", data["models"])
+
+    def test_fetch_models_vertex_ai_no_key(self) -> None:
+        response = self._request(
+            "POST",
+            "/api/settings/providers/VertexAI/fetch-models",
+            json={"api_key": "", "base_url": "https://us-central1-aiplatform.googleapis.com/v1"}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["provider"], "VertexAI")
+        self.assertIn("gemini-2.5-flash", data["models"])
+
+    def test_fetch_models_vertex_ai_fallback_on_http_error(self) -> None:
+        import httpx
+        request = httpx.Request("GET", "https://custom-proxy.example.com/v1/models")
+        mock_response = httpx.Response(404, request=request)
+        exc = httpx.HTTPStatusError("Not Found", request=request, response=mock_response)
+        with patch("httpx.AsyncClient.get", side_effect=exc):
+            response = self._request(
+                "POST",
+                "/api/settings/providers/VertexAI/fetch-models",
+                json={"api_key": "any-key", "base_url": "https://custom-proxy.example.com/v1"}
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["provider"], "VertexAI")
+            self.assertIn("gemini-2.5-flash", data["models"])
 
     def test_desktop_status_endpoint_returns_preflight_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

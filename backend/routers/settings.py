@@ -212,6 +212,7 @@ class FetchModelsResponse(BaseModel):
 
 GOOGLE_MODEL_LIST_SUPPLEMENTS = [
     # Mainline and frontier text/multimodal models
+    "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.5-flash",
     "gemini-3.1-flash-lite",
@@ -252,6 +253,22 @@ CARTESIA_MODEL_LIST_SUPPLEMENTS = [
 GRADIUM_MODEL_LIST_SUPPLEMENTS = [
     "gradium-realtime",
     "default",
+]
+VERTEXAI_MODEL_LIST_SUPPLEMENTS = [
+    # Mainline and frontier text/multimodal models
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    # Realtime voice and live translation models (Live API)
+    "gemini-live-2.5-flash-native-audio",
+    "gemini-2.5-flash-native-audio-preview-12-2025",
+    "gemini-3.1-flash-live-preview",
+    "gemini-3.5-live-translate-preview",
+    # Audio transcription models (Live API)
+    "gemini-3.5-transcribe-live",
 ]
 GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
 
@@ -514,6 +531,12 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
+        if provider == "VertexAI":
+            return FetchModelsResponse(
+                provider=provider,
+                models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
         raise HTTPException(
             status_code=400,
             detail={
@@ -573,6 +596,13 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             headers["HTTP-Referer"] = "https://echo.local"
             headers["X-Title"] = "Echo"
 
+    if provider == "VertexAI" and "aiplatform.googleapis.com" in base_url:
+        return FetchModelsResponse(
+            provider=provider,
+            models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+            tts_models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+        )
+
     import httpx
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -599,6 +629,14 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 provider=provider,
                 models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
+        if provider == "VertexAI":
+            # Vertex AI has no un-scoped /v1/models endpoint.
+            # Fall back gracefully to curated VERTEXAI_MODEL_LIST_SUPPLEMENTS.
+            return FetchModelsResponse(
+                provider=provider,
+                models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
+                tts_models=[m for m in VERTEXAI_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
         detail = exc.response.text[:500] if exc.response is not None else str(exc)
         raise HTTPException(
@@ -669,6 +707,8 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             model_ids.extend(DASHSCOPE_MODEL_LIST_SUPPLEMENTS)
         elif provider == "Doubao":
             model_ids.extend(DOUBAO_MODEL_LIST_SUPPLEMENTS)
+        elif provider == "VertexAI":
+            model_ids.extend(VERTEXAI_MODEL_LIST_SUPPLEMENTS)
 
         model_ids = sorted(list(set(model_ids)))
         tts_ids = [m for m in model_ids if _is_tts_model_id(m)]
