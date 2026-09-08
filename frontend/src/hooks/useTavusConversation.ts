@@ -48,7 +48,7 @@ export type UseTavusConversationResult = {
   clearError: () => void;
 };
 
-function parseAppMessageSubtitle(rawData: any): { speaker: "user" | "pal"; text: string; isFinal: boolean } | null {
+function parseAppMessageSubtitle(rawData: any): { speaker: "user" | "pal"; text: string; isFinal: boolean; speakerName?: string } | null {
   if (!rawData) return null;
   let data = rawData;
   if (typeof rawData === "string") {
@@ -63,29 +63,44 @@ function parseAppMessageSubtitle(rawData: any): { speaker: "user" | "pal"; text:
   const payload = data.data || data.payload || data;
 
   const role = String(payload.role || payload.speaker || data.role || data.speaker || "");
-  const isUser = role.toLowerCase() === "user" || role.toLowerCase() === "me" || eventType.startsWith("user.");
+  const participantName = String(payload.participant_name || payload.participantName || data.participant_name || "").trim();
+  const participantId = String(payload.participant_id || payload.participantId || data.participant_id || "").toLowerCase();
+
+  const isUser =
+    role.toLowerCase() === "user" ||
+    role.toLowerCase() === "me" ||
+    eventType.startsWith("user.") ||
+    participantId === "user" ||
+    participantName.toLowerCase() === "user" ||
+    participantName.toLowerCase() === "you";
+
   const speaker: "user" | "pal" = isUser ? "user" : "pal";
 
   const text = String(
     payload.text ||
+    payload.speech ||
     payload.utterance ||
     payload.transcript ||
     payload.content ||
     payload.message ||
     data.text ||
+    data.speech ||
     ""
   ).trim();
 
   if (!text) return null;
 
+  const isStreamingEvent = eventType === "conversation.utterance.streaming" || eventType.includes("stream");
   const isFinal = Boolean(
+    eventType === "conversation.utterance" ||
     eventType.includes("completed") ||
     eventType.includes("final") ||
     payload.is_final ||
-    payload.final
+    payload.final ||
+    !isStreamingEvent
   );
 
-  return { speaker, text, isFinal };
+  return { speaker, text, isFinal, speakerName: participantName || undefined };
 }
 
 // Fires after the last remote participant (the PAL) leaves, so a stray
@@ -292,7 +307,12 @@ export default function useTavusConversation({
         if (!parsed) return;
 
         const timestamp = Date.now();
-        const speakerName = parsed.speaker === "user" ? t("你", "You") : t("AI 分身", "AI PAL");
+        const fallbackName = parsed.speaker === "user" ? t("你", "You") : t("AI 分身", "AI PAL");
+        const speakerName =
+          parsed.speakerName &&
+          !["user", "you", "me", "pal", "assistant"].includes(parsed.speakerName.toLowerCase())
+            ? parsed.speakerName
+            : fallbackName;
 
         setTranscripts((prev) => {
           const last = prev[prev.length - 1];

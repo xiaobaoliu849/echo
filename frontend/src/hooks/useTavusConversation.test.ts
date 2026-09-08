@@ -245,4 +245,77 @@ describe("useTavusConversation", () => {
     expect(call.destroy).toHaveBeenCalled();
     expect(endTavusConversation).toHaveBeenCalledWith("conv-5");
   });
+
+  it("handles conversation.utterance and streaming app messages with participant attribution", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-cvi",
+      conversation_url: "https://tavus.daily.co/room?t=token",
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start();
+    });
+
+    const appMessageHandler = getEventHandler(call, "app-message");
+
+    // 1. Streaming message from Maya (PAL)
+    act(() => {
+      appMessageHandler({
+        data: {
+          event_type: "conversation.utterance.streaming",
+          data: {
+            role: "assistant",
+            participant_name: "Maya",
+            speech: "Hello there,",
+          },
+        },
+      });
+    });
+
+    expect(result.current.transcripts.length).toBe(1);
+    expect(result.current.transcripts[0].speaker).toBe("pal");
+    expect(result.current.transcripts[0].speakerName).toBe("Maya");
+    expect(result.current.transcripts[0].text).toBe("Hello there,");
+    expect(result.current.transcripts[0].isFinal).toBe(false);
+
+    // 2. Final completed utterance from Maya
+    act(() => {
+      appMessageHandler({
+        data: {
+          event_type: "conversation.utterance",
+          data: {
+            role: "assistant",
+            participant_name: "Maya",
+            speech: "Hello there, how can I help you today?",
+          },
+        },
+      });
+    });
+
+    // In-place update within 5s for non-final preceding item
+    expect(result.current.transcripts.length).toBe(1);
+    expect(result.current.transcripts[0].text).toBe("Hello there, how can I help you today?");
+    expect(result.current.transcripts[0].isFinal).toBe(true);
+
+    // 3. User utterance
+    act(() => {
+      appMessageHandler({
+        data: {
+          event_type: "conversation.utterance",
+          data: {
+            role: "user",
+            text: "Nice to meet you!",
+          },
+        },
+      });
+    });
+
+    expect(result.current.transcripts.length).toBe(2);
+    expect(result.current.transcripts[1].speaker).toBe("user");
+    expect(result.current.transcripts[1].text).toBe("Nice to meet you!");
+  });
 });
+
