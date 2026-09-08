@@ -10,6 +10,7 @@ import {
   isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
 import { useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
+import { traceSelection } from "../hooks/voiceSelectionTrace";
 
 type Translator = (zh: string, en: string) => string;
 
@@ -95,13 +96,17 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       .sort((a, b) => getProviderSortOrder(a.provider) - getProviderSortOrder(b.provider));
   }, [chat?.chatModelChoices, voiceChat.voiceChatRealtimeChoicesByProvider]);
 
-  const candidateProvider =
-    activeProvider ||
-    (voiceChat.voiceChatProvider && providerGroups.some((g) => g.provider === voiceChat.voiceChatProvider)
-      ? voiceChat.voiceChatProvider
-      : chat?.chatProvider && providerGroups.some((g) => g.provider === chat.chatProvider)
-        ? chat.chatProvider
-        : providerGroups[0]?.provider || "");
+  const committedProvider = voiceChat.voiceChatProvider || chat?.chatProvider || providerGroups[0]?.provider || "";
+  const committedModel = voiceChat.voiceChatModel || chat?.chatModel || "";
+
+  const candidateProvider = open
+    ? (activeProvider ||
+      (voiceChat.voiceChatProvider && providerGroups.some((g) => g.provider === voiceChat.voiceChatProvider)
+        ? voiceChat.voiceChatProvider
+        : chat?.chatProvider && providerGroups.some((g) => g.provider === chat.chatProvider)
+          ? chat.chatProvider
+          : providerGroups[0]?.provider || ""))
+    : committedProvider;
   const currentProviderName = candidateProvider;
   const currentProviderGroup = providerGroups.find((g) => g.provider === currentProviderName) || providerGroups[0];
 
@@ -109,9 +114,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   // to the current provider when nothing is hovered).
   const { panelRef, onRowRef, flyoutTop } = useProviderFlyoutTop(open, activeProvider || currentProviderName);
 
-  // Model being browsed for the browsed provider: the hovered model, else the
-  // committed model only when it belongs to that provider (no mixed pairs).
+  // Model being browsed for the browsed provider: when popover is closed, strictly
+  // reflect the committed model so the summary button cannot show a false selection.
   const currentModelName = useMemo(() => {
+    if (!open) {
+      return committedModel;
+    }
     if (hoveredModel) return hoveredModel;
     if (
       currentProviderName === voiceChat.voiceChatProvider &&
@@ -130,7 +138,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       return chat.chatModel;
     }
     return currentProviderGroup?.models[0]?.model || "";
-  }, [hoveredModel, currentProviderName, chat?.chatProvider, chat?.chatModel, voiceChat.voiceChatProvider, voiceChat.voiceChatModel, currentProviderGroup]);
+  }, [open, committedModel, hoveredModel, currentProviderName, chat?.chatProvider, chat?.chatModel, voiceChat.voiceChatProvider, voiceChat.voiceChatModel, currentProviderGroup]);
   const isCurrentModelRealtime = isVoiceRealtimeModel(currentProviderName, currentModelName);
 
   // Realtime model whose voices the Level-3 list previews while the user browses
@@ -139,11 +147,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     if (currentModelName && isVoiceRealtimeModel(currentProviderName, currentModelName)) {
       return currentModelName;
     }
-    const realtimeGroup = voiceChat.voiceChatRealtimeChoicesByProvider.find(
-      (g) => g.provider === currentProviderName
-    );
-    return realtimeGroup?.models[0] || "";
-  }, [currentModelName, currentProviderName, voiceChat.voiceChatRealtimeChoicesByProvider]);
+    const rt = currentProviderGroup?.models.find((m) => m.isRealtime);
+    return rt?.model || "";
+  }, [currentModelName, currentProviderGroup, currentProviderName]);
 
   const previewVoiceOptions = useMemo(
     () => voiceChat.voiceChatVoiceOptionsFor(currentProviderName, previewModel),
@@ -161,6 +167,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const canShowVoiceCategory = Boolean(previewModel);
 
   function commitProviderModel(provider: string, model: string) {
+    traceSelection("popoverPick", `${provider}/${model}`);
     if (chat) {
       chat.onModelChoiceChange(buildModelChoiceValue(provider, model));
     }
@@ -174,6 +181,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     }
     if (isVoiceRealtimeModel(provider, model)) {
       voiceChat.onModelChange(model);
+    }
+  }
+
+  function commitCurrentTranslateModel() {
+    if (currentProviderName && currentModelName) {
+      commitProviderModel(currentProviderName, currentModelName);
     }
   }
 
@@ -194,8 +207,15 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       setActiveCategory("voice");
     } else {
       // Standard text model choice: close popover
-      setOpen(false);
+      closePopover();
     }
+  }
+
+  function closePopover() {
+    setOpen(false);
+    setActiveProvider("");
+    setActiveCategory("");
+    setHoveredModel("");
   }
 
   function handleToggle() {
@@ -215,8 +235,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       setActiveProvider("");
       setActiveCategory("");
       setHoveredModel("");
+      setOpen(true);
+    } else {
+      closePopover();
     }
-    setOpen((prev) => !prev);
   }
 
   useEffect(() => {
@@ -224,13 +246,13 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
     function handlePointerDown(event: MouseEvent) {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
+        closePopover();
       }
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setOpen(false);
+        closePopover();
       }
     }
 
@@ -361,7 +383,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                 type="button"
                 className="vsVoiceSettingsRow vsVoiceSettingsDoneRow"
                 style={{ flex: 1, justifyContent: "center", fontWeight: 600 }}
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  if (currentProviderName && currentModelName) {
+                    commitProviderModel(currentProviderName, currentModelName);
+                  }
+                  closePopover();
+                }}
               >
                 <span className="vsVoiceSettingsRowLabel">{t("完成", "Done")}</span>
               </button>
@@ -524,7 +551,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                                 key={`tgt-pill-${item.code}`}
                                 type="button"
                                 className={`vsPresetPillBtn${active ? " active" : ""}`}
-                                onClick={() => voiceChat.onTargetLanguageCodeChange(item.code)}
+                                onClick={() => {
+                                  commitCurrentTranslateModel();
+                                  voiceChat.onTargetLanguageCodeChange(item.code);
+                                }}
                               >
                                 {item.label}
                               </button>
@@ -541,7 +571,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                             className="vsLanguageSelectDropdown"
                             style={{ width: "100%" }}
                             value={voiceChat.voiceChatTargetLanguageCode}
-                            onChange={(e) => voiceChat.onTargetLanguageCodeChange(e.target.value)}
+                            onChange={(e) => {
+                              commitCurrentTranslateModel();
+                              voiceChat.onTargetLanguageCodeChange(e.target.value);
+                            }}
                           >
                             {voiceChat.voiceChatTargetLanguageOptions.map((opt) => (
                               <option key={`tgt-${opt.value}`} value={opt.value}>
@@ -596,7 +629,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                                 key={`tgt-pill-${item.code}`}
                                 type="button"
                                 className={`vsPresetPillBtn${active ? " active" : ""}`}
-                                onClick={() => voiceChat.onTargetLanguageCodeChange(item.code)}
+                                onClick={() => {
+                                  commitCurrentTranslateModel();
+                                  voiceChat.onTargetLanguageCodeChange(item.code);
+                                }}
                               >
                                 {item.label}
                               </button>
@@ -613,7 +649,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                             className="vsLanguageSelectDropdown"
                             style={{ width: "100%" }}
                             value={voiceChat.voiceChatTargetLanguageCode}
-                            onChange={(e) => voiceChat.onTargetLanguageCodeChange(e.target.value)}
+                            onChange={(e) => {
+                              commitCurrentTranslateModel();
+                              voiceChat.onTargetLanguageCodeChange(e.target.value);
+                            }}
                           >
                             {voiceChat.voiceChatTargetLanguageOptions.map((opt) => (
                               <option key={`tgt-${opt.value}`} value={opt.value}>
@@ -635,7 +674,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       <input
                         type="checkbox"
                         checked={voiceChat.voiceChatEchoTargetLanguage}
-                        onChange={(e) => voiceChat.onEchoTargetLanguageChange(e.target.checked)}
+                        onChange={(e) => {
+                          commitCurrentTranslateModel();
+                          voiceChat.onEchoTargetLanguageChange(e.target.checked);
+                        }}
                       />
                       <span>{t("同语回放", "Echo target language")}</span>
                     </label>
@@ -652,7 +694,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                         <input
                           type="checkbox"
                           checked={voiceChat.voiceChatEnableVoiceClone || false}
-                          onChange={(e) => voiceChat.onVoiceCloneToggle?.(e.target.checked)}
+                          onChange={(e) => {
+                            commitCurrentTranslateModel();
+                            voiceChat.onVoiceCloneToggle?.(e.target.checked);
+                          }}
                         />
                         <span style={{ fontWeight: 600, color: "#60a5fa" }}>
                           {t("声音复刻 (用本人音色朗读)", "Voice Clone (Speak in your own voice)")}
@@ -664,7 +709,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                           <button
                             type="button"
                             className={`vsPresetPillBtn ${voiceChat.voiceChatVoiceCloneFrequency === "once" ? "active" : ""}`}
-                            onClick={() => voiceChat.onVoiceCloneFrequencyChange?.("once")}
+                            onClick={() => {
+                              commitCurrentTranslateModel();
+                              voiceChat.onVoiceCloneFrequencyChange?.("once");
+                            }}
                             title={t("服务端录入首句声纹并在会话内持续使用", "Clone voice from first utterance and reuse")}
                           >
                             {t("单人实时复刻", "Single Speaker (Once)")}
@@ -672,7 +720,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                           <button
                             type="button"
                             className={`vsPresetPillBtn ${voiceChat.voiceChatVoiceCloneFrequency === "always" ? "active" : ""}`}
-                            onClick={() => voiceChat.onVoiceCloneFrequencyChange?.("always")}
+                            onClick={() => {
+                              commitCurrentTranslateModel();
+                              voiceChat.onVoiceCloneFrequencyChange?.("always");
+                            }}
                             title={t("每次发声均动态捕获声纹特征，适合多人对话", "Dynamically capture voice per utterance")}
                           >
                             {t("动态实时复刻", "Multi Speaker (Always)")}
@@ -681,6 +732,20 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       ) : null}
                     </div>
                   ) : null}
+
+                  <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="vsVoiceSettingsRow vsVoiceSettingsDoneRow"
+                      style={{ padding: "6px 16px", borderRadius: 6, fontWeight: 600, background: "var(--accent, #3b82f6)", color: "#fff" }}
+                      onClick={() => {
+                        commitCurrentTranslateModel();
+                        closePopover();
+                      }}
+                    >
+                      {t("应用并完成", "Apply and Done")}
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>

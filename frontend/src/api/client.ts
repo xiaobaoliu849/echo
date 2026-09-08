@@ -602,6 +602,10 @@ export function buildVoiceChatWebSocketUrl(params: {
   echoTargetLanguage?: boolean;
   enableVoiceClone?: boolean;
   voiceCloneFrequency?: string;
+  /** Diagnostic breadcrumb trail of realtime-selection transitions; logged by
+   *  the backend so a mis-routed call can be traced to the state change that
+   *  caused it. Safe to omit. */
+  clientTrace?: string;
 }): string {
   const httpUrl = new URL(API_BASE_URL);
   const protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
@@ -639,6 +643,9 @@ export function buildVoiceChatWebSocketUrl(params: {
   }
   if (params.voiceCloneFrequency) {
     wsUrl.searchParams.set("voice_clone_frequency", params.voiceCloneFrequency);
+  }
+  if (params.clientTrace) {
+    wsUrl.searchParams.set("client_trace", params.clientTrace.slice(0, 1200));
   }
   const wsToken = getRealtimeWebSocketToken();
   if (wsToken) {

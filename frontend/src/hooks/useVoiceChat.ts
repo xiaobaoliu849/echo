@@ -67,6 +67,7 @@ import {
   type VoiceChatInterruptionState,
   type VoiceChatMetrics
 } from "./useVoiceChatHelpers";
+import { serializeSelectionTrace, traceSelection } from "./voiceSelectionTrace";
 
 export default function useVoiceChat({
   formatErrorMessage,
@@ -197,6 +198,11 @@ export default function useVoiceChat({
   const finalizedInterruptedTurnsRef = useRef<Set<string>>(new Set());
   const lastPreferredProviderRef = useRef(preferredProvider);
   const lastPreferredModelRef = useRef(preferredModel);
+  // Set once the user picks a provider/model in the voice picker itself
+  // (VoiceCallSettingsPopover is the only caller of onProviderChange /
+  // onModelChange). After that the call selection is the user's, and chat-side
+  // provider churn must never overwrite it — see the sync effect below.
+  const hasExplicitVoiceSelectionRef = useRef(false);
   const sessionEpochRef = useRef(0);
   const pendingInitialPromptRef = useRef<{ prompt: string; attachments?: ChatAttachment[] } | null>(null);
   const lastCommittedUserTextRef = useRef("");
@@ -232,18 +238,26 @@ export default function useVoiceChat({
     voiceChatTargetLanguageCode;
 
   useEffect(() => {
+    // Mount is a suspect: a remount recomputes initialProvider from
+    // preferredProvider, which would silently discard a committed selection.
+    traceSelection("mount", `${initialProvider}/${initialModel}`);
+  }, []);
+
+  useEffect(() => {
     const preferredProviderChanged = lastPreferredProviderRef.current !== preferredProvider;
     lastPreferredProviderRef.current = preferredProvider;
     const preferredModelChanged = lastPreferredModelRef.current !== preferredModel;
     lastPreferredModelRef.current = preferredModel;
 
     // Adopt the chat-side selection ONLY when it is itself a realtime voice
-    // selection (realtime-capable provider + realtime model). A text-model
-    // change on the chat side must never clobber the voice-call selection —
-    // otherwise picking e.g. AgentPlatform live-translate for the call and then a
-    // DashScope text model for typing silently resets the call to
-    // DashScope/qwen3.5-omni-plus-realtime (the "fallback to Aliyun" bug).
+    // selection (realtime-capable provider + realtime model) AND the user has
+    // not picked a call model in the voice picker themselves. Once they have,
+    // chat-side churn — e.g. the settings page reloading and pushing a
+    // different settingsProvider through useChat → preferredProvider — must
+    // never clobber the call selection, or a "AgentPlatform live-translate"
+    // pick silently reverts to DashScope/qwen-audio before connect.
     const preferredIsRealtimeSelection = Boolean(
+      !hasExplicitVoiceSelectionRef.current &&
       preferredProvider &&
       preferredModel &&
       resolvedProviders.includes(preferredProvider) &&
@@ -251,9 +265,11 @@ export default function useVoiceChat({
     );
     if (preferredIsRealtimeSelection && (preferredProviderChanged || preferredModelChanged)) {
       if (preferredProvider !== voiceChatProvider) {
+        traceSelection("adoptProvider", `${voiceChatProvider}->${preferredProvider}`);
         setVoiceChatProvider(preferredProvider!);
       }
       if (preferredModel !== voiceChatModel) {
+        traceSelection("adoptModel", `${voiceChatModel}->${preferredModel}`);
         setVoiceChatModel(preferredModel!);
       }
       return;
@@ -266,6 +282,11 @@ export default function useVoiceChat({
       !voiceChatModel.trim() ||
       availableModels.includes(voiceChatModel.trim());
     if (!voiceChatModel.trim() || !currentModelValid) {
+      traceSelection(
+        "resetModel",
+        `${voiceChatProvider}:${voiceChatModel || "<empty>"}->${defaultModel}` +
+          ` opts=[${availableModels.join(",")}]`
+      );
       setVoiceChatModel(defaultModel);
     }
   }, [
@@ -1569,6 +1590,7 @@ export default function useVoiceChat({
       assistantAnalyserRef.current = assistantAnalyser;
       setAssistantAnalyser(assistantAnalyser);
 
+      traceSelection("connect", `${voiceChatProvider}/${effectiveModel}/${voiceChatVoice}`);
       const wsUrl = buildVoiceChatWebSocketUrl({
         provider: voiceChatProvider,
         model: effectiveModel || undefined,
@@ -1579,6 +1601,7 @@ export default function useVoiceChat({
         echoTargetLanguage: voiceChatLiveTranslate ? voiceChatEchoTargetLanguage : undefined,
         enableVoiceClone: (voiceChatProvider === DASHSCOPE_PROVIDER && voiceChatLiveTranslate) ? voiceChatEnableVoiceClone : undefined,
         voiceCloneFrequency: (voiceChatProvider === DASHSCOPE_PROVIDER && voiceChatLiveTranslate) ? voiceChatVoiceCloneFrequency : undefined,
+        clientTrace: serializeSelectionTrace(),
       });
       const ws = new WebSocket(wsUrl);
       const memoryConfig = buildVoiceChatSessionConfig(memoryGroupId || undefined);
@@ -2035,10 +2058,16 @@ export default function useVoiceChat({
     sessionSummary,
     onToggleRecording,
     onProviderChange: (provider: string) => {
+      traceSelection("providerChange", `${voiceChatProvider}->${provider}`);
+      hasExplicitVoiceSelectionRef.current = true;
       setVoiceChatProvider(provider);
       setVoiceChatModel(resolveDefaultModel(provider, providerModelCatalog));
     },
-    onModelChange: setVoiceChatModel,
+    onModelChange: (model: string) => {
+      traceSelection("modelChange", `${voiceChatModel}->${model}`);
+      hasExplicitVoiceSelectionRef.current = true;
+      setVoiceChatModel(model);
+    },
     onVoiceChange: setVoiceChatVoice,
     onTranslationModeChange: setVoiceChatTranslationMode,
     onSourceLanguageCodeChange: setVoiceChatSourceLanguageCode,

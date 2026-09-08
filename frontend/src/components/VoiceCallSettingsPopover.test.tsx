@@ -454,4 +454,48 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.getByText("tavus-video-pal")).toBeInTheDocument();
     expect(screen.getByText("实时视频分身")).toBeInTheDocument();
   });
+
+  it("commits AgentPlatform live-translate model when clicking target language in Level 3", () => {
+    const voiceChat = renderPopover({
+      voiceChatProvider: "DashScope",
+      voiceChatModel: "qwen-audio-3.0-realtime-flash",
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "DashScope", models: ["qwen-audio-3.0-realtime-flash"] },
+        { provider: "AgentPlatform", models: ["gemini-3.5-live-translate-preview"] },
+      ],
+      voiceChatTargetLanguageOptions: [
+        { value: "zh-Hans", label: "中文 (zh-Hans)" },
+        { value: "en", label: "英语 (en)" },
+      ],
+    });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("Agent Platform"));
+    fireEvent.mouseEnter(screen.getByText("gemini-3.5-live-translate-preview"));
+
+    // User directly clicks target language pill in Level 3 without clicking Level 2
+    fireEvent.click(screen.getByRole("button", { name: "中文" }));
+    expect(voiceChat.onProviderChange).toHaveBeenCalledWith("AgentPlatform");
+    expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-3.5-live-translate-preview");
+    expect(voiceChat.onTargetLanguageCodeChange).toHaveBeenCalledWith("zh-Hans");
+  });
+
+  it("commits hovered model when clicking Done button in Level 1 footer", () => {
+    const voiceChat = renderPopover({
+      voiceChatProvider: "DashScope",
+      voiceChatModel: "qwen-audio-3.0-realtime-flash",
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "DashScope", models: ["qwen-audio-3.0-realtime-flash"] },
+        { provider: "AgentPlatform", models: ["gemini-3.5-live-translate-preview"] },
+      ],
+    });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("Agent Platform"));
+    fireEvent.mouseEnter(screen.getByText("gemini-3.5-live-translate-preview"));
+
+    // User clicks the "完成" button
+    fireEvent.click(screen.getByText("完成"));
+    expect(voiceChat.onProviderChange).toHaveBeenCalledWith("AgentPlatform");
+    expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-3.5-live-translate-preview");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
