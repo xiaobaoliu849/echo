@@ -117,7 +117,7 @@ describe('ChatPage', () => {
         ]);
     });
 
-    it('disables the realtime voice call button when a non-realtime text model is selected', () => {
+    it('keeps the realtime call button available on the voice-call selection when a text chat model is selected', () => {
         const mockToggle = vi.fn();
         render(
             <ChatPage
@@ -126,6 +126,39 @@ describe('ChatPage', () => {
                     chatModel: 'gemini-3.7-flash',
                 })}
                 voiceChat={createVoiceChatController({
+                    voiceChatProvider: 'AgentPlatform',
+                    voiceChatModel: 'gemini-3.5-live-translate-preview',
+                    voiceChatLiveTranslate: true,
+                    onToggleRecording: mockToggle,
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        // A text model picked for typing must not disable (or hijack) the call:
+        // the button runs on the voice-call selection shown in the popover.
+        const callButton = screen.getByRole('button', { name: '实时通话' });
+        expect(callButton).not.toBeDisabled();
+        expect(callButton).toHaveAttribute('title', expect.stringContaining('AgentPlatform / gemini-3.5-live-translate-preview'));
+
+        fireEvent.click(callButton);
+        expect(mockToggle).toHaveBeenCalled();
+
+        // Composer still behaves like text chat (dictation stays available).
+        expect(screen.getByRole('button', { name: '语音转写' })).toBeInTheDocument();
+    });
+
+    it('disables the realtime voice call button when neither selection is a realtime voice model', () => {
+        const mockToggle = vi.fn();
+        render(
+            <ChatPage
+                chat={createChatController({
+                    chatProvider: 'Google',
+                    chatModel: 'gemini-3.7-flash',
+                })}
+                voiceChat={createVoiceChatController({
+                    voiceChatProvider: 'DeepSeek',
+                    voiceChatModel: 'deepseek-chat',
                     onToggleRecording: mockToggle,
                 })}
                 errorRuntimeContext={{}}
@@ -138,8 +171,6 @@ describe('ChatPage', () => {
 
         fireEvent.click(callButton);
         expect(mockToggle).not.toHaveBeenCalled();
-
-        expect(screen.getByRole('button', { name: '语音转写' })).toBeInTheDocument();
     });
 
     it('shows memory badges for realtime voice turns', () => {

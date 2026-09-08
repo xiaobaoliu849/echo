@@ -237,30 +237,26 @@ export default function useVoiceChat({
     const preferredModelChanged = lastPreferredModelRef.current !== preferredModel;
     lastPreferredModelRef.current = preferredModel;
 
-    const nextProvider = resolveRealtimeProvider(preferredProvider, resolvedProviders);
-    if (preferredProviderChanged && voiceChatProvider !== nextProvider) {
-      setVoiceChatProvider(nextProvider);
-      const nextModel =
-        preferredModel &&
-        isRealtimeVoiceModel(nextProvider, preferredModel) &&
-        (preferredModelChanged || nextProvider !== voiceChatProvider)
-        ? preferredModel
-        : resolveDefaultModel(nextProvider, providerModelCatalog);
-      setVoiceChatModel(nextModel);
-      return;
-    }
-
-    if (
+    // Adopt the chat-side selection ONLY when it is itself a realtime voice
+    // selection (realtime-capable provider + realtime model). A text-model
+    // change on the chat side must never clobber the voice-call selection —
+    // otherwise picking e.g. AgentPlatform live-translate for the call and then a
+    // DashScope text model for typing silently resets the call to
+    // DashScope/qwen3.5-omni-plus-realtime (the "fallback to Aliyun" bug).
+    const preferredIsRealtimeSelection = Boolean(
+      preferredProvider &&
       preferredModel &&
-      preferredModelChanged &&
-      preferredModel !== voiceChatModel &&
-      isRealtimeVoiceModel(voiceChatProvider, preferredModel)
-    ) {
-      const availableModels = resolveRealtimeModelOptions(voiceChatProvider, providerModelCatalog);
-      if (availableModels.length === 0 || availableModels.includes(preferredModel)) {
-        setVoiceChatModel(preferredModel);
-        return;
+      resolvedProviders.includes(preferredProvider) &&
+      isRealtimeVoiceModel(preferredProvider, preferredModel)
+    );
+    if (preferredIsRealtimeSelection && (preferredProviderChanged || preferredModelChanged)) {
+      if (preferredProvider !== voiceChatProvider) {
+        setVoiceChatProvider(preferredProvider!);
       }
+      if (preferredModel !== voiceChatModel) {
+        setVoiceChatModel(preferredModel!);
+      }
+      return;
     }
 
     const defaultModel = resolveDefaultModel(voiceChatProvider, providerModelCatalog);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { extractPdfText } from "../../api";
 import VoiceCallSettingsPopover from "../VoiceCallSettingsPopover";
 import { isVoiceRealtimeModel } from "../../hooks/useChat";
-import { formatVoiceChatSecondaryLabel } from "../../hooks/useVoiceChatHelpers";
+import { formatVoiceChatSecondaryLabel, isRealtimeVoiceModel } from "../../hooks/useVoiceChatHelpers";
 import type { UseChatResult } from "../../hooks/useChat";
 import type { UseVoiceChatResult } from "../../hooks/useVoiceChat";
 import { useI18n } from "../../i18n";
@@ -82,6 +82,14 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
   const hasAttachments = (chat.chatAttachments && chat.chatAttachments.length > 0);
   const canSend = hasInput || hasAttachments;
   const isRealtime = isVoiceRealtimeModel(chat.chatProvider, chat.chatModel);
+  // The call runs on the voice-call selection (the popover on the left), so
+  // the call button stays available whenever EITHER the chat selection or the
+  // voice-call selection is a realtime voice model. A text model picked for
+  // typing must not disable (or hijack) the call. Kept separate from
+  // `isRealtime`, which drives composer UX (placeholder / dictation button).
+  const canStartCall =
+    isRealtime ||
+    isRealtimeVoiceModel(voiceChat.voiceChatProvider, voiceChat.voiceChatModel);
   const isLiveTranslate = voiceChat.voiceChatLiveTranslate;
 
   const [dictating, setDictating] = useState(false);
@@ -590,23 +598,22 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
           {!isVoiceActive && (
             <button
               type="button"
-              className={`vsComposerCallBtn ${!isRealtime ? "disabled" : ""}`}
+              className={`vsComposerCallBtn ${!canStartCall ? "disabled" : ""}`}
               aria-label={
                 (chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus"
                   ? t("开启视频分身", "Video PAL")
                   : t("实时通话", "Realtime call")
               }
               onClick={() => {
-                if (!isRealtime) return;
-                const activeProvider = chat ? chat.chatProvider : voiceChat.voiceChatProvider;
-                const activeModel = chat ? chat.chatModel : voiceChat.voiceChatModel;
-                if (activeProvider !== voiceChat.voiceChatProvider) {
-                  voiceChat.onProviderChange(activeProvider);
-                }
-                if (activeModel && activeModel !== voiceChat.voiceChatModel) {
-                  voiceChat.onModelChange(activeModel);
-                }
-                if (activeProvider === "Tavus") {
+                if (!canStartCall) return;
+                // NOTE: no chat→voiceChat sync here. The voice-call selection
+                // lives in voiceChat's own state (the popover on the left);
+                // useVoiceChat already adopts realtime chat selections via its
+                // sync effect. Force-copying chat's provider/model at click
+                // time would clobber a voice-popover pick (e.g. Agent Platform
+                // live-translate) with the chat model (e.g. DashScope), and
+                // the same-tick startSession would use stale state anyway.
+                if ((chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus") {
                   if (onOpenPal) {
                     onOpenPal();
                   } else {
@@ -616,9 +623,9 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
                 }
                 void voiceChat.onToggleRecording();
               }}
-              disabled={!isRealtime || !voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
+              disabled={!canStartCall || !voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
               title={
-                !isRealtime
+                !canStartCall
                   ? t(
                       "当前选择的是文本/多模态模型，实时通话请在左侧切换为实时语音模型（如带「实时」徽章的模型）",
                       "Current model is a text/multimodal model. Switch to a realtime voice model on the left to start a call."
