@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Globe, Cpu, Brain, Mic, Monitor } from "lucide-react";
+import { Globe, Cpu, Brain, Mic, Monitor, ArrowLeft } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import { useI18n } from "../i18n";
@@ -25,6 +25,21 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose }:
     <div className="vsSettingsLayout">
       {/* ── Left Navigation ── */}
       <nav className="vsSettingsNav">
+        {onClose && (
+          <div className="vsSettingsNavHeader">
+            <button
+              type="button"
+              className="vsSettingsBackBtn"
+              onClick={onClose}
+              title={t("返回工作区", "Back to Workspace")}
+              aria-label={t("返回工作区", "Back to Workspace")}
+            >
+              <ArrowLeft size={16} />
+              <span>{t("返回工作区", "Back to Workspace")}</span>
+            </button>
+          </div>
+        )}
+
         <div className="vsSettingsNavSection">
           <div className="vsSettingsNavSectionTitle">{t("基础设置", "Basic Settings")}</div>
           <ul className="vsSettingsNavList">
@@ -181,16 +196,6 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose }:
               )}
             </div>
             <div className="vsSettingsFooterActions">
-              {onClose && (
-                <button
-                  type="button"
-                  className="vsBtnSecondary vsFooterCloseBtn"
-                  onClick={onClose}
-                  disabled={settings.settingsSaving}
-                >
-                  {t("关闭", "Close")}
-                </button>
-              )}
               <button
                 type="submit"
                 className="vsBtnPrimary vsFooterSaveBtn"

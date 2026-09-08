@@ -6876,32 +6876,22 @@ button.vsPasswordToggleBtn:focus-visible {
   transform: translate(0, 0);
 }
 
-.vsSettingsModalHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 18px;
-  height: 48px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-card);
-  user-select: none;
-  flex-shrink: 0;
-}
-
-.vsSettingsModalHeaderLeft {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+/* Settings Navigation Header (ZCode-Style top-of-sidebar Back Button) */
+.vsSettingsNavHeader {
+  padding: 2px 2px 12px 2px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--sidebar-line);
 }
 
 .vsSettingsBackBtn {
+  width: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: 8px;
+  padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: var(--surface);
+  background: var(--vs-sidebar-hover-bg);
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
@@ -6910,68 +6900,10 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsSettingsBackBtn:hover {
-  background: var(--vs-sidebar-hover-bg);
+  background: var(--surface-strong);
   border-color: var(--line-strong);
   color: var(--text);
   transform: translateX(-1px);
-}
-
-.vsSettingsHeaderDivider {
-  width: 1px;
-  height: 18px;
-  background: var(--line);
-}
-
-.vsSettingsModalHeaderTitleRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.vsSettingsModalHeaderIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--brand);
-}
-
-.vsSettingsModalHeader h2 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
-}
-
-.vsSettingsModalWindowControls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.vsWindowControlBtn {
-  border: 0;
-  background: transparent;
-  font-size: 12px;
-  color: var(--muted);
-  cursor: pointer;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-
-.vsWindowControlBtn:hover {
-  background: var(--surface);
-  color: var(--text-primary);
-}
-
-.vsWindowControlBtn.close:hover {
-  background: color-mix(in oklab, #ef4444 15%, transparent);
-  color: #dc2626;
 }
 
 /* Settings Form Footer matching Echo design tokens */
@@ -7018,25 +6950,6 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.vsFooterCloseBtn {
-  height: 36px;
-  padding: 0 16px;
-  font-size: 13px;
-  font-weight: 500;
-  background: var(--surface);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.vsFooterCloseBtn:hover:not(:disabled) {
-  background: var(--vs-sidebar-hover-bg);
-  color: var(--text-primary);
-  border-color: var(--line-strong);
 }
 
 .vsFooterSaveBtn {
