@@ -166,6 +166,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     }
     if (provider !== voiceChat.voiceChatProvider) {
       voiceChat.onProviderChange(provider);
+      // Immediately reset to the new provider's default voice to prevent stale crossover
+      const defaultVoice = voiceChat.voiceChatVoiceOptionsFor(provider, model)[0]?.value;
+      if (defaultVoice) {
+        voiceChat.onVoiceChange(defaultVoice);
+      }
     }
     if (isVoiceRealtimeModel(provider, model)) {
       voiceChat.onModelChange(model);
@@ -237,15 +242,24 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     };
   }, [open]);
 
+  const currentLiveTranslate =
+    isLiveTranslateModelHelper(currentProviderName, currentModelName) ||
+    (currentProviderName === voiceChat.voiceChatProvider &&
+      currentModelName === voiceChat.voiceChatModel &&
+      voiceChat.voiceChatLiveTranslate);
+
   const secondaryLabel = formatVoiceChatSecondaryLabel({
-    liveTranslate: voiceChat.voiceChatLiveTranslate,
+    liveTranslate: currentLiveTranslate,
     voiceCloneEnabled: Boolean(voiceChat.voiceChatEnableVoiceClone),
     translationMode: voiceChat.voiceChatTranslationMode,
     sourceLanguageCode: voiceChat.voiceChatSourceLanguageCode,
     targetLanguageCode: voiceChat.voiceChatTargetLanguageCode,
-    voiceLabel: voiceChat.voiceChatVoiceLabel,
-    provider: voiceChat.voiceChatProvider,
-    model: voiceChat.voiceChatModel,
+    voiceLabel:
+      currentProviderName === voiceChat.voiceChatProvider
+        ? voiceChat.voiceChatVoiceLabel
+        : previewVoiceOptions[0]?.label || voiceChat.voiceChatVoiceLabel,
+    provider: currentProviderName,
+    model: currentModelName,
     t,
   });
 

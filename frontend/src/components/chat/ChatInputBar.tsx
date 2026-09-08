@@ -598,7 +598,15 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
               }
               onClick={() => {
                 if (!isRealtime) return;
-                if ((chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus") {
+                const activeProvider = chat ? chat.chatProvider : voiceChat.voiceChatProvider;
+                const activeModel = chat ? chat.chatModel : voiceChat.voiceChatModel;
+                if (activeProvider !== voiceChat.voiceChatProvider) {
+                  voiceChat.onProviderChange(activeProvider);
+                }
+                if (activeModel && activeModel !== voiceChat.voiceChatModel) {
+                  voiceChat.onModelChange(activeModel);
+                }
+                if (activeProvider === "Tavus") {
                   if (onOpenPal) {
                     onOpenPal();
                   } else {
