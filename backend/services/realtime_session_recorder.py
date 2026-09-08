@@ -60,6 +60,10 @@ class VoiceAgentSessionRecorder:
     def current_assistant_text(self) -> str:
         return self._current_assistant_text
 
+    @property
+    def has_assistant_output(self) -> bool:
+        return bool(self._current_assistant_text or self._first_audio_recorded)
+
     def _next_turn_id(self) -> str:
         self._turn_index += 1
         return f"voice-turn-{self._turn_index}"
@@ -142,20 +146,32 @@ class VoiceAgentSessionRecorder:
             payload=dict(payload),
         )
 
-    async def note_user_transcript(self, text: str) -> str:
+    async def note_user_transcript(self, text: str, *, turn_id: str = "") -> str:
         clean_text = str(text or "").strip()
         if not clean_text:
             return ""
-        # A barge-in can arrive while the previous turn still has coalesced
-        # assistant text waiting to flush — persist it against the old turn
-        # before the new one starts.
-        await self._flush_pending_assistant_text()
+        target_turn_id = str(turn_id or "").strip()
+        is_same_turn_backfill = bool(
+            not target_turn_id
+            and self._current_turn_id
+            and not self._pending_user_text
+            and not self._turn_user_text_persisted
+        ) or bool(target_turn_id and target_turn_id == self._current_turn_id)
+
+        if not is_same_turn_backfill:
+            # A barge-in can arrive while the previous turn still has coalesced
+            # assistant text waiting to flush — persist it against the old turn
+            # before the new one starts.
+            await self._flush_pending_assistant_text()
+            self._current_turn_id = target_turn_id or self._next_turn_id()
+            self._current_assistant_text = ""
+            self._turn_started_at = time.perf_counter()
+            self._first_audio_recorded = False
+        elif target_turn_id:
+            self._current_turn_id = target_turn_id
+
         self._pending_user_text = clean_text
         self._turn_user_text_persisted = False
-        self._current_turn_id = self._next_turn_id()
-        self._current_assistant_text = ""
-        self._turn_started_at = time.perf_counter()
-        self._first_audio_recorded = False
         await self._call_repository(
             "upsert_turn",
             self.session_id,
