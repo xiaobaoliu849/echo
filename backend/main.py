@@ -20,12 +20,17 @@ from services.api_auth_guard import (
     validate_auth_header,
 )
 from services.config_loader import get_data_dir
+from services.logging_setup import setup_file_logging
 
 request_logger = logging.getLogger("voicespirit.request")
 error_logger = logging.getLogger("voicespirit.error")
 
 
 def create_app() -> FastAPI:
+    log_path = setup_file_logging()
+    if log_path:
+        logging.getLogger("voicespirit").info("log_file_ready: %s", log_path)
+
     app = FastAPI(
         title="Echo API",
         description="Echo — local-first realtime voice AI assistant backend",
