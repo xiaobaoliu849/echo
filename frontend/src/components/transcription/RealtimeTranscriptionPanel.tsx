@@ -830,7 +830,7 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOp
             {viewMode === "teleprompter" && (
               <div className="vsRTFontGroup">
                 <span className="vsRTFontLabel">{t("字号", "Size")}:</span>
-                {(["normal", "large", "xlarge"]).map((lvl) => (
+                {(["normal", "large", "xlarge"] as const).map((lvl) => (
                   <button key={lvl} type="button" onClick={() => setFontSizeLevel(lvl)} className={`vsRTFontBtn${fontSizeLevel === lvl ? " active" : ""}`} style={{ fontSize: lvl === "normal" ? "11px" : lvl === "large" ? "13px" : "15px" }}>
                     A{lvl === "normal" ? "" : lvl === "large" ? "+" : "++"}
                   </button>
