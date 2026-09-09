@@ -119,127 +119,176 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
     </div>
   ) : null;
 
+  const handleClearWorkspace = () => {
+    if (tts.ttsMode === "dialogue") {
+      tts.onDialogueTextChange("");
+      return;
+    }
+    if (tts.ttsMode === "pdf") {
+      tts.onPdfTextChange("");
+      tts.onPdfFileChange(null);
+      return;
+    }
+    tts.onTextChange("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      if (!tts.generating && !tts.extractingPdf && !tts.polishingPdf && tts.activeSourceText.trim()) {
+        e.preventDefault();
+        const form = e.currentTarget.closest("form");
+        if (form && typeof form.requestSubmit === "function") {
+          form.requestSubmit();
+        } else {
+          tts.onSubmit({ preventDefault: () => {} } as React.FormEvent);
+        }
+      }
+    }
+  };
+
   return (
     <section className="vsTtsWorkspace vsTtsSingleColumn">
-      <form className="vsTtsLayout" onSubmit={tts.onSubmit} style={{ display: "flex", flexDirection: "column", height: "100%", margin: 0 }}>
+      <form className="vsTtsLayout" onSubmit={tts.onSubmit}>
         {/* ── Top Pane: Header & Mode Selection ── */}
-        <header className="vsTtsPrimaryHeader" style={{ padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div className="vsModeTabs" style={{ display: "flex", gap: 8 }}>
-            <button type="button" className={tts.ttsMode === "text" ? "vsBtnPrimary" : "vsBtnSecondary"} onClick={() => tts.onTtsModeChange("text")} style={{ height: "32px", fontSize: "12px", padding: "0 12px" }}>
+        <header className="vsTtsPrimaryHeader">
+          <div className="vsModeTabs">
+            <button
+              type="button"
+              data-mode="text"
+              className={`vsModeTabBtn ${tts.ttsMode === "text" ? "active" : ""}`}
+              onClick={() => tts.onTtsModeChange("text")}
+            >
               {t("文本转语音", "Text to speech")}
             </button>
-            <button type="button" className={tts.ttsMode === "dialogue" ? "vsBtnPrimary" : "vsBtnSecondary"} onClick={() => tts.onTtsModeChange("dialogue")} style={{ height: "32px", fontSize: "12px", padding: "0 12px" }}>
+            <button
+              type="button"
+              data-mode="dialogue"
+              className={`vsModeTabBtn ${tts.ttsMode === "dialogue" ? "active" : ""}`}
+              onClick={() => tts.onTtsModeChange("dialogue")}
+            >
               {t("对话转语音", "Dialogue to speech")}
             </button>
-            <button type="button" className={tts.ttsMode === "pdf" ? "vsBtnPrimary" : "vsBtnSecondary"} onClick={() => tts.onTtsModeChange("pdf")} style={{ height: "32px", fontSize: "12px", padding: "0 12px" }}>
+            <button
+              type="button"
+              data-mode="pdf"
+              className={`vsModeTabBtn ${tts.ttsMode === "pdf" ? "active" : ""}`}
+              onClick={() => tts.onTtsModeChange("pdf")}
+            >
               {t("PDF 转语音", "PDF to speech")}
             </button>
           </div>
-          <div className="vsTtsPrimaryStats" style={{ margin: 0 }}>
-            <span>{t(`${activeLength} 字`, `${activeLength} chars`)}</span>
+          <div className="vsTtsPrimaryStats">
+            <span className="vsStatsNumber">{activeLength}</span>
+            <span className="vsStatsUnit"> {t("字", "chars")}</span>
           </div>
         </header>
 
         {/* ── Config Horizontal Toolbar ── */}
         {tts.ttsMode === "dialogue" ? (
-          <div className="vsTtsToolbar vsTtsDialogueToolbar" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "12px", padding: "16px 24px" }}>
-            {/* Person A Row */}
-            <div style={{ display: "grid", gridTemplateColumns: "85px 220px minmax(260px, 1fr)", alignItems: "center", gap: "16px" }}>
-              <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "700", color: "var(--brand)", whiteSpace: "nowrap" }}>
-                {t("角色 A (A)", "Speaker A")}:
-              </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
-                <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155", whiteSpace: "nowrap" }}>{t("服务商", "Engine")}:</span>
-                <select
-                  className="vsSelect"
-                  value={tts.ttsEngine}
-                  onChange={(e) => tts.onEngineChange(e.target.value as typeof tts.ttsEngine)}
-                  style={{ width: "100%", height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
-                >
-                  {tts.engineOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+          <div className="vsTtsToolbar vsTtsDialogueToolbar">
+            <div className="vsDialogueSpeakersGrid">
+              {/* Person A Card */}
+              <div className="vsSpeakerCard vsSpeakerCardA">
+                <div className="vsSpeakerHeader">
+                  <span className="vsSpeakerBadge vsSpeakerBadgeA">A</span>
+                  <span className="vsSpeakerTitle">{t("角色 A (A)", "Speaker A")}</span>
+                </div>
+                <div className="vsSpeakerFields">
+                  <div className="vsSpeakerField">
+                    <span className="vsFieldLabelSub">{t("服务商", "Engine")}:</span>
+                    <select
+                      className="vsSelect vsSelectModern"
+                      value={tts.ttsEngine}
+                      onChange={(e) => tts.onEngineChange(e.target.value as typeof tts.ttsEngine)}
+                    >
+                      {tts.engineOptions.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="vsSpeakerField vsSpeakerVoiceField">
+                    <span className="vsFieldLabelSub">{t("音色", "Voice")}:</span>
+                    <div className="vsVoiceCapsuleWrapper">
+                      <select
+                        className="vsSelect vsSelectModern"
+                        value={tts.voice}
+                        onChange={(e) => tts.onVoiceChange(e.target.value)}
+                        disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
+                      >
+                        <option value="" disabled>{t("-- 请选择音色 A --", "-- Select voice A --")}</option>
+                        {tts.voiceOptions.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      {tts.loadingVoices && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
-                <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155", whiteSpace: "nowrap" }}>{t("音色", "Voice")}:</span>
-                <select
-                  className="vsSelect"
-                  value={tts.voice}
-                  onChange={(e) => tts.onVoiceChange(e.target.value)}
-                  disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
-                  style={{ flex: 1, height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
-                >
-                  <option value="" disabled>{t("-- 请选择音色 A --", "-- Select voice A --")}</option>
-                  {tts.voiceOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                {tts.loadingVoices && <span style={{ fontSize: "12px", color: "var(--brand)", whiteSpace: "nowrap" }}>{t("加载中…", "Loading...")}</span>}
-              </div>
-            </div>
 
-            {/* Person B Row */}
-            <div style={{ display: "grid", gridTemplateColumns: "85px 220px minmax(260px, 1fr)", alignItems: "center", gap: "16px" }}>
-              <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "700", color: "var(--brand)", whiteSpace: "nowrap" }}>
-                {t("角色 B (B)", "Speaker B")}:
-              </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
-                <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155", whiteSpace: "nowrap" }}>{t("服务商", "Engine")}:</span>
-                <select
-                  className="vsSelect"
-                  value={tts.ttsEngineB}
-                  onChange={(e) => tts.onEngineBChange?.(e.target.value as typeof tts.ttsEngine)}
-                  style={{ width: "100%", height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
-                >
-                  {tts.engineOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
-                <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155", whiteSpace: "nowrap" }}>{t("音色", "Voice")}:</span>
-                <select
-                  className="vsSelect"
-                  value={tts.voiceB}
-                  onChange={(e) => tts.onVoiceBChange?.(e.target.value)}
-                  disabled={tts.loadingVoicesB || tts.voiceOptionsB.length === 0}
-                  style={{ flex: 1, height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
-                >
-                  <option value="" disabled>{t("-- 请选择音色 B --", "-- Select voice B --")}</option>
-                  {tts.voiceOptionsB.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                {tts.loadingVoicesB && <span style={{ fontSize: "12px", color: "var(--brand)", whiteSpace: "nowrap" }}>{t("加载中…", "Loading...")}</span>}
+              {/* Person B Card */}
+              <div className="vsSpeakerCard vsSpeakerCardB">
+                <div className="vsSpeakerHeader">
+                  <span className="vsSpeakerBadge vsSpeakerBadgeB">B</span>
+                  <span className="vsSpeakerTitle">{t("角色 B (B)", "Speaker B")}</span>
+                </div>
+                <div className="vsSpeakerFields">
+                  <div className="vsSpeakerField">
+                    <span className="vsFieldLabelSub">{t("服务商", "Engine")}:</span>
+                    <select
+                      className="vsSelect vsSelectModern"
+                      value={tts.ttsEngineB}
+                      onChange={(e) => tts.onEngineBChange?.(e.target.value as typeof tts.ttsEngine)}
+                    >
+                      {tts.engineOptions.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="vsSpeakerField vsSpeakerVoiceField">
+                    <span className="vsFieldLabelSub">{t("音色", "Voice")}:</span>
+                    <div className="vsVoiceCapsuleWrapper">
+                      <select
+                        className="vsSelect vsSelectModern"
+                        value={tts.voiceB}
+                        onChange={(e) => tts.onVoiceBChange?.(e.target.value)}
+                        disabled={tts.loadingVoicesB || tts.voiceOptionsB.length === 0}
+                      >
+                        <option value="" disabled>{t("-- 请选择音色 B --", "-- Select voice B --")}</option>
+                        {tts.voiceOptionsB.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      {tts.loadingVoicesB && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Global Settings Row */}
-            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap", marginTop: "4px", borderTop: "1px dashed var(--line)", paddingTop: "12px" }}>
-              <div className="vsTtsToolbarField" style={{ margin: 0 }}>
-                <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>{t("全局语速", "Rate")}:</span>
+            <div className="vsDialogueGlobalRow">
+              <span className="vsFieldLabel">{t("全局语速", "Rate")}:</span>
+              <div className="vsRateCapsule">
                 <input
                   type="text"
-                  className="vsInput"
+                  className="vsInput vsInputModern vsInputRate"
                   value={tts.rate}
                   onChange={(e) => tts.onRateChange(e.target.value)}
                   placeholder="+0%"
-                  style={{ width: "90px", height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
                 />
                 <button
                   type="button"
-                  className="vsBtnGhost"
+                  className="vsBtnGhost vsRateResetBtn"
                   onClick={() => tts.onRateChange("+0%")}
-                  style={{ fontSize: "12px", padding: "4px 8px" }}
                 >
                   Reset
                 </button>
@@ -248,77 +297,99 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
           </div>
         ) : (
           <div className="vsTtsToolbar">
-            <div className="vsTtsToolbarField">
-              <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>{t("TTS 引擎", "Engine")}:</span>
-              <select
-                className="vsSelect"
-                value={tts.ttsEngine}
-                onChange={(e) => tts.onEngineChange(e.target.value as typeof tts.ttsEngine)}
-                style={{ width: "160px", height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
-              >
-                {tts.engineOptions.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {tts.ttsModelOptions && tts.ttsModelOptions.length > 0 && (
-              <div className="vsTtsToolbarField">
-                <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>{t("模型版本", "Model")}:</span>
+            <div className="vsTtsToolbarField vsTtsFieldEngine">
+              <span className="vsFieldLabel">{t("TTS 引擎", "Engine")}:</span>
+              <div className="vsSelectWrapper">
                 <select
-                  className="vsSelect"
-                  value={tts.ttsModel || ""}
-                  onChange={(e) => tts.onModelChange?.(e.target.value)}
-                  style={{ width: "190px", height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
+                  className="vsSelect vsSelectModern"
+                  value={tts.ttsEngine}
+                  onChange={(e) => tts.onEngineChange(e.target.value as typeof tts.ttsEngine)}
                 >
-                  {tts.ttsModelOptions.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
+                  {tts.engineOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
-
-            <div className="vsTtsToolbarField" style={{ flex: "1 1 280px", maxWidth: "480px" }}>
-              <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>{t("首选音色", "Voice")}:</span>
-              <select
-                className="vsSelect"
-                value={tts.voice}
-                onChange={(e) => tts.onVoiceChange(e.target.value)}
-                disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
-                style={{ flex: 1, minWidth: 0, height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
-              >
-                <option value="" disabled>{t("-- 请选择音色 --", "-- Select a voice --")}</option>
-                {tts.voiceOptions.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-              {tts.loadingVoices && <span style={{ fontSize: "12px", color: "var(--brand)" }}>{t("加载中…", "Loading...")}</span>}
             </div>
 
-            <div className="vsTtsToolbarField">
-              <span className="vsFieldLabel" style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>{t("全局语速", "Rate")}:</span>
-              <input
-                type="text"
-                className="vsInput"
-                value={tts.rate}
-                onChange={(e) => tts.onRateChange(e.target.value)}
-                placeholder="+0%"
-                style={{ width: "90px", height: "34px", padding: "4px 8px", fontSize: "13px", borderRadius: "6px" }}
-              />
-              <button
-                type="button"
-                className="vsBtnGhost"
-                onClick={() => tts.onRateChange("+0%")}
-                style={{ fontSize: "12px", padding: "4px 8px" }}
-              >
-                Reset
-              </button>
+            {tts.ttsModelOptions && tts.ttsModelOptions.length > 0 && (
+              <div className="vsTtsToolbarField vsTtsFieldModel">
+                <span className="vsFieldLabel">{t("模型版本", "Model")}:</span>
+                <div className="vsSelectWrapper">
+                  <select
+                    className="vsSelect vsSelectModern"
+                    value={tts.ttsModel || ""}
+                    onChange={(e) => tts.onModelChange?.(e.target.value)}
+                  >
+                    {tts.ttsModelOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <div className="vsTtsToolbarField vsTtsFieldVoice">
+              <span className="vsFieldLabel">{t("首选音色", "Voice")}:</span>
+              <div className="vsVoiceCapsuleWrapper">
+                <span className="vsVoiceCapsuleAvatar" aria-hidden="true">🎙️</span>
+                <select
+                  className="vsSelect vsSelectModern vsSelectVoice"
+                  value={tts.voice}
+                  onChange={(e) => tts.onVoiceChange(e.target.value)}
+                  disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
+                >
+                  <option value="" disabled>{t("-- 请选择音色 --", "-- Select a voice --")}</option>
+                  {tts.voiceOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                {tts.loadingVoices && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
+              </div>
+            </div>
+
+            <div className="vsTtsToolbarField vsTtsFieldRate">
+              <span className="vsFieldLabel">{t("全局语速", "Rate")}:</span>
+              <div className="vsRateCapsule">
+                <input
+                  type="text"
+                  className="vsInput vsInputModern vsInputRate"
+                  value={tts.rate}
+                  onChange={(e) => tts.onRateChange(e.target.value)}
+                  placeholder="+0%"
+                />
+                <div className="vsRateQuickPresets" role="group" aria-label="语速预设">
+                  {[
+                    { label: "0.8x", val: "-20%" },
+                    { label: "1.0x", val: "+0%" },
+                    { label: "1.2x", val: "+20%" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      className={`vsRatePresetTag ${tts.rate === preset.val ? "active" : ""}`}
+                      onClick={() => tts.onRateChange(preset.val)}
+                      title={`设为 ${preset.val}`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="vsBtnGhost vsRateResetBtn"
+                  onClick={() => tts.onRateChange("+0%")}
+                  title={t("重置语速", "Reset rate")}
+                >
+                  Reset
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -333,7 +404,8 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                 className="vsTtsEditor custom-scrollbar"
                 value={tts.text}
                 onChange={(e) => tts.onTextChange(e.target.value)}
-                placeholder={t("输入要合成朗读的正文内容、旁白或单人对白结构…", "Enter narration, body text, or a single-speaker script to synthesize...")}
+                onKeyDown={handleKeyDown}
+                placeholder={t("输入要合成朗读的正文内容、旁白或单人对白结构… (支持按 Ctrl+Enter 快捷合成)", "Enter narration, body text, or a single-speaker script to synthesize... (Press Ctrl+Enter to generate)")}
               />
             ) : null}
             {tts.ttsMode === "dialogue" ? (
@@ -341,28 +413,28 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                 className="vsTtsEditor custom-scrollbar"
                 value={tts.dialogueText}
                 onChange={(e) => tts.onDialogueTextChange(e.target.value)}
-                placeholder={t("A: 你好，欢迎来到今天的节目。\nB: 今天我们来聊聊 Echo 的语音工作流。", "A: Hello, welcome to today's show.\nB: Today we're talking about Echo's speech workflow.")}
+                onKeyDown={handleKeyDown}
+                placeholder={t("A: 你好，欢迎来到今天的节目。\nB: 今天我们来聊聊 Echo 的语音工作流。(支持按 Ctrl+Enter 快捷合成)", "A: Hello, welcome to today's show.\nB: Today we're talking about Echo's speech workflow. (Press Ctrl+Enter to generate)")}
               />
             ) : null}
             {tts.ttsMode === "pdf" ? (
-              <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "16px", gap: 12 }}>
-                <div className="vsPdfUploadRow" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--bg-secondary)", borderRadius: "8px", border: "1px solid var(--line)", opacity: (tts.extractingPdf || tts.polishingPdf) ? 0.6 : 1 }}>
-                  <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text)", whiteSpace: "nowrap", flexShrink: 0 }}>📁 {t("选择 PDF 文件", "Select PDF File")}:</span>
+              <div className="vsPdfEditorContainer">
+                <div className="vsPdfUploadRow" style={{ opacity: (tts.extractingPdf || tts.polishingPdf) ? 0.6 : 1 }}>
+                  <span className="vsPdfUploadLabel">📁 {t("选择 PDF 文件", "Select PDF File")}:</span>
                   <input
                     type="file"
                     key={tts.pdfFile ? tts.pdfFile.name : "empty"}
                     accept="application/pdf"
                     onChange={(e) => tts.onPdfFileChange(e.target.files?.[0] || null)}
                     disabled={tts.extractingPdf || tts.polishingPdf}
-                    style={{ fontSize: "13px", color: "var(--text)", flex: 1, minWidth: 0, cursor: (tts.extractingPdf || tts.polishingPdf) ? "not-allowed" : "pointer" }}
+                    className="vsPdfFileInput"
                   />
                   {tts.pdfText.trim() && (
                     <button
                       type="button"
-                      className="vsBtnSecondary"
+                      className="vsBtnSecondary vsPolishBtn"
                       onClick={tts.onPolishPdfText}
                       disabled={tts.extractingPdf || tts.polishingPdf}
-                      style={{ height: "28px", fontSize: "12px", padding: "0 10px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}
                     >
                       {tts.polishingPdf ? (
                         <>
@@ -379,15 +451,16 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                   className="vsTtsEditor custom-scrollbar"
                   value={tts.pdfText}
                   onChange={(e) => tts.onPdfTextChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
                   disabled={tts.extractingPdf || tts.polishingPdf}
                   placeholder={
                     tts.extractingPdf
                       ? t("正在从 PDF 提取文本中，请稍候...", "Extracting text from PDF, please wait...")
                       : tts.polishingPdf
                       ? t("正在使用 AI 优化文本（移除噪声、转换数学公式），请稍候...", "AI is optimizing text (removing noise, translating math formulas), please wait...")
-                      : t("这里放 PDF 提取后的可朗读正文。", "Paste the readable body text extracted from the PDF here.")
+                      : t("这里放 PDF 提取后的可朗读正文。(支持按 Ctrl+Enter 快捷合成)", "Paste the readable body text extracted from the PDF here. (Press Ctrl+Enter to generate)")
                   }
-                  style={{ flex: 1, resize: "none", border: "none", outline: "none", padding: "8px 0 0 0", opacity: (tts.extractingPdf || tts.polishingPdf) ? 0.6 : 1 }}
+                  style={{ opacity: (tts.extractingPdf || tts.polishingPdf) ? 0.6 : 1 }}
                 />
               </div>
             ) : null}
@@ -395,71 +468,78 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
         </div>
 
         {/* ── Bottom Pane: Playback & Action Footer ── */}
-        <div className="vsTtsEditorFooter" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", gap: 20 }}>
-          <button
-            type="button"
-            className="vsBtnSecondary"
-            onClick={() => {
-              if (tts.ttsMode === "dialogue") {
-                tts.onDialogueTextChange("");
-                return;
-              }
-              if (tts.ttsMode === "pdf") {
-                tts.onPdfTextChange("");
-                tts.onPdfFileChange(null);
-                return;
-              }
-              tts.onTextChange("");
-            }}
-            disabled={!tts.activeSourceText || tts.extractingPdf || tts.polishingPdf}
-            style={{ height: "40px" }}
-          >
-            {t("清空舞台", "Clear workspace")}
-          </button>
+        <div className="vsTtsEditorFooter">
+          <div className="vsTtsFooterLeft">
+            <button
+              type="button"
+              className="vsBtnSecondary vsTtsClearBtn"
+              onClick={handleClearWorkspace}
+              disabled={!tts.activeSourceText || tts.extractingPdf || tts.polishingPdf}
+              title={t("清空当前输入的文本", "Clear current text")}
+            >
+              <svg className="vsIconSmall" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              </svg>
+              <span>{t("清空舞台", "Clear workspace")}</span>
+            </button>
+          </div>
 
           {/* Synthesis Player Row */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", minWidth: 0, gap: "8px" }}>
+          <div className="vsTtsFooterCenter">
             {tts.audioUrl && (
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%", maxWidth: "480px" }}>
-                <audio controls src={tts.audioUrl} className="vsAudioElement" style={{ flex: 1, height: "36px" }} />
+              <div className="vsAudioPlayerDock">
+                <audio controls src={tts.audioUrl} className="vsAudioElement" />
                 <button
                   type="button"
-                  className="vsBtnSecondary"
+                  className="vsBtnSecondary vsExportAudioBtn"
                   onClick={handleDownload}
-                  style={{ height: "36px", fontSize: "12px", padding: "0 14px", whiteSpace: "nowrap" }}
+                  title={t("导出音频", "Export Audio")}
                 >
-                  {t("导出音频", "Export Audio")}
+                  <svg className="vsIconSmall" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span>{t("导出音频", "Export Audio")}</span>
                 </button>
               </div>
             )}
 
             {tts.ttsInfo && (
-              <p className="vsSettingsNotice ok" style={{ margin: 0, padding: "8px 16px", fontSize: "13px", borderRadius: "8px" }}>{tts.ttsInfo}</p>
+              <p className="vsSettingsNotice ok">{tts.ttsInfo}</p>
             )}
 
             {!tts.audioUrl && !tts.ttsInfo && (
-              <div style={{ color: "var(--muted)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span>🎧</span>
+              <div className="vsTtsEmptyHint">
+                <span className="vsTtsHintIcon">🎧</span>
                 <span>{t("完成输入后，点击右下角“生成音频”开始试听", "Enter text and click Generate Audio to listen")}</span>
               </div>
             )}
           </div>
 
-          <button
-            type="submit"
-            className="vsBtnPrimary"
-            disabled={tts.generating || tts.extractingPdf || tts.polishingPdf || !tts.activeSourceText.trim()}
-            style={{ height: "40px", minWidth: "120px" }}
-          >
-            {tts.generating ? (
-              <>
-                <span className="spinner-mini"></span>
-                {t("生成中…", "Generating...")}
-              </>
-            ) : (
-              t("生成音频", "Generate audio")
-            )}
-          </button>
+          <div className="vsTtsFooterRight">
+            <span className="vsTtsShortcutHint" title={t("快捷键: Ctrl/Cmd + 回车", "Shortcut: Ctrl/Cmd + Enter")}>⌘/Ctrl + ↵</span>
+            <button
+              type="submit"
+              className="vsBtnPrimary vsTtsGenerateBtn"
+              disabled={tts.generating || tts.extractingPdf || tts.polishingPdf || !tts.activeSourceText.trim()}
+            >
+              {tts.generating ? (
+                <>
+                  <span className="spinner-mini"></span>
+                  <span>{t("生成中…", "Generating...")}</span>
+                </>
+              ) : (
+                <>
+                  <svg className="vsIconSmall" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  </svg>
+                  <span>{t("生成音频", "Generate audio")}</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </form>
     </section>

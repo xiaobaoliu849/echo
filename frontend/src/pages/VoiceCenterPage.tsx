@@ -9,6 +9,7 @@ import type { UseTtsResult } from "../hooks/useTts";
 import type { VoiceCloneController, VoiceDesignController } from "../hooks/useVoiceManagement";
 
 export type VoiceCenterSubTab = "tts" | "design" | "clone" | "transcribe";
+export type VoiceCenterVoiceProvider = "qwen" | "xiaomi" | "gpt_sovits" | "elevenlabs" | (string & {});
 
 type Props = {
   initialSubTab?: VoiceCenterSubTab;
@@ -17,8 +18,8 @@ type Props = {
   clone: VoiceCloneController;
   errorRuntimeContext: ErrorRuntimeContext;
   onSendToChat?: (text: string) => void;
-  voiceProvider?: "qwen" | "xiaomi" | "gpt_sovits";
-  onVoiceProviderChange?: (provider: "qwen" | "xiaomi" | "gpt_sovits") => void;
+  voiceProvider?: VoiceCenterVoiceProvider;
+  onVoiceProviderChange?: (provider: any) => void;
   onOpenSettings?: (provider?: string) => void;
 };
 
@@ -48,29 +49,32 @@ export default function VoiceCenterPage({
   };
 
   const tabs = [
-    { id: "tts" as const, label: t("文本到音频", "Text to Audio") },
-    { id: "design" as const, label: t("设计音色", "Voice Design") },
-    { id: "clone" as const, label: t("音色克隆", "Voice Clone") },
-    { id: "transcribe" as const, label: t("一键转写", "Transcribe") },
+    { id: "tts" as const, label: t("文本到音频", "Text to Audio"), icon: "🎙️" },
+    { id: "design" as const, label: t("设计音色", "Voice Design"), icon: "✨" },
+    { id: "clone" as const, label: t("音色克隆", "Voice Clone"), icon: "🧬" },
+    { id: "transcribe" as const, label: t("一键转写", "Transcribe"), icon: "📝" },
   ];
 
   return (
     <div className={`vsVoiceCenter ${isDetailMode ? "vsVoiceCenter--immersive" : ""}`}>
       {!isDetailMode && (
         <div className="vsVoiceCenterNav">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleTabChange(tab.id)}
-                className={`vsVoiceSubTab ${isActive ? "active" : ""}`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+          <div className="vsVoiceCenterSegmented">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`vsVoiceSubTab ${isActive ? "active" : ""}`}
+                >
+                  <span className="vsVoiceSubTabIcon" aria-hidden="true">{tab.icon}</span>
+                  <span className="vsVoiceSubTabLabel">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
