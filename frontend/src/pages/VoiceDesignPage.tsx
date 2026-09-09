@@ -2,15 +2,15 @@ import { useState, useMemo, useEffect } from "react";
 import { ArrowLeft } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import { VoiceCard } from "../components/VoiceCard";
-import type { VoiceDesignController } from "../hooks/useVoiceManagement";
+import type { VoiceDesignController, VoiceProviderId } from "../hooks/useVoiceManagement";
 import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
 
 type Props = {
   design: VoiceDesignController;
   errorRuntimeContext: ErrorRuntimeContext;
-  voiceProvider?: "qwen" | "xiaomi" | "gpt_sovits";
-  onVoiceProviderChange?: (provider: "qwen" | "xiaomi" | "gpt_sovits") => void;
+  voiceProvider?: VoiceProviderId;
+  onVoiceProviderChange?: (provider: VoiceProviderId) => void;
   onDetailModeChange?: (isDetail: boolean) => void;
 };
 
@@ -125,7 +125,7 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
                 <select
                   className="vsInput"
                   value={voiceProvider}
-                  onChange={(e) => onVoiceProviderChange?.(e.target.value as "qwen" | "xiaomi" | "gpt_sovits")}
+                  onChange={(e) => onVoiceProviderChange?.(e.target.value as VoiceProviderId)}
                   style={{ height: "40px", fontSize: "14px" }}
                 >
                   <option value="qwen">{t("阿里 DashScope (Qwen)", "Alibaba DashScope (Qwen)")}</option>

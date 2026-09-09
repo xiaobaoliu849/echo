@@ -2,15 +2,15 @@ import { useState, useMemo, useEffect } from "react";
 import { ArrowLeft } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import { VoiceCard } from "../components/VoiceCard";
-import type { VoiceCloneController } from "../hooks/useVoiceManagement";
+import type { VoiceCloneController, VoiceProviderId } from "../hooks/useVoiceManagement";
 import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
 
 type Props = {
   clone: VoiceCloneController;
   errorRuntimeContext: ErrorRuntimeContext;
-  voiceProvider?: "qwen" | "xiaomi" | "gpt_sovits";
-  onVoiceProviderChange?: (provider: "qwen" | "xiaomi" | "gpt_sovits") => void;
+  voiceProvider?: VoiceProviderId;
+  onVoiceProviderChange?: (provider: VoiceProviderId) => void;
   onDetailModeChange?: (isDetail: boolean) => void;
 };
 
@@ -122,12 +122,13 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
                 <select
                   className="vsInput"
                   value={voiceProvider}
-                  onChange={(e) => onVoiceProviderChange?.(e.target.value as "qwen" | "xiaomi" | "gpt_sovits")}
+                  onChange={(e) => onVoiceProviderChange?.(e.target.value as VoiceProviderId)}
                   style={{ height: "40px", fontSize: "14px" }}
                 >
                   <option value="qwen">{t("阿里 DashScope (Qwen)", "Alibaba DashScope (Qwen)")}</option>
                   <option value="xiaomi">{t("小米 MiMo", "Xiaomi MiMo")}</option>
                   <option value="gpt_sovits">{t("GPT-SoVITS (本地 API)", "GPT-SoVITS (Local API)")}</option>
+                  <option value="elevenlabs">{t("ElevenLabs 克隆", "ElevenLabs Clone")}</option>
                 </select>
               </label>
 

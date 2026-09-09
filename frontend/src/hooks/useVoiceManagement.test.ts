@@ -60,6 +60,24 @@ describe("useVoiceManagement", () => {
     expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "qwen");
   });
 
+  it("fetches ElevenLabs clone voices after switching provider", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() =>
+      useVoiceManagement({
+        formatErrorMessage,
+        elevenlabsApiKeyConfigured: true,
+      })
+    );
+
+    act(() => {
+      result.current.setVoiceProvider("elevenlabs");
+    });
+
+    await act(async () => {});
+
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "elevenlabs");
+  });
+
   it("validates clone audio file metadata on selection", () => {
     const formatErrorMessage = createFormatErrorMessageStub();
     const { result } = renderHook(() =>

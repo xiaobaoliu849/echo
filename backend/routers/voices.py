@@ -8,6 +8,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
+from services.elevenlabs_voice_service import ElevenLabsVoiceService
 from services.qwen_voice_service import QwenVoiceService
 from services.xiaomi_voice_service import XiaomiVoiceService
 from services.tts_service import TTSService
@@ -18,6 +19,7 @@ MAX_LOCAL_CLONE_FILE_BYTES = 20 * 1024 * 1024
 router = APIRouter()
 qwen_voice_service = QwenVoiceService()
 xiaomi_voice_service = XiaomiVoiceService()
+elevenlabs_voice_service = ElevenLabsVoiceService()
 tts_service = TTSService()
 _whisper_model = None
 _whisper_model_lock = threading.Lock()
@@ -62,6 +64,7 @@ class VoiceCreateResponse(BaseModel):
 
 class VoiceListResponse(BaseModel):
     voice_type: VoiceType
+    voice_provider: str | None = None
     count: int
     voices: list[dict[str, Any]]
 
@@ -105,6 +108,8 @@ async def create_voice_design(payload: VoiceDesignRequest) -> VoiceCreateRespons
             result["provider"] = "xiaomi"
         elif provider == "gpt_sovits":
             raise ValueError("GPT-SoVITS local API does not support voice design. Use voice clone instead.")
+        elif provider == "elevenlabs":
+            raise ValueError("ElevenLabs does not support voice design. Use voice clone instead.")
         else:
             result = await qwen_voice_service.create_voice_design(
                 voice_prompt=payload.voice_prompt,
@@ -190,6 +195,13 @@ async def create_voice_clone(
             )
             result["provider"] = "xiaomi"
             result["preferred_name"] = preferred_name
+        elif provider == "elevenlabs":
+            result = await elevenlabs_voice_service.create_voice_clone(
+                audio_bytes=data,
+                mime_type=audio_file.content_type or "",
+                preferred_name=preferred_name,
+            )
+            result["provider"] = "elevenlabs"
         elif provider == "gpt_sovits":
             prompt_text = ""
             saved = tts_service.save_local_gpt_sovits_voice(
@@ -260,16 +272,28 @@ async def list_voices(
     try:
         if provider == "xiaomi" or provider == "mimo":
             # Xiaomi doesn't have persistent voice management
-            return VoiceListResponse(voice_type=voice_type, count=0, voices=[])
+            result = {"voice_type": voice_type, "count": 0, "voices": []}
+            result["voice_provider"] = "xiaomi"
         elif provider == "gpt_sovits":
             local_voices = tts_service._get_local_gpt_sovits_voices()
-            return VoiceListResponse(voice_type=voice_type, count=len(local_voices), voices=local_voices)
+            result = {
+                "voice_type": voice_type,
+                "count": len(local_voices),
+                "voices": local_voices,
+            }
+            result["voice_provider"] = "gpt_sovits"
+        elif provider == "elevenlabs":
+            result = await elevenlabs_voice_service.list_voices()
+            result["voice_provider"] = "elevenlabs"
         else:
             result = await qwen_voice_service.list_voices(
                 voice_type=voice_type,
                 page_index=page_index,
                 page_size=page_size,
             )
+            result["voice_provider"] = "qwen"
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
@@ -319,6 +343,9 @@ async def delete_voice(
                 "type": voice_type,
                 "deleted": deleted
             }
+        elif provider == "elevenlabs":
+            result = await elevenlabs_voice_service.delete_voice(voice_name=voice_name)
+            result["type"] = voice_type
         else:
             result = await qwen_voice_service.delete_voice(voice_name=voice_name, voice_type=voice_type)
     except ValueError as exc:

@@ -287,6 +287,11 @@ export default function useSettings({ formatErrorMessage }: Options) {
     return Boolean(trimOrEmpty(String(apiKeys.xiaomi_api_key || "")));
   }, [settingsData]);
 
+  const elevenlabsApiKeyConfigured = useMemo(() => {
+    const apiKeys = settingsData?.api_keys || {};
+    return Boolean(trimOrEmpty(String(apiKeys.elevenlabs_api_key || "")));
+  }, [settingsData]);
+
   const providerModelCatalog = useMemo<ProviderModelCatalog>(() => {
     if (!settingsData) {
       return {};
@@ -1028,6 +1033,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
     providerSection,
     dashscopeApiKeyConfigured,
     xiaomiApiKeyConfigured,
+    elevenlabsApiKeyConfigured,
     providerModelCatalog,
     memorySection,
     transcriptionSection,

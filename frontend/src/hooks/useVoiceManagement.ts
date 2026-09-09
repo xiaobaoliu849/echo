@@ -10,11 +10,14 @@ import {
 import { createInlineTranslator, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 
+export type VoiceProviderId = "qwen" | "xiaomi" | "gpt_sovits" | "elevenlabs";
+
 type Options = {
   formatErrorMessage: FormatErrorMessage;
   language?: UiLanguage;
   dashscopeApiKeyConfigured?: boolean;
   xiaomiApiKeyConfigured?: boolean;
+  elevenlabsApiKeyConfigured?: boolean;
 };
 
 const CLONE_ACCEPTED_TYPES = [
@@ -44,8 +47,9 @@ export default function useVoiceManagement({
   language = "zh-CN",
   dashscopeApiKeyConfigured = false,
   xiaomiApiKeyConfigured = false,
+  elevenlabsApiKeyConfigured = false,
 }: Options) {
-  const [voiceProvider, setVoiceProvider] = useState<"qwen" | "xiaomi" | "gpt_sovits">("qwen");
+  const [activeProvider, setActiveProvider] = useState<VoiceProviderId>("qwen");
   const t = createInlineTranslator(language);
   const designPromptPresets = [
     {
@@ -99,17 +103,40 @@ export default function useVoiceManagement({
   const [cloneInfo, setCloneInfo] = useState("");
   const [cloneVoices, setCloneVoices] = useState<CustomVoice[]>([]);
 
+  // Design and Clone tabs share one provider selector. ElevenLabs only
+  // supports cloning, so a provider picked on the clone page must not leak
+  // into the design tab (its API would reject the request with a 400):
+  // the design tab keeps using the last design-capable provider.
+  const voiceProvider = activeProvider === "elevenlabs" ? "qwen" : activeProvider;
+  const cloneProvider = activeProvider;
+
+  function setVoiceProvider(provider: VoiceProviderId) {
+    setActiveProvider(provider);
+  }
+
+  function isProviderKeyConfigured(provider: VoiceProviderId): boolean {
+    if (provider === "gpt_sovits") return true;
+    if (provider === "elevenlabs") return elevenlabsApiKeyConfigured;
+    return provider === "xiaomi" ? xiaomiApiKeyConfigured : dashscopeApiKeyConfigured;
+  }
+
   function setMissingKeyError(voiceType: VoiceType) {
-    const isXiaomi = voiceProvider === "xiaomi";
-    const message = isXiaomi
-      ? t(
-          "请先在设置中配置小米 API Key，再使用音色设计/克隆。",
-          "Configure the Xiaomi API Key in Settings before using voice design/clone."
-        )
-      : t(
-          "请先在设置中配置 DashScope API Key，再使用音色设计/克隆。",
-          "Configure the DashScope API Key in Settings before using voice design/clone."
-        );
+    const provider = voiceType === "voice_design" ? voiceProvider : cloneProvider;
+    const message =
+      provider === "xiaomi"
+        ? t(
+            "请先在设置中配置小米 API Key，再使用音色设计/克隆。",
+            "Configure the Xiaomi API Key in Settings before using voice design/clone."
+          )
+        : provider === "elevenlabs"
+        ? t(
+            "请先在设置中配置 ElevenLabs API Key，再使用音色克隆。",
+            "Configure the ElevenLabs API Key in Settings before using voice clone."
+          )
+        : t(
+            "请先在设置中配置 DashScope API Key，再使用音色设计/克隆。",
+            "Configure the DashScope API Key in Settings before using voice design/clone."
+          );
     if (voiceType === "voice_design") {
       setDesignError(message);
     } else {
@@ -117,13 +144,8 @@ export default function useVoiceManagement({
     }
   }
 
-  function isCurrentProviderKeyConfigured(): boolean {
-    if (voiceProvider === "gpt_sovits") return true;
-    return voiceProvider === "xiaomi" ? xiaomiApiKeyConfigured : dashscopeApiKeyConfigured;
-  }
-
   async function refreshCustomVoices(voiceType: VoiceType, options: { silentIfMissingKey?: boolean } = {}) {
-    if (!isCurrentProviderKeyConfigured()) {
+    if (!isProviderKeyConfigured(voiceType === "voice_design" ? voiceProvider : cloneProvider)) {
       if (!options.silentIfMissingKey) {
         setMissingKeyError(voiceType);
       }
@@ -135,7 +157,7 @@ export default function useVoiceManagement({
       } else {
         setCloneListBusy(true);
       }
-      const result = await listCustomVoices(voiceType, voiceProvider);
+      const result = await listCustomVoices(voiceType, voiceType === "voice_design" ? voiceProvider : cloneProvider);
       if (voiceType === "voice_design") {
         setDesignVoices(result.voices);
       } else {
@@ -160,7 +182,7 @@ export default function useVoiceManagement({
   useEffect(() => {
     void refreshCustomVoices("voice_design", { silentIfMissingKey: true });
     void refreshCustomVoices("voice_clone", { silentIfMissingKey: true });
-  }, [dashscopeApiKeyConfigured, xiaomiApiKeyConfigured, voiceProvider]);
+  }, [dashscopeApiKeyConfigured, xiaomiApiKeyConfigured, elevenlabsApiKeyConfigured, voiceProvider, cloneProvider]);
 
   async function onDesignSubmit(event: FormEvent) {
     event.preventDefault();
@@ -178,7 +200,7 @@ export default function useVoiceManagement({
       setDesignError(t("请填写足够长的试听文本，方便判断音色效果。", "Enter a longer preview text so the voice quality can be judged."));
       return;
     }
-    if (!isCurrentProviderKeyConfigured()) {
+    if (!isProviderKeyConfigured(voiceProvider)) {
       setMissingKeyError("voice_design");
       return;
     }
@@ -216,7 +238,7 @@ export default function useVoiceManagement({
       setCloneError(t("请先选择音频文件。", "Choose an audio file first."));
       return;
     }
-    if (!isCurrentProviderKeyConfigured()) {
+    if (!isProviderKeyConfigured(cloneProvider)) {
       setMissingKeyError("voice_clone");
       return;
     }
@@ -225,7 +247,7 @@ export default function useVoiceManagement({
       const result = await createVoiceClone({
         preferred_name: cloneName.trim(),
         audio_file: cloneAudioFile,
-        provider: voiceProvider,
+        provider: cloneProvider,
       });
       setCloneInfo(t(`已创建音色：${result.voice ?? "未知"}`, `Created voice: ${result.voice ?? "unknown"}`));
       await refreshCustomVoices("voice_clone");
@@ -238,7 +260,7 @@ export default function useVoiceManagement({
 
   async function onDeleteVoice(voiceName: string, voiceType: VoiceType) {
     try {
-      await deleteCustomVoice(voiceName, voiceType, voiceProvider);
+      await deleteCustomVoice(voiceName, voiceType, voiceType === "voice_design" ? voiceProvider : cloneProvider);
       await refreshCustomVoices(voiceType);
     } catch (err) {
       const message = formatErrorMessage(err, t("删除音色失败。", "Failed to delete the voice."));

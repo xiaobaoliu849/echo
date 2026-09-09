@@ -1713,6 +1713,45 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertEqual(r_delete.status_code, 200)
         self.assertTrue(r_delete.json()["deleted"])
 
+    def test_voices_elevenlabs_clone_endpoint(self) -> None:
+        async def fake_create_voice_clone(**kwargs: Any) -> dict[str, Any]:
+            _ = kwargs
+            return {"voice": "vc_elevenlabs_1", "type": "voice_clone", "preferred_name": "demo"}
+
+        with patch.object(voices_router.elevenlabs_voice_service, "create_voice_clone", new=fake_create_voice_clone):
+            r_clone = self._request(
+                "POST",
+                "/api/voices/clone",
+                data={"preferred_name": "demo", "provider": "elevenlabs"},
+                files={"audio_file": ("demo.wav", b"RIFFdata", "audio/wav")},
+            )
+        self.assertEqual(r_clone.status_code, 200)
+        body = r_clone.json()
+        self.assertEqual(body["voice"], "vc_elevenlabs_1")
+        self.assertEqual(body["provider"], "elevenlabs")
+
+    def test_voices_list_endpoint_echoes_provider(self) -> None:
+        async def fake_list_voices() -> dict[str, Any]:
+            return {
+                "voice_type": "voice_clone",
+                "count": 1,
+                "voices": [{"voice": "vc_1", "type": "voice_clone", "target_model": "cloned"}],
+            }
+
+        async def fake_qwen_list_voices(**kwargs: Any) -> dict[str, Any]:
+            _ = kwargs
+            return {"voice_type": "voice_design", "count": 0, "voices": []}
+
+        with patch.object(voices_router.elevenlabs_voice_service, "list_voices", new=fake_list_voices):
+            r_list = self._request("GET", "/api/voices/?voice_type=voice_clone&provider=elevenlabs")
+        self.assertEqual(r_list.status_code, 200)
+        self.assertEqual(r_list.json()["voice_provider"], "elevenlabs")
+
+        with patch.object(voices_router.qwen_voice_service, "list_voices", new=fake_qwen_list_voices):
+            r_list_qwen = self._request("GET", "/api/voices/?voice_type=voice_design&provider=qwen")
+        self.assertEqual(r_list_qwen.status_code, 200)
+        self.assertEqual(r_list_qwen.json()["voice_provider"], "qwen")
+
     def test_gpt_sovits_clone_sanitizes_name_and_preserves_extension(self) -> None:
         async def fake_transcribe_local_clone(audio_path: str) -> str:
             self.assertTrue(audio_path.endswith(".mp3"))

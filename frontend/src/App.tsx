@@ -230,6 +230,7 @@ export default function App() {
     language: uiLanguage,
     dashscopeApiKeyConfigured: settings.dashscopeApiKeyConfigured,
     xiaomiApiKeyConfigured: settings.xiaomiApiKeyConfigured,
+    elevenlabsApiKeyConfigured: settings.elevenlabsApiKeyConfigured,
   });
   const { errorRuntimeContext } = settings;
 
