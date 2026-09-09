@@ -112,11 +112,12 @@ export default function VoiceCenterPage({
       {!isDetailMode && (
         <div className="vsVoiceCenterNav">
           <div className="vsVoiceCenterSegmented">
-            {/* 1st Tab: TTS Mode Dropdown Tab */}
+            {/* 1st Tab: TTS Mode Dropdown Tab — unified single button with inline chevron */}
             <div className="vsVoiceSubTabDropdownWrapper" ref={ttsMenuRef}>
               <div className={`vsVoiceSubTabDropdownGroup ${activeTab === "tts" ? "active" : ""}`}>
                 <button
                   type="button"
+                  ref={ttsMenuButtonRef}
                   data-testid="voicecenter-tab-tts"
                   onClick={() => {
                     if (activeTab !== "tts") {
@@ -125,25 +126,14 @@ export default function VoiceCenterPage({
                       setIsTtsDropdownOpen((prev) => !prev);
                     }
                   }}
-                  aria-expanded={activeTab === "tts" ? isTtsDropdownOpen : undefined}
+                  aria-expanded={isTtsDropdownOpen}
                   aria-haspopup="menu"
-                  className={`vsVoiceSubTab vsVoiceSubTab--dropdownMain ${activeTab === "tts" ? "active" : ""}`}
+                  className={`vsVoiceSubTab vsVoiceSubTab--unified ${activeTab === "tts" ? "active" : ""}`}
                 >
                   <span className="vsVoiceSubTabIcon" aria-hidden="true">{currentTtsMode.icon}</span>
                   <span className="vsVoiceSubTabLabel">{currentTtsMode.label}</span>
-                </button>
-                <button
-                  type="button"
-                  ref={ttsMenuButtonRef}
-                  className="vsVoiceSubTabChevronBtn"
-                  onClick={() => setIsTtsDropdownOpen((prev) => !prev)}
-                  aria-expanded={isTtsDropdownOpen}
-                  aria-haspopup="menu"
-                  aria-label={t("切换创作模式 (文本/对话/PDF)", "Switch mode (Text/Dialogue/PDF)")}
-                  title={t("切换创作模式 (文本/对话/PDF)", "Switch mode (Text/Dialogue/PDF)")}
-                >
                   <svg
-                    className={`vsVoiceSubTabChevron ${isTtsDropdownOpen ? "open" : ""}`}
+                    className={`vsVoiceSubTabChevron vsVoiceSubTabChevron--inline ${isTtsDropdownOpen && activeTab === "tts" ? "open" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"

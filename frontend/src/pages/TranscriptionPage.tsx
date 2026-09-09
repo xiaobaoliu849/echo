@@ -605,111 +605,31 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
         overflowY: "auto",
       }}
     >
-      {/* Studio Top Level Mode Tabs */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          borderBottom: "1px solid var(--border-color)",
-          paddingBottom: "12px",
-          flexShrink: 0,
-          flexWrap: "wrap",
-          gap: "10px",
-        }}
-      >
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={() => setPageTab("realtime")}
-            style={{
-              padding: "8px 16px",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 600,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              background: pageTab === "realtime" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
-              color: pageTab === "realtime" ? "#fff" : "var(--text)",
-              border: "none",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-            }}
-          >
-            <span aria-hidden="true">🎙️</span>
-            {t("实时录音", "Realtime Live")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPageTab("file")}
-            aria-label={t("新建转写 / 本地音频", "New Transcription / Local Audio")}
-            style={{
-              padding: "8px 16px",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 600,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              background: pageTab === "file" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
-              color: pageTab === "file" ? "#fff" : "var(--text)",
-              border: "none",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-            }}
-          >
-            <span aria-hidden="true">📁</span>
-            {t("本地音频", "Local Audio")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPageTab("remote")}
-            style={{
-              padding: "8px 16px",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 600,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              background: pageTab === "remote" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
-              color: pageTab === "remote" ? "#fff" : "var(--text)",
-              border: "none",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-            }}
-          >
-            <span aria-hidden="true">🔗</span>
-            {t("链式转写", "Link Pipeline")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPageTab("library")}
-            style={{
-              padding: "8px 16px",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 600,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              background: pageTab === "library" ? "var(--brand, #6366f1)" : "var(--bg-subtle, rgba(0,0,0,0.04))",
-              color: pageTab === "library" ? "#fff" : "var(--text)",
-              border: "none",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-            }}
-          >
-            <span aria-hidden="true">📚</span>
-            {t("转写历史库", "Library & History")}
-          </button>
+      {/* Studio Top Level Mode Tabs — compact segmented pill bar */}
+      <div className="vsTranscriptionTabBar">
+        <div className="vsVoiceCenterSegmented">
+          {(
+            [
+              { id: "realtime" as PageTab, icon: "🎙️", zh: "实时录音", en: "Realtime Live" },
+              { id: "file" as PageTab,     icon: "📁", zh: "本地音频", en: "Local Audio", ariaLabel: t("新建转写 / 本地音频", "New Transcription / Local Audio") },
+              { id: "remote" as PageTab,   icon: "🔗", zh: "链式转写", en: "Link Pipeline" },
+              { id: "library" as PageTab,  icon: "📚", zh: "转写历史库", en: "History" },
+            ]
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setPageTab(tab.id)}
+              aria-label={"ariaLabel" in tab ? tab.ariaLabel : undefined}
+              className={`vsVoiceSubTab${pageTab === tab.id ? " active" : ""}`}
+            >
+              <span className="vsVoiceSubTabIcon" aria-hidden="true">{tab.icon}</span>
+              <span className="vsVoiceSubTabLabel">{t(tab.zh, tab.en)}</span>
+            </button>
+          ))}
         </div>
-
         {infoMessage && (
-          <span style={{ fontSize: "13px", color: "var(--primary, #6366f1)", fontWeight: 500 }}>
-            {infoMessage}
-          </span>
+          <span className="vsTranscriptionTabInfo">{infoMessage}</span>
         )}
       </div>
 
