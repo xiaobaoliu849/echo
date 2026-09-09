@@ -6843,22 +6843,55 @@ button.danger:focus-visible {
   opacity: 0.8;
 }
 
-/* Transcription page — layered secondary nav */
+/* Transcription — secondary: light text + 2px underline (level-2 lightweight) */
 .vsTranscriptionTabBar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.08));
+  flex-wrap: wrap;
+  min-height: 36px;
+  padding: 0 2px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
 }
-.vsTranscriptionTabBar::-webkit-scrollbar { display: none; }
-.vsTranscriptionTabBar .vsVoiceCenterSegmented { flex-shrink: 0; }
-
+.vsTranscriptionTabBar .vsVoiceCenterSegmented {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+.vsTranscriptionTabBar .vsVoiceSubTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #78716c;
+}
+.vsTranscriptionTabBar .vsVoiceSubTab:hover {
+  background: rgba(0,0,0,0.03);
+  color: #44403c;
+}
+.vsTranscriptionTabBar .vsVoiceSubTab.active {
+  background: transparent;
+  color: #1c1917;
+  font-weight: 600;
+  border-bottom-color: #1c1917;
+  box-shadow: none;
+}
 .vsTranscriptionTabInfo {
   font-size: 12px;
   color: var(--primary, #6366f1);
@@ -6896,8 +6929,8 @@ button.danger:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 16px;
-  padding: 12px 16px;
+  gap: 10px 14px;
+  padding: 8px 14px;
 }
 .vsRTConfigGroup {
   display: flex;
@@ -6913,13 +6946,13 @@ button.danger:focus-visible {
   white-space: nowrap;
 }
 .vsRTConfigSelect {
-  height: 34px;
+  height: 32px;
   padding: 0 10px;
   border-radius: 8px;
   font-size: 13px;
-  min-width: 160px;
-  max-width: 240px;
-  flex: 1 1 180px;
+  min-width: 150px;
+  max-width: 220px;
+  flex: 1 1 170px;
 }
 .vsRTConfigMeta {
   display: flex;
@@ -6965,10 +6998,10 @@ button.danger:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
+  gap: 10px;
+  padding: 7px 14px;
   border-top: 1px solid rgba(0,0,0,0.06);
-  background: rgba(251,249,245,0.5);
+  background: rgba(251,249,245,0.55);
 }
 .vsRTViewSwitcher {
   display: inline-flex;
@@ -6980,7 +7013,7 @@ button.danger:focus-visible {
   flex-shrink: 0;
 }
 .vsRTViewBtn {
-  padding: 5px 12px;
+  padding: 4px 10px;
   border-radius: 7px;
   font-size: 12px;
   font-weight: 500;
@@ -7147,8 +7180,15 @@ button.danger:focus-visible {
 }
 .vsRTDropdownItem:hover { background: rgba(0,0,0,0.04); }
 @media (max-width: 960px) {
-  .vsRTConfigRow { gap: 10px; }
-  .vsRTConfigSelect { max-width: none; flex: 1 1 100%; min-width: 0; }
+  .vsRTConfigRow { gap: 8px 10px; padding: 8px 12px; }
+  .vsRTConfigSelect { max-width: none; flex: 1 1 200px; min-width: 0; }
+  .vsRTViewRow { gap: 8px; }
+  .vsRTViewControls { justify-content: flex-start; width: auto; flex: 1; }
+}
+@media (max-width: 780px) {
+  .vsRTConfigRow { flex-direction: column; align-items: stretch; }
+  .vsRTConfigGroup { width: 100%; }
+  .vsRTConfigSelect { flex: 1 1 auto; max-width: none; }
   .vsRTViewRow { flex-direction: column; align-items: stretch; }
   .vsRTViewControls { justify-content: space-between; width: 100%; }
 }
