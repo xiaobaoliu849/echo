@@ -2,7 +2,7 @@
 
 **A batteries-included, local-first realtime voice AI assistant** — full-duplex voice chat, TTS, voice cloning, and live transcription in one app.
 
-中文 | [English](README_EN.md)
+[English](README_EN.md) | [简体中文](README.md) | [日本語](README.ja.md)
 
 ---
 
@@ -18,26 +18,26 @@ Echo is a **ready-to-use voice AI desktop app** (FastAPI + React, runs in your b
 
 ### 🎙️ Realtime full-duplex voice chat
 - Talk and listen simultaneously, interrupt anytime (barge-in), VAD + smart interruption handling
-- Providers: OpenAI Realtime · Google Gemini Live · DashScope Qwen-Omni · Doubao full-duplex · GLM4Voice · PersonaPlex (English speaking practice)
+- Providers: OpenAI Realtime · Google Gemini Live · Qwen-Omni / Qwen-Audio (DashScope) · Doubao full-duplex · GLM-4 Voice · Cartesia · Gradium · PersonaPlex (local English-speaking practice partner)
 - Voice tool calling, long-term memory (EverMem), live session config updates
 
-### 🔊 TTS (9+ engines)
-Edge TTS · Qwen TTS · MiniMax · OpenAI · ElevenLabs · ChatTTS · GPT-SoVITS · Xiaomi · Azure · Cartesia — with content-hash caching so nothing is synthesized twice
+### 🔊 TTS (13 engines)
+Edge TTS · Qwen TTS · MiniMax · OpenAI · ElevenLabs · ChatTTS · GPT-SoVITS · Xiaomi · Azure · Doubao · Cartesia · Gradium · Soniox — with content-hash caching so nothing is synthesized twice
 
 ### 🧬 Voice Center
 Voice design (text-to-voice) and voice cloning from a short sample
 
 ### 📝 Transcription
 - Long audio/video transcription: automatic ffmpeg chunking, audio track extraction from video — no single-file length limits
-- Live microphone transcription (Qwen-ASR-Flash-Streaming)
+- Live microphone transcription (Qwen-Audio-3.0-ASR-Flash-Streaming / Fun-ASR-Realtime)
 - Synced subtitle player, SRT/VTT export, batch management, one-click save to memory
 
 ### 🎧 More
-Podcast / multi-speaker dialogue generation · translation · AI chat (DeepSeek / OpenRouter / Groq / SiliconFlow / Gemini / DashScope / Ollama) · PDF reading & polishing
+Podcast / multi-speaker dialogue generation · translation (incl. realtime bidirectional interpreting) · AI chat (DeepSeek / OpenRouter / Groq / SiliconFlow / Google Gemini / Qwen / Ollama, plus custom providers) · PDF reading & polishing · realtime video personas via Tavus
 
 ## Quick Start
 
-**Requirements**: Python 3.10+ · Node.js 18+ · ffmpeg
+**Requirements**: Python 3.10+ · Node.js 20+ (Vite 7 needs ≥ 20.19) · ffmpeg
 
 ```bash
 # Windows one-click (backend + frontend dev servers)
@@ -47,7 +47,7 @@ run_web.bat
 run_web_desktop.bat
 ```
 
-Manual:
+Manual (works on macOS / Linux too):
 
 ```bash
 # Backend
@@ -63,10 +63,22 @@ npm run dev
 
 A `config.json` is created on first run — open the Settings page and add your provider API keys.
 
+Desktop troubleshooting: `python run_web_desktop.py --check`
+
+### Optional features
+
+```bash
+# Local open-source TTS (ChatTTS / GPT-SoVITS clone transcription)
+pip install -r backend/requirements-local-tts.txt
+
+# PersonaPlex realtime English-practice provider (model runs as a separate moshi.server process)
+pip install -r backend/requirements-personaplex.txt
+```
+
 ## Architecture
 
 ```
-backend/    FastAPI · 14 routers · service layer (composable realtime providers / 9-engine TTS dispatch / multi-provider LLM)
+backend/    FastAPI · 14 routers · service layer (composable realtime providers / 13-engine TTS dispatch / multi-provider LLM)
 frontend/   React 19 + Vite + TypeScript SPA (FastAPI serves dist/ in production)
 ```
 
@@ -74,11 +86,23 @@ frontend/   React 19 + Vite + TypeScript SPA (FastAPI serves dist/ in production
 - **TtsService**: engine dispatch + content-hash cache (atomic writes, size-based eviction)
 - **ConfigLoader**: JSON config with mtime-based hot reload
 
+## Testing
+
 ```bash
-# Tests
 cd backend && python -m pytest tests/ -q
 cd frontend && npm run test:run
 ```
+
+## FAQ
+
+**Which API keys do I need?**
+Depends on the features: text chat plus Edge TTS works with zero keys; realtime voice and cloning need a key for whichever provider you pick. Everything stays in a local `config.json`.
+
+**Does it run on macOS / Linux?**
+Yes. The manual commands are cross-platform; the `.bat` scripts are just Windows shortcuts.
+
+**Does my data leave my machine?**
+No. Config, session history, and transcripts live locally (SQLite + local files). Only the cloud APIs you call see your requests.
 
 ## Roadmap
 

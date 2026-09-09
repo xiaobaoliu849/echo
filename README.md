@@ -2,7 +2,7 @@
 
 **开箱即用的本地实时语音 AI 助手** —— 全双工语音对话、TTS、语音克隆、实时转写，一个应用全搞定。
 
-[English](README_EN.md) | 中文
+[English](README_EN.md) | [日本語](README.ja.md) | 简体中文
 
 ---
 
@@ -18,26 +18,26 @@ GitHub 上的 [LiveKit Agents](https://github.com/livekit/agents)、[Pipecat](ht
 
 ### 🎙️ 实时全双工语音对话
 - 边说边听、随时打断（barge-in），VAD 静音检测 + 智能打断判定
-- Provider：OpenAI Realtime · Google Gemini Live · 通义 Qwen-Omni · 豆包全双工 · GLM4Voice · PersonaPlex（英语口语陪练）
+- Provider：OpenAI Realtime · Google Gemini Live · 通义 Qwen-Omni / Qwen-Audio · 豆包全双工 · GLM-4 Voice · Cartesia · Gradium · PersonaPlex（本地英语口语陪练）
 - 语音工具调用、EverMem 长期记忆、会话配置热更新
 
-### 🔊 TTS 语音合成（9+ 引擎）
-Edge TTS · 通义 Qwen TTS · MiniMax · OpenAI · ElevenLabs · ChatTTS · GPT-SoVITS · 小米 · Azure · Cartesia，内容哈希缓存免重复合成
+### 🔊 TTS 语音合成（13 引擎）
+Edge TTS · 通义 Qwen TTS · MiniMax · OpenAI · ElevenLabs · ChatTTS · GPT-SoVITS · 小米 · Azure · 豆包 · Cartesia · Gradium · Soniox —— 内容哈希缓存，同一段文本绝不重复合成
 
 ### 🧬 语音中心
 声音设计（text-to-voice）、声音克隆（上传样本即可）
 
 ### 📝 转写
 - 长音频/视频转写：ffmpeg 自动分片、视频自动提取音轨，突破单文件时长限制
-- 实时麦克风转写（Qwen-ASR-Flash-Streaming）
+- 实时麦克风转写（Qwen-Audio-3.0-ASR-Flash-Streaming / Fun-ASR-Realtime）
 - 同步字幕播放器、SRT/VTT 导出、批量管理、一键存入记忆
 
 ### 🎧 更多
-播客/多人对白生成 · 智能翻译 · AI 聊天（DeepSeek / OpenRouter / Groq / SiliconFlow / Gemini / 通义 / Ollama）· PDF 文档朗读与润色
+播客/多人对白生成 · 智能翻译（实时双向口译）· AI 聊天（DeepSeek / OpenRouter / Groq / SiliconFlow / Google Gemini / 通义 Qwen / Ollama，支持自定义 Provider）· PDF 文档朗读与润色 · Tavus 实时视频形象对话
 
 ## 快速开始
 
-**环境要求**：Python 3.10+ · Node.js 18+ · ffmpeg（音频处理）
+**环境要求**：Python 3.10+ · Node.js 20+（Vite 7 要求 ≥ 20.19）· ffmpeg（音频处理）
 
 ```bash
 # Windows 一键启动（后端 + 前端开发服务器）
@@ -47,7 +47,7 @@ run_web.bat
 run_web_desktop.bat
 ```
 
-手动启动：
+手动启动（macOS / Linux 同样适用）：
 
 ```bash
 # 后端
@@ -63,10 +63,22 @@ npm run dev
 
 首次运行自动生成 `config.json`，打开设置页填入各 Provider 的 API Key 即可。
 
+桌面模式故障排查：`python run_web_desktop.py --check`
+
+### 可选功能
+
+```bash
+# 本地开源 TTS（ChatTTS / GPT-SoVITS 克隆转写）
+pip install -r backend/requirements-local-tts.txt
+
+# PersonaPlex 实时英语口语陪练（模型以独立 moshi.server 进程运行）
+pip install -r backend/requirements-personaplex.txt
+```
+
 ## 架构
 
 ```
-backend/    FastAPI · 14 个路由 · 服务层（实时语音 4-provider 组合 / TTS 9 引擎分发 / 多 Provider LLM）
+backend/    FastAPI · 14 个路由 · 服务层（实时语音 9-provider 组合 / TTS 13 引擎分发 / 多 Provider LLM）
 frontend/   React 19 + Vite + TypeScript SPA（生产环境由 FastAPI 直接托管 dist/）
 ```
 
@@ -74,11 +86,23 @@ frontend/   React 19 + Vite + TypeScript SPA（生产环境由 FastAPI 直接托
 - **TtsService**：引擎分发 + 内容哈希缓存（原子写入 + 容量淘汰）
 - **ConfigLoader**：JSON 配置，mtime 增量热加载
 
+## 测试
+
 ```bash
-# 运行测试
 cd backend && python -m pytest tests/ -q
 cd frontend && npm run test:run
 ```
+
+## 常见问题
+
+**需要哪些 API Key？**
+按功能而定：仅文本聊天 + Edge TTS 可以零 Key 上手；实时语音、克隆等按所选 Provider 填 Key，全部保存在本地 `config.json`。
+
+**支持 macOS / Linux 吗？**
+支持。"手动启动"的命令跨平台通用，`.bat` 脚本只是 Windows 快捷方式。
+
+**数据会上传吗？**
+不会。配置、会话记录、转写结果都存在本机（SQLite + 本地文件），只有你调用的云服务 API 能看到请求内容。
 
 ## Roadmap
 
