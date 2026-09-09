@@ -7028,6 +7028,62 @@ button.danger:focus-visible {
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
+/* ── Compact Dialogue Bar (replaces the 2-card grid) ── */
+.vsTtsDialogueBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 0 22px;
+  background: #fafaf9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  min-height: 48px;
+  /* NOTE: no backdrop-filter/transform — must not create a stacking context
+     that clips absolutely-positioned children (same rule as vsVoiceCenterNav) */
+}
+
+.vsDialogueSpeakerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 0;
+}
+
+.vsDialogueDivider {
+  width: 1px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+  margin: 0 12px;
+}
+
+.vsDialogueRateRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 8px 0;
+}
+
+/* Compact select used in the dialogue bar */
+.vsSelectCompact {
+  height: 30px !important;
+  padding: 0 28px 0 8px !important;
+  font-size: 12px !important;
+  border-radius: 7px !important;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.vsSelectVoice {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 260px;
+}
+
+/* Legacy dialogue card classes kept for graceful fallback */
 .vsDialogueSpeakersGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -7038,6 +7094,20 @@ button.danger:focus-visible {
 @media (max-width: 800px) {
   .vsDialogueSpeakersGrid {
     grid-template-columns: 1fr;
+  }
+  .vsTtsDialogueBar {
+    padding: 0 12px;
+  }
+  .vsDialogueDivider {
+    width: 100%;
+    height: 1px;
+    margin: 0;
+  }
+  .vsDialogueSpeakerRow {
+    flex-wrap: wrap;
+  }
+  .vsSelectVoice {
+    max-width: none;
   }
 }
 
@@ -7067,6 +7137,7 @@ button.danger:focus-visible {
   font-size: 11px;
   font-weight: 700;
   color: #ffffff;
+  flex-shrink: 0;
 }
 
 .vsSpeakerBadgeA {

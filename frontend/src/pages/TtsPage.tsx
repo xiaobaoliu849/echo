@@ -267,115 +267,83 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
 
         {/* ── Dialogue Config Toolbar (When in dialogue mode) ── */}
         {tts.ttsMode === "dialogue" && (
-          <div className="vsTtsToolbar vsTtsDialogueToolbar">
-            <div className="vsDialogueSpeakersGrid">
-              {/* Person A Card */}
-              <div className="vsSpeakerCard vsSpeakerCardA">
-                <div className="vsSpeakerHeader">
-                  <span className="vsSpeakerBadge vsSpeakerBadgeA">A</span>
-                  <span className="vsSpeakerTitle">{t("角色 A (A)", "Speaker A")}</span>
-                </div>
-                <div className="vsSpeakerFields">
-                  <div className="vsSpeakerField">
-                    <span className="vsFieldLabelSub">{t("服务商", "Engine")}:</span>
-                    <select
-                      className="vsSelect vsSelectModern"
-                      value={tts.ttsEngine}
-                      onChange={(e) => tts.onEngineChange(e.target.value as typeof tts.ttsEngine)}
-                    >
-                      {tts.engineOptions.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="vsSpeakerField vsSpeakerVoiceField">
-                    <span className="vsFieldLabelSub">{t("音色", "Voice")}:</span>
-                    <div className="vsVoiceCapsuleWrapper">
-                      <select
-                        className="vsSelect vsSelectModern"
-                        value={tts.voice}
-                        onChange={(e) => tts.onVoiceChange(e.target.value)}
-                        disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
-                      >
-                        <option value="" disabled>{t("-- 请选择音色 A --", "-- Select voice A --")}</option>
-                        {tts.voiceOptions.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                      {tts.loadingVoices && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Person B Card */}
-              <div className="vsSpeakerCard vsSpeakerCardB">
-                <div className="vsSpeakerHeader">
-                  <span className="vsSpeakerBadge vsSpeakerBadgeB">B</span>
-                  <span className="vsSpeakerTitle">{t("角色 B (B)", "Speaker B")}</span>
-                </div>
-                <div className="vsSpeakerFields">
-                  <div className="vsSpeakerField">
-                    <span className="vsFieldLabelSub">{t("服务商", "Engine")}:</span>
-                    <select
-                      className="vsSelect vsSelectModern"
-                      value={tts.ttsEngineB}
-                      onChange={(e) => tts.onEngineBChange?.(e.target.value as typeof tts.ttsEngine)}
-                    >
-                      {tts.engineOptions.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="vsSpeakerField vsSpeakerVoiceField">
-                    <span className="vsFieldLabelSub">{t("音色", "Voice")}:</span>
-                    <div className="vsVoiceCapsuleWrapper">
-                      <select
-                        className="vsSelect vsSelectModern"
-                        value={tts.voiceB}
-                        onChange={(e) => tts.onVoiceBChange?.(e.target.value)}
-                        disabled={tts.loadingVoicesB || tts.voiceOptionsB.length === 0}
-                      >
-                        <option value="" disabled>{t("-- 请选择音色 B --", "-- Select voice B --")}</option>
-                        {tts.voiceOptionsB.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                      {tts.loadingVoicesB && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <div className="vsTtsDialogueBar">
+            {/* Speaker A */}
+            <div className="vsDialogueSpeakerRow">
+              <span className="vsSpeakerBadge vsSpeakerBadgeA">A</span>
+              <select
+                className="vsSelect vsSelectCompact"
+                value={tts.ttsEngine}
+                onChange={(e) => tts.onEngineChange(e.target.value as typeof tts.ttsEngine)}
+                title={t("角色 A 服务商", "Speaker A Engine")}
+              >
+                {tts.engineOptions.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
+              <select
+                className="vsSelect vsSelectCompact vsSelectVoice"
+                value={tts.voice}
+                onChange={(e) => tts.onVoiceChange(e.target.value)}
+                disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
+                title={t("角色 A 音色", "Speaker A Voice")}
+              >
+                <option value="" disabled>{t("选择音色…", "Select voice…")}</option>
+                {tts.voiceOptions.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
             </div>
 
-            {/* Global Settings Row */}
-            <div className="vsDialogueGlobalRow">
-              <span className="vsFieldLabel">{t("全局语速", "Rate")}:</span>
-              <div className="vsRateCapsule">
-                <input
-                  type="text"
-                  className="vsInput vsInputModern vsInputRate"
-                  value={tts.rate}
-                  onChange={(e) => tts.onRateChange(e.target.value)}
-                  placeholder="+0%"
-                />
-                <button
-                  type="button"
-                  className="vsBtnGhost vsRateResetBtn"
-                  onClick={() => tts.onRateChange("+0%")}
-                  title={t("重置语速", "Reset rate")}
-                >
-                  {t("重置", "Reset")}
-                </button>
-              </div>
+            <div className="vsDialogueDivider" aria-hidden="true" />
+
+            {/* Speaker B */}
+            <div className="vsDialogueSpeakerRow">
+              <span className="vsSpeakerBadge vsSpeakerBadgeB">B</span>
+              <select
+                className="vsSelect vsSelectCompact"
+                value={tts.ttsEngineB}
+                onChange={(e) => tts.onEngineBChange?.(e.target.value as typeof tts.ttsEngine)}
+                title={t("角色 B 服务商", "Speaker B Engine")}
+              >
+                {tts.engineOptions.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
+              <select
+                className="vsSelect vsSelectCompact vsSelectVoice"
+                value={tts.voiceB}
+                onChange={(e) => tts.onVoiceBChange?.(e.target.value)}
+                disabled={tts.loadingVoicesB || tts.voiceOptionsB.length === 0}
+                title={t("角色 B 音色", "Speaker B Voice")}
+              >
+                <option value="" disabled>{t("选择音色…", "Select voice…")}</option>
+                {tts.voiceOptionsB.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="vsDialogueDivider" aria-hidden="true" />
+
+            {/* Global Rate */}
+            <div className="vsDialogueRateRow">
+              <span className="vsFieldLabelSub">{t("语速", "Rate")}</span>
+              <input
+                type="text"
+                className="vsInput vsInputModern vsInputRate"
+                value={tts.rate}
+                onChange={(e) => tts.onRateChange(e.target.value)}
+                placeholder="+0%"
+              />
+              <button
+                type="button"
+                className="vsBtnGhost vsRateResetBtn"
+                onClick={() => tts.onRateChange("+0%")}
+                title={t("重置语速", "Reset rate")}
+              >
+                {t("重置", "Reset")}
+              </button>
             </div>
           </div>
         )}
