@@ -6,10 +6,10 @@ const VoiceClonePage = lazy(() => import("./VoiceClonePage"));
 const TranscriptionPage = lazy(() => import("./TranscriptionPage").then(m => ({ default: m.TranscriptionPage })));
 import type { ErrorRuntimeContext } from "../types/ui";
 import type { UseTtsResult } from "../hooks/useTts";
-import type { VoiceCloneController, VoiceDesignController } from "../hooks/useVoiceManagement";
+import type { VoiceCloneController, VoiceDesignController, VoiceProviderId } from "../hooks/useVoiceManagement";
 
 export type VoiceCenterSubTab = "tts" | "design" | "clone" | "transcribe";
-export type VoiceCenterVoiceProvider = "qwen" | "xiaomi" | "gpt_sovits" | "elevenlabs" | (string & {});
+export type VoiceCenterVoiceProvider = VoiceProviderId;
 
 type Props = {
   initialSubTab?: VoiceCenterSubTab;
@@ -18,8 +18,8 @@ type Props = {
   clone: VoiceCloneController;
   errorRuntimeContext: ErrorRuntimeContext;
   onSendToChat?: (text: string) => void;
-  voiceProvider?: VoiceCenterVoiceProvider;
-  onVoiceProviderChange?: (provider: any) => void;
+  voiceProvider?: VoiceProviderId;
+  onVoiceProviderChange?: (provider: VoiceProviderId) => void;
   onOpenSettings?: (provider?: string) => void;
 };
 
