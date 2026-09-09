@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 const TtsPage = lazy(() => import("./TtsPage"));
 const VoiceDesignPage = lazy(() => import("./VoiceDesignPage"));
@@ -37,19 +37,56 @@ export default function VoiceCenterPage({
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<VoiceCenterSubTab>(initialSubTab);
   const [isDetailMode, setIsDetailMode] = useState(false);
+  const [isTtsDropdownOpen, setIsTtsDropdownOpen] = useState(false);
+  const ttsMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setActiveTab(initialSubTab);
     setIsDetailMode(false);
   }, [initialSubTab]);
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ttsMenuRef.current && !ttsMenuRef.current.contains(event.target as Node)) {
+        setIsTtsDropdownOpen(false);
+      }
+    }
+    if (isTtsDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isTtsDropdownOpen]);
+
   const handleTabChange = (tab: VoiceCenterSubTab) => {
     setActiveTab(tab);
     setIsDetailMode(false);
+    setIsTtsDropdownOpen(false);
   };
 
-  const tabs = [
-    { id: "tts" as const, label: t("文本到音频", "Text to Audio"), icon: "🎙️" },
+  const ttsModes = [
+    {
+      id: "text" as const,
+      icon: "📄",
+      label: t("文本转语音", "Text to speech"),
+      desc: t("单人自然朗读 · 适合正文与旁白", "Single natural speaker for narration & prose"),
+    },
+    {
+      id: "dialogue" as const,
+      icon: "👥",
+      label: t("对话转语音", "Dialogue to speech"),
+      desc: t("双人角色对谈 · 适合播客与情景剧", "Two-speaker dialogue for podcasts & role-play"),
+    },
+    {
+      id: "pdf" as const,
+      icon: "📑",
+      label: t("PDF 转语音", "PDF to speech"),
+      desc: t("PDF 文档提炼 · 支持 AI 口语化润色", "Extract from PDF with AI oralization polishing"),
+    },
+  ];
+
+  const currentTtsMode = ttsModes.find((m) => m.id === tts.ttsMode) || ttsModes[0];
+
+  const otherTabs = [
     { id: "design" as const, label: t("设计音色", "Voice Design"), icon: "✨" },
     { id: "clone" as const, label: t("音色克隆", "Voice Clone"), icon: "🧬" },
     { id: "transcribe" as const, label: t("一键转写", "Transcribe"), icon: "📝" },
@@ -60,7 +97,84 @@ export default function VoiceCenterPage({
       {!isDetailMode && (
         <div className="vsVoiceCenterNav">
           <div className="vsVoiceCenterSegmented">
-            {tabs.map((tab) => {
+            {/* 1st Tab: TTS Mode Dropdown Tab */}
+            <div className="vsVoiceSubTabDropdownWrapper" ref={ttsMenuRef}>
+              <div className={`vsVoiceSubTabDropdownGroup ${activeTab === "tts" ? "active" : ""}`}>
+                <button
+                  type="button"
+                  data-testid="voicecenter-tab-tts"
+                  onClick={() => handleTabChange("tts")}
+                  className={`vsVoiceSubTab vsVoiceSubTab--dropdownMain ${activeTab === "tts" ? "active" : ""}`}
+                >
+                  <span className="vsVoiceSubTabIcon" aria-hidden="true">{currentTtsMode.icon}</span>
+                  <span className="vsVoiceSubTabLabel">{currentTtsMode.label}</span>
+                </button>
+                <button
+                  type="button"
+                  className="vsVoiceSubTabChevronBtn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (activeTab !== "tts") {
+                      setActiveTab("tts");
+                      setIsDetailMode(false);
+                    }
+                    setIsTtsDropdownOpen((prev) => !prev);
+                  }}
+                  aria-expanded={isTtsDropdownOpen}
+                  aria-haspopup="listbox"
+                  title={t("切换创作模式 (文本/对话/PDF)", "Switch mode (Text/Dialogue/PDF)")}
+                >
+                  <svg
+                    className={`vsVoiceSubTabChevron ${isTtsDropdownOpen ? "open" : ""}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+              </div>
+
+              <div
+                className={`vsVoiceSubTabMenu ${isTtsDropdownOpen ? "open" : ""}`}
+                role="menu"
+                aria-label={t("创作模式选择", "TTS Mode selection")}
+              >
+                {ttsModes.map((opt) => {
+                  const isSelected = tts.ttsMode === opt.id && activeTab === "tts";
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      aria-label={opt.label}
+                      className={`vsVoiceSubTabMenuItem ${isSelected ? "active" : ""}`}
+                      onClick={() => {
+                        tts.onTtsModeChange(opt.id);
+                        setActiveTab("tts");
+                        setIsDetailMode(false);
+                        setIsTtsDropdownOpen(false);
+                      }}
+                    >
+                      <span className="vsVoiceSubTabMenuIcon" aria-hidden="true">{opt.icon}</span>
+                      <div className="vsVoiceSubTabMenuText">
+                        <span className="vsVoiceSubTabMenuTitle">{opt.label}</span>
+                        <span className="vsVoiceSubTabMenuDesc">{opt.desc}</span>
+                      </div>
+                      {isSelected && (
+                        <span className="vsVoiceSubTabMenuCheckmark" aria-hidden="true">✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Other Tabs */}
+            {otherTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
