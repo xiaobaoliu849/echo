@@ -148,43 +148,144 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
 
   return (
     <section className="vsTtsWorkspace vsTtsSingleColumn">
-      <form className="vsTtsLayout" onSubmit={tts.onSubmit}>
-        {/* ── Top Pane: Header & Mode Selection ── */}
-        <header className="vsTtsPrimaryHeader">
-          <div className="vsModeTabs">
-            <button
-              type="button"
-              data-mode="text"
-              className={`vsModeTabBtn ${tts.ttsMode === "text" ? "active" : ""}`}
-              onClick={() => tts.onTtsModeChange("text")}
-            >
-              {t("文本转语音", "Text to speech")}
-            </button>
-            <button
-              type="button"
-              data-mode="dialogue"
-              className={`vsModeTabBtn ${tts.ttsMode === "dialogue" ? "active" : ""}`}
-              onClick={() => tts.onTtsModeChange("dialogue")}
-            >
-              {t("对话转语音", "Dialogue to speech")}
-            </button>
-            <button
-              type="button"
-              data-mode="pdf"
-              className={`vsModeTabBtn ${tts.ttsMode === "pdf" ? "active" : ""}`}
-              onClick={() => tts.onTtsModeChange("pdf")}
-            >
-              {t("PDF 转语音", "PDF to speech")}
-            </button>
+      <form
+        className="vsTtsLayout"
+        onSubmit={tts.onSubmit}
+        style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", margin: 0 }}
+      >
+        {/* ── Top Studio Bar: Mode Selector & Streamlined Parameters ── */}
+        <header className="vsTtsStudioBar vsTtsPrimaryHeader">
+          <div className="vsTtsBarLeft">
+            <div className="vsModeTabs" role="tablist" aria-label={t("TTS 模式", "TTS Mode")}>
+              <button
+                type="button"
+                data-mode="text"
+                className={`vsModeTabBtn ${tts.ttsMode === "text" ? "active" : ""}`}
+                onClick={() => tts.onTtsModeChange("text")}
+              >
+                {t("文本转语音", "Text to speech")}
+              </button>
+              <button
+                type="button"
+                data-mode="dialogue"
+                className={`vsModeTabBtn ${tts.ttsMode === "dialogue" ? "active" : ""}`}
+                onClick={() => tts.onTtsModeChange("dialogue")}
+              >
+                {t("对话转语音", "Dialogue to speech")}
+              </button>
+              <button
+                type="button"
+                data-mode="pdf"
+                className={`vsModeTabBtn ${tts.ttsMode === "pdf" ? "active" : ""}`}
+                onClick={() => tts.onTtsModeChange("pdf")}
+              >
+                {t("PDF 转语音", "PDF to speech")}
+              </button>
+            </div>
           </div>
-          <div className="vsTtsPrimaryStats">
-            <span className="vsStatsNumber">{activeLength}</span>
-            <span className="vsStatsUnit"> {t("字", "chars")}</span>
-          </div>
+
+          {/* Unified Parameters in Single and PDF mode */}
+          {tts.ttsMode !== "dialogue" && (
+            <div className="vsTtsBarRight">
+              <div className="vsTtsToolbarField vsTtsFieldEngine">
+                <span className="vsFieldLabel">{t("TTS 引擎:", "TTS Engine:")}</span>
+                <div className="vsSelectWrapper">
+                  <select
+                    className="vsSelect vsSelectModern"
+                    value={tts.ttsEngine}
+                    onChange={(e) => tts.onEngineChange(e.target.value as typeof tts.ttsEngine)}
+                  >
+                    {tts.engineOptions.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {tts.ttsModelOptions && tts.ttsModelOptions.length > 0 && (
+                <div className="vsTtsToolbarField vsTtsFieldModel">
+                  <span className="vsFieldLabel">{t("模型版本:", "Model:")}</span>
+                  <div className="vsSelectWrapper">
+                    <select
+                      className="vsSelect vsSelectModern"
+                      value={tts.ttsModel || ""}
+                      onChange={(e) => tts.onModelChange?.(e.target.value)}
+                    >
+                      {tts.ttsModelOptions.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="vsTtsToolbarField vsTtsFieldVoice">
+                <div className="vsVoiceCapsuleWrapper">
+                  <span className="vsVoiceCapsuleAvatar" aria-hidden="true">🎙️</span>
+                  <select
+                    className="vsSelect vsSelectModern vsSelectVoice"
+                    value={tts.voice}
+                    onChange={(e) => tts.onVoiceChange(e.target.value)}
+                    disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
+                  >
+                    <option value="" disabled>{t("-- 请选择音色 --", "-- Select a voice --")}</option>
+                    {tts.voiceOptions.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                  {tts.loadingVoices && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
+                </div>
+              </div>
+
+              <div className="vsTtsToolbarField vsTtsFieldRate">
+                <div className="vsRateCapsule">
+                  <span className="vsRateLabel">{t("语速", "Rate")}</span>
+                  <input
+                    type="text"
+                    className="vsInput vsInputModern vsInputRate"
+                    value={tts.rate}
+                    onChange={(e) => tts.onRateChange(e.target.value)}
+                    placeholder="+0%"
+                  />
+                  <div className="vsRateQuickPresets" role="group" aria-label="语速预设">
+                    {[
+                      { label: "0.8x", val: "-20%" },
+                      { label: "1.0x", val: "+0%" },
+                      { label: "1.2x", val: "+20%" },
+                    ].map((preset) => (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        className={`vsRatePresetTag ${tts.rate === preset.val ? "active" : ""}`}
+                        onClick={() => tts.onRateChange(preset.val)}
+                        title={`设为 ${preset.val}`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="vsBtnGhost vsRateResetBtn"
+                    onClick={() => tts.onRateChange("+0%")}
+                    title={t("重置语速", "Reset rate")}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </header>
 
-        {/* ── Config Horizontal Toolbar ── */}
-        {tts.ttsMode === "dialogue" ? (
+        {/* ── Dialogue Config Toolbar (When in dialogue mode) ── */}
+        {tts.ttsMode === "dialogue" && (
           <div className="vsTtsToolbar vsTtsDialogueToolbar">
             <div className="vsDialogueSpeakersGrid">
               {/* Person A Card */}
@@ -295,197 +396,100 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="vsTtsToolbar">
-            <div className="vsTtsToolbarField vsTtsFieldEngine">
-              <span className="vsFieldLabel">{t("TTS 引擎", "Engine")}:</span>
-              <div className="vsSelectWrapper">
-                <select
-                  className="vsSelect vsSelectModern"
-                  value={tts.ttsEngine}
-                  onChange={(e) => tts.onEngineChange(e.target.value as typeof tts.ttsEngine)}
-                >
-                  {tts.engineOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {tts.ttsModelOptions && tts.ttsModelOptions.length > 0 && (
-              <div className="vsTtsToolbarField vsTtsFieldModel">
-                <span className="vsFieldLabel">{t("模型版本", "Model")}:</span>
-                <div className="vsSelectWrapper">
-                  <select
-                    className="vsSelect vsSelectModern"
-                    value={tts.ttsModel || ""}
-                    onChange={(e) => tts.onModelChange?.(e.target.value)}
-                  >
-                    {tts.ttsModelOptions.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            <div className="vsTtsToolbarField vsTtsFieldVoice">
-              <span className="vsFieldLabel">{t("首选音色", "Voice")}:</span>
-              <div className="vsVoiceCapsuleWrapper">
-                <span className="vsVoiceCapsuleAvatar" aria-hidden="true">🎙️</span>
-                <select
-                  className="vsSelect vsSelectModern vsSelectVoice"
-                  value={tts.voice}
-                  onChange={(e) => tts.onVoiceChange(e.target.value)}
-                  disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
-                >
-                  <option value="" disabled>{t("-- 请选择音色 --", "-- Select a voice --")}</option>
-                  {tts.voiceOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                {tts.loadingVoices && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
-              </div>
-            </div>
-
-            <div className="vsTtsToolbarField vsTtsFieldRate">
-              <span className="vsFieldLabel">{t("全局语速", "Rate")}:</span>
-              <div className="vsRateCapsule">
-                <input
-                  type="text"
-                  className="vsInput vsInputModern vsInputRate"
-                  value={tts.rate}
-                  onChange={(e) => tts.onRateChange(e.target.value)}
-                  placeholder="+0%"
-                />
-                <div className="vsRateQuickPresets" role="group" aria-label="语速预设">
-                  {[
-                    { label: "0.8x", val: "-20%" },
-                    { label: "1.0x", val: "+0%" },
-                    { label: "1.2x", val: "+20%" },
-                  ].map((preset) => (
-                    <button
-                      key={preset.val}
-                      type="button"
-                      className={`vsRatePresetTag ${tts.rate === preset.val ? "active" : ""}`}
-                      onClick={() => tts.onRateChange(preset.val)}
-                      title={`设为 ${preset.val}`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="vsBtnGhost vsRateResetBtn"
-                  onClick={() => tts.onRateChange("+0%")}
-                  title={t("重置语速", "Reset rate")}
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          </div>
         )}
 
         {errorNotice}
 
-        {/* ── Middle Pane: Full-Width Editor Area ── */}
+        {/* ── Middle Pane: Full-Width Studio Canvas ── */}
         <div className="vsTtsEditorWrap">
-          <div className="vsTtsEditorCard">
-            {tts.ttsMode === "text" ? (
-              <textarea
-                className="vsTtsEditor custom-scrollbar"
-                value={tts.text}
-                onChange={(e) => tts.onTextChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t("输入要合成朗读的正文内容、旁白或单人对白结构… (支持按 Ctrl+Enter 快捷合成)", "Enter narration, body text, or a single-speaker script to synthesize... (Press Ctrl+Enter to generate)")}
-              />
-            ) : null}
-            {tts.ttsMode === "dialogue" ? (
-              <textarea
-                className="vsTtsEditor custom-scrollbar"
-                value={tts.dialogueText}
-                onChange={(e) => tts.onDialogueTextChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t("A: 你好，欢迎来到今天的节目。\nB: 今天我们来聊聊 Echo 的语音工作流。(支持按 Ctrl+Enter 快捷合成)", "A: Hello, welcome to today's show.\nB: Today we're talking about Echo's speech workflow. (Press Ctrl+Enter to generate)")}
-              />
-            ) : null}
-            {tts.ttsMode === "pdf" ? (
-              <div className="vsPdfEditorContainer">
-                <div className="vsPdfUploadRow" style={{ opacity: (tts.extractingPdf || tts.polishingPdf) ? 0.6 : 1 }}>
-                  <span className="vsPdfUploadLabel">📁 {t("选择 PDF 文件", "Select PDF File")}:</span>
-                  <input
-                    type="file"
-                    key={tts.pdfFile ? tts.pdfFile.name : "empty"}
-                    accept="application/pdf"
-                    onChange={(e) => tts.onPdfFileChange(e.target.files?.[0] || null)}
-                    disabled={tts.extractingPdf || tts.polishingPdf}
-                    className="vsPdfFileInput"
-                  />
-                  {tts.pdfText.trim() && (
-                    <button
-                      type="button"
-                      className="vsBtnSecondary vsPolishBtn"
-                      onClick={tts.onPolishPdfText}
-                      disabled={tts.extractingPdf || tts.polishingPdf}
-                    >
-                      {tts.polishingPdf ? (
-                        <>
-                          <span className="spinner-mini"></span>
-                          {t("优化中...", "Optimizing...")}
-                        </>
-                      ) : (
-                        <>✨ {t("AI 朗读优化", "AI Oralize")}</>
-                      )}
-                    </button>
-                  )}
-                </div>
-                <textarea
-                  className="vsTtsEditor custom-scrollbar"
-                  value={tts.pdfText}
-                  onChange={(e) => tts.onPdfTextChange(e.target.value)}
-                  onKeyDown={handleKeyDown}
+          {tts.ttsMode === "text" && (
+            <textarea
+              className="vsTtsEditor custom-scrollbar"
+              value={tts.text}
+              onChange={(e) => tts.onTextChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={t("在此键入或粘贴您想要合成的文本、旁白、剧本内容… (支持按 Ctrl+Enter 快捷合成)", "Enter narration, body text, or a single-speaker script to synthesize... (Press Ctrl+Enter to generate)")}
+            />
+          )}
+          {tts.ttsMode === "dialogue" && (
+            <textarea
+              className="vsTtsEditor custom-scrollbar"
+              value={tts.dialogueText}
+              onChange={(e) => tts.onDialogueTextChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={t("A: 你好，欢迎来到今天的节目。\nB: 今天我们来聊聊 Echo 的语音工作流。(支持按 Ctrl+Enter 快捷合成)", "A: Hello, welcome to today's show.\nB: Today we're talking about Echo's speech workflow. (Press Ctrl+Enter to generate)")}
+            />
+          )}
+          {tts.ttsMode === "pdf" && (
+            <div className="vsPdfEditorContainer">
+              <div className="vsPdfUploadRow" style={{ opacity: (tts.extractingPdf || tts.polishingPdf) ? 0.6 : 1 }}>
+                <span className="vsPdfUploadLabel">📁 {t("选择 PDF 文件", "Select PDF File")}:</span>
+                <input
+                  type="file"
+                  key={tts.pdfFile ? tts.pdfFile.name : "empty"}
+                  accept="application/pdf"
+                  onChange={(e) => tts.onPdfFileChange(e.target.files?.[0] || null)}
                   disabled={tts.extractingPdf || tts.polishingPdf}
-                  placeholder={
-                    tts.extractingPdf
-                      ? t("正在从 PDF 提取文本中，请稍候...", "Extracting text from PDF, please wait...")
-                      : tts.polishingPdf
-                      ? t("正在使用 AI 优化文本（移除噪声、转换数学公式），请稍候...", "AI is optimizing text (removing noise, translating math formulas), please wait...")
-                      : t("这里放 PDF 提取后的可朗读正文。(支持按 Ctrl+Enter 快捷合成)", "Paste the readable body text extracted from the PDF here. (Press Ctrl+Enter to generate)")
-                  }
-                  style={{ opacity: (tts.extractingPdf || tts.polishingPdf) ? 0.6 : 1 }}
+                  className="vsPdfFileInput"
                 />
+                {tts.pdfText.trim() && (
+                  <button
+                    type="button"
+                    className="vsBtnSecondary vsPolishBtn"
+                    onClick={tts.onPolishPdfText}
+                    disabled={tts.extractingPdf || tts.polishingPdf}
+                  >
+                    {tts.polishingPdf ? (
+                      <>
+                        <span className="spinner-mini"></span>
+                        {t("优化中...", "Optimizing...")}
+                      </>
+                    ) : (
+                      <>✨ {t("AI 朗读优化", "AI Oralize")}</>
+                    )}
+                  </button>
+                )}
               </div>
-            ) : null}
-          </div>
-        </div>
+              <textarea
+                className="vsTtsEditor custom-scrollbar"
+                value={tts.pdfText}
+                onChange={(e) => tts.onPdfTextChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={tts.extractingPdf || tts.polishingPdf}
+                placeholder={
+                  tts.extractingPdf
+                    ? t("正在从 PDF 提取文本中，请稍候...", "Extracting text from PDF, please wait...")
+                    : tts.polishingPdf
+                    ? t("正在使用 AI 优化文本（移除噪声、转换数学公式），请稍候...", "AI is optimizing text (removing noise, translating math formulas), please wait...")
+                    : t("这里放 PDF 提取后的可朗读正文。(支持按 Ctrl+Enter 快捷合成)", "Paste the readable body text extracted from the PDF here. (Press Ctrl+Enter to generate)")
+                }
+                style={{ opacity: (tts.extractingPdf || tts.polishingPdf) ? 0.6 : 1 }}
+              />
+            </div>
+          )}
 
-        {/* ── Bottom Pane: Playback & Action Footer ── */}
-        <div className="vsTtsEditorFooter">
-          <div className="vsTtsFooterLeft">
+          {/* Floating Corner Utilities inside Editor */}
+          <div className="vsTtsEditorCornerTools">
             <button
               type="button"
-              className="vsBtnSecondary vsTtsClearBtn"
+              className="vsTtsCornerClearBtn"
               onClick={handleClearWorkspace}
               disabled={!tts.activeSourceText || tts.extractingPdf || tts.polishingPdf}
-              title={t("清空当前输入的文本", "Clear current text")}
+              title={t("清空舞台", "Clear workspace")}
             >
               <svg className="vsIconSmall" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
               </svg>
-              <span>{t("清空舞台", "Clear workspace")}</span>
+              <span>{t("清空", "Clear")}</span>
             </button>
+            <span className="vsTtsCornerDivider">|</span>
+            <span className="vsTtsCornerStats">{activeLength} {t("字", "chars")}</span>
           </div>
+        </div>
 
-          {/* Synthesis Player Row */}
-          <div className="vsTtsFooterCenter">
+        {/* ── Bottom Pane: Playback & Action Footer ── */}
+        <footer className="vsTtsEditorFooter">
+          <div className="vsTtsFooterLeft">
             {tts.audioUrl && (
               <div className="vsAudioPlayerDock">
                 <audio controls src={tts.audioUrl} className="vsAudioElement" />
@@ -540,7 +544,7 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
               )}
             </button>
           </div>
-        </div>
+        </footer>
       </form>
     </section>
   );
