@@ -1,5 +1,6 @@
-import { useState, useMemo, ReactNode } from "react";
-import { Terminal, Brain } from "lucide-react";
+import { useState, useMemo, useEffect, ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Terminal, Brain, X } from "lucide-react";
 import type { UseSettingsResult } from "../../hooks/useSettings";
 import { PROVIDER_API_KEY_FIELD } from "../../hooks/useSettings";
 import SecretInput from "./SecretInput";
@@ -95,6 +96,17 @@ export default function ProviderSettingsSection({ settings }: Props) {
   const [customUseMaxTokens, setCustomUseMaxTokens] = useState(false);
   const [customHeadersJson, setCustomHeadersJson] = useState("{}");
   const [customModalError, setCustomModalError] = useState("");
+
+  useEffect(() => {
+    if (!showAddCustomModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowAddCustomModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showAddCustomModal]);
 
   const providerDisplayNames = useMemo(() => {
     const base = getProviderDisplayNames(t);
@@ -666,112 +678,137 @@ export default function ProviderSettingsSection({ settings }: Props) {
       </div>
 
       {/* Modal: Add Custom Provider */}
-      {showAddCustomModal && (
-        <div className="vsModalOverlay">
-          <div className="vsModalCard" style={{ maxWidth: "480px" }}>
-            <h3 className="vsModalTitle">{t("添加自定义 OpenAI 兼容服务商", "Add Custom OpenAI-Compatible Provider")}</h3>
-            {customModalError && (
-              <div className="vsSettingsNotice warning" style={{ marginBottom: "12px" }}>
-                {customModalError}
+      {showAddCustomModal &&
+        createPortal(
+          <div
+            className="vsModalOverlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vs-custom-provider-modal-title"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowAddCustomModal(false);
+              }
+            }}
+          >
+            <div className="vsModalCard" onClick={(e) => e.stopPropagation()}>
+              <div className="vsModalHeader">
+                <h3 id="vs-custom-provider-modal-title" className="vsModalTitle">
+                  {t("添加自定义 OpenAI 兼容服务商", "Add Custom OpenAI-Compatible Provider")}
+                </h3>
+                <button
+                  type="button"
+                  className="vsModalCloseBtn"
+                  onClick={() => setShowAddCustomModal(false)}
+                  aria-label={t("关闭", "Close")}
+                >
+                  <X size={18} />
+                </button>
               </div>
-            )}
-            <div className="vsFormRow" style={{ flexDirection: "column", gap: "12px" }}>
-              <label className="vsField">
-                <span className="vsFieldLabel">{t("服务商名称 (英文/中文)", "Provider Name")}</span>
-                <input
-                  className="vsInput"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  placeholder={t("例如: MyLocalOllama", "e.g. MyLocalOllama")}
-                />
-              </label>
-              <label className="vsField">
-                <span className="vsFieldLabel">Base URL</span>
-                <input
-                  className="vsInput"
-                  value={customBaseUrl}
-                  onChange={(e) => setCustomBaseUrl(e.target.value)}
-                  placeholder="https://api.example.com/v1"
-                />
-              </label>
-              <label className="vsField">
-                <span className="vsFieldLabel">API Key</span>
-                <input
-                  className="vsInput"
-                  type="password"
-                  value={customApiKey}
-                  onChange={(e) => setCustomApiKey(e.target.value)}
-                  placeholder={t("输入 API Key (若无需可留空)", "API Key (optional)")}
-                />
-              </label>
-              <label className="vsField">
-                <span className="vsFieldLabel">{t("使用 max_completion_tokens", "Use max_completion_tokens")}</span>
-                <div style={{ display: "flex", alignItems: "center", marginTop: "4px" }}>
+
+              {customModalError && (
+                <div className="vsSettingsNotice warning" style={{ marginBottom: "12px" }}>
+                  {customModalError}
+                </div>
+              )}
+
+              <div className="vsFormRow" style={{ flexDirection: "column", gap: "12px" }}>
+                <label className="vsField">
+                  <span className="vsFieldLabel">{t("服务商名称 (英文/中文)", "Provider Name")}</span>
+                  <input
+                    className="vsInput"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    placeholder={t("例如: MyLocalOllama", "e.g. MyLocalOllama")}
+                    autoFocus
+                  />
+                </label>
+                <label className="vsField">
+                  <span className="vsFieldLabel">Base URL</span>
+                  <input
+                    className="vsInput"
+                    value={customBaseUrl}
+                    onChange={(e) => setCustomBaseUrl(e.target.value)}
+                    placeholder="https://api.example.com/v1"
+                  />
+                </label>
+                <label className="vsField">
+                  <span className="vsFieldLabel">API Key</span>
+                  <input
+                    className="vsInput"
+                    type="password"
+                    value={customApiKey}
+                    onChange={(e) => setCustomApiKey(e.target.value)}
+                    placeholder={t("输入 API Key (若无需可留空)", "API Key (optional)")}
+                  />
+                </label>
+                <label className="vsField" style={{ flexDirection: "row", alignItems: "center", gap: "8px", cursor: "pointer" }}>
                   <input
                     type="checkbox"
                     checked={customUseMaxTokens}
                     onChange={(e) => setCustomUseMaxTokens(e.target.checked)}
                     style={{ width: "16px", height: "16px", cursor: "pointer" }}
                   />
-                  <span style={{ marginLeft: "8px", fontSize: "12px", color: "#666" }}>
-                    {t("针对 o1, o3-mini 等新模型开启", "Enable for o1, o3-mini etc.")}
+                  <span className="vsFieldLabel" style={{ margin: 0, fontWeight: 500, fontSize: "13px" }}>
+                    {t("针对 o1, o3-mini 等新模型开启 (使用 max_completion_tokens)", "Enable for o1, o3-mini etc. (use max_completion_tokens)")}
                   </span>
-                </div>
-              </label>
-              <label className="vsField">
-                <span className="vsFieldLabel">{t("自定义请求头 (JSON)", "Custom Headers (JSON)")}</span>
-                <textarea
-                  className="vsInput"
-                  style={{ fontFamily: "monospace", minHeight: "50px", fontSize: "12px" }}
-                  value={customHeadersJson}
-                  onChange={(e) => setCustomHeadersJson(e.target.value)}
-                  placeholder='{"User-Agent": "CustomApp/1.0"}'
-                />
-              </label>
-            </div>
-            <div className="vsModalActions" style={{ marginTop: "20px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button
-                type="button"
-                className="vsBtnSecondary"
-                onClick={() => setShowAddCustomModal(false)}
-              >
-                {t("取消", "Cancel")}
-              </button>
-              <button
-                type="button"
-                className="vsBtnPrimary"
-                onClick={() => {
-                  if (!customName.trim()) {
-                    setCustomModalError(t("请输入服务商名称", "Please enter a provider name"));
-                    return;
-                  }
-                  if (!customBaseUrl.trim()) {
-                    setCustomModalError(t("请输入 Base URL", "Please enter Base URL"));
-                    return;
-                  }
-                  try {
-                    JSON.parse(customHeadersJson);
-                  } catch {
-                    setCustomModalError(t("请求头 JSON 格式无效", "Invalid Headers JSON format"));
-                    return;
-                  }
+                </label>
+                <label className="vsField">
+                  <span className="vsFieldLabel">{t("自定义请求头 (JSON)", "Custom Headers (JSON)")}</span>
+                  <textarea
+                    className="vsInput"
+                    style={{ fontFamily: "monospace", minHeight: "50px", fontSize: "12px" }}
+                    value={customHeadersJson}
+                    onChange={(e) => setCustomHeadersJson(e.target.value)}
+                    placeholder='{"User-Agent": "CustomApp/1.0"}'
+                  />
+                </label>
+              </div>
 
-                  void settings.onAddCustomProvider(
-                    customName.trim(),
-                    customBaseUrl.trim(),
-                    customApiKey.trim(),
-                    customUseMaxTokens,
-                    customHeadersJson.trim()
-                  );
-                  setShowAddCustomModal(false);
-                }}
-              >
-                {t("确认添加", "Confirm Add")}
-              </button>
+              <div className="vsModalActions">
+                <button
+                  type="button"
+                  className="vsBtnSecondary"
+                  onClick={() => setShowAddCustomModal(false)}
+                >
+                  {t("取消", "Cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="vsBtnPrimary"
+                  onClick={() => {
+                    if (!customName.trim()) {
+                      setCustomModalError(t("请输入服务商名称", "Please enter a provider name"));
+                      return;
+                    }
+                    if (!customBaseUrl.trim()) {
+                      setCustomModalError(t("请输入 Base URL", "Please enter Base URL"));
+                      return;
+                    }
+                    try {
+                      JSON.parse(customHeadersJson);
+                    } catch {
+                      setCustomModalError(t("请求头 JSON 格式无效", "Invalid Headers JSON format"));
+                      return;
+                    }
+
+                    void settings.onAddCustomProvider(
+                      customName.trim(),
+                      customBaseUrl.trim(),
+                      customApiKey.trim(),
+                      customUseMaxTokens,
+                      customHeadersJson.trim()
+                    );
+                    setShowAddCustomModal(false);
+                  }}
+                >
+                  {t("确认添加", "Confirm Add")}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

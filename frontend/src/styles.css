@@ -6828,6 +6828,84 @@ button.vsPasswordToggleBtn:focus-visible {
   margin-top: 4px;
 }
 
+/* ── Modal Dialog (Add Custom Provider & Settings Popups) ── */
+.vsModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: vsModalFadeIn 0.2s ease;
+  box-sizing: border-box;
+}
+
+.vsModalCard {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  padding: 24px;
+  animation: vsModalSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vsModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 2px;
+}
+
+.vsModalTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.vsModalCloseBtn {
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.vsModalCloseBtn:hover {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.vsModalActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
 /* =========================================================
    Settings Full-window Desktop Workspace (ZCode-Style)
    ========================================================= */
