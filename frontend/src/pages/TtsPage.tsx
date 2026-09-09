@@ -288,11 +288,11 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                   className="vsSelect vsSelectModern"
                   value={tts.voice}
                   onChange={(e) => tts.onVoiceChange(e.target.value)}
-                  disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
+                  disabled={tts.loadingVoices || tts.voiceOptionsCompact.length === 0}
                   title={t("角色 A 音色", "Speaker A Voice")}
                 >
                   <option value="" disabled>{t("选择音色…", "Select voice…")}</option>
-                  {tts.voiceOptions.map((item) => (
+                  {tts.voiceOptionsCompact.map((item) => (
                     <option key={item.value} value={item.value}>{item.label}</option>
                   ))}
                 </select>
@@ -321,11 +321,11 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                   className="vsSelect vsSelectModern"
                   value={tts.voiceB}
                   onChange={(e) => tts.onVoiceBChange?.(e.target.value)}
-                  disabled={tts.loadingVoicesB || tts.voiceOptionsB.length === 0}
+                  disabled={tts.loadingVoicesB || tts.voiceOptionsBCompact.length === 0}
                   title={t("角色 B 音色", "Speaker B Voice")}
                 >
                   <option value="" disabled>{t("选择音色…", "Select voice…")}</option>
-                  {tts.voiceOptionsB.map((item) => (
+                  {tts.voiceOptionsBCompact.map((item) => (
                     <option key={item.value} value={item.value}>{item.label}</option>
                   ))}
                 </select>

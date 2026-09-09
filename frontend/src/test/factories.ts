@@ -84,6 +84,8 @@ export function createTtsController(
     ],
     voiceOptions: [{ value: "zh-CN-XiaoxiaoNeural", label: "Xiaoxiao (zh-CN)" }],
     voiceOptionsB: [{ value: "zh-CN-YunxiNeural", label: "Yunxi (zh-CN)" }],
+    voiceOptionsCompact: [{ value: "zh-CN-XiaoxiaoNeural", label: "Xiaoxiao (女)" }],
+    voiceOptionsBCompact: [{ value: "zh-CN-YunxiNeural", label: "Yunxi (男)" }],
     ttsEngineB: "edge",
     ttsModel: "",
     ttsModelB: "",

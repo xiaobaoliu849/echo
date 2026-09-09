@@ -199,6 +199,24 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
       label: formatVoiceLabel(item, t)
     }));
   }, [voicesB, language, t]);
+
+  // Compact labels (name + gender only) for tight spaces like the dialogue bar
+  const voiceOptionsCompact = useMemo(() => {
+    const sorted = sortVoices(voices, language);
+    return sorted.map((item) => ({
+      value: item.name,
+      label: formatVoiceLabel(item, t, { compact: true })
+    }));
+  }, [voices, language, t]);
+
+  const voiceOptionsBCompact = useMemo(() => {
+    const sorted = sortVoices(voicesB, language);
+    return sorted.map((item) => ({
+      value: item.name,
+      label: formatVoiceLabel(item, t, { compact: true })
+    }));
+  }, [voicesB, language, t]);
+
   const engineOptions = useMemo(
     () => [
       { value: "edge" as TtsEngine, label: "Edge TTS", hint: t("系统级稳定合成，适合基础朗读。", "Stable system-level synthesis for standard narration.") },
@@ -417,6 +435,8 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     engineOptions,
     voiceOptions,
     voiceOptionsB,
+    voiceOptionsCompact,
+    voiceOptionsBCompact,
     ttsModelOptions,
     ttsModelOptionsB,
     activeSourceText,
