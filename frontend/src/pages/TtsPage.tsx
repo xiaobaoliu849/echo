@@ -257,7 +257,7 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                     onClick={() => tts.onRateChange("+0%")}
                     title={t("重置语速", "Reset rate")}
                   >
-                    Reset
+                    {t("重置", "Reset")}
                   </button>
                 </div>
               </div>
@@ -371,8 +371,9 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                   type="button"
                   className="vsBtnGhost vsRateResetBtn"
                   onClick={() => tts.onRateChange("+0%")}
+                  title={t("重置语速", "Reset rate")}
                 >
-                  Reset
+                  {t("重置", "Reset")}
                 </button>
               </div>
             </div>

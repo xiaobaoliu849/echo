@@ -6480,15 +6480,19 @@ button.danger:focus-visible {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.02);
 }
 
+/* NOTE: keep this bar free of backdrop-filter/transform/filter —
+   they create a stacking context that would clip the TTS mode dropdown
+   (absolutely positioned inside) behind the content card below. */
 .vsVoiceCenterNav {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   padding: 10px 18px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
+  background: #ffffff;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  position: relative;
+  z-index: 30;
 }
 
 .vsVoiceCenterSegmented {
@@ -6596,6 +6600,23 @@ button.danger:focus-visible {
   .vsVoiceSubTab {
     flex: 1 1 calc(50% - 4px);
     justify-content: center;
+  }
+
+  .vsVoiceSubTabDropdownWrapper {
+    flex: 1 1 100%;
+  }
+
+  .vsVoiceSubTabDropdownGroup {
+    width: 100%;
+  }
+
+  .vsVoiceSubTabDropdownGroup .vsVoiceSubTab {
+    flex: 1 1 auto;
+  }
+
+  .vsVoiceSubTabDropdownGroup .vsVoiceSubTabLabel {
+    flex: 1;
+    text-align: left;
   }
 
   .vsVoiceCenterContent {
@@ -6711,11 +6732,11 @@ button.danger:focus-visible {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  min-width: 250px;
+  min-width: 264px;
   background: #ffffff;
   border-radius: 12px;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.05);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -6723,7 +6744,7 @@ button.danger:focus-visible {
   z-index: 120;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-6px) scale(0.98);
+  transform: translateY(-6px);
   transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
   pointer-events: none;
 }
@@ -6755,6 +6776,11 @@ button.danger:focus-visible {
 
 .vsVoiceSubTabMenuItem.active {
   background: #fef3c7;
+}
+
+.vsVoiceSubTabMenuItem:focus-visible {
+  outline: 2px solid #d97706;
+  outline-offset: -2px;
 }
 
 .vsVoiceSubTabMenuIcon {

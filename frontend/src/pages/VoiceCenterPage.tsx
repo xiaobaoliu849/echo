@@ -39,11 +39,17 @@ export default function VoiceCenterPage({
   const [isDetailMode, setIsDetailMode] = useState(false);
   const [isTtsDropdownOpen, setIsTtsDropdownOpen] = useState(false);
   const ttsMenuRef = useRef<HTMLDivElement>(null);
+  const ttsMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setActiveTab(initialSubTab);
     setIsDetailMode(false);
   }, [initialSubTab]);
+
+  const closeTtsMenu = (restoreFocus = false) => {
+    setIsTtsDropdownOpen(false);
+    if (restoreFocus) ttsMenuButtonRef.current?.focus();
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -51,16 +57,25 @@ export default function VoiceCenterPage({
         setIsTtsDropdownOpen(false);
       }
     }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeTtsMenu(true);
+      }
+    }
     if (isTtsDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+        document.removeEventListener("keydown", handleKeyDown);
+      };
     }
   }, [isTtsDropdownOpen]);
 
   const handleTabChange = (tab: VoiceCenterSubTab) => {
     setActiveTab(tab);
     setIsDetailMode(false);
-    setIsTtsDropdownOpen(false);
+    closeTtsMenu();
   };
 
   const ttsModes = [
@@ -103,7 +118,15 @@ export default function VoiceCenterPage({
                 <button
                   type="button"
                   data-testid="voicecenter-tab-tts"
-                  onClick={() => handleTabChange("tts")}
+                  onClick={() => {
+                    if (activeTab !== "tts") {
+                      handleTabChange("tts");
+                    } else {
+                      setIsTtsDropdownOpen((prev) => !prev);
+                    }
+                  }}
+                  aria-expanded={activeTab === "tts" ? isTtsDropdownOpen : undefined}
+                  aria-haspopup="menu"
                   className={`vsVoiceSubTab vsVoiceSubTab--dropdownMain ${activeTab === "tts" ? "active" : ""}`}
                 >
                   <span className="vsVoiceSubTabIcon" aria-hidden="true">{currentTtsMode.icon}</span>
@@ -111,17 +134,12 @@ export default function VoiceCenterPage({
                 </button>
                 <button
                   type="button"
+                  ref={ttsMenuButtonRef}
                   className="vsVoiceSubTabChevronBtn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (activeTab !== "tts") {
-                      setActiveTab("tts");
-                      setIsDetailMode(false);
-                    }
-                    setIsTtsDropdownOpen((prev) => !prev);
-                  }}
+                  onClick={() => setIsTtsDropdownOpen((prev) => !prev)}
                   aria-expanded={isTtsDropdownOpen}
-                  aria-haspopup="listbox"
+                  aria-haspopup="menu"
+                  aria-label={t("切换创作模式 (文本/对话/PDF)", "Switch mode (Text/Dialogue/PDF)")}
                   title={t("切换创作模式 (文本/对话/PDF)", "Switch mode (Text/Dialogue/PDF)")}
                 >
                   <svg
@@ -150,13 +168,12 @@ export default function VoiceCenterPage({
                     <button
                       key={opt.id}
                       type="button"
+                      role="menuitem"
                       aria-label={opt.label}
                       className={`vsVoiceSubTabMenuItem ${isSelected ? "active" : ""}`}
                       onClick={() => {
-                        tts.onTtsModeChange(opt.id);
-                        setActiveTab("tts");
-                        setIsDetailMode(false);
-                        setIsTtsDropdownOpen(false);
+                        if (tts.ttsMode !== opt.id) tts.onTtsModeChange(opt.id);
+                        handleTabChange("tts");
                       }}
                     >
                       <span className="vsVoiceSubTabMenuIcon" aria-hidden="true">{opt.icon}</span>
