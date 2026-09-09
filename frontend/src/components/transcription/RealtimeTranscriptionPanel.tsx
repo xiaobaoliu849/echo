@@ -41,6 +41,7 @@ type RealtimeServerMessage =
 
 type Props = {
   onComplete: (job: TranscriptionJobResponse, words?: WordTimestamp[]) => void;
+  /** @deprecated redundant with the top-level "转写历史库" tab; kept so existing callers still compile */
   onSwitchToLibrary?: () => void;
   onOpenSettings?: (provider?: string) => void;
 };
@@ -95,7 +96,7 @@ export function formatTimestampDisplay(sec: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOpenSettings }: Props) {
+export function RealtimeTranscriptionPanel({ onComplete, onOpenSettings }: Props) {
   const { t } = useI18n();
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -120,7 +121,16 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOp
 
   useEffect(() => {
     fetchSettings()
-      .then((data) => setAppSettings(data.settings))
+      .then((data) => {
+        setAppSettings(data.settings);
+        // API keys live in Settings — just land on a usable model. If the
+        // current pick has no configured key, fall back to the first one that does.
+        setModel((current) => {
+          if (isAsrEngineConfigured(current, data.settings)) return current;
+          const fallback = REALTIME_ASR_MODELS.find((m) => isAsrEngineConfigured(m.id, data.settings));
+          return fallback ? fallback.id : current;
+        });
+      })
       .catch(() => setAppSettings(null));
   }, []);
 
@@ -753,12 +763,12 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOp
 
   return (
     <div className="vsRTPanel">
-      {/* ── Layered toolbar: Config row + View row ── */}
+      {/* ── Single-row toolbar: model + language | view controls ── */}
       <div className="vsRTToolbar">
         <div className="vsRTConfigRow">
-        {/* Config: Model */}
-        <div className="vsRTConfigGroup">
-            <span className="vsRTConfigLabel">{t("模型", "Model")}:</span>
+          {/* Model picker — API keys live in Settings; warn only when truly missing */}
+          <div className="vsRTConfigGroup">
+            <span className="vsRTConfigLabel">{t("模型", "Model")}</span>
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
@@ -766,55 +776,46 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOp
               className="vsSelect vsRTConfigSelect"
             >
               {REALTIME_ASR_MODELS.map((option) => {
-                const isConfigured = isAsrEngineConfigured(option.id, appSettings);
-                const tag = isConfigured ? t("🟢 已配置", "🟢 Configured") : t("⚪ 未配置", "⚪ Not Configured");
+                const configured = isAsrEngineConfigured(option.id, appSettings);
                 return (
                   <option key={option.id} value={option.id}>
-                    {t(option.zh, option.en)} ({tag})
+                    {t(option.zh, option.en)}{configured ? "" : t("（未配置密钥）", " (no API key)")}
                   </option>
                 );
               })}
             </select>
-            {!isAsrEngineConfigured(model, appSettings) ? (
-              <span className="vsRTWarning">
-                ⚠️ {t("未配置 API Key", "API Key not configured")}
-                <button
-                  type="button"
-                  className="errorSettingsBtn"
-                  style={{ padding: "2px 8px", fontSize: "11px" }}
-                  onClick={() => {
-                    const target = ASR_ENGINE_PROVIDER_MAP[model];
-                    if (onOpenSettings) onOpenSettings(target?.providerName);
-                    else window.dispatchEvent(new CustomEvent("open-settings", { detail: { category: "provider", provider: target?.providerName || "Google" } }));
-                  }}
-                >
-                  ⚙️ {t("前往配置", "Configure")}
-                </button>
-              </span>
-            ) : (
-              <span className="vsRTConfigBadge dot">{t("已就绪", "Ready")}</span>
+            {appSettings && !isAsrEngineConfigured(model, appSettings) && (
+              <button
+                type="button"
+                className="vsRTWarning vsRTWarningBtn"
+                title={t("密钥统一在设置页管理，点击前往配置", "Keys are managed in Settings — click to configure")}
+                onClick={() => {
+                  const target = ASR_ENGINE_PROVIDER_MAP[model];
+                  if (onOpenSettings) onOpenSettings(target?.providerName);
+                  else window.dispatchEvent(new CustomEvent("open-settings", { detail: { category: "provider", provider: target?.providerName || "Google" } }));
+                }}
+              >
+                ⚠️ {t("未配置 API Key · 前往设置", "No API Key · Open Settings")}
+              </button>
             )}
           </div>
-          <div className="vsRTConfigGroup">
-            <span className="vsRTConfigLabel">{t("语种", "Lang")}:</span>
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              disabled={running}
-              className="vsSelect vsRTConfigSelect"
-              style={{ flex: "0 1 190px", maxWidth: "210px" }}
-            >
-              {LANGUAGE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {t(option.zh, option.en)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+          {/* Language is auto-detected; this select is only a fallback override */}
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            disabled={running}
+            className="vsSelect vsRTConfigSelect"
+            style={{ flex: "0 1 180px", maxWidth: "200px" }}
+            title={t("语种默认全自动识别，一般无需修改；仅当识别错语种时手动指定", "Language is auto-detected — change only if it picks the wrong one")}
+          >
+            {LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.zh, option.en)}
+              </option>
+            ))}
+          </select>
 
-        <div className="vsRTViewRow">
-          <div className="vsRTViewSwitcher">
+          <div className="vsRTViewSwitcher" style={{ marginLeft: "auto" }}>
             <button type="button" onClick={() => setViewMode("teleprompter")} className={`vsRTViewBtn${viewMode === "teleprompter" ? " active" : ""}`}>
               📺 {t("大字提词器", "Teleprompter")}
             </button>
@@ -845,15 +846,12 @@ export function RealtimeTranscriptionPanel({ onComplete, onSwitchToLibrary, onOp
                 })}
               </div>
             )}
-            <div className={`vsRTStatusBadge${phase === "listening" ? " live" : ""}`}>
-              {phase === "listening" && <span className="vsRTStatusDot" />}
-              <span>{phase === "listening" ? "LIVE ON AIR" : statusText}</span>
-              <span style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}>{formatElapsed(elapsed)}</span>
-            </div>
-            {onSwitchToLibrary && (
-              <button type="button" onClick={onSwitchToLibrary} className="vsBtnGhost" style={{ height: "32px", padding: "0 10px", fontSize: "12px", borderRadius: "8px", display: "inline-flex", alignItems: "center", gap: "4px" }} title={t("切换至转写历史库", "Switch to Transcription Library")}>
-                📚 {t("历史库", "Library")}
-              </button>
+            {phase !== "idle" && (
+              <div className={`vsRTStatusBadge${phase === "listening" ? " live" : ""}`}>
+                {phase === "listening" && <span className="vsRTStatusDot" />}
+                <span>{phase === "listening" ? "LIVE ON AIR" : statusText}</span>
+                <span style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}>{formatElapsed(elapsed)}</span>
+              </div>
             )}
           </div>
         </div>

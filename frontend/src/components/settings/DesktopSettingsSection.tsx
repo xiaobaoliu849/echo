@@ -1,3 +1,4 @@
+import { useAppUpdater } from "../../hooks/useAppUpdater";
 import type { UseSettingsResult } from "../../hooks/useSettings";
 import { useI18n } from "../../i18n";
 
@@ -5,8 +6,19 @@ type Props = {
   settings: UseSettingsResult;
 };
 
+// ── helpers ────────────────────────────────────────────────────────────────
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ── component ──────────────────────────────────────────────────────────────
+
 export default function DesktopSettingsSection({ settings }: Props) {
   const { t } = useI18n();
+  const updater = useAppUpdater();
 
   const desktopSection = settings.desktopSection || {
     backendPhase: "",
@@ -23,6 +35,134 @@ export default function DesktopSettingsSection({ settings }: Props) {
 
   return (
     <>
+      {/* ── Auto-Update Card (Electron only) ── */}
+      {updater.isElectron && (
+        <div className="vsSettingsCard">
+          <div className="vsCardSection">
+            <h3 className="vsCardSubTitle">{t("应用更新", "Application Update")}</h3>
+
+            {/* Current version */}
+            <div className="vsFormRow">
+              <label className="vsField">
+                <span className="vsFieldLabel">{t("当前版本", "Current Version")}</span>
+                <input
+                  className="vsInput"
+                  value={updater.appVersion || t("读取中...", "Loading...")}
+                  readOnly
+                />
+              </label>
+              {updater.updateInfo?.version && (
+                <label className="vsField">
+                  <span className="vsFieldLabel">{t("可用新版本", "Available Version")}</span>
+                  <input
+                    className="vsInput"
+                    value={`v${updater.updateInfo.version}`}
+                    readOnly
+                    style={{ color: "var(--accent, #6ee7b7)" }}
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Status messages */}
+            {updater.phase === "checking" && (
+              <div className="vsSettingsNotice">
+                <span className="spinner-mini" style={{ marginRight: 6 }} />
+                {t("正在检查更新...", "Checking for updates...")}
+              </div>
+            )}
+            {updater.phase === "up-to-date" && (
+              <div className="vsSettingsNotice ok">
+                ✓ {t("当前已是最新版本", "You are on the latest version")}
+              </div>
+            )}
+            {updater.phase === "available" && (
+              <div className="vsSettingsNotice ok">
+                🎉 {t(
+                  `发现新版本 v${updater.updateInfo?.version ?? ""}，点击下方按钮开始下载。`,
+                  `New version v${updater.updateInfo?.version ?? ""} is available. Click below to download.`
+                )}
+              </div>
+            )}
+            {updater.phase === "downloading" && updater.progress && (
+              <div className="vsSettingsNotice" style={{ padding: "10px 14px" }}>
+                <div style={{ marginBottom: 6, fontSize: 13 }}>
+                  {t("正在下载更新", "Downloading update")}
+                  {" — "}
+                  {updater.progress.percent.toFixed(1)}%
+                  {" ("}
+                  {formatBytes(updater.progress.transferred)}
+                  {" / "}
+                  {formatBytes(updater.progress.total)}
+                  {")"}
+                </div>
+                <div
+                  style={{
+                    height: 6,
+                    borderRadius: 3,
+                    background: "var(--border, rgba(255,255,255,0.1))",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${updater.progress.percent}%`,
+                      background: "var(--accent, #6ee7b7)",
+                      transition: "width 0.3s ease",
+                      borderRadius: 3,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+            {updater.phase === "ready" && (
+              <div className="vsSettingsNotice ok">
+                ✅ {t("下载完成，点击下方按钮重启安装。", "Download complete. Click below to restart and install.")}
+              </div>
+            )}
+            {updater.phase === "error" && updater.errorMessage && (
+              <div className="vsSettingsNotice warning">
+                ⚠️ {updater.errorMessage}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="vsSystemActions" style={{ marginTop: 12 }}>
+              {(updater.phase === "idle" ||
+                updater.phase === "up-to-date" ||
+                updater.phase === "error") && (
+                <button
+                  type="button"
+                  className="vsBtnGhost"
+                  onClick={() => void updater.checkForUpdates()}
+                >
+                  {t("检查更新", "Check for Updates")}
+                </button>
+              )}
+              {updater.phase === "available" && (
+                <button
+                  type="button"
+                  className="vsBtnPrimary"
+                  onClick={() => void updater.downloadUpdate()}
+                >
+                  {t("立即下载", "Download Now")}
+                </button>
+              )}
+              {updater.phase === "ready" && (
+                <button
+                  type="button"
+                  className="vsBtnPrimary"
+                  onClick={updater.installNow}
+                >
+                  {t("重启并安装", "Restart & Install")}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="vsSettingsCard vsDesktopSection">
         <div className="vsCardSection">
           <h3 className="vsCardSubTitle">{t("诊断与底层信息", "Diagnostics & Runtime Details")}</h3>

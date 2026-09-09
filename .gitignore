@@ -24,9 +24,12 @@ backend/temp_audio/
 
 # Media/Temp
 *.png
+!resources/icons/*.png
+!electron/icon.png
 *.mp3
 *.jpg
 *.wav
+output/
 backup_before_cleanup/
 backend/temp_stream_test.html
 backend/patch_tts_router.py

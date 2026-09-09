@@ -302,18 +302,11 @@ export default function App() {
     };
   }, [authRuntime.apiToken, authRuntime.userEmail]);
 
-  // Stale credentials fail every data request silently; surface one login
-  // prompt instead of letting each hook report its own AUTH_* error.
-  const authDialogAutoOpenedAtRef = useRef(0);
+  // When credentials are rejected, clear stored runtime state but DO NOT force
+  // open the login modal to interrupt the user; user can voluntarily click login.
   useEffect(() => {
     function handleAuthRejected() {
       setAuthRuntime(clearAuthRuntime());
-      const now = Date.now();
-      if (now - authDialogAutoOpenedAtRef.current < 30_000) {
-        return;
-      }
-      authDialogAutoOpenedAtRef.current = now;
-      setAuthDialogOpen(true);
     }
     window.addEventListener(AUTH_REJECTED_EVENT, handleAuthRejected);
     return () => window.removeEventListener(AUTH_REJECTED_EVENT, handleAuthRejected);

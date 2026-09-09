@@ -25,9 +25,11 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   Deepgram: t("Deepgram ASR", "Deepgram ASR"),
   Soniox: t("Soniox ASR", "Soniox ASR"),
   "GPT-SoVITS": t("本地 GPT-SoVITS API", "Local GPT-SoVITS API"),
-  Tavus: t("Tavus 视频分身", "Tavus Video PAL"),
+  Doubao: t("火山引擎 豆包", "Volcengine Doubao"),
   Cartesia: t("Cartesia 极速语音", "Cartesia Sonic Voice"),
   Gradium: t("Gradium 实时语音", "Gradium Voice AI"),
+  PersonaPlex: t("PersonaPlex 语音模型", "PersonaPlex"),
+  GLM4Voice: t("智谱 GLM-4-Voice", "Zhipu GLM-4-Voice"),
 });
 
 const getLobeProviderKey = (name: string): string => {
@@ -35,6 +37,7 @@ const getLobeProviderKey = (name: string): string => {
   if (lower.startsWith("custom_")) {
     lower = lower.substring(7);
   }
+  if (lower.includes("doubao") || lower.includes("bytedance")) return "doubao";
   if (lower.includes("dashscope")) return "qwen";
   if (lower.includes("siliconflow")) return "siliconcloud";
   if (lower === "xiaomi") return "xiaomimimo";
@@ -120,7 +123,6 @@ export default function ProviderSettingsSection({ settings }: Props) {
   }, [t, settings.customProviders]);
 
   const providerOptions = settings.providerOptions || [];
-  const catalog = settings.providerModelCatalog || {};
   const availableModels = settings.settingsAvailableModels || [];
   const ttsAvailableModels = settings.settingsTtsAvailableModels || [];
   const isTtsSupported =
@@ -164,8 +166,16 @@ export default function ProviderSettingsSection({ settings }: Props) {
             })
             .map((providerName) => {
             const isActive = settings.settingsProvider === providerName;
-            const hasKey = !!catalog[providerName]?.defaultModel || 
-              (catalog[providerName]?.availableModels && (catalog[providerName]?.availableModels?.length ?? 0) > 0);
+            const apiKeyField = PROVIDER_API_KEY_FIELD[providerName];
+            const storedApiKeys = (settings.settingsData?.api_keys || {}) as Record<string, any>;
+            const isCustom = settings.customProviders?.some((cp) => cp.id === providerName && Boolean(cp.apiKey));
+            const hasKey = Boolean(
+              isCustom ||
+              (apiKeyField && storedApiKeys[apiKeyField]) ||
+              (providerName === "Doubao" && (storedApiKeys["doubao_access_token"] || storedApiKeys["doubao_api_key"])) ||
+              (providerName === "Xiaomi" && ((settings.settingsData as any)?.xiaomi?.api_key || storedApiKeys["xiaomi_api_key"])) ||
+              (providerName === "Ollama")
+            );
             
             return (
               <button

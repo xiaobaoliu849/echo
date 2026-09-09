@@ -599,8 +599,8 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
         flexDirection: "column",
         height: "100%",
         width: "100%",
-        gap: "14px",
-        padding: "16px 24px",
+        gap: "10px",
+        padding: "10px 24px 16px",
         boxSizing: "border-box",
         overflowY: "auto",
       }}

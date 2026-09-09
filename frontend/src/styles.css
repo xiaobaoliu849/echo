@@ -6909,7 +6909,7 @@ button.danger:focus-visible {
 .vsRTPanel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   min-height: 0;
   height: 100%;
@@ -6950,9 +6950,9 @@ button.danger:focus-visible {
   padding: 0 10px;
   border-radius: 8px;
   font-size: 13px;
-  min-width: 150px;
-  max-width: 220px;
-  flex: 1 1 170px;
+  min-width: 180px;
+  max-width: 340px;
+  flex: 0 1 auto;
 }
 .vsRTConfigMeta {
   display: flex;
@@ -6993,6 +6993,15 @@ button.danger:focus-visible {
   background: #a8a29e;
   display: inline-block;
 }
+button.vsRTWarningBtn {
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+button.vsRTWarningBtn:hover {
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
 .vsRTViewRow {
   display: flex;
   flex-wrap: wrap;
@@ -7011,6 +7020,7 @@ button.danger:focus-visible {
   border-radius: 9px;
   gap: 2px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 .vsRTViewBtn {
   padding: 4px 10px;

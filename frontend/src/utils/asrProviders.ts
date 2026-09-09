@@ -202,14 +202,19 @@ export const ASR_ENGINE_PROVIDER_MAP: Record<string, { providerName: string; key
 
 export function isAsrEngineConfigured(engineId: string, settingsObj?: Record<string, any> | null): boolean {
   if (!settingsObj || engineId === "auto") return true;
+  // GET /api/settings nests credentials under `api_keys` (masked as
+  // "__MASKED__" when set — truthy is all we need). Accept a flat record too
+  // for backwards compatibility with older callers/tests.
+  const keys: Record<string, any> =
+    settingsObj.api_keys && typeof settingsObj.api_keys === "object" ? settingsObj.api_keys : settingsObj;
+  const hasKey = (field: string): boolean => {
+    const val = keys[field] ?? settingsObj[field];
+    return typeof val === "string" ? val.trim().length > 0 : Boolean(val);
+  };
   if (engineId === "google" || engineId === "gemini-3.5-transcribe-live") {
-    return Boolean(
-      (typeof settingsObj.google_api_key === "string" && settingsObj.google_api_key.trim()) ||
-      (typeof settingsObj.vertex_api_key === "string" && settingsObj.vertex_api_key.trim())
-    );
+    return hasKey("google_api_key") || hasKey("vertex_api_key");
   }
   const target = ASR_ENGINE_PROVIDER_MAP[engineId];
   if (!target) return true;
-  const val = settingsObj[target.keyField];
-  return typeof val === "string" ? val.trim().length > 0 : Boolean(val);
+  return hasKey(target.keyField);
 }

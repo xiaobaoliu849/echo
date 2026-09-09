@@ -1,0 +1,43 @@
+appId: com.echo.app
+productName: Echo
+copyright: Copyright © 2024 Echo Team
+
+publish:
+  provider: github
+  owner: xiaobaoliu849
+  repo: echo
+  releaseType: release
+
+directories:
+  output: dist
+  buildResources: .
+
+# Files packed into the ASAR (relative to the electron/ dir)
+files:
+  - main.js
+  - preload.js
+  - package.json
+  - node_modules/**
+
+# Extra resources placed alongside the ASAR (not inside it)
+extraResources:
+  - from: ../frontend/dist
+    to: frontend/dist
+  - from: ../resources
+    to: resources
+  - from: ../backend/dist/voicespirit-backend
+    to: backend-dist
+
+win:
+  icon: ../resources/icons/logo.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  differentialPackage: true

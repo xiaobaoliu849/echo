@@ -1,0 +1,15 @@
+{
+  "name": "echo-desktop",
+  "version": "1.0.0",
+  "description": "Echo Desktop Application",
+  "main": "main.js",
+  "author": "Echo Team",
+  "license": "MIT",
+  "dependencies": {
+    "electron-updater": "^6.1.4",
+    "js-yaml": "^4.3.2"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}
