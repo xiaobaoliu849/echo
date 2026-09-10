@@ -311,7 +311,9 @@ describe("App interactions", () => {
   it("sends a quick chat prompt and renders the streamed reply", async () => {
     render(<App />);
 
-    const textarea = await screen.findByPlaceholderText(/输入聊天内容/);
+    // The first mount loads ChatPage's lazy module. Windows packaging CI can
+    // exceed Testing Library's 1s default while other workers compile modules.
+    const textarea = await screen.findByPlaceholderText(/输入聊天内容/, {}, { timeout: 10000 });
     fireEvent.change(textarea, { target: { value: "请帮我起草一封语气专业但不生硬的项目进度更新邮件。" } });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 

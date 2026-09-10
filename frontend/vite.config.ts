@@ -9,11 +9,20 @@ const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
 };
 const appVersion = String(process.env.VITE_APP_VERSION || packageJson.version || "N/A");
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  envDir: mode === "desktop" ? false : undefined,
+  envPrefix: mode === "desktop" ? [] : "VITE_",
   plugins: [react()],
   base: "./",
   define: {
-    __APP_VERSION__: JSON.stringify(appVersion)
+    __APP_VERSION__: JSON.stringify(appVersion),
+    // Installer builds always target their own backend and never embed a
+    // developer's .env.local API tokens in distributable JavaScript.
+    ...(mode === "desktop" ? {
+      "import.meta.env.VITE_API_URL": JSON.stringify("http://127.0.0.1:8000"),
+      "import.meta.env.VITE_API_TOKEN": JSON.stringify(""),
+      "import.meta.env.VITE_API_ADMIN_TOKEN": JSON.stringify("")
+    } : {})
   },
   build: {
     target: "es2022",
@@ -38,4 +47,4 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts"
   }
-});
+}));
