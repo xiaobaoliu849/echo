@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_pending_cache_path() -> Path:
+    if os.environ.get("ECHO_DATA_DIR", "").strip() or os.environ.get("VOICESPIRIT_DATA_DIR", "").strip():
+        from .config_loader import get_data_dir
+        return get_data_dir() / "realtime_pending_memory.json"
     app_name = "Echo"
     if os.name == "nt":
         base_dir = Path(os.environ.get("APPDATA", str(Path.cwd())))

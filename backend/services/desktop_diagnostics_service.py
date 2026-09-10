@@ -110,6 +110,9 @@ def is_wsl_environment() -> bool:
 
 
 def get_runtime_dir() -> Path:
+    if os.environ.get("ECHO_DESKTOP_INSTANCE_ID"):
+        from .config_loader import get_data_dir
+        return get_data_dir()
     if sys.platform == "win32":
         base_dir = Path(os.environ.get("APPDATA", str(PROJECT_ROOT)))
         preferred_dir = base_dir / APP_NAME

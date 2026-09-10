@@ -383,6 +383,8 @@ def create_app() -> FastAPI:
             "status": "running",
             "auth_enabled": is_auth_enabled(),
             "auth_mode": "user-or-token-write-auth",
+            **({"desktop_instance_id": os.environ["ECHO_DESKTOP_INSTANCE_ID"]}
+               if os.environ.get("ECHO_DESKTOP_INSTANCE_ID") else {}),
         }
 
     @app.get("/health")

@@ -1758,7 +1758,7 @@ class ApiSmokeTests(unittest.TestCase):
             return "hello prompt"
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict(os.environ, {"APPDATA": tmp_dir}, clear=False):
+            with patch.dict(os.environ, {"APPDATA": tmp_dir, "ECHO_DATA_DIR": str(Path(tmp_dir) / "Echo")}, clear=False):
                 with patch.object(voices_router, "_transcribe_local_clone", new=fake_transcribe_local_clone):
                     response = self._request(
                         "POST",

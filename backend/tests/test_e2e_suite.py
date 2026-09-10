@@ -681,16 +681,23 @@ def test_tier1_transcription_async_submit_and_status(e2e_env):
         job = TranscriptionJob(
             file_path=str(upload_path),
             job_id="job-tier1-123",
-            remote_job_id="rem-123",
-            mode="file",
-            status="completed",
+            remote_job_id=None,
+            mode="async",
+            status="queued",
             original_filename="sample.mp3",
             duration_seconds=12.0,
             transcript_path=str(t_path),
         )
         return transcription_router.transcription_service._write_job(job)
 
-    with patch.object(transcription_router.transcription_service, "prepare_long_transcription_job", new=fake_prepare_job):
+    async def fake_process_job(job_id, *, provider=None):
+        return transcription_router.transcription_service.update_job(job_id, status="completed")
+
+    with (
+        patch.object(transcription_router.transcription_service, "prepare_long_transcription_job", new=fake_prepare_job),
+        patch.object(transcription_router.transcription_service, "can_publish_local_async", return_value=False),
+        patch.object(transcription_router.transcription_service, "process_local_chunked_job", new=fake_process_job),
+    ):
         files = {"file": ("sample.mp3", b"ID3FakeData", "audio/mpeg")}
         submit_resp = client.post(
             "/api/transcription/jobs",

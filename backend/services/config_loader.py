@@ -39,7 +39,8 @@ def get_data_file_path(filename: str) -> Path:
         # In packaged / frozen distribution mode, never copy developer's local config.json (which contains private API keys)
         import sys
         is_frozen = getattr(sys, "frozen", False)
-        if not is_frozen:
+        explicit_data_dir = os.environ.get("ECHO_DATA_DIR", "").strip() or os.environ.get("VOICESPIRIT_DATA_DIR", "").strip()
+        if not is_frozen and not explicit_data_dir:
             legacy_path = PROJECT_ROOT / filename
             if legacy_path.exists():
                 target.parent.mkdir(parents=True, exist_ok=True)
