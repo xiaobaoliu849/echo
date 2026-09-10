@@ -15,6 +15,7 @@ directories:
 # Files packed into the ASAR (relative to the electron/ dir)
 files:
   - main.js
+  - backend-runtime.js
   - preload.js
   - package.json
   - node_modules/**
@@ -25,8 +26,21 @@ extraResources:
     to: frontend/dist
   - from: ../resources
     to: resources
+    filter:
+      - icons/logo.ico
+      - icons/logo.png
   - from: ../backend/dist/voicespirit-backend
     to: backend-dist
+  - from: node_modules/ffmpeg-static/ffmpeg.exe
+    to: media-tools/ffmpeg.exe
+  - from: node_modules/ffprobe-static/bin/win32/x64/ffprobe.exe
+    to: media-tools/ffprobe.exe
+  - from: node_modules/ffmpeg-static/ffmpeg.exe.LICENSE
+    to: media-tools/ffmpeg.LICENSE
+  - from: node_modules/ffmpeg-static/ffmpeg.exe.README
+    to: media-tools/ffmpeg.README
+  - from: node_modules/ffprobe-static/LICENSE
+    to: media-tools/ffprobe.LICENSE
 
 win:
   icon: ../resources/icons/logo.ico

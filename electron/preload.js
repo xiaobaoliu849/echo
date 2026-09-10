@@ -35,6 +35,7 @@ const electronAPI = {
   getShortcutSettings: () => ipcRenderer.invoke('get-shortcut-settings'),
   updateGlobalShortcut: (shortcut) => ipcRenderer.invoke('update-global-shortcut', shortcut),
   onUpdateStatus: (callback) => {
+    if (updateStatusListener) ipcRenderer.removeListener('update-status', updateStatusListener);
     updateStatusListener = onUpdateStatus(callback);
   },
   removeUpdateStatusListener: () => {

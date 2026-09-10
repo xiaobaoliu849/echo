@@ -1,15 +1,24 @@
 {
   "name": "echo-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Echo Desktop Application",
   "main": "main.js",
   "author": "Echo Team",
   "license": "MIT",
+  "scripts": {
+    "test": "node --test backend-runtime.test.js",
+    "start": "electron .",
+    "pack": "electron-builder --win --dir --publish never",
+    "dist": "electron-builder --win nsis --publish never"
+  },
   "dependencies": {
     "electron-updater": "^6.1.4",
     "js-yaml": "^4.3.2"
   },
   "devDependencies": {
-    "electron": "^31.7.7"
+    "electron": "44.3.0",
+    "electron-builder": "26.15.3",
+    "ffmpeg-static": "5.2.0",
+    "ffprobe-static": "3.1.0"
   }
 }

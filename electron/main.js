@@ -1,22 +1,24 @@
 const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const url = require('url');
-const { spawn } = require('child_process');
+const { BackendRuntime } = require('./backend-runtime');
 const { autoUpdater } = require('electron-updater');
 
+// Allows smoke tests and portable profiles to avoid the installed user's data.
+if (process.env.ECHO_DESKTOP_USER_DATA_DIR) {
+  const profile = path.resolve(process.env.ECHO_DESKTOP_USER_DATA_DIR);
+  fs.mkdirSync(profile, { recursive: true });
+  app.setPath('userData', profile);
+}
+
 // Check DEV_MODE
-const DEV_MODE = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const DEV_MODE = !app.isPackaged;
 
 function getFrontendUrl() {
   if (DEV_MODE) {
     return 'http://localhost:5173';
   }
-  return url.format({
-    pathname: path.join(process.resourcesPath, 'frontend', 'dist', 'index.html'),
-    protocol: 'file:',
-    slashes: true
-  });
+  return 'http://127.0.0.1:8000/app/';
 }
 
 // Configure BACKEND_PATH
@@ -24,7 +26,7 @@ const BACKEND_PATH = path.join(__dirname, '../backend');
 
 let mainWindow = null;
 let tray = null;
-let backendProcess = null;
+let backendRuntime = null;
 app.isQuiting = false;
 
 // Shortcut settings management
@@ -34,7 +36,8 @@ function loadShortcutSettings() {
   try {
     if (fs.existsSync(shortcutSettingsPath)) {
       const data = fs.readFileSync(shortcutSettingsPath, 'utf8');
-      return JSON.parse(data);
+      const settings = JSON.parse(data);
+      if (settings && typeof settings.shortcut === 'string') return settings;
     }
   } catch (err) {
     console.error('Error loading shortcut settings:', err);
@@ -92,9 +95,10 @@ function registerGlobalShortcut(accelerator) {
 }
 
 // Spawns Python backend
-function startBackend() {
+async function startBackend() {
   const env = {
     ...process.env,
+    ECHO_DATA_DIR: app.getPath('userData'),
     VOICESPIRIT_DATA_DIR: app.getPath('userData'),
     VOICESPIRIT_FRONTEND_DIST: DEV_MODE
       ? path.join(__dirname, '../frontend/dist')
@@ -116,73 +120,30 @@ function startBackend() {
           'python3'
         ];
     const pythonCmd = pythonCandidates.find((candidate) => candidate === 'python' || candidate === 'python3' || fs.existsSync(candidate));
-    backendProcess = spawn(pythonCmd, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8000'], {
-      cwd: BACKEND_PATH,
-      env: env,
-      shell: true
-    });
+    await backendRuntime.start(pythonCmd, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8000'], { cwd: BACKEND_PATH, env });
   } else {
     // Production: spawn path.join(process.resourcesPath, 'backend-dist', 'voicespirit-backend.exe')
     const prodBackendExe = path.join(process.resourcesPath, 'backend-dist', 'voicespirit-backend.exe');
+    // pydub and transcription subprocesses must work without a system ffmpeg.
+    // Windows environment names are case-insensitive; remove Path/PATH aliases.
+    const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path');
+    const inheritedPath = pathKey ? env[pathKey] : '';
+    for (const key of Object.keys(env)) {
+      if (key.toLowerCase() === 'path') delete env[key];
+    }
+    env.PATH = `${path.join(process.resourcesPath, 'media-tools')}${path.delimiter}${inheritedPath}`;
     console.log(`Starting backend in production mode: ${prodBackendExe}`);
-    backendProcess = spawn(prodBackendExe, [], {
-      env: env
-    });
+    await backendRuntime.start(prodBackendExe, [], { cwd: app.getPath('userData'), env });
   }
 
-  if (backendProcess) {
-    backendProcess.stdout.on('data', (data) => {
-      console.log(`Backend stdout: ${data.toString().trim()}`);
-    });
-
-    backendProcess.stderr.on('data', (data) => {
-      console.error(`Backend stderr: ${data.toString().trim()}`);
-    });
-
-    backendProcess.on('close', (code) => {
-      console.log(`Backend process exited with code ${code}`);
-    });
-  }
 }
 
 async function waitForBackend(timeoutMs = 20000) {
-  const startedAt = Date.now();
-  let lastError = null;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const response = await fetch('http://127.0.0.1:8000/');
-      if (response.ok) {
-        const payload = await response.json();
-        if (payload && (payload.name === 'Echo API' || payload.name === 'VoiceSpirit API')) {
-          return true;
-        }
-        lastError = new Error(`Port 8000 returned unexpected service: ${payload?.name || 'unknown'}`);
-      }
-    } catch (err) {
-      lastError = err;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-
-  throw lastError || new Error('Echo backend did not become ready.');
+  await backendRuntime.waitUntilReady(timeoutMs);
 }
 
 function killBackend() {
-  if (backendProcess) {
-    console.log('Terminating backend process...');
-    if (process.platform === 'win32') {
-      try {
-        spawn('taskkill', ['/pid', backendProcess.pid, '/f', '/t']);
-      } catch (err) {
-        console.error('Failed to taskkill backend:', err);
-        backendProcess.kill();
-      }
-    } else {
-      backendProcess.kill();
-    }
-    backendProcess = null;
-  }
+  backendRuntime?.stop();
 }
 
 // Tray management
@@ -231,7 +192,7 @@ function createTray() {
 }
 
 // Window creation
-function createWindow() {
+async function createWindow() {
   const windowIconPath = DEV_MODE
     ? path.join(__dirname, '../resources/icons/logo.ico')
     : path.join(process.resourcesPath, 'resources/icons/logo.ico');
@@ -253,9 +214,8 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadURL(getFrontendUrl());
-
   mainWindow.once('ready-to-show', () => {
+    if (process.argv.includes('--smoke-test')) return;
     mainWindow.show();
     mainWindow.focus();
   });
@@ -283,6 +243,7 @@ function createWindow() {
     ]);
     contextMenu.popup();
   });
+  await mainWindow.loadURL(getFrontendUrl());
 }
 
 // Menu setup
@@ -329,7 +290,7 @@ function setupMenus() {
           label: 'Learn More',
           click: async () => {
             const { shell } = require('electron');
-            await shell.openExternal('https://github.com/xiaobaoliu849/voicespirit');
+            await shell.openExternal('https://github.com/xiaobaoliu849/echo');
           }
         }
       ]
@@ -375,7 +336,7 @@ function setupIpcHandlers() {
   ipcMain.handle('check-for-updates', async () => {
     try {
       const result = await autoUpdater.checkForUpdates();
-      return { success: true, result };
+      return { success: true, result: result ? { updateInfo: result.updateInfo } : null };
     } catch (err) {
       console.error('Check for updates error:', err);
       return { success: false, error: err.message };
@@ -476,22 +437,31 @@ if (!gotTheLock) {
 
   // App lifecycle
   app.whenReady().then(async () => {
-    startBackend();
+    backendRuntime = new BackendRuntime({
+      logPath: path.join(app.getPath('userData'), 'logs', 'desktop-startup.log'),
+      onUnexpectedExit: (message) => {
+        if (!app.isQuiting) {
+          dialog.showErrorBox('Echo 后端已停止 / Backend stopped', message);
+          app.quit();
+        }
+      }
+    });
     try {
-      await waitForBackend();
+      await startBackend();
+      await waitForBackend(60000);
+      setupIpcHandlers();
+      setupAutoUpdaterEvents();
+      await createWindow();
+      createTray();
+      setupMenus();
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       console.error('Backend startup failed:', message);
-      dialog.showErrorBox('VoiceSpirit backend failed to start', message);
+      dialog.showErrorBox('Echo 启动失败 / Startup failed', `${message}\n\n日志 / Log: ${backendRuntime.logPath}`);
       app.isQuiting = true;
       app.quit();
       return;
     }
-    createWindow();
-    createTray();
-    setupMenus();
-    setupIpcHandlers();
-    setupAutoUpdaterEvents();
 
     // Load and register configured global shortcut
     const settings = loadShortcutSettings();
@@ -500,7 +470,10 @@ if (!gotTheLock) {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
+        createWindow().catch((err) => {
+          dialog.showErrorBox('Echo 页面加载失败 / Page failed to load', err.message);
+          app.quit();
+        });
       }
     });
   });
