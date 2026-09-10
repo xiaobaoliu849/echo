@@ -213,9 +213,11 @@ textarea {
   width: 40px;
   height: 40px;
   border-radius: 14px;
+  /* Mirrors the packaged app icon (resources/icons/logo.png) gradient and
+     glyph color so the in-app brand mark matches the desktop icon. */
   background:
-    linear-gradient(160deg, color-mix(in oklab, var(--brand) 74%, white), color-mix(in oklab, var(--brand-dark) 78%, var(--brand)));
-  color: oklch(0.98 0.01 95);
+    linear-gradient(160deg, oklch(0.611 0.028 161), oklch(0.52 0.027 161));
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
