@@ -4,7 +4,7 @@ This file describes the current, tracked Echo architecture and the verification 
 
 ## Project overview
 
-Echo is a local-first voice and AI desktop application. The maintained application is a React/TypeScript frontend backed by FastAPI. The desktop shell is PyWebView and serves the same built frontend through the FastAPI process.
+Echo is a local-first voice and AI desktop application. The maintained application is a React/TypeScript frontend backed by FastAPI. The development desktop launcher uses PyWebView. Windows installers use the tracked Electron shell in `electron/`, with a PyInstaller-frozen FastAPI backend. Both serve the built frontend through FastAPI at `http://127.0.0.1:8000/app/`.
 
 The old PySide6 application may still exist in local, ignored folders on some workstations, but it is not part of the tracked application and must not be treated as the current architecture.
 
@@ -42,6 +42,14 @@ Useful diagnostics:
 python run_web_desktop.py --check
 python run_web_desktop.py --export-diagnostics
 ```
+
+### Windows installer
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_desktop.ps1
+```
+
+Use Python 3.12 and Node.js 22 or newer. This creates an isolated packaging environment from `backend/requirements-packaging.lock`, runs tests, builds the frozen backend and Electron shell, and smoke-tests the actual executable before creating an NSIS installer. Never build with a global Conda environment. See `docs/Windows_Packaging.md` for diagnostics and verification limits.
 
 ### Verification
 

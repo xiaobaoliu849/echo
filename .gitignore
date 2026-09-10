@@ -10,6 +10,8 @@ venv/
 build/
 dist/
 *.spec
+!backend/voicespirit-backend.spec
+.packaging-venv/
 backend/.venv/
 backend/.venv-win/
 backend/temp_audio/
