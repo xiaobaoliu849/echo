@@ -144,6 +144,14 @@ textarea {
   position: relative;
   height: 100%;
   max-height: 100%;
+  /* With the hidden native title bar (Windows), the sidebar is the drag
+     surface; interactive children stay clickable via no-drag. Inert in
+     browsers, where -webkit-app-region has no effect. */
+  -webkit-app-region: drag;
+}
+
+.vsSidebar :is(button, a, input, select, textarea, [role="menu"], [role="menuitem"], .vsHistoryItem) {
+  -webkit-app-region: no-drag;
 }
 
 .vsSidebar.collapsed {

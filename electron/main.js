@@ -204,9 +204,17 @@ async function createWindow() {
     height: 800,
     minWidth: 920,
     minHeight: 620,
-    backgroundColor: '#0f172a',
+    // Match the warm app canvas instead of flashing a dark frame on startup.
+    backgroundColor: '#F2EFE6',
     autoHideMenuBar: true,
     show: false,
+    // Windows: the native title bar follows the system accent color and
+    // clashes with the sage brand. Draw caption buttons over app colors;
+    // the sidebar is the drag surface (see -webkit-app-region in styles.css).
+    ...(process.platform === 'win32' ? {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { color: '#FAF8F2', symbolColor: '#43544B', height: 40 }
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
