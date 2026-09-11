@@ -48,7 +48,8 @@ export function isVoiceRealtimeModel(provider: string, model: string): boolean {
     normalizedProvider === "tavus" ||
     normalizedProvider === "doubao" ||
     normalizedProvider === "cartesia" ||
-    normalizedProvider === "gradium"
+    normalizedProvider === "gradium" ||
+    normalizedProvider === "vercel"
   ) {
     return true;
   }
@@ -90,6 +91,9 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
   }
   if (normalizedProv === "gradium" || model.toLowerCase().includes("gradium")) {
     return t("Gradium 实时语音", "Gradium Voice AI");
+  }
+  if (normalizedProv === "vercel" || model.toLowerCase().includes("gpt-realtime")) {
+    return t("Vercel Gateway 实时语音", "Vercel Gateway realtime");
   }
   if (normalizedProv === "glm4voice" || model.toLowerCase().includes("glm-4-voice")) {
     return t("智谱端到端语音", "GLM-4-Voice bilingual");

@@ -98,6 +98,17 @@ GRADIUM_REALTIME_VOICES = (
     "r2sIQdqqoqgRJuXw",  # Marcus (en)
 )
 
+# Vercel AI Gateway realtime — routes the normalized AI SDK realtime protocol
+# (an OpenAI-Realtime-derived wire format) through Vercel's gateway. Auth uses
+# a Gateway API key minted into a short-lived `vcst_` client secret; model ids
+# are qualified `creator/model-name` (e.g. `openai/gpt-realtime-2`).
+DEFAULT_VERCEL_REALTIME_MODEL = "openai/gpt-realtime-2"
+DEFAULT_VERCEL_REALTIME_VOICE = "alloy"
+VERCEL_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh"
+VERCEL_REALTIME_VOICES = (
+    "alloy", "echo", "fable", "onyx", "nova", "shimmer", "verse", "sage", "coral",
+)
+
 DEFAULT_DOUBAO_REALTIME_MODEL = "doubao-realtime"
 # 端到端实时语音-全双工版本 (SeedPulse duplex) voices — the only supported
 # Doubao realtime transport since 2026-08-24.
@@ -257,6 +268,20 @@ def resolve_agent_platform_service_account_file(sa_file: str = "") -> str:
 # ---------------------------------------------------------------------------
 # Model-detection helpers
 # ---------------------------------------------------------------------------
+
+def _is_vercel_realtime_model(model: str | None) -> bool:
+    """True when the model id is a Vercel AI Gateway realtime model.
+
+    Gateway model ids are `creator/model-name` strings; realtime ones are
+    matched by a `realtime`/`voice` token in the model-name half (e.g.
+    `openai/gpt-realtime-2`, `spacexai/grok-voice-think-fast-1.0`).
+    """
+    m = str(model or "").strip().lower()
+    if not m or "/" not in m:
+        return False
+    model_name = m.split("/", 1)[1]
+    return "realtime" in model_name or "voice" in model_name
+
 
 def _is_google_live_translate_model(model: str | None) -> bool:
     return "live-translate" in str(model or "").strip().lower()

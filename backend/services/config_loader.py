@@ -66,6 +66,7 @@ PROVIDER_KEY_MAP = {
     "Groq": "groq_api_key",
     # 3. Global Cloud Providers (deprioritized if unconfigured)
     "OpenAI": "openai_api_key",
+    "Vercel": "vercel_api_key",
     # 4. Local Models & Specialized Voice Engines
     "PersonaPlex": "personaplex_api_key",
     "GLM4Voice": "glm4voice_api_key",
@@ -129,6 +130,7 @@ DEFAULT_BASE_URLS = {
     "SiliconFlow": "https://api.siliconflow.cn/v1",
     "Groq": "https://api.groq.com/openai/v1",
     "OpenAI": "https://api.openai.com/v1",
+    "Vercel": "https://ai-gateway.vercel.sh",
     # PersonaPlex and GLM4Voice use local WebSocket URLs
     "PersonaPlex": "",
     "GLM4Voice": "",

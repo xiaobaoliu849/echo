@@ -254,6 +254,14 @@ GRADIUM_MODEL_LIST_SUPPLEMENTS = [
     "gradium-realtime",
     "default",
 ]
+VERCEL_MODEL_LIST_SUPPLEMENTS = [
+    "openai/gpt-realtime-2",
+    "openai/gpt-realtime-2.1",
+    "openai/gpt-realtime-1.5",
+    "openai/gpt-realtime-mini",
+    "spacexai/grok-voice-think-fast-1.0",
+    "spacexai/grok-voice-think-fast-2.0",
+]
 AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS = [
     # Mainline and frontier text/multimodal models
     "gemini-3.8-flash",
@@ -533,6 +541,12 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
             )
+        if provider == "Vercel":
+            return FetchModelsResponse(
+                provider=provider,
+                models=list(VERCEL_MODEL_LIST_SUPPLEMENTS),
+                tts_models=[],
+            )
         if provider == "AgentPlatform":
             return FetchModelsResponse(
                 provider=provider,
@@ -631,6 +645,14 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
                 provider=provider,
                 models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is False],
                 tts_models=[m for m in GRADIUM_MODEL_LIST_SUPPLEMENTS if _is_tts_model_id(m) is True],
+            )
+        if provider == "Vercel":
+            # AI Gateway has no un-authenticated /models endpoint for realtime;
+            # return the curated realtime model list.
+            return FetchModelsResponse(
+                provider=provider,
+                models=list(VERCEL_MODEL_LIST_SUPPLEMENTS),
+                tts_models=[],
             )
         if provider == "AgentPlatform":
             # Vertex AI (Google Agent Platform) has no un-scoped /v1/models endpoint.

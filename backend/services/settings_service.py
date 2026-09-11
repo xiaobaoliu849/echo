@@ -84,6 +84,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "dashscope_api_key": "",
         "xiaomi_api_key": "",
         "openai_api_key": "",
+        "vercel_api_key": "",
         "elevenlabs_api_key": "",
         "ollama_api_key": "",
         "deepgram_api_key": "",

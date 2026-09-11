@@ -63,6 +63,7 @@ export const PERSONAPLEX_PROVIDER = "PersonaPlex";
 export const GLM4VOICE_PROVIDER = "GLM4Voice";
 export const CARTESIA_PROVIDER = "Cartesia";
 export const GRADIUM_PROVIDER = "Gradium";
+export const VERCEL_PROVIDER = "Vercel";
 export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
@@ -86,6 +87,7 @@ export const DEFAULT_PERSONAPLEX_MODEL = "personaplex-7b-v1-bnb-4bit";
 export const DEFAULT_GLM4VOICE_MODEL = "glm-4-voice-9b";
 export const DEFAULT_CARTESIA_MODEL = "cartesia-realtime";
 export const DEFAULT_GRADIUM_MODEL = "gradium-realtime";
+export const DEFAULT_VERCEL_MODEL = "openai/gpt-realtime-2";
 export const DEFAULT_TAVUS_MODEL = "tavus-video-pal";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
   "native-audio",
@@ -317,6 +319,11 @@ export const OPENAI_REALTIME_VOICES = [
   { value: "verse", label: "Verse (Male)" },
 ];
 
+// Vercel AI Gateway realtime proxies OpenAI-style realtime models, so the
+// voice set matches OPENAI_REALTIME_VOICES (kept in sync with the backend's
+// VERCEL_REALTIME_VOICES in realtime_constants.py).
+export const VERCEL_REALTIME_VOICES = OPENAI_REALTIME_VOICES;
+
 // Voices for the Doubao OpenSpeech end-to-end realtime dialogue API
 // (volc.speech.dialog, O2.0 model 1.2.1.1), per the official RealtimeAPI docs
 // (docs/豆包时时语音.txt).
@@ -490,6 +497,8 @@ export function formatRealtimeVoiceOptions(
     }
   } else if (provider === OPENAI_PROVIDER) {
     options = OPENAI_REALTIME_VOICES;
+  } else if (provider === VERCEL_PROVIDER) {
+    options = VERCEL_REALTIME_VOICES;
   } else {
     options = GOOGLE_REALTIME_VOICES;
   }
@@ -546,6 +555,7 @@ export const CANONICAL_PROVIDER_ORDER = [
   "Doubao",
   "Cartesia",
   "Gradium",
+  "Vercel",
   "DeepSeek",
   "Xiaomi",
   "OpenRouter",
@@ -593,6 +603,7 @@ export function getProviderBadge(
     norm === "doubao" ||
     norm === "cartesia" ||
     norm === "gradium" ||
+    norm === "vercel" ||
     norm === "openai"
   ) {
     return { label: t("实时语音", "Realtime"), type: "realtime" };
@@ -644,6 +655,7 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
     DOUBAO_PROVIDER,
     CARTESIA_PROVIDER,
     GRADIUM_PROVIDER,
+    VERCEL_PROVIDER,
     OPENAI_PROVIDER,
     PERSONAPLEX_PROVIDER,
     GLM4VOICE_PROVIDER,
@@ -674,6 +686,9 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   }
   if (providerOptions.includes(GRADIUM_PROVIDER)) {
     return GRADIUM_PROVIDER;
+  }
+  if (providerOptions.includes(VERCEL_PROVIDER)) {
+    return VERCEL_PROVIDER;
   }
   if (providerOptions.includes(OPENAI_PROVIDER)) {
     return OPENAI_PROVIDER;
@@ -711,6 +726,12 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   }
   if (normalizedProvider === GRADIUM_PROVIDER.toLowerCase()) {
     return normalizedModel.includes("gradium");
+  }
+  if (normalizedProvider === VERCEL_PROVIDER.toLowerCase()) {
+    // Gateway model ids are creator/model-name; realtime ones carry a
+    // realtime/voice token in the model-name half.
+    return normalizedModel.includes("/") &&
+      (normalizedModel.includes("realtime") || normalizedModel.includes("voice"));
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
     return /^qwen3\.5-omni-(plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel) ||
@@ -845,6 +866,16 @@ export function resolveRealtimeModelOptions(
   const gradiumBuiltIns = provider === GRADIUM_PROVIDER
     ? [DEFAULT_GRADIUM_MODEL]
     : [];
+  const vercelBuiltIns = provider === VERCEL_PROVIDER
+    ? [
+        DEFAULT_VERCEL_MODEL,
+        "openai/gpt-realtime-2.1",
+        "openai/gpt-realtime-1.5",
+        "openai/gpt-realtime-mini",
+        "spacexai/grok-voice-think-fast-1.0",
+        "spacexai/grok-voice-think-fast-2.0",
+      ]
+    : [];
   const tavusBuiltIns = provider === TAVUS_PROVIDER
     ? [DEFAULT_TAVUS_MODEL, "tavus-phoenix-2"]
     : [];
@@ -858,6 +889,7 @@ export function resolveRealtimeModelOptions(
     ...glm4voiceBuiltIns,
     ...cartesiaBuiltIns,
     ...gradiumBuiltIns,
+    ...vercelBuiltIns,
     ...tavusBuiltIns,
   ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];

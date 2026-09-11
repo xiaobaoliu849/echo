@@ -21,6 +21,7 @@ from services.realtime_voice_service import (
     DEFAULT_GLM4VOICE_REALTIME_VOICE,
     DEFAULT_CARTESIA_REALTIME_VOICE,
     DEFAULT_GRADIUM_REALTIME_VOICE,
+    DEFAULT_VERCEL_REALTIME_VOICE,
     RealtimeVoiceService,
 )
 from services.voice_agent_session_repository import VoiceAgentSessionRepository
@@ -246,7 +247,7 @@ async def voice_chat_ws(
         )
         await websocket.close(code=1003)
         return
-    if selected_provider not in {"Google", "AgentPlatform", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia", "Gradium"}:
+    if selected_provider not in {"Google", "AgentPlatform", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia", "Gradium", "Vercel"}:
         await websocket.send_json(
             {
                 "type": "error",
@@ -304,6 +305,9 @@ async def voice_chat_ws(
     elif selected_provider == "Gradium":
         if not _cfg.get_setting("gradium_api_key"):
             _missing.append("Gradium API Key")
+    elif selected_provider == "Vercel":
+        if not _cfg.get_setting("vercel_api_key"):
+            _missing.append("Vercel AI Gateway API Key")
 
     if _missing:
         await websocket.send_json(
@@ -361,6 +365,12 @@ async def voice_chat_ws(
                 websocket,
                 model=model,
                 voice=(voice or DEFAULT_OPENAI_REALTIME_VOICE).strip(),
+            )
+        elif selected_provider == "Vercel":
+            await voice_chat_service.stream_vercel_session(
+                websocket,
+                model=model,
+                voice=(voice or DEFAULT_VERCEL_REALTIME_VOICE).strip(),
             )
         elif selected_provider == "PersonaPlex":
             await voice_chat_service.stream_personaplex_session(

@@ -28,6 +28,7 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   Doubao: t("火山引擎 豆包", "Volcengine Doubao"),
   Cartesia: t("Cartesia 极速语音", "Cartesia Sonic Voice"),
   Gradium: t("Gradium 实时语音", "Gradium Voice AI"),
+  Vercel: t("Vercel AI Gateway 实时语音", "Vercel AI Gateway Realtime"),
   PersonaPlex: t("PersonaPlex 语音模型", "PersonaPlex"),
   GLM4Voice: t("智谱 GLM-4-Voice", "Zhipu GLM-4-Voice"),
 });
@@ -56,6 +57,7 @@ const getLobeProviderKey = (name: string): string => {
   if (lower === "tavus") return "tavus";
   if (lower === "cartesia") return "cartesia";
   if (lower === "gradium") return "gradium";
+  if (lower === "vercel") return "vercel";
   return lower;
 };
 
