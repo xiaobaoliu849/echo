@@ -6949,12 +6949,6 @@ button.danger:focus-visible {
   min-width: 0;
   flex-wrap: wrap;
 }
-.vsRTConfigLabel {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  white-space: nowrap;
-}
 .vsRTConfigSelect {
   height: 32px;
   padding: 0 10px;

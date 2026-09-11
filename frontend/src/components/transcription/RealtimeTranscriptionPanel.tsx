@@ -766,14 +766,14 @@ export function RealtimeTranscriptionPanel({ onComplete, onOpenSettings }: Props
       {/* ── Single-row toolbar: model + language | view controls ── */}
       <div className="vsRTToolbar">
         <div className="vsRTConfigRow">
-          {/* Model picker — API keys live in Settings; warn only when truly missing */}
-          <div className="vsRTConfigGroup">
-            <span className="vsRTConfigLabel">{t("模型", "Model")}</span>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={running}
-              className="vsSelect vsRTConfigSelect"
+          {/* Model picker — API keys live in Settings; warn only when truly missing */}
+          <div className="vsRTConfigGroup">
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={running}
+              className="vsSelect vsRTConfigSelect"
+              aria-label={t("模型", "Model")}
             >
               {REALTIME_ASR_MODELS.map((option) => {
                 const configured = isAsrEngineConfigured(option.id, appSettings);

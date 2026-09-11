@@ -41,7 +41,7 @@ describe("RealtimeTranscriptionPanel component", () => {
 
   it("renders initial controls, model list and view mode switchers", () => {
     render(<RealtimeTranscriptionPanel onComplete={onComplete} />);
-    expect(screen.getAllByText(/模型/i).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/模型/i)).toBeInTheDocument();
     expect(screen.getAllByText(/语种/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /文稿模式/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /字幕时间轴/i })).toBeInTheDocument();
