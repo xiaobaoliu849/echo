@@ -35,6 +35,17 @@ class TavusPalListResponse(BaseModel):
     pals: list[TavusPalSummary]
 
 
+class TavusFaceSummary(BaseModel):
+    face_id: str
+    face_name: str
+    model_name: str | None = None
+    status: str | None = None
+
+
+class TavusFaceListResponse(BaseModel):
+    faces: list[TavusFaceSummary]
+
+
 class StructuredErrorDetail(BaseModel):
     code: str
     message: str
@@ -107,6 +118,45 @@ async def list_tavus_pals(request: Request) -> TavusPalListResponse:
             )
         )
     return TavusPalListResponse(pals=summaries)
+
+
+@router.get(
+    "/faces",
+    response_model=TavusFaceListResponse,
+    responses={
+        400: {"description": "Tavus API key is not configured.", "model": StructuredErrorResponse},
+        502: {"description": "Tavus upstream request failed.", "model": StructuredErrorResponse},
+    },
+)
+async def list_tavus_faces(request: Request) -> TavusFaceListResponse:
+    config = _load_config(request)
+    service = config.get_service()
+    if not service:
+        raise _http_error(
+            400,
+            "TAVUS_NOT_CONFIGURED",
+            "A Tavus API key is required. Set it in the PAL page or via TAVUS_API_KEY.",
+        )
+
+    try:
+        faces = await service.list_faces()
+    except TavusError as exc:
+        raise _map_tavus_error(exc)
+
+    summaries: list[TavusFaceSummary] = []
+    for item in faces:
+        face_id = str(item.get("face_id", "")).strip()
+        if not face_id:
+            continue
+        summaries.append(
+            TavusFaceSummary(
+                face_id=face_id,
+                face_name=str(item.get("face_name", "")).strip() or face_id,
+                model_name=str(item.get("model_name", "")).strip() or None,
+                status=str(item.get("status", "")).strip() or None,
+            )
+        )
+    return TavusFaceListResponse(faces=summaries)
 
 
 @router.post(

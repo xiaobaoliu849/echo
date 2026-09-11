@@ -27,6 +27,8 @@ import type {
   StreamEventHandlers,
   SubtitleCueItem,
   TavusConversationResponse,
+  TavusFaceListResponse,
+  TavusFaceSummary,
   TavusPalListResponse,
   TavusPalSummary,
   TranscriptionBatchDeleteResponse,
@@ -493,11 +495,33 @@ export async function listTavusPals(): Promise<TavusPalListResponse> {
   };
 }
 
+export async function listTavusFaces(): Promise<TavusFaceListResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/api/tavus/faces`, {
+    headers: buildTavusHeaders(),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const payload = (await response.json()) as Partial<TavusFaceListResponse>;
+  const faces = Array.isArray(payload.faces) ? payload.faces : [];
+  return {
+    faces: faces
+      .filter((item): item is TavusFaceSummary => Boolean(item && item.face_id))
+      .map((item) => ({
+        face_id: item.face_id,
+        face_name: item.face_name || item.face_id,
+        model_name: item.model_name || null,
+        status: item.status || null,
+      })),
+  };
+}
+
 export async function createTavusConversation(
-  params: { palId?: string; conversationName?: string } = {}
+  params: { palId?: string; conversationName?: string; faceId?: string } = {}
 ): Promise<TavusConversationResponse> {
   const palId = (params.palId || "").trim();
   const conversationName = (params.conversationName || "").trim();
+  const faceId = (params.faceId || "").trim();
   const response = await apiFetch(`${API_BASE_URL}/api/tavus/conversations`, {
     method: "POST",
     headers: {
@@ -506,6 +530,7 @@ export async function createTavusConversation(
     },
     body: JSON.stringify({
       ...(palId ? { pal_id: palId } : {}),
+      ...(faceId ? { face_id: faceId } : {}),
       ...(conversationName ? { conversation_name: conversationName } : {}),
     }),
   });

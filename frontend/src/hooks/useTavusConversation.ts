@@ -18,6 +18,7 @@ export type SubtitleItem = {
 type StartParams = {
   palId?: string;
   conversationName?: string;
+  faceId?: string;
 };
 
 type Options = {
@@ -243,6 +244,7 @@ export default function useTavusConversation({
       const conversation = await createTavusConversation({
         palId: params.palId,
         conversationName: params.conversationName,
+        faceId: params.faceId,
       });
       conversationIdRef.current = conversation.conversation_id;
       setStatus("joining");

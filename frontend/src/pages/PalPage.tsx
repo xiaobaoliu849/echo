@@ -21,9 +21,11 @@ import useTavusConversation from "../hooks/useTavusConversation";
 import {
   getPersistedTavusApiKey,
   getPersistedTavusPalId,
+  listTavusFaces,
   listTavusPals,
   persistTavusApiKey,
   persistTavusPalId,
+  type TavusFaceSummary,
   type TavusPalSummary,
 } from "../api";
 import { useI18n } from "../i18n";
@@ -36,6 +38,7 @@ type Props = {
 };
 
 const MANUAL_PAL_VALUE = "__manual__";
+const MANUAL_FACE_VALUE = "__manual_face__";
 
 export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Props) {
   const { t, language } = useI18n();
@@ -44,6 +47,9 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   const [palIdInput, setPalIdInput] = useState(() => getPersistedTavusPalId());
   const [pals, setPals] = useState<TavusPalSummary[]>([]);
   const [selectedPalId, setSelectedPalId] = useState(MANUAL_PAL_VALUE);
+  const [faces, setFaces] = useState<TavusFaceSummary[]>([]);
+  const [selectedFaceId, setSelectedFaceId] = useState("");
+  const [faceIdInput, setFaceIdInput] = useState("");
   const [showDrawer, setShowDrawer] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -62,8 +68,20 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
       .catch(() => {
         // Falls back to manual PAL entry; the start attempt surfaces real errors.
       });
+    let facesDisposed = false;
+    Promise.resolve(listTavusFaces())
+      .then((payload) => {
+        if (facesDisposed || !payload) {
+          return;
+        }
+        setFaces(payload.faces || []);
+      })
+      .catch(() => {
+        // Face listing is optional; manual face_id entry still works.
+      });
     return () => {
       disposed = true;
+      facesDisposed = true;
     };
   }, [apiKey]);
 
@@ -73,6 +91,13 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
     }
     return palIdInput.trim();
   }, [palIdInput, pals.length, selectedPalId]);
+
+  const resolvedFaceId = useMemo(() => {
+    if (selectedFaceId === MANUAL_FACE_VALUE) {
+      return faceIdInput.trim();
+    }
+    return selectedFaceId;
+  }, [faceIdInput, selectedFaceId]);
 
   const showConfigPanel = conversation.status === "idle" || (conversation.status === "ended" && conversation.transcripts.length === 0);
   const showPostCallSummary = conversation.status === "ended" && conversation.transcripts.length > 0;
@@ -95,7 +120,10 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   function handleStart() {
     setShowDrawer(false);
     conversation.clearTranscripts();
-    void conversation.start({ palId: resolvedPalId || undefined });
+    void conversation.start({
+      palId: resolvedPalId || undefined,
+      faceId: resolvedFaceId || undefined,
+    });
   }
 
   function handleCopyTranscript() {
@@ -193,6 +221,49 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                       "Personas created on platform.tavus.io appear in the dropdown, or you can paste a PAL ID manually here."
                     )}
                   </small>
+                </label>
+              ) : null}
+
+              {faces.length > 0 ? (
+                <label className="vsPalField">
+                  <span>
+                    {t("选择形象 (可选)", "Choose a Face (optional)")}
+                  </span>
+                  <select
+                    value={selectedFaceId}
+                    onChange={(event) => setSelectedFaceId(event.target.value)}
+                    data-testid="pal-face-select"
+                  >
+                    <option value="">{t("使用分身默认形象", "Use the PAL's default face")}</option>
+                    {faces.map((face) => (
+                      <option key={face.face_id} value={face.face_id}>
+                        {face.face_name}
+                        {face.model_name
+                          ? ` · ${face.model_name.replace(/^phoenix-/i, "Phoenix ")}`
+                          : ""}
+                        {face.status && face.status !== "completed" ? ` (${face.status})` : ""}
+                      </option>
+                    ))}
+                    <option value={MANUAL_FACE_VALUE}>{t("手动输入 Face ID...", "Enter a Face ID...")}</option>
+                  </select>
+                  <small>
+                    {t(
+                      "Phoenix-4.5 形象渲染更快、表情更自然。在 PAL Maker 用 Phoenix-4.5 训练新形象后即可在此选择。",
+                      "Phoenix-4.5 faces render faster with richer expressions. Train a new face with Phoenix-4.5 in PAL Maker, then pick it here."
+                    )}
+                  </small>
+                </label>
+              ) : null}
+
+              {selectedFaceId === MANUAL_FACE_VALUE ? (
+                <label className="vsPalField">
+                  <span>{t("Face ID (数字人形象 ID)", "Face ID (Avatar Face ID)")}</span>
+                  <input
+                    value={faceIdInput}
+                    onChange={(event) => setFaceIdInput(event.target.value)}
+                    placeholder={t("在 PAL Maker 创建的形象 ID (如 rc9cff...)", "Face ID from PAL Maker (e.g. rc9cff...)")}
+                    data-testid="pal-face-id-input"
+                  />
                 </label>
               ) : null}
 

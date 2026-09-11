@@ -826,6 +826,18 @@ export type TavusPalListResponse = {
   pals: TavusPalSummary[];
 };
 
+export type TavusFaceSummary = {
+  face_id: string;
+  face_name: string;
+  // Phoenix model the face was trained on, e.g. "phoenix-4.5".
+  model_name?: string | null;
+  status?: string | null;
+};
+
+export type TavusFaceListResponse = {
+  faces: TavusFaceSummary[];
+};
+
 export type TavusConversationResponse = {
   conversation_id: string;
   conversation_url: string;

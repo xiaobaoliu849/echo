@@ -91,6 +91,33 @@ class TavusServiceTests(unittest.IsolatedAsyncioTestCase):
         _, kwargs = request.call_args
         self.assertEqual(kwargs["url"], "https://tavusapi.com/v2/pals")
 
+    async def test_list_faces_returns_face_items(self) -> None:
+        service = TavusService(api_key="tavus-key")
+
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {
+            "data": [
+                {
+                    "face_id": "rc9cff32ceba",
+                    "face_name": "Rio",
+                    "model_name": "phoenix-4.5",
+                    "status": "completed",
+                }
+            ]
+        }
+        request = AsyncMock(return_value=response)
+
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+
+            faces = await service.list_faces()
+
+        self.assertEqual(faces[0]["face_id"], "rc9cff32ceba")
+        self.assertEqual(faces[0]["model_name"], "phoenix-4.5")
+        _, kwargs = request.call_args
+        self.assertEqual(kwargs["url"], "https://tavusapi.com/v2/faces")
+
     async def test_end_conversation_treats_404_as_already_ended(self) -> None:
         service = TavusService(api_key="tavus-key")
 

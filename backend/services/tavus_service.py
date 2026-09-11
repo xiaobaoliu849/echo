@@ -78,6 +78,16 @@ class TavusService:
             )
         return data
 
+    async def list_faces(self) -> list[dict[str, Any]]:
+        """Return the account's faces (Phoenix-trained video personas, e.g. phoenix-4.5)."""
+        data = await self._request_json("GET", "/v2/faces")
+        items: Any = data
+        if isinstance(data, dict):
+            items = data.get("data", data.get("faces", data.get("replicas", [])))
+        if not isinstance(items, list):
+            raise TavusError("TAVUS_RESPONSE_INVALID", "Tavus face list response is not a list.")
+        return [item for item in items if isinstance(item, dict)]
+
     async def end_conversation(self, conversation_id: str) -> None:
         """End a live conversation. Ending an already-ended call is a no-op."""
         try:

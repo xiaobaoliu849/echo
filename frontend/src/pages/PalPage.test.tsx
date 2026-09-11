@@ -4,6 +4,7 @@ import PalPage from "./PalPage";
 import {
   createTavusConversation,
   endTavusConversation,
+  listTavusFaces,
   listTavusPals
 } from "../api";
 
@@ -17,6 +18,7 @@ vi.mock("../api", () => ({
   persistTavusApiKey: vi.fn(),
   persistTavusPalId: vi.fn(),
   listTavusPals: vi.fn(),
+  listTavusFaces: vi.fn(),
   createTavusConversation: vi.fn(),
   endTavusConversation: vi.fn()
 }));
@@ -50,6 +52,8 @@ describe("PalPage", () => {
   beforeEach(() => {
     vi.mocked(listTavusPals).mockReset();
     vi.mocked(listTavusPals).mockResolvedValue({ pals: [] });
+    vi.mocked(listTavusFaces).mockReset();
+    vi.mocked(listTavusFaces).mockResolvedValue({ faces: [] });
     vi.mocked(createTavusConversation).mockReset();
     vi.mocked(endTavusConversation).mockReset();
     vi.mocked(endTavusConversation).mockResolvedValue(undefined);
