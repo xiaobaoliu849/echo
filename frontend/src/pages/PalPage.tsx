@@ -39,6 +39,7 @@ type Props = {
 
 const MANUAL_PAL_VALUE = "__manual__";
 const MANUAL_FACE_VALUE = "__manual_face__";
+const formatPhoenixModel = (model: string) => model.replace(/^phoenix-/i, "Phoenix ");
 
 export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Props) {
   const { t, language } = useI18n();
@@ -50,11 +51,16 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   const [faces, setFaces] = useState<TavusFaceSummary[]>([]);
   const [selectedFaceId, setSelectedFaceId] = useState("");
   const [faceIdInput, setFaceIdInput] = useState("");
+  const [catalogError, setCatalogError] = useState("");
   const [showDrawer, setShowDrawer] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let disposed = false;
+    setPals([]);
+    setFaces([]);
+    setCatalogError("");
+    setSelectedFaceId("");
     Promise.resolve(listTavusPals())
       .then((payload) => {
         if (disposed || !payload) {
@@ -62,11 +68,14 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
         }
         setPals(payload.pals || []);
         if (payload.pals && payload.pals.length > 0) {
-          setSelectedPalId(payload.pals[0].pal_id);
+          const savedPalId = getPersistedTavusPalId();
+          setSelectedPalId(savedPalId
+            ? (payload.pals.some((pal) => pal.pal_id === savedPalId) ? savedPalId : MANUAL_PAL_VALUE)
+            : payload.pals[0].pal_id);
         }
       })
-      .catch(() => {
-        // Falls back to manual PAL entry; the start attempt surfaces real errors.
+      .catch((error) => {
+        if (!disposed) setCatalogError(error instanceof Error ? error.message : String(error));
       });
     let facesDisposed = false;
     Promise.resolve(listTavusFaces())
@@ -74,10 +83,11 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
         if (facesDisposed || !payload) {
           return;
         }
-        setFaces(payload.faces || []);
+        setFaces([...(payload.faces || [])].sort((a, b) =>
+          Number(b.model_name === "phoenix-4.5") - Number(a.model_name === "phoenix-4.5")));
       })
-      .catch(() => {
-        // Face listing is optional; manual face_id entry still works.
+      .catch((error) => {
+        if (!facesDisposed) setCatalogError(error instanceof Error ? error.message : String(error));
       });
     return () => {
       disposed = true;
@@ -98,6 +108,19 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
     }
     return selectedFaceId;
   }, [faceIdInput, selectedFaceId]);
+
+  const faceGroups = useMemo(() => {
+    const groups = new Map<string, TavusFaceSummary[]>();
+    for (const face of faces) {
+      const model = face.model_name || "";
+      groups.set(model, [...(groups.get(model) || []), face]);
+    }
+    return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a, undefined, { numeric: true }));
+  }, [faces]);
+  const selectedPal = pals.find((pal) => pal.pal_id === resolvedPalId);
+  const effectiveFaceId = resolvedFaceId || selectedPal?.default_face_id;
+  const effectiveFace = faces.find((face) => face.face_id === effectiveFaceId);
+  const faceUnavailable = Boolean(effectiveFace?.status && effectiveFace.status !== "completed");
 
   const showConfigPanel = conversation.status === "idle" || (conversation.status === "ended" && conversation.transcripts.length === 0);
   const showPostCallSummary = conversation.status === "ended" && conversation.transcripts.length > 0;
@@ -157,7 +180,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                 </span>
                 <div>
                   <h2>{t("AI 视频分身", "AI Video PAL")}</h2>
-                  <p>{t("与你的 Tavus 分身进行实时视频对话。", "Have a realtime video conversation with your Tavus PAL.")}</p>
+                  <p>{t("PAL 决定角色与对话方式；Face 决定视频形象及 Phoenix 渲染版本。", "PAL sets the role and conversation behavior; Face sets the appearance and Phoenix rendering version.")}</p>
                 </div>
               </div>
 
@@ -190,10 +213,15 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
 
               {pals.length > 0 ? (
                 <label className="vsPalField">
-                  <span>{t("选择分身", "Choose a PAL")}</span>
+                  <span>{t("选择角色（PAL）", "Choose a role (PAL)")}</span>
                   <select
                     value={selectedPalId}
-                    onChange={(event) => setSelectedPalId(event.target.value)}
+                    onChange={(event) => {
+                      setSelectedPalId(event.target.value);
+                      if (event.target.value !== MANUAL_PAL_VALUE) {
+                        handlePalIdInputChange(event.target.value);
+                      }
+                    }}
                     data-testid="pal-select"
                   >
                     {pals.map((pal) => (
@@ -224,36 +252,48 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                 </label>
               ) : null}
 
-              {faces.length > 0 ? (
-                <label className="vsPalField">
-                  <span>
-                    {t("选择形象 (可选)", "Choose a Face (optional)")}
-                  </span>
-                  <select
-                    value={selectedFaceId}
-                    onChange={(event) => setSelectedFaceId(event.target.value)}
-                    data-testid="pal-face-select"
-                  >
-                    <option value="">{t("使用分身默认形象", "Use the PAL's default face")}</option>
-                    {faces.map((face) => (
-                      <option key={face.face_id} value={face.face_id}>
-                        {face.face_name}
-                        {face.model_name
-                          ? ` · ${face.model_name.replace(/^phoenix-/i, "Phoenix ")}`
-                          : ""}
-                        {face.status && face.status !== "completed" ? ` (${face.status})` : ""}
-                      </option>
+              {catalogError ? <p role="alert">{t("无法加载分身或形象列表：", "Could not load PALs or faces: ")}{catalogError}</p> : null}
+
+              <label className="vsPalField">
+                <span>
+                  {t("选择视频形象（Face）与模型", "Choose a video face and model")}
+                </span>
+                <select
+                  value={selectedFaceId}
+                  onChange={(event) => setSelectedFaceId(event.target.value)}
+                  data-testid="pal-face-select"
+                >
+                  <option value="">{t("使用分身默认形象", "Use the PAL's default face")}</option>
+                  {faceGroups.map(([model, group]) => (
+                    <optgroup key={model} label={`${model ? formatPhoenixModel(model) : t("模型未知", "Unknown model")} · ${group.length}`}>
+                    {group.map((face) => (
+                    <option key={face.face_id} value={face.face_id} disabled={Boolean(face.status && face.status !== "completed")}>
+                      {face.face_name}
+                      {face.model_name
+                        ? ` · ${formatPhoenixModel(face.model_name)}`
+                        : ""}
+                      {face.status && face.status !== "completed" ? ` (${face.status})` : ""}
+                    </option>
                     ))}
-                    <option value={MANUAL_FACE_VALUE}>{t("手动输入 Face ID...", "Enter a Face ID...")}</option>
-                  </select>
-                  <small>
-                    {t(
-                      "Phoenix-4.5 形象渲染更快、表情更自然。在 PAL Maker 用 Phoenix-4.5 训练新形象后即可在此选择。",
-                      "Phoenix-4.5 faces render faster with richer expressions. Train a new face with Phoenix-4.5 in PAL Maker, then pick it here."
-                    )}
-                  </small>
-                </label>
-              ) : null}
+                    </optgroup>
+                  ))}
+                  <option value={MANUAL_FACE_VALUE}>{t("手动输入 Face ID...", "Enter a Face ID...")}</option>
+                </select>
+                <small>
+                  {t(
+                    "这里列出账号返回的所有版本；更新应用不会自动升级旧形象。使用默认形象时，沿用该 PAL 绑定的版本。",
+                    "All versions returned by your account are listed. Updating Echo does not upgrade existing faces. The default face keeps the version assigned to the PAL."
+                  )}
+                </small>
+              </label>
+
+              <div className="vsPalField" data-testid="pal-effective-face" role="status">
+                <span>{t("本次使用", "This conversation uses")}</span>
+                <small>{effectiveFace
+                  ? `${effectiveFace.face_name} · ${effectiveFace.model_name ? formatPhoenixModel(effectiveFace.model_name) : t("模型未知", "Unknown model")}`
+                  : t("模型尚未确认，请选择有模型标签的形象。默认或手动 ID 不保证使用 Phoenix 4.5。", "Model not confirmed. Choose a face with a model label. Default or manual IDs do not guarantee Phoenix 4.5.")}</small>
+                {faceUnavailable ? <small>{t("该形象尚未就绪，请选择其他形象。", "This face is not ready. Choose another face.")}</small> : null}
+              </div>
 
               {selectedFaceId === MANUAL_FACE_VALUE ? (
                 <label className="vsPalField">
@@ -270,7 +310,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
               <button
                 type="submit"
                 className="vsPalStartBtn"
-                disabled={isPending}
+                disabled={isPending || faceUnavailable}
                 data-testid="pal-start-button"
               >
                 <Play size={16} />

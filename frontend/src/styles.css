@@ -12346,6 +12346,7 @@ button.vsPasswordToggleBtn:focus-visible {
   inset: 0;
   z-index: 3;
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
   padding: 24px;
   background: color-mix(in oklab, var(--bg-primary) 78%, transparent);
@@ -12354,6 +12355,10 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsPalConfigCard {
   width: min(460px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 16px;

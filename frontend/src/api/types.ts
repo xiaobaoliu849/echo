@@ -820,6 +820,7 @@ export type VoiceChatServerEvent =
 export type TavusPalSummary = {
   pal_id: string;
   pal_name: string;
+  default_face_id?: string | null;
 };
 
 export type TavusPalListResponse = {

@@ -491,6 +491,7 @@ export async function listTavusPals(): Promise<TavusPalListResponse> {
       .map((item) => ({
         pal_id: item.pal_id,
         pal_name: item.pal_name || item.pal_id,
+        default_face_id: item.default_face_id || null,
       })),
   };
 }
