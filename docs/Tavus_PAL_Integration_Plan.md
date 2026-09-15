@@ -3,6 +3,57 @@
 > 基于 docs.tavus.io 2026-08 文档快照整理。结论先行：**Phase 1（核心视频对话）已落地并全量测试通过**；
 > 本文档给出平台能力全景、差距分析和 Phase 2–6 的演进路线，供后续迭代按阶段取用。
 
+## 2026-09-15：Phoenix 4.5 接入验收
+
+- Phoenix 是 Face 的渲染模型，测试时在「视频分身」选择带 **Phoenix 4.5** 标签的形象。只选 PAL 或聊天模型名称不能保证使用 4.5。
+- 修复官方 `data` 列表响应读取，按 `total_count` 获取所有 PAL / Face 页；修复空值被转成 `"None"`（包括房间 token）的问题。
+- 4.5 形象优先展示；未就绪形象不可选；列表失败会显示原因，仍可手动输入 Face ID。PAL 下拉选择会保存并恢复。
+- 聊天通话选择器移除旧 `tavus-phoenix-2` 模型和默认音色级联，统一显示「打开视频分身」，点击进入真实 PAL / Face 选择页；入口不代表某个 Phoenix 版本。
+- 上游挂断改为 `POST /v2/conversations/{id}/end`，保留历史。修复创建中离开页面的孤立房间、重复启动，以及只剩本地参与者时不自动结束的问题。
+- 本机真实账号验证：32 个 PAL，143 个 Face，其中 52 个 Phoenix 4.5 Face 状态为 `completed`。该数量是本次测试快照，后续可能变化。
+- **真实 API 验证通过**：Charlie + Brooke（Phoenix 4.5）免费 `test_mode` 创建成功；短时真实会话创建后为 `active`，查询返回指定 Face，挂断后为 `ended`，历史仍可查询。测试房间已结束。
+- **本次回归**：前端 55 个测试文件、464 项测试通过；前端生产构建通过；后端 882 项测试及 95 项子测试通过。
+- **验证边界**：尚未通过摄像头/麦克风进行真人 WebRTC 通话，未验收音画同步、网络延迟或主观形象效果。下一步可直接在「视频分身」选 Charlie → Brooke · Phoenix 4.5 → 开始视频对话。
+
+可重复运行（在仓库根目录，使用已安装后端依赖的 Python）：
+
+```powershell
+# 默认免费测试：只验证创建参数，不启动形象渲染。
+python scripts/check_tavus.py --pal-id p0f105b5b82e --face-id rc8992fe8e8e
+
+# 短时真实 API 测试，会产生少量用量，finally 中自动结束会话。
+python scripts/check_tavus.py --pal-id p0f105b5b82e --face-id rc8992fe8e8e --live
+```
+
+脚本复用 Echo 设置/环境变量中的 Key，不输出 Key、房间 URL 或 token；不读取麦克风/摄像头。
+
+官方依据：[创建会话与 test_mode](https://docs.tavus.io/api-reference/conversations/create-conversation)、[结束会话](https://docs.tavus.io/api-reference/conversations/end-conversation)、[PAL 分页](https://docs.tavus.io/api-reference/pals/list-pals)、[Face 模型与分页](https://docs.tavus.io/api-reference/faces/list-faces)。
+
+### 版本选择原理与对抗性审查
+
+Echo → FastAPI Tavus adapter → `POST /v2/conversations {pal_id, face_id?}` → Daily WebRTC 房间。
+
+- **PAL**：角色、系统提示、LLM/STT/TTS 等对话管线设置，以及默认 Face。它不是 Phoenix 模型名称。
+- **Face**：视频形象，带 `model_name`。本次账号快照同时包含 Phoenix 3（52）、4（39）、4.5（52）。
+- **默认与覆盖**：不传 `face_id` 使用 PAL 默认形象；显式选择 Face 会覆盖本次会话形象，不修改 Tavus 中保存的 PAL。
+- **实际例子**：截图中的 Gloria PAL 默认 Face 是 Gloria - Studio，版本为 Phoenix 4；选 Brooke · Phoenix 4.5 才会让该次会话使用 4.5。更新 Echo 不会重新训练或自动升级远端 Face。
+- **UI**：所有 Face 按接口返回的模型版本分组；“本次使用”显示可解析的默认或显式形象。缺少元数据时明确显示模型尚未确认，不推断为 4.5。小窗口配置卡片支持内部滚动。
+
+逐项反证审查与结果：
+
+| 攻击/误用场景 | 验证结果 |
+| --- | --- |
+| 旧配置仍保存 `tavus-phoenix-2` | 菜单只保留中性视频入口；回归测试覆盖 |
+| 更新后是否删除 Phoenix 3/4 | 真实列表与浏览器均显示全部三组；参数化测试分别提交三个版本的 Face |
+| PAL 默认是 4，会不会静默变成 4.5 | 默认选择不提交覆盖 Face；测试确认默认解析为 4 |
+| Face/default metadata 缺失或为 null | 不显示虚构版本，不向 Daily 传字符串 `None` token |
+| 默认 Face 尚未就绪 | 禁止开始；切换至完成状态 Face 后可继续 |
+| 创建中卸载、重复点击、旧房间延迟事件 | 回归测试确认孤立房间结束，旧事件不结束新会话 |
+| PAL 离开后只剩本地用户／短时重新加入 | 前者自动结束，后者保留会话；均有回归覆盖 |
+| 挂断会不会删除历史 | 官方 `/end` 接口；真实 API 验证结束后仍可查询 |
+
+最终审查未发现本次改动的阻断问题。浏览器验证了真实列表、快捷入口和显式 Phoenix 3 选择；新版默认 Face 元数据需重启后端加载。音视频媒体质量和真人交互仍属于手动验收范围。
+
 ---
 
 ## 1. 背景与目标
@@ -63,12 +114,12 @@ Base URL `https://tavusapi.com`，认证 `x-api-key`（在 PAL Maker [maker.tavu
 前端 vitest 全量 323+ 通过（含 `useTavusConversation.test.ts`/`PalPage.test.tsx`）；`npm run build` 通过，
 daily-js 为独立懒加载 chunk，不进主包。
 
-**尚未做的事（明确排除在 Phase 1 外）**：真实账号端到端验证（需要用户自己的 Tavus key）、会话历史、创建参数 UI。
+**尚未做的事（明确排除在 Phase 1 外）**：真人音视频端到端验收、会话历史 UI、更多创建参数 UI。真实账号 API 验证见上方 2026-09-15 验收记录。
 
 ## 4. 关键平台事实与约束（规划依据）
 
 1. **计费起点 = 会话创建**。PAL 创建后即进入房间等待，积分开始累计并占用一个并发槽位，
-   直到会话结束或超时。⇒ 任何"创建了但没用上"的会话必须尽快 `DELETE /v2/conversations/{id}`；
+   直到会话结束或超时。⇒ 任何"创建了但没用上"的会话必须尽快 `POST /v2/conversations/{id}/end`；
    前端 join 失败路径已做此处理（`endConversationUpstream`）。
 2. **超时三参数**（`properties` 内，均秒为单位）：`max_call_duration`（通话上限，受套餐封顶）、
    `participant_left_timeout`（默认 0）、`participant_absent_timeout`（默认 300，无人加入自动结束）。

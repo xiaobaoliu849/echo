@@ -153,7 +153,7 @@ class TavusRouterTests(unittest.TestCase):
         self._patch_service(
             list_pals=AsyncMock(
                 return_value=[
-                    {"pal_id": "pal-1", "pal_name": "Mia"},
+                    {"pal_id": "pal-1", "pal_name": "Mia", "default_face_id": "face-4"},
                     {"pal_name": "missing id"},
                 ]
             )
@@ -162,7 +162,7 @@ class TavusRouterTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"pals": [{"pal_id": "pal-1", "pal_name": "Mia"}]},
+            {"pals": [{"pal_id": "pal-1", "pal_name": "Mia", "default_face_id": "face-4"}]},
         )
 
     def test_end_conversation_returns_ended_flag(self) -> None:
@@ -173,6 +173,30 @@ class TavusRouterTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"ended": True})
+
+    def test_faces_preserve_phoenix_model_and_nullable_metadata(self) -> None:
+        self._patch_service(list_faces=AsyncMock(return_value=[
+            {"face_id": "face45", "face_name": "Brooke", "model_name": "phoenix-4.5", "status": "completed"},
+            {"face_id": "unknown", "face_name": None, "model_name": None, "status": None},
+            {"face_id": None},
+        ]))
+        response = self.client.get("/api/tavus/faces", headers={"X-Tavus-Api-Key": "key"})
+        self.assertEqual(response.status_code, 200)
+        faces = response.json()["faces"]
+        self.assertEqual(len(faces), 2)
+        self.assertEqual(faces[0]["model_name"], "phoenix-4.5")
+        self.assertIsNone(faces[1]["model_name"])
+        self.assertEqual(faces[1]["face_name"], "unknown")
+
+    def test_face_override_and_null_meeting_token(self) -> None:
+        self._patch_service(create_conversation=AsyncMock(return_value={
+            "conversation_id": "id", "conversation_url": "https://tavus.daily.co/test", "meeting_token": None,
+        }))
+        response = self.client.post("/api/tavus/conversations", json={"pal_id": "pal", "face_id": " face45 "},
+                                    headers={"X-Tavus-Api-Key": "key"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["meeting_token"])
+        self.assertEqual(TavusService.create_conversation.await_args.kwargs["face_id"], "face45")
 
 
 if __name__ == "__main__":

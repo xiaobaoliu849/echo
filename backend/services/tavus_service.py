@@ -40,14 +40,8 @@ class TavusService:
         }
 
     async def list_pals(self) -> list[dict[str, Any]]:
-        """Return the account's PALs (new API), falling back to legacy personas."""
-        data = await self._request_json("GET", "/v2/pals")
-        items: Any = data
-        if isinstance(data, dict):
-            items = data.get("pals", data.get("personas", []))
-        if not isinstance(items, list):
-            raise TavusError("TAVUS_RESPONSE_INVALID", "Tavus PAL list response is not a list.")
-        return [item for item in items if isinstance(item, dict)]
+        """Return all PAL pages, accepting legacy response envelopes too."""
+        return await self._list_items("/v2/pals", ("pals", "personas"))
 
     async def create_conversation(
         self,
@@ -56,6 +50,7 @@ class TavusService:
         conversation_name: str | None = None,
         face_id: str | None = None,
         properties: dict[str, Any] | None = None,
+        test_mode: bool = False,
     ) -> dict[str, Any]:
         """Create a real-time conversation and return its id and join URL."""
         payload: dict[str, Any] = {"pal_id": pal_id}
@@ -66,35 +61,56 @@ class TavusService:
             payload["face_id"] = face_id
         if properties:
             payload["properties"] = properties
+        if test_mode:
+            payload["test_mode"] = True
 
         data = await self._request_json("POST", "/v2/conversations", json_payload=payload)
         if not isinstance(data, dict):
             raise TavusError("TAVUS_RESPONSE_INVALID", "Tavus conversation response is not an object.")
-        conversation_url = str(data.get("conversation_url", "")).strip()
-        if not conversation_url:
+        conversation_url = data.get("conversation_url")
+        conversation_id = data.get("conversation_id")
+        if not isinstance(conversation_url, str) or not conversation_url.strip():
             raise TavusError(
                 "TAVUS_RESPONSE_INVALID",
                 "Tavus conversation response did not include a conversation_url.",
+            )
+        if not isinstance(conversation_id, str) or not conversation_id.strip():
+            raise TavusError(
+                "TAVUS_RESPONSE_INVALID",
+                "Tavus conversation response did not include a conversation_id.",
             )
         return data
 
     async def list_faces(self) -> list[dict[str, Any]]:
         """Return the account's faces (Phoenix-trained video personas, e.g. phoenix-4.5)."""
-        data = await self._request_json("GET", "/v2/faces")
-        items: Any = data
-        if isinstance(data, dict):
-            items = data.get("data", data.get("faces", data.get("replicas", [])))
-        if not isinstance(items, list):
-            raise TavusError("TAVUS_RESPONSE_INVALID", "Tavus face list response is not a list.")
-        return [item for item in items if isinstance(item, dict)]
+        return await self._list_items("/v2/faces", ("faces", "replicas"))
+
+    async def _list_items(self, path: str, aliases: tuple[str, ...]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        page = 1
+        received = 0
+        while True:
+            data = await self._request_json("GET", f"{path}?limit=100&page={page}")
+            batch: Any = data
+            total = None
+            if isinstance(data, dict):
+                batch = next((data[key] for key in ("data", *aliases) if key in data), None)
+                total = data.get("total_count")
+            if not isinstance(batch, list):
+                raise TavusError("TAVUS_RESPONSE_INVALID", "Tavus list response is not a list.")
+            items.extend(item for item in batch if isinstance(item, dict))
+            received += len(batch)
+            if not batch or not isinstance(total, int) or received >= total:
+                return items
+            page += 1
 
     async def end_conversation(self, conversation_id: str) -> None:
         """End a live conversation. Ending an already-ended call is a no-op."""
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.request(
-                    method="DELETE",
-                    url=f"{self.api_url}/v2/conversations/{conversation_id}",
+                    method="POST",
+                    url=f"{self.api_url}/v2/conversations/{conversation_id}/end",
                     headers=self._headers(),
                 )
         except httpx.HTTPError as exc:

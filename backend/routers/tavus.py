@@ -29,6 +29,7 @@ class TavusConversationResponse(BaseModel):
 class TavusPalSummary(BaseModel):
     pal_id: str
     pal_name: str
+    default_face_id: str | None = None
 
 
 class TavusPalListResponse(BaseModel):
@@ -108,13 +109,14 @@ async def list_tavus_pals(request: Request) -> TavusPalListResponse:
 
     summaries: list[TavusPalSummary] = []
     for item in pals:
-        pal_id = str(item.get("pal_id", "")).strip()
+        pal_id = str(item.get("pal_id") or item.get("persona_id") or "").strip()
         if not pal_id:
             continue
         summaries.append(
             TavusPalSummary(
                 pal_id=pal_id,
-                pal_name=str(item.get("pal_name", "")).strip() or pal_id,
+                pal_name=str(item.get("pal_name") or item.get("persona_name") or "").strip() or pal_id,
+                default_face_id=str(item.get("default_face_id") or item.get("default_replica_id") or "").strip() or None,
             )
         )
     return TavusPalListResponse(pals=summaries)
@@ -145,15 +147,15 @@ async def list_tavus_faces(request: Request) -> TavusFaceListResponse:
 
     summaries: list[TavusFaceSummary] = []
     for item in faces:
-        face_id = str(item.get("face_id", "")).strip()
+        face_id = str(item.get("face_id") or item.get("replica_id") or "").strip()
         if not face_id:
             continue
         summaries.append(
             TavusFaceSummary(
                 face_id=face_id,
-                face_name=str(item.get("face_name", "")).strip() or face_id,
-                model_name=str(item.get("model_name", "")).strip() or None,
-                status=str(item.get("status", "")).strip() or None,
+                face_name=str(item.get("face_name") or item.get("replica_name") or "").strip() or face_id,
+                model_name=str(item.get("model_name") or "").strip() or None,
+                status=str(item.get("status") or "").strip() or None,
             )
         )
     return TavusFaceListResponse(faces=summaries)
@@ -200,8 +202,8 @@ async def create_tavus_conversation(
     return TavusConversationResponse(
         conversation_id=str(result.get("conversation_id", "")).strip(),
         conversation_url=str(result.get("conversation_url", "")).strip(),
-        status=str(result.get("status", "")).strip() or None,
-        meeting_token=str(result.get("meeting_token", "")).strip() or None,
+        status=str(result.get("status") or "").strip() or None,
+        meeting_token=str(result.get("meeting_token") or "").strip() or None,
     )
 
 
