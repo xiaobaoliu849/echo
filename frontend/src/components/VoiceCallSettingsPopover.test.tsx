@@ -440,19 +440,23 @@ describe("VoiceCallSettingsPopover", () => {
     expect(dialog.style.maxHeight).toBe("390px");
   });
 
-  it("renders Tavus provider and its video avatar model", () => {
+  it("replaces legacy Tavus model aliases with a Video PAL entry", () => {
     renderPopover({
       voiceChatRealtimeChoicesByProvider: [
         { provider: "DashScope", models: ["qwen3.5-omni-plus-realtime"] },
-        { provider: "Tavus", models: ["tavus-video-pal"] },
+        { provider: "Tavus", models: ["tavus-video-pal", "tavus-phoenix-2"] },
       ],
     });
     openPanel();
     const tavusRow = screen.getByRole("button", { name: /Tavus/ });
     expect(tavusRow).toBeInTheDocument();
     fireEvent.mouseEnter(tavusRow);
-    expect(screen.getByText("tavus-video-pal")).toBeInTheDocument();
-    expect(screen.getByText("实时视频分身")).toBeInTheDocument();
+    expect(screen.queryByText("tavus-video-pal")).not.toBeInTheDocument();
+    expect(screen.queryByText("tavus-phoenix-2")).not.toBeInTheDocument();
+    const entry = screen.getByText("打开视频分身");
+    fireEvent.mouseEnter(entry);
+    expect(screen.getByText("选择角色、形象与 Phoenix 版本")).toBeInTheDocument();
+    expect(document.querySelector(".vsVoiceLevel3Flyout")).toBeNull();
   });
 
   it("commits AgentPlatform live-translate model when clicking target language in Level 3", () => {

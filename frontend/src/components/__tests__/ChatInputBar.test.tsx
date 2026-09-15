@@ -154,6 +154,23 @@ describe("ChatInputBar", () => {
     expect(onOpenPal).toHaveBeenCalledTimes(1);
   });
 
+  it("opens the real Video PAL page from the Tavus model menu", () => {
+    const onOpenPal = vi.fn();
+    const chat = createChatController();
+    const voiceChat = createVoiceChatController({
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "Tavus", models: ["tavus-video-pal", "tavus-phoenix-2"] },
+      ],
+    });
+    render(<ChatInputBar chat={chat} voiceChat={voiceChat} onOpenPal={onOpenPal} />);
+    fireEvent.click(screen.getByTitle("通话设置"));
+    fireEvent.mouseEnter(screen.getByText("Tavus"));
+    fireEvent.click(screen.getByText("打开视频分身"));
+    expect(onOpenPal).toHaveBeenCalledTimes(1);
+    expect(voiceChat.onToggleRecording).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "通话设置" })).not.toBeInTheDocument();
+  });
+
   it("displays live voice call banner and handles hang up when voice session is active", () => {
     const chat = createChatController({
       chatProvider: "DashScope",

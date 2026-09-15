@@ -16,6 +16,7 @@ import {
   getProviderBadge,
   getProviderSortOrder,
   resolveRealtimeProvider,
+  resolveRealtimeModelOptions,
 } from "./useVoiceChatHelpers";
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,11 @@ import {
 // Doubao 403.
 // ---------------------------------------------------------------------------
 describe("resolveRealtimeProvider", () => {
+  it("removes legacy Tavus model names from saved catalogs", () => {
+    expect(resolveRealtimeModelOptions("Tavus", {
+      Tavus: { defaultModel: "tavus-phoenix-2", enabledModels: ["tavus-phoenix-2"], availableModels: ["tavus-video-pal", "tavus-phoenix-2"] },
+    })).toEqual(["tavus-video-pal"]);
+  });
   const allProviders = [
     DASHSCOPE_PROVIDER,
     GOOGLE_PROVIDER,
@@ -152,4 +158,3 @@ describe("Google Gemini Live voices", () => {
     expect(GOOGLE_REALTIME_VOICES.some((v) => v.value === "Lyra")).toBe(false);
   });
 });
-

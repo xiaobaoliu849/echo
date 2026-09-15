@@ -3,6 +3,8 @@ import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
   DASHSCOPE_PROVIDER,
+  DEFAULT_TAVUS_MODEL,
+  TAVUS_PROVIDER,
   formatVoiceChatSecondaryLabel,
   getProviderBadge,
   getProviderDisplayName,
@@ -20,6 +22,7 @@ type Props = {
   t: Translator;
   disabled?: boolean;
   onOpenSettings?: () => void;
+  onOpenPal?: () => void;
 };
 
 type ModelChoiceItem = {
@@ -33,7 +36,7 @@ type ProviderGroup = {
   models: ModelChoiceItem[];
 };
 
-export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled = false, onOpenSettings }: Props) {
+export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled = false, onOpenSettings, onOpenPal }: Props) {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(true);
   const [flyoutToLeft, setFlyoutToLeft] = useState(false);
@@ -90,7 +93,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     return Array.from(map.entries())
       .map(([provider, modelMap]) => ({
         provider,
-        models: Array.from(modelMap.values()),
+        models: provider === TAVUS_PROVIDER
+          ? [{ model: DEFAULT_TAVUS_MODEL, value: buildModelChoiceValue(provider, DEFAULT_TAVUS_MODEL), isRealtime: true }]
+          : Array.from(modelMap.values()),
       }))
       .filter((group) => group.models.length > 0)
       .sort((a, b) => getProviderSortOrder(a.provider) - getProviderSortOrder(b.provider));
@@ -193,6 +198,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   function handleModelSelect(provider: string, model: string) {
     setHoveredModel(model);
     commitProviderModel(provider, model);
+    if (provider === TAVUS_PROVIDER) {
+      closePopover();
+      onOpenPal?.();
+      return;
+    }
 
     const isRealtimeChoice = isVoiceRealtimeModel(provider, model);
     const isTranslateChoice = isLiveTranslateModelHelper(provider, model);
@@ -285,7 +295,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     t,
   });
 
-  const summaryText = isCurrentModelRealtime
+  const summaryText = currentProviderName === TAVUS_PROVIDER
+    ? t("Tavus · 视频分身", "Tavus · Video PAL")
+    : isCurrentModelRealtime
     ? `${currentModelName} · ${secondaryLabel}`
     : currentModelName.trim()
     ? `${getProviderDisplayName(currentProviderName, "short", t)} / ${currentModelName}`
@@ -416,7 +428,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       aria-current={isSelectedModel ? "true" : undefined}
                       onMouseEnter={() => {
                         setHoveredModel(item.model);
-                        if (isLiveTranslateModelHelper(currentProviderGroup.provider, item.model)) {
+                        if (currentProviderGroup.provider === TAVUS_PROVIDER) {
+                          setActiveCategory("");
+                        } else if (isLiveTranslateModelHelper(currentProviderGroup.provider, item.model)) {
                           setActiveCategory("translation");
                         } else if (item.isRealtime) {
                           setActiveCategory("voice");
@@ -425,14 +439,18 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       onClick={() => handleModelSelect(currentProviderGroup.provider, item.model)}
                     >
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                        <span className="vsVoiceSettingsRowLabel">{item.model}</span>
+                        <span className="vsVoiceSettingsRowLabel">{currentProviderGroup.provider === TAVUS_PROVIDER
+                          ? t("打开视频分身", "Open Video PAL")
+                          : item.model}</span>
                         {item.isRealtime ? (
                           <span className="vsVoiceSettingsProviderChevron" aria-hidden="true" style={{ fontSize: 12, opacity: 0.6 }}>
                             ›
                           </span>
                         ) : null}
                       </div>
-                      {hint ? <span className="vsVoiceSettingsRowHint">{hint}</span> : null}
+                      {currentProviderGroup.provider === TAVUS_PROVIDER
+                        ? <span className="vsVoiceSettingsRowHint">{t("选择角色、形象与 Phoenix 版本", "Choose a role, face, and Phoenix version")}</span>
+                        : hint ? <span className="vsVoiceSettingsRowHint">{hint}</span> : null}
                     </button>
                   );
                 })}
@@ -441,7 +459,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           ) : null}
 
           {/* LEVEL 3: VOICE TIMBRE & TRANSLATION SETTINGS (音色与同传/扩展设定) */}
-          {activeCategory ? (
+          {activeCategory && currentProviderName !== TAVUS_PROVIDER ? (
             <div
               className={`vsVoiceLevel3Flyout${flyoutToLeft ? " flyLeft" : ""}`}
               // Share the Level-2 offset so the voice list stays on the row of the

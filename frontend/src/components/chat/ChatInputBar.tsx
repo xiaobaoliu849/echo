@@ -572,6 +572,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
             </span>
           ) : (
             <VoiceCallSettingsPopover
+              onOpenPal={onOpenPal}
               voiceChat={voiceChat}
               chat={chat}
               t={t}

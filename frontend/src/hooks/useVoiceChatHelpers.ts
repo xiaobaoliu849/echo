@@ -809,6 +809,9 @@ export function resolveRealtimeModelOptions(
 ): string[] {
   // Canonicalize legacy keys so catalog lookups and built-ins keep working.
   provider = normalizeProviderKey(provider);
+  // Tavus selects the rendering model through a Face on the Video PAL page.
+  // Old catalog entries are navigation aliases, not callable voice models.
+  if (provider === TAVUS_PROVIDER) return [DEFAULT_TAVUS_MODEL];
   const providerMeta = providerModelCatalog[provider];
   const enabledModels = Array.isArray(providerMeta?.enabledModels)
     ? providerMeta.enabledModels.map((item) => item.trim()).filter(Boolean)
@@ -876,9 +879,6 @@ export function resolveRealtimeModelOptions(
         "spacexai/grok-voice-think-fast-2.0",
       ]
     : [];
-  const tavusBuiltIns = provider === TAVUS_PROVIDER
-    ? [DEFAULT_TAVUS_MODEL, "tavus-phoenix-2"]
-    : [];
   const allBuiltIns = [
     ...googleBuiltIns,
     ...agentPlatformBuiltIns,
@@ -890,7 +890,6 @@ export function resolveRealtimeModelOptions(
     ...cartesiaBuiltIns,
     ...gradiumBuiltIns,
     ...vercelBuiltIns,
-    ...tavusBuiltIns,
   ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];
   return [...new Set(ordered.filter(Boolean))];
