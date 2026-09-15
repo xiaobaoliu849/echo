@@ -12823,6 +12823,8 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsPalDrawerIconBtn {
   width: 28px;
   height: 28px;
+  padding: 0;
+  box-shadow: none;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.08);
@@ -12998,17 +13000,30 @@ button.vsPasswordToggleBtn:focus-visible {
   justify-content: center;
   width: 34px;
   height: 34px;
+  padding: 0;
+  box-shadow: none;
   border-radius: 8px;
-  border: 1px solid var(--border-color, #e2e8f0);
-  background: transparent;
-  color: var(--text-secondary, #64748b);
+  border: 1px solid var(--border-color, #cbd5e1);
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #0f172a);
   cursor: pointer;
+  flex-shrink: 0;
   transition: all 0.15s ease;
 }
 
 .vsPalCloseBtn:hover {
   background: var(--bg-secondary, #f1f5f9);
-  color: var(--text-primary, #0f172a);
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.vsPalCloseBtn:active {
+  transform: scale(0.95);
+}
+
+.vsPalCloseBtn svg {
+  flex-shrink: 0;
+  display: block;
 }
 
 .vsPalTranscriptScrollArea {

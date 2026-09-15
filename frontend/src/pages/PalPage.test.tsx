@@ -343,10 +343,57 @@ describe("PalPage", () => {
       expect(screen.getByTestId("pal-dismiss-summary-button")).toBeInTheDocument();
     });
 
+    // Verify close button contains svg icon and has Esc title
+    const closeBtn = screen.getByTestId("pal-close-summary-button");
+    expect(closeBtn.querySelector("svg")).toBeInTheDocument();
+    expect(closeBtn).toHaveAttribute("title", "关闭 (Esc)");
+
     // Dismiss summary via Close button
-    fireEvent.click(screen.getByTestId("pal-close-summary-button"));
+    fireEvent.click(closeBtn);
 
     // Verify returning to configuration panel
+    await waitFor(() => {
+      expect(screen.queryByText("通话已结束")).not.toBeInTheDocument();
+      expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();
+    });
+  });
+
+  it("dismisses post-call summary when pressing Escape key", async () => {
+    vi.mocked(listTavusPals).mockRejectedValue(new Error("not configured"));
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-esc-test",
+      conversation_url: "https://tavus.daily.co/room?t=token"
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    renderPage();
+
+    fireEvent.change(screen.getByTestId("pal-api-key-input"), {
+      target: { value: "key-1" }
+    });
+    fireEvent.click(screen.getByTestId("pal-start-button"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
+    });
+
+    const appMessageHandler = call.on.mock.calls.find(([name]) => name === "app-message")?.[1];
+    appMessageHandler?.({
+      data: {
+        event_type: "conversation.utterance",
+        properties: { text: "Escape test speech", role: "assistant" }
+      }
+    });
+
+    fireEvent.click(screen.getByTestId("pal-leave-button"));
+
+    await waitFor(() => {
+      expect(screen.getByText("通话已结束")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
     await waitFor(() => {
       expect(screen.queryByText("通话已结束")).not.toBeInTheDocument();
       expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();

@@ -149,6 +149,17 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
     conversation.status === "ended" && conversation.transcripts.length > 0 && !summaryDismissed;
   const isPending = conversation.status === "creating" || conversation.status === "joining";
 
+  useEffect(() => {
+    if (!showPostCallSummary) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSummaryDismissed(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showPostCallSummary]);
+
   const pendingLabel = conversation.status === "creating"
     ? t("正在创建视频会话...", "Creating the video conversation...")
     : t("正在接入视频房间...", "Joining the video room...");
@@ -391,11 +402,11 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                     type="button"
                     className="vsPalCloseBtn"
                     onClick={() => setSummaryDismissed(true)}
-                    title={t("关闭", "Close")}
+                    title={t("关闭 (Esc)", "Close (Esc)")}
                     aria-label={t("关闭", "Close")}
                     data-testid="pal-close-summary-button"
                   >
-                    <X size={18} />
+                    <X size={18} strokeWidth={2.25} />
                   </button>
                 </div>
               </div>
