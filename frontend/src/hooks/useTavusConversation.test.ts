@@ -227,6 +227,68 @@ describe("useTavusConversation", () => {
     expect(endTavusConversation).not.toHaveBeenCalled();
   });
 
+  it("ends a late-created room after unmount and prevents duplicate starts", async () => {
+    let resolveCreate!: (value: { conversation_id: string; conversation_url: string }) => void;
+    vi.mocked(createTavusConversation).mockReturnValue(new Promise((resolve) => { resolveCreate = resolve; }));
+    const { result, unmount } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.start(); });
+    await act(async () => { await result.current.start(); });
+    expect(createTavusConversation).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => {
+      resolveCreate({ conversation_id: "late-room", conversation_url: "https://tavus.daily.co/late" });
+      await pending;
+    });
+    expect(dailyMocks.createFrame).not.toHaveBeenCalled();
+    expect(endTavusConversation).toHaveBeenCalledWith("late-room");
+  });
+
+  it("auto-leaves when only the local participant remains", async () => {
+    vi.useFakeTimers();
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "local-only", conversation_url: "https://tavus.daily.co/room",
+    });
+    const call = createCallMock();
+    call.participants.mockReturnValue({ local: { local: true, session_id: "self" } });
+    dailyMocks.createFrame.mockReturnValue(call);
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => { await result.current.start(); });
+    act(() => { getEventHandler(call, "participant-left")(); });
+    await act(async () => { vi.advanceTimersByTime(1600); });
+    expect(endTavusConversation).toHaveBeenCalledWith("local-only");
+  });
+
+  it("ignores a previous frame's delayed leave event after restarting", async () => {
+    vi.mocked(createTavusConversation)
+      .mockResolvedValueOnce({ conversation_id: "old", conversation_url: "https://tavus.daily.co/old" })
+      .mockResolvedValueOnce({ conversation_id: "new", conversation_url: "https://tavus.daily.co/new" });
+    const oldCall = createCallMock();
+    dailyMocks.createFrame.mockReturnValueOnce(oldCall).mockReturnValueOnce(createCallMock());
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => { await result.current.start(); });
+    act(() => { result.current.leave(); });
+    await act(async () => { await result.current.start(); });
+    act(() => { getEventHandler(oldCall, "left-meeting")(); });
+    expect(result.current.status).toBe("connected");
+    expect(endTavusConversation).not.toHaveBeenCalledWith("new");
+  });
+
+  it("keeps a room when a remote participant rejoins during the grace period", async () => {
+    vi.useFakeTimers();
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "rejoined", conversation_url: "https://tavus.daily.co/room",
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => { await result.current.start(); });
+    act(() => { getEventHandler(call, "participant-left")(); });
+    call.participants.mockReturnValue({ remote: { local: false, session_id: "pal" } });
+    await act(async () => { vi.advanceTimersByTime(1600); });
+    expect(endTavusConversation).not.toHaveBeenCalled();
+  });
+
   it("cleans up the call when the hook unmounts mid-conversation", async () => {
     vi.mocked(createTavusConversation).mockResolvedValue({
       conversation_id: "conv-5",
@@ -318,4 +380,3 @@ describe("useTavusConversation", () => {
     expect(result.current.transcripts[1].text).toBe("Nice to meet you!");
   });
 });
-

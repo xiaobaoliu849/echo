@@ -116,6 +116,8 @@ export default function useTavusConversation({
   const callRef = useRef<DailyCall | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const conversationIdRef = useRef<string>("");
+  const startGenerationRef = useRef(0);
+  const startingRef = useRef(false);
   const autoLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeSubtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -206,7 +208,7 @@ export default function useTavusConversation({
       return;
     }
     try {
-      call.destroy();
+      void Promise.resolve(call.destroy()).catch(() => {});
     } catch {
       // The frame may already be gone with the unmounted container.
     }
@@ -219,25 +221,29 @@ export default function useTavusConversation({
   }, [clearAutoLeaveTimer, clearDurationTimer]);
 
   const leave = useCallback(() => {
+    startGenerationRef.current += 1;
+    startingRef.current = false;
     const call = callRef.current;
     const conversationId = conversationIdRef.current;
     conversationIdRef.current = "";
-    teardownCall();
     if (call) {
       try {
-        void call.leave();
+        void Promise.resolve(call.leave()).catch(() => {});
       } catch {
-        // Leaving an already-dead meeting throws; the destroy above released it.
+        // Teardown below also releases already-ended meetings.
       }
     }
+    teardownCall();
     endConversationUpstream(conversationId);
     setStatus((prev) => (prev === "idle" ? prev : "ended"));
   }, [endConversationUpstream, teardownCall]);
 
   const start = useCallback(async (params: StartParams = {}) => {
-    if (callRef.current) {
+    if (callRef.current || startingRef.current) {
       return;
     }
+    startingRef.current = true;
+    const generation = ++startGenerationRef.current;
     setErrorMessage("");
     setStatus("creating");
     try {
@@ -246,6 +252,10 @@ export default function useTavusConversation({
         conversationName: params.conversationName,
         faceId: params.faceId,
       });
+      if (generation !== startGenerationRef.current) {
+        endConversationUpstream(conversation.conversation_id);
+        return;
+      }
       conversationIdRef.current = conversation.conversation_id;
       setStatus("joining");
 
@@ -253,6 +263,7 @@ export default function useTavusConversation({
       // main bundle; the video page is lazy-loaded on its own. The frame
       // is sized by the .vsPalVideoHost iframe CSS rules.
       const Daily = (await import("@daily-co/daily-js")).default;
+      if (generation !== startGenerationRef.current) return;
       const parent = containerRef.current ?? undefined;
       const frame = parent
         ? Daily.createFrame(parent, {
@@ -283,6 +294,7 @@ export default function useTavusConversation({
       callRef.current = frame;
 
       frame.on("joined-meeting", () => {
+        if (generation !== startGenerationRef.current) return;
         setStatus("connected");
         setCallDuration(0);
         clearDurationTimer();
@@ -291,7 +303,7 @@ export default function useTavusConversation({
         }, 1000);
       });
       frame.on("left-meeting", () => {
-        leave();
+        if (generation === startGenerationRef.current) leave();
       });
       frame.on("error", (event: DailyEventObject) => {
         const message = (event as { errorMsg?: string }).errorMsg || "";
@@ -363,17 +375,21 @@ export default function useTavusConversation({
         }
       });
       frame.on("participant-left", () => {
+        if (generation !== startGenerationRef.current) return;
         const activeCall = callRef.current;
         if (!activeCall) {
           return;
         }
-        const remaining = Object.keys(activeCall.participants() || {}).length;
+        const remaining = Object.entries(activeCall.participants() || {})
+          .filter(([id, participant]) => id !== "local" && !participant.local).length;
         if (remaining > 0) {
           return;
         }
         clearAutoLeaveTimer();
         autoLeaveTimerRef.current = setTimeout(() => {
           autoLeaveTimerRef.current = null;
+          if (Object.entries(callRef.current?.participants() || {})
+            .some(([id, participant]) => id !== "local" && !participant.local)) return;
           leave();
         }, PAL_LEFT_LEAVE_DELAY_MS);
       });
@@ -389,8 +405,9 @@ export default function useTavusConversation({
         joinParams.token = meetingToken;
       }
       await frame.join(joinParams);
-      setStatus("connected");
+      if (generation === startGenerationRef.current) setStatus("connected");
     } catch (error) {
+      if (generation !== startGenerationRef.current) return;
       // Billing starts when the conversation is created, so a conversation
       // that was created but never joined must be ended upstream as well.
       const orphanedConversationId = conversationIdRef.current;
@@ -401,8 +418,10 @@ export default function useTavusConversation({
       setErrorMessage(
         formatErrorMessage(error, t("无法开始视频通话。", "Could not start the video conversation."))
       );
+    } finally {
+      if (generation === startGenerationRef.current) startingRef.current = false;
     }
-  }, [clearAutoLeaveTimer, clearDurationTimer, formatErrorMessage, leave, t, teardownCall]);
+  }, [clearAutoLeaveTimer, clearDurationTimer, endConversationUpstream, formatErrorMessage, leave, t, teardownCall]);
 
   const clearError = useCallback(() => {
     setErrorMessage("");
@@ -419,6 +438,8 @@ export default function useTavusConversation({
 
   useEffect(() => {
     return () => {
+      startGenerationRef.current += 1;
+      startingRef.current = false;
       const conversationId = conversationIdRef.current;
       conversationIdRef.current = "";
       teardownCall();
