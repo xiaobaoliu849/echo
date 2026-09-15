@@ -17,6 +17,7 @@ export type SubtitleItem = {
 
 type StartParams = {
   palId?: string;
+  palName?: string;
   conversationName?: string;
   faceId?: string;
 };
@@ -49,7 +50,15 @@ export type UseTavusConversationResult = {
   clearError: () => void;
 };
 
-function parseAppMessageSubtitle(rawData: any): { speaker: "user" | "pal"; text: string; isFinal: boolean; speakerName?: string } | null {
+export function parseAppMessageSubtitle(
+  rawData: any,
+  localSessionId?: string
+): {
+  speaker: "user" | "pal";
+  text: string;
+  isFinal: boolean;
+  speakerName?: string;
+} | null {
   if (!rawData) return null;
   let data = rawData;
   if (typeof rawData === "string") {
@@ -60,45 +69,120 @@ function parseAppMessageSubtitle(rawData: any): { speaker: "user" | "pal"; text:
     }
   }
 
-  const eventType = String(data.event_type || data.type || data.event || "");
-  const payload = data.data || data.payload || data;
+  const eventType = String(
+    data.event_type ||
+    data.eventType ||
+    data.type ||
+    data.action ||
+    data.event ||
+    ""
+  ).toLowerCase();
 
-  const role = String(payload.role || payload.speaker || data.role || data.speaker || "");
-  const participantName = String(payload.participant_name || payload.participantName || data.participant_name || "").trim();
-  const participantId = String(payload.participant_id || payload.participantId || data.participant_id || "").toLowerCase();
+  // Skip explicit non-speech control/system events
+  if (
+    eventType.includes("ping") ||
+    eventType.includes("heartbeat") ||
+    eventType === "system.pal_joined" ||
+    eventType === "system.shutdown" ||
+    eventType === "conversation.echo" ||
+    eventType.startsWith("room.")
+  ) {
+    return null;
+  }
+
+  // Tavus Interaction Events store speech and role in `properties`.
+  // Also check `data.data`, `data.payload`, `data.detail`, or root object.
+  const props =
+    typeof data.properties === "object" && data.properties !== null
+      ? data.properties
+      : typeof data.data === "object" && data.data !== null
+      ? data.data
+      : typeof data.payload === "object" && data.payload !== null
+      ? data.payload
+      : typeof data.detail === "object" && data.detail !== null
+      ? data.detail
+      : data;
+
+  const role = String(
+    props.role ||
+    props.speaker ||
+    props.speaker_type ||
+    data.role ||
+    data.speaker ||
+    data.speaker_type ||
+    ""
+  ).toLowerCase();
+
+  const participantName = String(
+    props.participant_name ||
+    props.participantName ||
+    props.name ||
+    data.participant_name ||
+    data.participantName ||
+    data.name ||
+    ""
+  ).trim();
+
+  const participantId = String(
+    props.participant_id ||
+    props.participantId ||
+    data.participant_id ||
+    data.participantId ||
+    data.participantId ||
+    ""
+  ).toLowerCase();
 
   const isUser =
-    role.toLowerCase() === "user" ||
-    role.toLowerCase() === "me" ||
+    role === "user" ||
+    role === "me" ||
+    role === "human" ||
+    role === "client" ||
     eventType.startsWith("user.") ||
     participantId === "user" ||
+    participantId === "local" ||
+    (Boolean(localSessionId) && participantId === localSessionId?.toLowerCase()) ||
     participantName.toLowerCase() === "user" ||
-    participantName.toLowerCase() === "you";
+    participantName.toLowerCase() === "you" ||
+    participantName.toLowerCase() === "echo user";
 
   const speaker: "user" | "pal" = isUser ? "user" : "pal";
 
   const text = String(
-    payload.text ||
-    payload.speech ||
-    payload.utterance ||
-    payload.transcript ||
-    payload.content ||
-    payload.message ||
+    props.text ||
+    props.speech ||
+    props.utterance ||
+    props.transcript ||
+    props.content ||
+    props.message ||
     data.text ||
     data.speech ||
+    data.utterance ||
+    data.transcript ||
+    data.content ||
+    data.message ||
     ""
   ).trim();
 
   if (!text) return null;
 
-  const isStreamingEvent = eventType === "conversation.utterance.streaming" || eventType.includes("stream");
+  const isStreamingEvent =
+    eventType === "conversation.utterance.streaming" ||
+    eventType.includes("streaming") ||
+    eventType.includes("stream") ||
+    Boolean(props.is_streaming || data.is_streaming);
+
   const isFinal = Boolean(
+    !isStreamingEvent ||
+    props.is_final ||
+    props.isFinal ||
+    props.final ||
+    props.speech_final ||
+    data.is_final ||
+    data.isFinal ||
+    data.final ||
     eventType === "conversation.utterance" ||
     eventType.includes("completed") ||
-    eventType.includes("final") ||
-    payload.is_final ||
-    payload.final ||
-    !isStreamingEvent
+    eventType.includes("final")
   );
 
   return { speaker, text, isFinal, speakerName: participantName || undefined };
@@ -116,6 +200,7 @@ export default function useTavusConversation({
   const callRef = useRef<DailyCall | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const conversationIdRef = useRef<string>("");
+  const activePalNameRef = useRef<string>("");
   const startGenerationRef = useRef(0);
   const startingRef = useRef(false);
   const autoLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -243,6 +328,7 @@ export default function useTavusConversation({
       return;
     }
     startingRef.current = true;
+    activePalNameRef.current = params.palName?.trim() || "";
     const generation = ++startGenerationRef.current;
     setErrorMessage("");
     setStatus("creating");
@@ -293,6 +379,60 @@ export default function useTavusConversation({
         : Daily.createFrame();
       callRef.current = frame;
 
+      const handleIncomingSubtitle = (rawEventData: any) => {
+        const localSessionId = callRef.current?.participants()?.local?.session_id;
+        const parsed = parseAppMessageSubtitle(rawEventData, localSessionId);
+        if (!parsed) return;
+
+        const timestamp = Date.now();
+        const fallbackPalName = activePalNameRef.current || t("AI 分身", "AI PAL");
+        const fallbackName = parsed.speaker === "user" ? t("你", "You") : fallbackPalName;
+        const speakerName =
+          parsed.speakerName &&
+          !["user", "you", "me", "pal", "assistant", "replica"].includes(parsed.speakerName.toLowerCase())
+            ? parsed.speakerName
+            : fallbackName;
+
+        setTranscripts((prev) => {
+          const last = prev[prev.length - 1];
+          // If previous message was same speaker within 5s and not final, update it in place
+          if (last && last.speaker === parsed.speaker && !last.isFinal && timestamp - last.timestamp < 5000) {
+            const updatedItem: SubtitleItem = {
+              ...last,
+              text: parsed.text,
+              isFinal: parsed.isFinal,
+              timestamp,
+            };
+            setActiveSubtitle(updatedItem);
+            return [...prev.slice(0, -1), updatedItem];
+          }
+
+          // If speaker changed while previous turn was in-progress, seal previous turn as final
+          const basePrev =
+            last && !last.isFinal && last.speaker !== parsed.speaker
+              ? [...prev.slice(0, -1), { ...last, isFinal: true }]
+              : prev;
+
+          const newItem: SubtitleItem = {
+            id: `sub-${timestamp}-${Math.random().toString(36).slice(2, 6)}`,
+            speaker: parsed.speaker,
+            speakerName,
+            text: parsed.text,
+            isFinal: parsed.isFinal,
+            timestamp,
+          };
+          setActiveSubtitle(newItem);
+          return [...basePrev, newItem];
+        });
+
+        if (activeSubtitleTimerRef.current) {
+          clearTimeout(activeSubtitleTimerRef.current);
+        }
+        activeSubtitleTimerRef.current = setTimeout(() => {
+          setActiveSubtitle(null);
+        }, 4500);
+      };
+
       frame.on("joined-meeting", () => {
         if (generation !== startGenerationRef.current) return;
         setStatus("connected");
@@ -317,49 +457,10 @@ export default function useTavusConversation({
         }
       });
       frame.on("app-message", (event: any) => {
-        const parsed = parseAppMessageSubtitle(event?.data);
-        if (!parsed) return;
-
-        const timestamp = Date.now();
-        const fallbackName = parsed.speaker === "user" ? t("你", "You") : t("AI 分身", "AI PAL");
-        const speakerName =
-          parsed.speakerName &&
-          !["user", "you", "me", "pal", "assistant"].includes(parsed.speakerName.toLowerCase())
-            ? parsed.speakerName
-            : fallbackName;
-
-        setTranscripts((prev) => {
-          const last = prev[prev.length - 1];
-          // If previous message was same speaker within 5s and not final, update it in place
-          if (last && last.speaker === parsed.speaker && !last.isFinal && timestamp - last.timestamp < 5000) {
-            const updatedItem: SubtitleItem = {
-              ...last,
-              text: parsed.text,
-              isFinal: parsed.isFinal,
-              timestamp,
-            };
-            setActiveSubtitle(updatedItem);
-            return [...prev.slice(0, -1), updatedItem];
-          }
-
-          const newItem: SubtitleItem = {
-            id: `sub-${timestamp}-${Math.random().toString(36).slice(2, 6)}`,
-            speaker: parsed.speaker,
-            speakerName,
-            text: parsed.text,
-            isFinal: parsed.isFinal,
-            timestamp,
-          };
-          setActiveSubtitle(newItem);
-          return [...prev, newItem];
-        });
-
-        if (activeSubtitleTimerRef.current) {
-          clearTimeout(activeSubtitleTimerRef.current);
-        }
-        activeSubtitleTimerRef.current = setTimeout(() => {
-          setActiveSubtitle(null);
-        }, 4500);
+        handleIncomingSubtitle(event?.data ?? event?.message ?? event);
+      });
+      frame.on("transcription-message" as any, (event: any) => {
+        handleIncomingSubtitle(event);
       });
       frame.on("participant-updated", (event: any) => {
         if (event?.participant?.local) {

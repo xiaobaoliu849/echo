@@ -12722,59 +12722,37 @@ button.vsPasswordToggleBtn:focus-visible {
   border: 2px solid #0f172a;
 }
 
-/* ── Live Floating Subtitle Banner ── */
+/* ── Live Floating Subtitle Banner (Standard Video CC Style) ── */
 .vsPalFloatingSubtitle {
   position: absolute;
-  bottom: 86px;
+  bottom: 84px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: min(88%, 680px);
+  max-width: min(84%, 620px);
   z-index: 9;
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 10px 18px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.88);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-  animation: vsPalSubSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   user-select: none;
 }
 
-@keyframes vsPalSubSlideUp {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 10px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
-.vsPalFloatingSubtitle.user {
-  border-color: rgba(99, 102, 241, 0.4);
-}
-
-.vsPalFloatingSubtitle.pal {
-  border-color: rgba(16, 185, 129, 0.4);
-}
-
 .vsPalSubSpeaker {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .vsPalFloatingSubtitle.user .vsPalSubSpeaker {
-  color: #a5b4fc;
+  color: #93c5fd;
 }
 
 .vsPalFloatingSubtitle.pal .vsPalSubSpeaker {
@@ -12782,12 +12760,16 @@ button.vsPasswordToggleBtn:focus-visible {
 }
 
 .vsPalSubText {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.45;
-  color: #f8fafc;
-  font-weight: 500;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+  font-weight: 400;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ── Side Transcript Drawer ── */

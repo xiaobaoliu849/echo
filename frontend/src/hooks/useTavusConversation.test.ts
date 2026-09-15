@@ -308,7 +308,7 @@ describe("useTavusConversation", () => {
     expect(endTavusConversation).toHaveBeenCalledWith("conv-5");
   });
 
-  it("handles conversation.utterance and streaming app messages with participant attribution", async () => {
+  it("handles conversation.utterance and streaming app messages with official Tavus properties payload", async () => {
     vi.mocked(createTavusConversation).mockResolvedValue({
       conversation_id: "conv-cvi",
       conversation_url: "https://tavus.daily.co/room?t=token",
@@ -318,41 +318,42 @@ describe("useTavusConversation", () => {
 
     const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
     await act(async () => {
-      await result.current.start();
+      await result.current.start({ palName: "Gloria" });
     });
 
     const appMessageHandler = getEventHandler(call, "app-message");
 
-    // 1. Streaming message from Maya (PAL)
+    // 1. Official Tavus streaming message with properties
     act(() => {
       appMessageHandler({
         data: {
           event_type: "conversation.utterance.streaming",
-          data: {
-            role: "assistant",
-            participant_name: "Maya",
-            speech: "Hello there,",
+          properties: {
+            role: "pal",
+            text: "Hello there,",
           },
+          participant_name: "Gloria",
         },
       });
     });
 
     expect(result.current.transcripts.length).toBe(1);
     expect(result.current.transcripts[0].speaker).toBe("pal");
-    expect(result.current.transcripts[0].speakerName).toBe("Maya");
+    expect(result.current.transcripts[0].speakerName).toBe("Gloria");
     expect(result.current.transcripts[0].text).toBe("Hello there,");
     expect(result.current.transcripts[0].isFinal).toBe(false);
+    expect(result.current.activeSubtitle?.text).toBe("Hello there,");
 
-    // 2. Final completed utterance from Maya
+    // 2. Final completed utterance from Gloria
     act(() => {
       appMessageHandler({
         data: {
           event_type: "conversation.utterance",
-          data: {
-            role: "assistant",
-            participant_name: "Maya",
-            speech: "Hello there, how can I help you today?",
+          properties: {
+            role: "pal",
+            text: "Hello there, how can I help you today?",
           },
+          participant_name: "Gloria",
         },
       });
     });
@@ -362,12 +363,12 @@ describe("useTavusConversation", () => {
     expect(result.current.transcripts[0].text).toBe("Hello there, how can I help you today?");
     expect(result.current.transcripts[0].isFinal).toBe(true);
 
-    // 3. User utterance
+    // 3. User utterance with official properties
     act(() => {
       appMessageHandler({
         data: {
           event_type: "conversation.utterance",
-          data: {
+          properties: {
             role: "user",
             text: "Nice to meet you!",
           },
@@ -378,5 +379,35 @@ describe("useTavusConversation", () => {
     expect(result.current.transcripts.length).toBe(2);
     expect(result.current.transcripts[1].speaker).toBe("user");
     expect(result.current.transcripts[1].text).toBe("Nice to meet you!");
+  });
+
+  it("handles Daily native transcription-message events", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-transcription",
+      conversation_url: "https://tavus.daily.co/room?t=token",
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start({ palName: "Gloria" });
+    });
+
+    const transcriptionHandler = getEventHandler(call, "transcription-message");
+
+    act(() => {
+      transcriptionHandler({
+        action: "transcription-message",
+        text: "I am speaking via Daily transcription",
+        participantId: "remote-pal",
+        isFinal: true,
+      });
+    });
+
+    expect(result.current.transcripts.length).toBe(1);
+    expect(result.current.transcripts[0].speaker).toBe("pal");
+    expect(result.current.transcripts[0].speakerName).toBe("Gloria");
+    expect(result.current.transcripts[0].text).toBe("I am speaking via Daily transcription");
   });
 });

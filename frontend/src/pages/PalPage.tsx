@@ -145,6 +145,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
     conversation.clearTranscripts();
     void conversation.start({
       palId: resolvedPalId || undefined,
+      palName: selectedPal?.pal_name || undefined,
       faceId: resolvedFaceId || undefined,
     });
   }
@@ -281,8 +282,8 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                 </select>
                 <small>
                   {t(
-                    "这里列出账号返回的所有版本；更新应用不会自动升级旧形象。使用默认形象时，沿用该 PAL 绑定的版本。",
-                    "All versions returned by your account are listed. Updating Echo does not upgrade existing faces. The default face keeps the version assigned to the PAL."
+                    "分身自带默认绑定的形象与版本。仅在想临时覆盖使用其他形象（如体验 Phoenix 4.5 高清效果）时切换。",
+                    "The PAL uses its assigned default face by default. Change this only if you want to override it (e.g. to try a Phoenix 4.5 face)."
                   )}
                 </small>
               </label>
@@ -394,10 +395,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
             {/* Live Floating Subtitle Banner */}
             {conversation.showSubtitles && conversation.activeSubtitle ? (
               <div className={`vsPalFloatingSubtitle ${conversation.activeSubtitle.speaker}`} role="status">
-                <span className="vsPalSubSpeaker">
-                  {conversation.activeSubtitle.speaker === "user" ? "🗣️ " : "🤖 "}
-                  {conversation.activeSubtitle.speakerName}
-                </span>
+                <span className="vsPalSubSpeaker">{conversation.activeSubtitle.speakerName}:</span>
                 <span className="vsPalSubText">{conversation.activeSubtitle.text}</span>
               </div>
             ) : null}
