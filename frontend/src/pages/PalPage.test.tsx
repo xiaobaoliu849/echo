@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import PalPage from "./PalPage";
+import PalPage, { getRollingSubtitleText } from "./PalPage";
 import {
   createTavusConversation,
   endTavusConversation,
@@ -301,4 +301,81 @@ describe("PalPage", () => {
 
     expect(screen.getByText(/实时速记/)).toBeInTheDocument();
   });
+
+  it("shows post-call summary and allows dismissing via Back to Setup and Close buttons", async () => {
+    vi.mocked(listTavusPals).mockRejectedValue(new Error("not configured"));
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-summary-test",
+      conversation_url: "https://tavus.daily.co/room?t=token"
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    renderPage();
+
+    fireEvent.change(screen.getByTestId("pal-api-key-input"), {
+      target: { value: "key-1" }
+    });
+    fireEvent.click(screen.getByTestId("pal-start-button"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
+    });
+
+    // Simulate incoming speech transcript
+    const appMessageHandler = call.on.mock.calls.find(([name]) => name === "app-message")?.[1];
+    expect(appMessageHandler).toBeDefined();
+    appMessageHandler?.({
+      data: {
+        event_type: "conversation.utterance",
+        properties: { text: "Hello from Tavus AI", role: "assistant" }
+      }
+    });
+
+    // Hang up call
+    fireEvent.click(screen.getByTestId("pal-leave-button"));
+
+    // Verify summary card appears with messages
+    await waitFor(() => {
+      expect(screen.getByText("通话已结束")).toBeInTheDocument();
+      expect(screen.getByText("Hello from Tavus AI")).toBeInTheDocument();
+      expect(screen.getByTestId("pal-close-summary-button")).toBeInTheDocument();
+      expect(screen.getByTestId("pal-dismiss-summary-button")).toBeInTheDocument();
+    });
+
+    // Dismiss summary via Close button
+    fireEvent.click(screen.getByTestId("pal-close-summary-button"));
+
+    // Verify returning to configuration panel
+    await waitFor(() => {
+      expect(screen.queryByText("通话已结束")).not.toBeInTheDocument();
+      expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();
+    });
+  });
 });
+
+describe("getRollingSubtitleText", () => {
+  it("returns empty string when given empty input", () => {
+    expect(getRollingSubtitleText("")).toBe("");
+  });
+
+  it("returns short text directly without modification", () => {
+    expect(getRollingSubtitleText("Hello world!")).toBe("Hello world!");
+    expect(getRollingSubtitleText("你好世界！")).toBe("你好世界！");
+  });
+
+  it("rolls Latin text exceeding latinMax characters with leading ellipsis", () => {
+    const longEnglish = "The quick brown fox jumps over the lazy dog repeatedly until the sentence becomes extremely long and exceeds limits.";
+    const result = getRollingSubtitleText(longEnglish, 40);
+    expect(result.startsWith("… ")).toBe(true);
+    expect(result.length).toBeLessThanOrEqual(45);
+  });
+
+  it("rolls CJK text exceeding cjkMax characters with leading ellipsis", () => {
+    const longChinese = "这是一段非常长的中文实时对话转录文本，当用户连续不断地说了很多话的时候，字幕不能停滞卡死，而是应该平滑地滚动显示最新的一句话。";
+    const result = getRollingSubtitleText(longChinese, 120, 25);
+    expect(result.startsWith("… ")).toBe(true);
+    expect(result.length).toBeLessThanOrEqual(28);
+  });
+});
+

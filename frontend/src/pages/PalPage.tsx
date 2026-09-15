@@ -41,6 +41,25 @@ const MANUAL_PAL_VALUE = "__manual__";
 const MANUAL_FACE_VALUE = "__manual_face__";
 const formatPhoenixModel = (model: string) => model.replace(/^phoenix-/i, "Phoenix ");
 
+export function getRollingSubtitleText(text: string, latinMax = 120, cjkMax = 60): string {
+  if (!text) return "";
+  const hasCjk = /[\u4e00-\u9fff\u3040-\u30ff]/.test(text);
+  const maxChars = hasCjk ? cjkMax : latinMax;
+  if (text.length <= maxChars) {
+    return text;
+  }
+  const rawTail = text.slice(-maxChars);
+  const boundaryMatch = rawTail.search(/[.!?。！？，、;\n]\s*/);
+  if (boundaryMatch >= 0 && boundaryMatch < maxChars * 0.45) {
+    return `… ${rawTail.slice(boundaryMatch + 1).trimStart()}`;
+  }
+  const spaceIndex = rawTail.indexOf(" ");
+  if (spaceIndex >= 0 && spaceIndex < 25) {
+    return `… ${rawTail.slice(spaceIndex + 1).trimStart()}`;
+  }
+  return `… ${rawTail.trimStart()}`;
+}
+
 export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Props) {
   const { t, language } = useI18n();
   const conversation = useTavusConversation({ formatErrorMessage, language });
@@ -54,6 +73,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   const [catalogError, setCatalogError] = useState("");
   const [showDrawer, setShowDrawer] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [summaryDismissed, setSummaryDismissed] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -122,8 +142,11 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   const effectiveFace = faces.find((face) => face.face_id === effectiveFaceId);
   const faceUnavailable = Boolean(effectiveFace?.status && effectiveFace.status !== "completed");
 
-  const showConfigPanel = conversation.status === "idle" || (conversation.status === "ended" && conversation.transcripts.length === 0);
-  const showPostCallSummary = conversation.status === "ended" && conversation.transcripts.length > 0;
+  const showConfigPanel =
+    conversation.status === "idle" ||
+    (conversation.status === "ended" && (conversation.transcripts.length === 0 || summaryDismissed));
+  const showPostCallSummary =
+    conversation.status === "ended" && conversation.transcripts.length > 0 && !summaryDismissed;
   const isPending = conversation.status === "creating" || conversation.status === "joining";
 
   const pendingLabel = conversation.status === "creating"
@@ -141,6 +164,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   }
 
   function handleStart() {
+    setSummaryDismissed(false);
     setShowDrawer(false);
     conversation.clearTranscripts();
     void conversation.start({
@@ -322,7 +346,14 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
         ) : null}
 
         {showPostCallSummary ? (
-          <div className="vsPalOverlay">
+          <div
+            className="vsPalOverlay"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setSummaryDismissed(true);
+              }
+            }}
+          >
             <div className="vsPalSummaryCard">
               <div className="vsPalSummaryHead">
                 <div>
@@ -341,12 +372,30 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                   </button>
                   <button
                     type="button"
+                    className="vsPalGhostBtn"
+                    onClick={() => setSummaryDismissed(true)}
+                    data-testid="pal-dismiss-summary-button"
+                  >
+                    <span>{t("返回配置", "Back to Setup")}</span>
+                  </button>
+                  <button
+                    type="button"
                     className="vsPalRestartBtn"
                     onClick={handleStart}
                     data-testid="pal-start-button"
                   >
                     <RotateCcw size={15} />
                     <span>{t("再次通话", "Call Again")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="vsPalCloseBtn"
+                    onClick={() => setSummaryDismissed(true)}
+                    title={t("关闭", "Close")}
+                    aria-label={t("关闭", "Close")}
+                    data-testid="pal-close-summary-button"
+                  >
+                    <X size={18} />
                   </button>
                 </div>
               </div>
@@ -355,7 +404,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                 {conversation.transcripts.map((item) => (
                   <div key={item.id} className={`vsPalTranscriptRow ${item.speaker}`}>
                     <div className="vsPalTranscriptMeta">
-                      <span className="vsPalTranscriptName">{item.speaker === "user" ? "🗣️" : "🤖"} {item.speakerName}</span>
+                      <span className="vsPalTranscriptName">{item.speakerName}</span>
                       <span className="vsPalTranscriptTime">{new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
                     </div>
                     <div className="vsPalTranscriptBubble">{item.text}</div>
@@ -396,7 +445,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
             {conversation.showSubtitles && conversation.activeSubtitle ? (
               <div className={`vsPalFloatingSubtitle ${conversation.activeSubtitle.speaker}`} role="status">
                 <span className="vsPalSubSpeaker">{conversation.activeSubtitle.speakerName}:</span>
-                <span className="vsPalSubText">{conversation.activeSubtitle.text}</span>
+                <span className="vsPalSubText">{getRollingSubtitleText(conversation.activeSubtitle.text)}</span>
               </div>
             ) : null}
 

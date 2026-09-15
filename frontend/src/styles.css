@@ -12764,12 +12764,8 @@ button.vsPasswordToggleBtn:focus-visible {
   line-height: 1.45;
   color: #ffffff;
   font-weight: 400;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
   word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 /* ── Side Transcript Drawer ── */
@@ -12996,6 +12992,25 @@ button.vsPasswordToggleBtn:focus-visible {
   background: #4f46e5;
 }
 
+.vsPalCloseBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsPalCloseBtn:hover {
+  background: var(--bg-secondary, #f1f5f9);
+  color: var(--text-primary, #0f172a);
+}
+
 .vsPalTranscriptScrollArea {
   max-height: 320px;
   overflow-y: auto;
@@ -13003,4 +13018,46 @@ button.vsPasswordToggleBtn:focus-visible {
   flex-direction: column;
   gap: 12px;
   padding: 8px 4px;
+}
+
+/* ── High-Contrast Styles for Post-Call Summary Modal ── */
+.vsPalSummaryCard .vsPalTranscriptRow {
+  gap: 6px;
+}
+
+.vsPalSummaryCard .vsPalTranscriptMeta {
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  font-weight: 500;
+}
+
+.vsPalSummaryCard .vsPalTranscriptRow.user .vsPalTranscriptName {
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.vsPalSummaryCard .vsPalTranscriptRow.pal .vsPalTranscriptName {
+  color: #047857;
+  font-weight: 600;
+}
+
+.vsPalSummaryCard .vsPalTranscriptBubble {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary, #0f172a);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.vsPalSummaryCard .vsPalTranscriptRow.user .vsPalTranscriptBubble {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #1e1b4b;
+}
+
+.vsPalSummaryCard .vsPalTranscriptRow.pal .vsPalTranscriptBubble {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #064e3b;
 }
