@@ -42,8 +42,8 @@ class Gemini38LiveTests(unittest.TestCase):
     def test_settings_supplements_include_gemini_3_8_live(self):
         self.assertIn("gemini-3.8-live", GOOGLE_MODEL_LIST_SUPPLEMENTS)
         self.assertIn("gemini-3.8-live-extended-thinking", GOOGLE_MODEL_LIST_SUPPLEMENTS)
-        self.assertIn("gemini-3.8-live", AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS)
-        self.assertIn("gemini-3.8-live-extended-thinking", AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS)
+        self.assertNotIn("gemini-3.8-live", AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS)
+        self.assertNotIn("gemini-3.8-live-extended-thinking", AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS)
 
     def test_resolve_google_settings_preserves_models(self):
         cfg = self._config(api_keys={"google_api_key": "test-key"})

@@ -32,16 +32,17 @@ describe("Gemini 3.8 Live models", () => {
     expect(models).toContain("gemini-3.8-live-extended-thinking");
   });
 
-  it("includes gemini-3.8-live for AgentPlatform as well", () => {
+  it("excludes gemini-3.8-live from AgentPlatform builtIns", () => {
     const models = resolveRealtimeModelOptions(AGENT_PLATFORM_PROVIDER, {
       [AGENT_PLATFORM_PROVIDER]: {
-        defaultModel: "gemini-3.8-live",
+        defaultModel: "gemini-live-2.5-flash-native-audio",
         availableModels: [],
         enabledModels: [],
       },
     });
 
-    expect(models).toContain("gemini-3.8-live");
-    expect(models).toContain("gemini-3.8-live-extended-thinking");
+    expect(models).not.toContain("gemini-3.8-live");
+    expect(models).not.toContain("gemini-3.8-live-extended-thinking");
+    expect(models).toContain("gemini-live-2.5-flash-native-audio");
   });
 });

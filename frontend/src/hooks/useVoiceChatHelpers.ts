@@ -842,8 +842,6 @@ export function resolveRealtimeModelOptions(
     : [];
   const agentPlatformBuiltIns = provider === AGENT_PLATFORM_PROVIDER
     ? [
-        "gemini-3.8-live",
-        "gemini-3.8-live-extended-thinking",
         "gemini-live-2.5-flash-native-audio",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",
