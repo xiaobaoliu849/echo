@@ -66,6 +66,10 @@ class Gemini38LiveTests(unittest.TestCase):
             model="gemini-3.8-live",
         )
         self.assertIsNone(config_standard.thinking_config)
+        self.assertEqual(
+            config_standard.realtime_input_config.activity_handling,
+            types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+        )
         for tool in config_standard.tools or []:
             for decl in getattr(tool, "function_declarations", None) or []:
                 self.assertIsNone(decl.behavior)
@@ -78,6 +82,10 @@ class Gemini38LiveTests(unittest.TestCase):
         )
         self.assertIsNotNone(config_thinking.thinking_config)
         self.assertEqual(config_thinking.thinking_config.thinking_level, types.ThinkingLevel.LOW)
+        self.assertEqual(
+            config_thinking.realtime_input_config.activity_handling,
+            types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+        )
 
         tool_count = 0
         for tool in config_thinking.tools or []:

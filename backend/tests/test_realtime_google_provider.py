@@ -302,6 +302,103 @@ class GoogleRealtimeProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("interruption_pending", event_types)
         self.assertIn("interrupted", event_types)
 
+    async def test_google_live_server_content_interrupted_triggers_bargein(self) -> None:
+        """Verify that server_content.interrupted from Gemini cuts off assistant playback immediately."""
+        service = RealtimeVoiceService()
+        websocket = _MockWebSocket()
+
+        from unittest.mock import MagicMock
+        mock_repo = MagicMock()
+        recorder = VoiceAgentSessionRecorder(repository=mock_repo, session_id="test-server-interrupt-session")
+        memory_session = RealtimeMemorySession()
+        tool_session = VoiceAgentToolSession()
+
+        # Sequence:
+        # 1. Initial prompt arrives -> finalized as turn prompt
+        # 2. Assistant starts speaking
+        # 3. Google emits server_content with interrupted=True followed by turn_complete=True
+        # 4. User starts speaking new turn prompt
+        # 5. Assistant outputs audio for new turn
+        responses = [
+            _MockGoogleResponse(
+                server_content=_MockServerContent(
+                    input_transcription=_MockTranscriptObject(text="Tell me a story about space.", finished=True)
+                )
+            ),
+            _MockGoogleResponse(
+                data=b"\x00\x01" * 1600,
+                text="Once upon a time in a galaxy far away...",
+            ),
+            _MockGoogleResponse(
+                server_content=_MockServerContent(
+                    interrupted=True,
+                )
+            ),
+            _MockGoogleResponse(
+                server_content=_MockServerContent(
+                    turn_complete=True,
+                )
+            ),
+            _MockGoogleResponse(
+                server_content=_MockServerContent(
+                    input_transcription=_MockTranscriptObject(text="Wait tell me about cats instead.", finished=True)
+                )
+            ),
+            _MockGoogleResponse(
+                data=b"\x00\x02" * 1600,
+                text="Cats are wonderful domestic felines.",
+            ),
+            _MockGoogleResponse(
+                server_content=_MockServerContent(
+                    turn_complete=True,
+                )
+            ),
+        ]
+
+        turn = _MockAsyncTurn(responses)
+        mock_session = _MockSession([turn])
+
+        loop_task = asyncio.create_task(
+            service._google_to_client_loop(
+                websocket,  # type: ignore[arg-type]
+                mock_session,
+                memory_session,
+                tool_session,
+                recorder=recorder,
+            )
+        )
+
+        await asyncio.sleep(0.3)
+        loop_task.cancel()
+        try:
+            await loop_task
+        except asyncio.CancelledError:
+            pass
+
+        event_types = [e["type"] for e in websocket.events]
+
+        # 1. Must send "interruption_decision" and "interrupted" to cutoff frontend audio immediately
+        self.assertIn("interruption_decision", event_types)
+        self.assertIn("interrupted", event_types)
+        interrupted_event = next(e for e in websocket.events if e["type"] == "interrupted")
+        self.assertTrue(interrupted_event.get("interrupted"))
+
+        # 2. Must not emit a false turn_complete(interrupted=False) for the aborted turn
+        # Only the final second turn should complete cleanly
+        turn_completes = [e for e in websocket.events if e["type"] == "turn_complete"]
+        self.assertEqual(len(turn_completes), 1)
+
+        # 3. Second utterance must be delivered as user transcript for the new turn
+        user_transcripts = [e for e in websocket.events if e["type"] == "user_transcript"]
+        self.assertGreaterEqual(len(user_transcripts), 2)
+        self.assertIn("Tell me a story about space", user_transcripts[0].get("text", ""))
+        self.assertIn("Wait tell me about cats instead", user_transcripts[-1].get("text", ""))
+
+        # 4. Assistant audio from both turns should be emitted, with turn IDs distinct
+        audio_events = [e for e in websocket.events if e["type"] == "assistant_audio"]
+        self.assertEqual(len(audio_events), 2)
+        self.assertNotEqual(audio_events[0].get("turn_id"), audio_events[1].get("turn_id"))
+
 
 if __name__ == "__main__":
     unittest.main()

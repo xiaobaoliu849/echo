@@ -280,7 +280,7 @@ class GoogleRealtimeMixin:
                     prefix_padding_ms=500,
                     silence_duration_ms=1500,
                 ),
-                activity_handling=types.ActivityHandling.NO_INTERRUPTION,
+                activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
             ),
         }
         if is_thinking and hasattr(types, "ThinkingConfig"):
@@ -499,8 +499,12 @@ class GoogleRealtimeMixin:
                 and bool(recorder.current_user_text)
                 and bool(recorder.current_assistant_text)
             )
-            is_initial_turn_prompt = not turn_has_user_prompt and not recorder_has_prior_turn
-            if is_initial_turn_prompt and interruption.pending is not None and not google_provider_interrupted_early:
+            is_initial_turn_prompt = (
+                not turn_has_user_prompt
+                and not recorder_has_prior_turn
+                and not google_provider_interrupted_early
+            )
+            if is_initial_turn_prompt and interruption.pending is not None:
                 interruption.complete_decision()
 
             if not is_initial_turn_prompt:

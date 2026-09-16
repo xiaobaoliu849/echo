@@ -786,7 +786,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(detection)
         assert detection is not None
         self.assertEqual(detection.silence_duration_ms, 1500)
-        self.assertEqual(str(realtime_input.activity_handling), "ActivityHandling.NO_INTERRUPTION")
+        self.assertEqual(str(realtime_input.activity_handling), "ActivityHandling.START_OF_ACTIVITY_INTERRUPTS")
         declarations = config.tools[0].function_declarations
         self.assertEqual(
             [declaration.name for declaration in declarations],
