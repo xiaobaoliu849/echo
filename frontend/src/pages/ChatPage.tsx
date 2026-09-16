@@ -847,9 +847,9 @@ export default function ChatPage({
   }, [chat, voiceChat, isVoiceActive, onOpenPal]);
 
   return (
-    <section className={`vsChatWorkspace ${showCanvas ? "hasCanvasPanel" : ""}`} style={{ position: "relative" }}>
+    <div className={`vsChatOuterLayout ${showCanvas ? "hasCanvasSidePanel" : ""}`}>
       {/* ── Top Bar Controls (Canvas Toggle) ── */}
-      <div className="vsChatTopBar">
+      <div className="vsChatCanvasToggleWrap">
         <button
           type="button"
           className={`vsChatCanvasToggleBtn ${showCanvas ? "active" : ""}`}
@@ -862,8 +862,8 @@ export default function ChatPage({
         </button>
       </div>
 
-      {/* ── Left Column: Chat Conversation ── */}
-      <div className="vsChatMainColumn">
+      {/* ── Main Chat Workspace ── */}
+      <section className="vsChatWorkspace" style={{ position: "relative" }}>
         {/* ── Body ── */}
         <div
           ref={bodyRef}
@@ -1146,7 +1146,7 @@ export default function ChatPage({
           )}
         </div>
       )}
-      </div>
+      </section>
 
       {/* ── Right Column: Visual Canvas Side Panel ── */}
       {showCanvas && (
@@ -1338,6 +1338,6 @@ export default function ChatPage({
           </div>
         </aside>
       )}
-    </section>
+    </div>
   );
 }
