@@ -65,6 +65,8 @@ export const CARTESIA_PROVIDER = "Cartesia";
 export const GRADIUM_PROVIDER = "Gradium";
 export const VERCEL_PROVIDER = "Vercel";
 export const TAVUS_PROVIDER = "Tavus";
+export const GOOGLE_3_8_LIVE_MODEL = "gemini-3.8-live";
+export const GOOGLE_3_8_LIVE_THINKING_MODEL = "gemini-3.8-live-extended-thinking";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 export const AGENT_PLATFORM_FLASH_LIVE_MODEL = "gemini-live-2.5-flash-native-audio";
@@ -830,6 +832,8 @@ export function resolveRealtimeModelOptions(
     : resolveRealtimeFallbackModel(provider);
   const googleBuiltIns = provider === GOOGLE_PROVIDER
     ? [
+        "gemini-3.8-live",
+        "gemini-3.8-live-extended-thinking",
         "gemini-3.1-flash-live-preview",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",
@@ -838,6 +842,8 @@ export function resolveRealtimeModelOptions(
     : [];
   const agentPlatformBuiltIns = provider === AGENT_PLATFORM_PROVIDER
     ? [
+        "gemini-3.8-live",
+        "gemini-3.8-live-extended-thinking",
         "gemini-live-2.5-flash-native-audio",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",

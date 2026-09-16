@@ -1941,6 +1941,8 @@ class ApiSmokeTests(unittest.TestCase):
                         "gemini-3.5-transcribe-live",
                         "gemini-3.7-flash",
                         "gemini-3.8-flash",
+                        "gemini-3.8-live",
+                        "gemini-3.8-live-extended-thinking",
                     ],
                 )
             finally:

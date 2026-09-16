@@ -219,6 +219,8 @@ GOOGLE_MODEL_LIST_SUPPLEMENTS = [
     "gemini-2.5-flash",
     "gemini-2.5-pro",
     # Realtime voice and live translation models
+    "gemini-3.8-live",
+    "gemini-3.8-live-extended-thinking",
     "gemini-3.1-flash-live-preview",
     "gemini-3.5-live-translate-preview",
     # Audio transcription models (Interactions API / Live API)
@@ -271,6 +273,8 @@ AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS = [
     "gemini-2.5-flash",
     "gemini-2.5-pro",
     # Realtime voice and live translation models (Live API)
+    "gemini-3.8-live",
+    "gemini-3.8-live-extended-thinking",
     "gemini-live-2.5-flash-native-audio",
     "gemini-3.5-live-translate-preview",
     # Audio transcription models (Live API)

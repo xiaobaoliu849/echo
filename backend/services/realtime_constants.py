@@ -14,6 +14,8 @@ import struct
 # ---------------------------------------------------------------------------
 
 DEFAULT_GOOGLE_REALTIME_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+GEMINI_3_8_LIVE_MODEL = "gemini-3.8-live"
+GEMINI_3_8_LIVE_EXTENDED_THINKING_MODEL = "gemini-3.8-live-extended-thinking"
 DEFAULT_AGENT_PLATFORM_REALTIME_MODEL = "gemini-live-2.5-flash-native-audio"
 # Back-compat alias (Vertex AI 已更名为 Google Agent Platform)。
 DEFAULT_VERTEXAI_REALTIME_MODEL = DEFAULT_AGENT_PLATFORM_REALTIME_MODEL
@@ -285,6 +287,11 @@ def _is_vercel_realtime_model(model: str | None) -> bool:
 
 def _is_google_live_translate_model(model: str | None) -> bool:
     return "live-translate" in str(model or "").strip().lower()
+
+
+def _is_google_thinking_realtime_model(model: str | None) -> bool:
+    m = str(model or "").strip().lower()
+    return "extended-thinking" in m or "thinking" in m
 
 
 def _is_google_realtime_model(model: str | None) -> bool:

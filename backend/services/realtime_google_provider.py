@@ -58,6 +58,7 @@ from .realtime_constants import (
     DEFAULT_GOOGLE_REALTIME_VOICE,
     GOOGLE_REALTIME_VOICES,
     _is_google_live_translate_model,
+    _is_google_thinking_realtime_model,
     _is_google_public_rest_base_url,
     _merge_streaming_text,
     resolve_agent_platform_service_account_file,
@@ -238,14 +239,19 @@ class GoogleRealtimeMixin:
                 output_audio_transcription=types.AudioTranscriptionConfig(),
             )
 
-        declarations = [
-            types.FunctionDeclaration(
-                name=declaration["name"],
-                description=declaration["description"],
-                parameters_json_schema=declaration["parameters"],
-            )
-            for declaration in native_tool_declarations()
-        ]
+        is_thinking = _is_google_thinking_realtime_model(model)
+
+        declarations = []
+        for declaration in native_tool_declarations():
+            decl_kwargs: dict[str, Any] = {
+                "name": declaration["name"],
+                "description": declaration["description"],
+                "parameters_json_schema": declaration["parameters"],
+            }
+            if is_thinking and hasattr(types, "Behavior"):
+                decl_kwargs["behavior"] = types.Behavior.NON_BLOCKING
+            declarations.append(types.FunctionDeclaration(**decl_kwargs))
+
         system_inst = instructions or cls._build_realtime_instructions()
         tools_list = []
         if hasattr(types, "GoogleSearch"):
@@ -255,18 +261,18 @@ class GoogleRealtimeMixin:
         voice_lookup = {v.lower(): v for v in GOOGLE_REALTIME_VOICES}
         safe_voice = voice_lookup.get((voice or "").strip().lower(), DEFAULT_GOOGLE_REALTIME_VOICE)
 
-        return types.LiveConnectConfig(
-            response_modalities=["AUDIO"],
-            system_instruction=system_inst,
-            input_audio_transcription=types.AudioTranscriptionConfig(),
-            output_audio_transcription=types.AudioTranscriptionConfig(),
-            tools=tools_list,
-            speech_config=types.SpeechConfig(
+        live_kwargs: dict[str, Any] = {
+            "response_modalities": ["AUDIO"],
+            "system_instruction": system_inst,
+            "input_audio_transcription": types.AudioTranscriptionConfig(),
+            "output_audio_transcription": types.AudioTranscriptionConfig(),
+            "tools": tools_list,
+            "speech_config": types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=safe_voice)
                 )
             ),
-            realtime_input_config=types.RealtimeInputConfig(
+            "realtime_input_config": types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
                     disabled=False,
                     start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
@@ -276,7 +282,11 @@ class GoogleRealtimeMixin:
                 ),
                 activity_handling=types.ActivityHandling.NO_INTERRUPTION,
             ),
-        )
+        }
+        if is_thinking and hasattr(types, "ThinkingConfig"):
+            live_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="low")
+
+        return types.LiveConnectConfig(**live_kwargs)
     @staticmethod
     def _build_live_translate_config(
         target_language_code: str,
@@ -425,6 +435,7 @@ class GoogleRealtimeMixin:
         recorder: VoiceAgentSessionRecorder | None = None,
         is_live_translate: bool = False,
         interruption: InterruptionDecisionCoordinator | None = None,
+        model: str | None = None,
     ) -> None:
         pending_prefill_context = ""
         gated_tool_turn_id = ""
@@ -1021,7 +1032,37 @@ class GoogleRealtimeMixin:
                     if is_live_translate:
                         await complete_live_translate_turn_if_needed()
 
-                    if getattr(server_content, "turn_complete", False):
+                    turn_complete_flag = bool(getattr(server_content, "turn_complete", False))
+                    interaction_status = getattr(server_content, "interaction_status", None)
+                    if interaction_status is None and hasattr(server_content, "model_extra") and server_content.model_extra:
+                        interaction_status = server_content.model_extra.get("interaction_status")
+                    status_str = str(interaction_status or "").upper()
+                    is_in_progress = "IN_PROGRESS" in status_str
+                    is_idle = "IDLE" in status_str or bool(getattr(server_content, "waiting_for_input", False))
+
+                    is_thinking = _is_google_thinking_realtime_model(model)
+                    if turn_complete_flag and is_thinking and is_in_progress and not is_idle:
+                        if (
+                            pending_google_response_text
+                            and not google_output_transcription_seen
+                            and not gated_tool_turn_id
+                            and not suppress_interrupted_google_response
+                        ):
+                            await self._emit_assistant_output(
+                                websocket,
+                                interruption,
+                                {"type": "assistant_text", "text": pending_google_response_text},
+                                memory_session=memory_session,
+                                recorder=recorder,
+                                record_memory=not is_live_translate,
+                            )
+                        pending_google_response_text = ""
+                        google_output_transcription_seen = False
+                        google_output_transcription_text = ""
+                        logger.debug("google_thinking_turn_in_progress: continuing background reasoning")
+                        continue
+
+                    if turn_complete_flag:
                         if (
                             pending_google_response_text
                             and not google_output_transcription_seen
@@ -1279,6 +1320,7 @@ class GoogleRealtimeMixin:
                         recorder,
                         is_live_translate,
                         interruption,
+                        model=settings["model"],
                     )
                 )
                 await self._run_duplex_tasks(send_task, receive_task)
