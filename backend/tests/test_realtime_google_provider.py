@@ -243,11 +243,8 @@ class GoogleRealtimeProviderTests(unittest.IsolatedAsyncioTestCase):
         event_types = [e["type"] for e in websocket.events]
         self.assertIn("interruption_pending", event_types)
 
-    async def test_second_utterance_during_assistant_speech_triggers_barge_in(self) -> None:
-        """Verify that when a second distinct utterance arrives while the assistant is already
-
-        speaking and the initial prompt was already established, barge-in is triggered.
-        """
+    async def test_transcription_alone_does_not_infer_native_cancellation(self) -> None:
+        """ASR arrival is not a server VAD cancellation signal."""
         service = RealtimeVoiceService()
         websocket = _MockWebSocket()
 
@@ -299,8 +296,8 @@ class GoogleRealtimeProviderTests(unittest.IsolatedAsyncioTestCase):
             pass
 
         event_types = [e["type"] for e in websocket.events]
-        self.assertIn("interruption_pending", event_types)
-        self.assertIn("interrupted", event_types)
+        self.assertNotIn("interruption_pending", event_types)
+        self.assertNotIn("interrupted", event_types)
 
     async def test_google_live_server_content_interrupted_triggers_bargein(self) -> None:
         """Verify that server_content.interrupted from Gemini cuts off assistant playback immediately."""

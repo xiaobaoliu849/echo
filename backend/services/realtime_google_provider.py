@@ -393,20 +393,9 @@ class GoogleRealtimeMixin:
                                     )
                     continue
                 if command_type == "speech_activity_started":
-                    assistant_active = (
-                        recorder.has_assistant_output
-                        if recorder is not None and hasattr(recorder, "has_assistant_output")
-                        else (recorder is not None and bool(recorder.current_assistant_text))
-                    )
-                    if not is_live_translate and (tool_session.has_active_task or assistant_active):
-                        await self._begin_interruption(
-                            websocket,
-                            interruption,
-                            provider="Google",
-                            provider_event_type="client_vad.speech_started",
-                            recorder=recorder,
-                            tool_session=tool_session,
-                        )
+                    # Automatic server VAD owns Gemini turn taking. Local RMS
+                    # hints include speaker echo and must not duck/buffer output
+                    # while waiting for a transcript-based second opinion.
                     continue
                 result = await self._handle_common_client_command(
                     command_type, payload,
@@ -422,10 +411,11 @@ class GoogleRealtimeMixin:
 
             audio_bytes = message.get("bytes")
             if audio_bytes:
-                if not tool_session.has_active_task:
-                    await session.send_realtime_input(
-                        audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
-                    )
+                # Keep full duplex input alive during tools as well: otherwise
+                # server VAD cannot hear the user interrupt an active tool.
+                await session.send_realtime_input(
+                    audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
+                )
     async def _google_to_client_loop(
         self,
         websocket: WebSocket,
@@ -442,6 +432,8 @@ class GoogleRealtimeMixin:
         interruption = interruption or InterruptionDecisionCoordinator()
         pending_google_user_transcript = ""
         finalized_google_user_transcript = ""
+        google_user_transcript_waiting_for_boundary = False
+        google_input_transcription_finished = False
         google_provider_interrupted_early = False
         suppress_interrupted_google_response = False
         consume_next_google_terminal = False
@@ -461,6 +453,8 @@ class GoogleRealtimeMixin:
             nonlocal gated_tool_turn_id, pending_prefill_context
             nonlocal last_activity_time, turn_has_user_prompt
 
+            if google_user_transcript_waiting_for_boundary:
+                return
             user_text = pending_google_user_transcript.strip()
             if pending_google_user_transcript == finalized_google_user_transcript:
                 if clear_transcript:
@@ -507,26 +501,9 @@ class GoogleRealtimeMixin:
             if is_initial_turn_prompt and interruption.pending is not None:
                 interruption.complete_decision()
 
-            if not is_initial_turn_prompt:
-                assistant_active = (
-                    recorder.has_assistant_output
-                    if recorder is not None and hasattr(recorder, "has_assistant_output")
-                    else (recorder is not None and bool(recorder.current_assistant_text))
-                )
-                if interruption.pending is None and (
-                    google_provider_interrupted_early
-                    or tool_session.has_active_task
-                    or assistant_active
-                ):
-                    await self._begin_interruption(
-                        websocket,
-                        interruption,
-                        provider="Google",
-                        provider_event_type="input_transcription.without_pending_vad",
-                        recorder=recorder,
-                        tool_session=tool_session,
-                        supersede_timed_out=True,
-                    )
+            # ASR has no ordering guarantee relative to model output. Never
+            # infer a new native cancellation from transcript arrival alone.
+            if interruption.pending is not None and not google_provider_interrupted_early:
                 had_deferred_terminal = interruption.has_deferred_terminal()
 
                 should_process_user, interruption_decision = await self._decide_interruption(
@@ -753,8 +730,46 @@ class GoogleRealtimeMixin:
             while True:
                 turn = session.receive()
                 async for response in turn:
+                    server_content = getattr(response, "server_content", None)
+                    if getattr(server_content, "interrupted", False) and not is_live_translate:
+                        # Process cancellation before ANY output carried in this
+                        # event. Do not wait for input transcription (which may
+                        # be absent, delayed, or just an unfinished opener).
+                        if not (google_provider_interrupted_early and consume_next_google_terminal):
+                            await self._begin_interruption(
+                                websocket, interruption, provider="Google",
+                                provider_event_type="server_content.interrupted",
+                                recorder=recorder, tool_session=tool_session,
+                            )
+                            await self._decide_interruption(
+                                websocket, interruption, "",
+                                memory_session=memory_session, tool_session=tool_session,
+                                recorder=recorder, provider_interrupted=True,
+                            )
+                        google_provider_interrupted_early = True
+                        suppress_interrupted_google_response = True
+                        consume_next_google_terminal = True
+                        deferred_user_transcript = google_user_transcript_waiting_for_boundary
+                        turn_has_user_prompt = False
+                        google_user_transcript_waiting_for_boundary = False
+                        gated_tool_turn_id = ""
+                        pending_prefill_context = ""
+                        if pending_google_user_transcript == finalized_google_user_transcript:
+                            pending_google_user_transcript = ""
+                            finalized_google_user_transcript = ""
+                        pending_google_response_text = ""
+                        google_output_transcription_seen = False
+                        google_output_transcription_text = ""
+                        if deferred_user_transcript and pending_google_user_transcript:
+                            if google_input_transcription_finished:
+                                await finalize_user_transcript_if_needed(clear_transcript=False)
+                            else:
+                                await self._send_event(
+                                    websocket, "user_transcript",
+                                    text=pending_google_user_transcript, turn_id="",
+                                )
                     audio_data = getattr(response, "data", None)
-                    if audio_data:
+                    if audio_data and not suppress_interrupted_google_response:
                         if is_live_translate:
                             last_activity_time = time.time()
                         if not is_live_translate:
@@ -775,7 +790,7 @@ class GoogleRealtimeMixin:
                             )
 
                     response_text = getattr(response, "text", None)
-                    if response_text:
+                    if response_text and not suppress_interrupted_google_response:
                         if is_live_translate:
                             last_activity_time = time.time()
                             live_translate_has_content = True
@@ -938,22 +953,6 @@ class GoogleRealtimeMixin:
                     if not server_content:
                         continue
 
-                    if getattr(server_content, "interrupted", False) and not is_live_translate:
-                        await finalize_user_transcript_if_needed(clear_transcript=True)
-                        google_provider_interrupted_early = True
-                        turn_has_user_prompt = False
-                        pending_google_response_text = ""
-                        google_output_transcription_seen = False
-                        google_output_transcription_text = ""
-                        await self._begin_interruption(
-                            websocket,
-                            interruption,
-                            provider="Google",
-                            provider_event_type="server_content.interrupted",
-                            recorder=recorder,
-                            tool_session=tool_session,
-                        )
-
                     user_transcript_fields = ("input_transcription", "input_audio_transcription", "transcription")
                     input_transcription_value: Any = None
                     for transcript_field in user_transcript_fields:
@@ -964,6 +963,25 @@ class GoogleRealtimeMixin:
                                 break
                     user_text_chunk = self._extract_transcript_text(server_content, user_transcript_fields)
                     if user_text_chunk:
+                        if not is_live_translate:
+                            if (
+                                pending_google_user_transcript
+                                and pending_google_user_transcript == finalized_google_user_transcript
+                                and user_text_chunk != pending_google_user_transcript
+                            ):
+                                pending_google_user_transcript = ""
+                                finalized_google_user_transcript = ""
+                            if (
+                                recorder is not None
+                                and recorder.current_user_text
+                                and recorder.has_assistant_output
+                                and not consume_next_google_terminal
+                                and interruption.pending is None
+                            ):
+                                # Input ASR may precede the native interruption.
+                                # Keep the old playback turn addressable until
+                                # its cancellation/terminal has been processed.
+                                google_user_transcript_waiting_for_boundary = True
                         if is_live_translate:
                             last_activity_time = time.time()
                             live_translate_has_content = True
@@ -974,7 +992,10 @@ class GoogleRealtimeMixin:
                             pending_google_user_transcript,
                             user_text_chunk,
                         )
-                        if InterruptionClassifier.classify_interruption(pending_google_user_transcript) != InterruptionIntent.NOISE_OR_SILENCE:
+                        if (
+                            not google_user_transcript_waiting_for_boundary
+                            and InterruptionClassifier.classify_interruption(pending_google_user_transcript) != InterruptionIntent.NOISE_OR_SILENCE
+                        ):
                             current_tid = recorder.current_turn_id if recorder is not None else ""
                             await self._send_event(websocket, "user_transcript", text=pending_google_user_transcript, turn_id=current_tid)
                     supports_finished_marker = (
@@ -984,6 +1005,8 @@ class GoogleRealtimeMixin:
                     transcription_finished = bool(
                         getattr(input_transcription_value, "finished", False)
                     ) if supports_finished_marker else input_transcription_value is not None
+                    if input_transcription_value is not None:
+                        google_input_transcription_finished = transcription_finished
                     if input_transcription_value is not None and transcription_finished:
                         await finalize_user_transcript_if_needed(clear_transcript=False)
 
@@ -1001,7 +1024,7 @@ class GoogleRealtimeMixin:
                         server_content,
                         ("output_transcription", "output_audio_transcription"),
                     )
-                    if assistant_transcript:
+                    if assistant_transcript and not suppress_interrupted_google_response:
                         google_output_transcription_seen = True
                         (
                             google_output_transcription_text,
@@ -1037,6 +1060,13 @@ class GoogleRealtimeMixin:
                         await complete_live_translate_turn_if_needed()
 
                     turn_complete_flag = bool(getattr(server_content, "turn_complete", False))
+                    if turn_complete_flag and consume_next_google_terminal:
+                        # This terminal belongs to the canceled generation, not
+                        # the user who is still speaking. Preserve their ASR and
+                        # do not complete/flush the newly opened turn.
+                        consume_next_google_terminal = False
+                        suppress_interrupted_google_response = False
+                        continue
                     interaction_status = getattr(server_content, "interaction_status", None)
                     if interaction_status is None and hasattr(server_content, "model_extra") and server_content.model_extra:
                         interaction_status = server_content.model_extra.get("interaction_status")
@@ -1086,16 +1116,13 @@ class GoogleRealtimeMixin:
                         google_output_transcription_text = ""
                         await finalize_user_transcript_if_needed(clear_transcript=True)
                         turn_has_user_prompt = False
+                        google_provider_interrupted_early = False
                         if is_live_translate:
                             await complete_live_translate_turn_if_needed(force=True)
                             continue
                         if interruption.defer_terminal(
                             {"type": "turn_complete", "provider": "Google"}
                         ):
-                            continue
-                        if consume_next_google_terminal:
-                            consume_next_google_terminal = False
-                            suppress_interrupted_google_response = False
                             continue
                         memory_result: dict[str, Any] = {}
                         if not is_live_translate:
@@ -1122,6 +1149,9 @@ class GoogleRealtimeMixin:
                                 turn_id=completed_turn_id,
                                 interrupted=False,
                             )
+                        if google_user_transcript_waiting_for_boundary:
+                            google_user_transcript_waiting_for_boundary = False
+                            await finalize_user_transcript_if_needed(clear_transcript=False)
         finally:
             if monitor_task is not None:
                 monitor_task.cancel()

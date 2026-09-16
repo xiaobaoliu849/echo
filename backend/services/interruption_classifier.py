@@ -181,12 +181,18 @@ class InterruptionDecisionCoordinator:
         self._decision_at = None
         self._resume_provider = None
 
-    def decide(self, text: str) -> dict[str, object] | None:
+    def decide(self, text: str, *, provider_interrupted: bool = False) -> dict[str, object] | None:
         pending = self._pending
         if pending is None or self._resolving:
             return None
         self._resolving = True
-        classification = InterruptionClassifier.classify_with_rule(text)
+        # A native cancellation is irreversible. ASR heuristics must never
+        # resume output that the provider has already discarded.
+        classification = (
+            InterruptionClassification(InterruptionIntent.TRUE_BARGE_IN, "provider_interrupted")
+            if provider_interrupted
+            else InterruptionClassifier.classify_with_rule(text)
+        )
         self._decision_at = self._clock()
         elapsed_ms = max(0, int((self._decision_at - pending.started_at) * 1000))
         action = {

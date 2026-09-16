@@ -1175,6 +1175,12 @@ export default function useVoiceChat({
         if (event.turn_id && currentTurnIdRef.current && event.turn_id !== currentTurnIdRef.current) {
           return;
         }
+        clearInterruptionTimeout();
+        if (pendingInterruptionRef.current) {
+          handledInterruptionCandidatesRef.current.add(pendingInterruptionRef.current.candidateId);
+          pendingInterruptionRef.current = null;
+        }
+        setVoiceChatInterruptionState({ phase: "interrupted", classification: "TRUE_BARGE_IN" });
         stopAssistantPlayback();
         setAssistantPlaybackGain(1);
         currentAssistantInterruptedRef.current = true;

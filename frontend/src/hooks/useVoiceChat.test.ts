@@ -1381,6 +1381,60 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceAgentHistoryError).toBe("加载历史语音 Agent 会话详情失败。");
   });
 
+  it("stops all queued audio on native interruption and cannot resume from a stale timeout", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["Google"],
+      preferredProvider: "Google",
+      preferredModel: "gemini-3.8-live",
+      providerModelCatalog: {
+        Google: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] },
+      },
+    }));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({ type: "session_open", provider: "Google", model: "gemini-3.8-live", voice: "Puck" });
+      socket.emitMessage({ type: "user_transcript", text: "Tell me a story", turn_id: "old" });
+      socket.emitMessage({ type: "assistant_text", text: "Once upon a time", turn_id: "old" });
+      for (let i = 0; i < 3; i++) {
+        socket.emitMessage({ type: "assistant_audio", audio: "AAA=", sample_rate: 24000, turn_id: "old" });
+      }
+    });
+    expect(FakeAudioContext.bufferSources).toHaveLength(3);
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        // A confirmed native event must also retire any older pending hint.
+        socket.emitMessage({ type: "interruption_pending", candidate_id: "hint", provider: "Google", interrupted_turn_id: "old" });
+        socket.emitMessage({ type: "interrupted", candidate_id: "native", turn_id: "old", interrupted: true });
+      });
+      for (const source of FakeAudioContext.bufferSources) {
+        expect(source.stop).toHaveBeenCalledTimes(1);
+      }
+      expect(result.current.voiceChatAssistantSpeaking).toBe(false);
+      expect(result.current.voiceChatInterruptionState.phase).toBe("interrupted");
+      act(() => { vi.advanceTimersByTime(3000); });
+      expect(socket.sent.some(p => typeof p === "string" && p.includes("interruption_timeout"))).toBe(false);
+      act(() => {
+        socket.emitMessage({ type: "assistant_audio", audio: "AAA=", sample_rate: 24000, turn_id: "old" });
+        socket.emitMessage({ type: "interruption_decision", candidate_id: "hint", classification: "BACKCHANNEL" });
+      });
+      expect(FakeAudioContext.bufferSources).toHaveLength(3);
+      expect(result.current.voiceChatInterruptionState.phase).toBe("interrupted");
+      act(() => {
+        socket.emitMessage({ type: "user_transcript", text: "Now cats", turn_id: "new" });
+        socket.emitMessage({ type: "assistant_audio", audio: "AAA=", sample_rate: 24000, turn_id: "new" });
+      });
+      expect(FakeAudioContext.bufferSources).toHaveLength(4);
+      expect(FakeAudioContext.gains[0].gain.value).toBe(1);
+      expect(result.current.voiceChatMessages.filter(m => m.role === "assistant")[0].interrupted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("ducks on a candidate, resumes backchannels, and archives confirmed interruptions", async () => {
     ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-interruption");
     const { result } = renderHook(() =>

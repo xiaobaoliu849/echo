@@ -497,6 +497,7 @@ class RealtimeVoiceService(
         record_memory: bool = True,
         expected_candidate_id: str = "",
         timeout_resolution: bool = False,
+        provider_interrupted: bool = False,
     ) -> tuple[bool, dict[str, Any] | None]:
         async with coordinator.decision_lock:
             if expected_candidate_id and (
@@ -504,7 +505,7 @@ class RealtimeVoiceService(
                 or coordinator.pending.candidate_id != expected_candidate_id
             ):
                 return True, None
-            decision = coordinator.decide(text)
+            decision = coordinator.decide(text, provider_interrupted=provider_interrupted)
             if decision is None:
                 return True, None
             classification = str(decision.get("classification", ""))

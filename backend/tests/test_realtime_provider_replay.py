@@ -676,7 +676,7 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(decisions[0]["classification"], "TRUE_BARGE_IN")
         self.assertEqual(decisions[0]["transcript"], "嗯，等一下")
 
-    async def test_google_client_vad_command_drives_shared_provider_decision(self) -> None:
+    async def test_google_client_rms_hint_does_not_duck_or_buffer_output(self) -> None:
         websocket = CollectingWebSocket(
             [
                 {
@@ -702,10 +702,8 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
             False,
             interruption,
         )
-        self.assertIsNotNone(interruption.pending)
-        self.assertEqual(interruption.pending.provider, "Google")
-        self.assertEqual(interruption.pending.provider_event_type, "client_vad.speech_started")
-        self.assertEqual(interruption.pending.interrupted_turn_id, "voice-turn-1")
+        self.assertIsNone(interruption.pending)
+        self.assertEqual(websocket.events, [])
 
         with self.assertRaises(ReplayComplete):
             await self.service._google_to_client_loop(
@@ -719,8 +717,7 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
             )
 
         decisions = [event for event in websocket.events if event["type"] == "interruption_decision"]
-        self.assertEqual(len(decisions), 1)
-        self.assertEqual(decisions[0]["classification"], "BACKCHANNEL")
+        self.assertEqual(decisions, [])
         self.assertIsNone(interruption.pending)
 
     async def test_google_provider_interrupted_timeout_does_not_start_synthetic_turn(self) -> None:
@@ -752,7 +749,8 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         await session.response_processed.wait()
-        self.assertIsNotNone(interruption.pending)
+        self.assertIsNone(interruption.pending)
+        self.assertIn("interrupted", [event["type"] for event in websocket.events])
         self.assertIsNone(interruption.resume_provider)
 
         await self.service._client_to_google_loop(
@@ -912,6 +910,8 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
         session = FakeGoogleSession(
             [
                 [google_response(interrupted=True)],
+                # The API orders an interrupted turn as interrupted -> turn_complete.
+                [google_response(turn_complete=True)],
                 [google_response(input_transcription=SimpleNamespace(text="等一下", finished=True))],
                 [SimpleNamespace(data=None, text="新的回答", server_content=None)],
                 [google_response(turn_complete=True)],
