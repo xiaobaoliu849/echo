@@ -6,6 +6,9 @@ import MarkdownContent from "../components/chat/MarkdownContent";
 import { isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import type { UseSettingsResult } from "../hooks/useSettings";
+import CanvasPreview from "../components/canvas/CanvasPreview";
+import CanvasCodeView from "../components/canvas/CanvasCodeView";
+import { PanelRight, Code2, Monitor, X, Trash2 } from "lucide-react";
 import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
 
@@ -136,6 +139,7 @@ type MessageBubbleProps = {
   onDelete: (index: number) => void;
   onToggleSources: (key: string) => void;
   onToggleReasoning: (key: string) => void;
+  onOpenInCanvas?: (code: string, mode: "react" | "html", title?: string) => void;
 };
 
 const TOOL_RESULT_STATUSES = new Set(["result", "completed", "context_injected", "result_delivered"]);
@@ -162,6 +166,7 @@ function MessageBubbleImpl({
   onDelete,
   onToggleSources,
   onToggleReasoning,
+  onOpenInCanvas,
 }: MessageBubbleProps) {
   const toolCalls = msg.toolCalls;
   const lastTool =
@@ -191,6 +196,19 @@ function MessageBubbleImpl({
     if (lastTool.elapsed_ms != null) toolMeta.push(`${(lastTool.elapsed_ms / 1000).toFixed(1)}s`);
   }
   const isSourcesClickable = sourcesList.length > 0;
+
+  const codeBlockMatch = useMemo(() => {
+    if (msg.role !== "assistant" || !msg.content) return null;
+    const match = msg.content.match(/```(?:jsx|tsx|react|javascript|js)?\s*\n([\s\S]*?)```/i);
+    if (match && match[1]?.trim()) {
+      return { code: match[1].trim(), mode: "react" as const };
+    }
+    const htmlMatch = msg.content.match(/```(?:html|xml)?\s*\n([\s\S]*?)```/i);
+    if (htmlMatch && htmlMatch[1]?.trim()) {
+      return { code: htmlMatch[1].trim(), mode: "html" as const };
+    }
+    return null;
+  }, [msg.role, msg.content]);
 
   return (
     <div className={msg.role === "user" ? "bubble user hasCopyAction" : "bubble assistant hasCopyAction"}>
@@ -348,6 +366,18 @@ function MessageBubbleImpl({
           </button>
         )}
 
+        {msg.role === "assistant" && codeBlockMatch && onOpenInCanvas && (
+          <button
+            type="button"
+            className="vsBubbleActionBtn"
+            aria-label={t("在画布中预览", "Preview on Canvas")}
+            title={t("在画布中预览", "Preview on Canvas")}
+            onClick={() => onOpenInCanvas(codeBlockMatch.code, codeBlockMatch.mode)}
+          >
+            <PanelRight size={14} />
+          </button>
+        )}
+
         {msg.role === "assistant" && (
           <button
             type="button"
@@ -396,6 +426,30 @@ export default function ChatPage({
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translatingKeys, setTranslatingKeys] = useState<Record<string, boolean>>({});
   const [wordLookup, setWordLookup] = useState<WordLookupState | null>(null);
+
+  // ── Visual Canvas Side Panel State ──
+  const [showCanvas, setShowCanvas] = useState(false);
+  const [canvasMode, setCanvasMode] = useState<"react" | "html">("react");
+  const [canvasView, setCanvasView] = useState<"preview" | "code">("preview");
+  const [canvasCode, setCanvasCode] = useState("");
+  const [canvasTitle, setCanvasTitle] = useState("");
+
+  // Sync with realtime voice canvas artifact (e.g. Gemini 3.8 Live render_canvas tool)
+  useEffect(() => {
+    if (voiceChat.voiceChatCanvas?.code) {
+      setCanvasCode(voiceChat.voiceChatCanvas.code);
+      setCanvasMode(voiceChat.voiceChatCanvas.mode || "react");
+      setCanvasTitle(voiceChat.voiceChatCanvas.title || "Live Component");
+      setShowCanvas(true);
+    }
+  }, [voiceChat.voiceChatCanvas]);
+
+  const handleOpenInCanvas = useCallback((code: string, mode: "react" | "html" = "react", title: string = "Preview Component") => {
+    setCanvasCode(code);
+    setCanvasMode(mode);
+    setCanvasTitle(title);
+    setShowCanvas(true);
+  }, []);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -793,13 +847,29 @@ export default function ChatPage({
   }, [chat, voiceChat, isVoiceActive, onOpenPal]);
 
   return (
-    <section className="vsChatWorkspace" style={{ position: "relative" }}>
-      {/* ── Body ── */}
-      <div
-        ref={bodyRef}
-        className={`vsChatBody ${showWelcome ? "empty" : ""} ${isVoiceActive ? "liveActive" : ""}`}
-        onScroll={handleBodyScroll}
-      >
+    <section className={`vsChatWorkspace ${showCanvas ? "hasCanvasPanel" : ""}`} style={{ position: "relative" }}>
+      {/* ── Top Bar Controls (Canvas Toggle) ── */}
+      <div className="vsChatTopBar">
+        <button
+          type="button"
+          className={`vsChatCanvasToggleBtn ${showCanvas ? "active" : ""}`}
+          onClick={() => setShowCanvas((prev) => !prev)}
+          title={showCanvas ? t("关闭侧边画布", "Close Canvas") : t("打开侧边画布", "Open Canvas")}
+        >
+          <PanelRight size={15} />
+          <span>{t("画布", "Canvas")}</span>
+          {Boolean(canvasCode) && <span className="vsCanvasBadgeDot" />}
+        </button>
+      </div>
+
+      {/* ── Left Column: Chat Conversation ── */}
+      <div className="vsChatMainColumn">
+        {/* ── Body ── */}
+        <div
+          ref={bodyRef}
+          className={`vsChatBody ${showWelcome ? "empty" : ""} ${isVoiceActive ? "liveActive" : ""}`}
+          onScroll={handleBodyScroll}
+        >
         {showWelcome ? (
           /* ═══ EMPTY STATE ═══ */
           <div className="vsChatCentered">
@@ -886,6 +956,7 @@ export default function ChatPage({
                   onDelete={stableDeleteMessage}
                   onToggleSources={stableToggleSources}
                   onToggleReasoning={stableToggleReasoning}
+                  onOpenInCanvas={handleOpenInCanvas}
                 />
               );
             })}
@@ -954,6 +1025,24 @@ export default function ChatPage({
                   >
                     <CopyIcon />
                   </button>
+                  {(() => {
+                    const match = voiceChat.voiceChatReply.match(/```(?:jsx|tsx|react|javascript|js)?\s*\n([\s\S]*?)```/i);
+                    const htmlMatch = voiceChat.voiceChatReply.match(/```(?:html|xml)?\s*\n([\s\S]*?)```/i);
+                    const foundCode = match?.[1]?.trim() || htmlMatch?.[1]?.trim();
+                    const foundMode = match?.[1]?.trim() ? "react" : "html";
+                    if (!foundCode) return null;
+                    return (
+                      <button
+                        type="button"
+                        className="vsBubbleActionBtn"
+                        aria-label={t("在画布中预览", "Preview on Canvas")}
+                        title={t("在画布中预览", "Preview on Canvas")}
+                        onClick={() => handleOpenInCanvas(foundCode, foundMode, t("实时语音生成组件", "Live Voice Component"))}
+                      >
+                        <PanelRight size={14} />
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -1056,6 +1145,198 @@ export default function ChatPage({
             </div>
           )}
         </div>
+      )}
+      </div>
+
+      {/* ── Right Column: Visual Canvas Side Panel ── */}
+      {showCanvas && (
+        <aside className="vsChatCanvasSidePanel">
+          <div className="vsCanvasToolbar">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
+              <span style={{ fontWeight: 600, fontSize: "13px", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+                🎨 {canvasTitle || t("实时画布", "Realtime Canvas")}
+              </span>
+              <div className="vsCanvasModeToggle">
+                <button
+                  type="button"
+                  onClick={() => setCanvasMode("react")}
+                  style={{
+                    padding: "2px 8px",
+                    border: "none",
+                    borderRadius: "4px",
+                    background: canvasMode === "react" ? "var(--surface-strong)" : "transparent",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: canvasMode === "react" ? 600 : 400,
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  React
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCanvasMode("html")}
+                  style={{
+                    padding: "2px 8px",
+                    border: "none",
+                    borderRadius: "4px",
+                    background: canvasMode === "html" ? "var(--surface-strong)" : "transparent",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: canvasMode === "html" ? 600 : 400,
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  HTML
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div className="vsCanvasViewToggle">
+                <button
+                  type="button"
+                  onClick={() => setCanvasView("preview")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "4px 8px",
+                    border: "none",
+                    background: canvasView === "preview" ? "var(--brand-soft)" : "transparent",
+                    color: canvasView === "preview" ? "var(--brand-dark)" : "var(--text-secondary)",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                  }}
+                  title={t("预览视图", "Preview view")}
+                >
+                  <Monitor size={13} /> {t("预览", "Preview")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCanvasView("code")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "4px 8px",
+                    border: "none",
+                    background: canvasView === "code" ? "var(--brand-soft)" : "transparent",
+                    color: canvasView === "code" ? "var(--brand-dark)" : "var(--text-secondary)",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                  }}
+                  title={t("代码视图", "Code view")}
+                >
+                  <Code2 size={13} /> {t("代码", "Code")}
+                </button>
+              </div>
+
+              {Boolean(canvasCode) && (
+                <button
+                  type="button"
+                  onClick={() => setCanvasCode("")}
+                  style={{
+                    padding: "4px 6px",
+                    border: "none",
+                    background: "transparent",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    color: "var(--text-secondary)",
+                  }}
+                  title={t("清空画布", "Clear Canvas")}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowCanvas(false)}
+                style={{
+                  padding: "4px 6px",
+                  border: "none",
+                  background: "transparent",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  color: "var(--text-secondary)",
+                }}
+                title={t("关闭", "Close")}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "hidden", position: "relative", display: "flex", flexDirection: "column" }}>
+            {!canvasCode ? (
+              <div
+                className="vsCanvasEmptyState"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  color: "var(--text-secondary)",
+                  padding: "24px",
+                  textAlign: "center",
+                  gap: "14px",
+                }}
+              >
+                <Monitor size={44} opacity={0.3} />
+                <div>
+                  <h4 style={{ margin: "0 0 6px", color: "var(--text-primary)", fontSize: "14px" }}>
+                    {t("实时语音画布已就绪", "Realtime Voice Canvas Ready")}
+                  </h4>
+                  <p style={{ margin: 0, fontSize: "12px", maxWidth: "280px", lineHeight: "1.5" }}>
+                    {t(
+                      "在语音通话中直接对 Gemini 说「在画布上做一个...」或「帮我写一个登录卡片」，画布会实时展示生成的组件！",
+                      "Tell Gemini in voice 'Draw a card on the canvas' or 'Build a login widget', and the canvas will render it live!"
+                    )}
+                  </p>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", justifyContent: "center", maxWidth: "300px" }}>
+                  {[
+                    { label: "登录表单", en: "Login Card", prompt: "请帮我在画布上做一个漂亮的 React 登录卡片组件" },
+                    { label: "待办清单", en: "Todo List", prompt: "请帮我在画布上做一个交互式 React 待办事项组件" },
+                    { label: "数据仪表盘", en: "Dashboard", prompt: "请帮我在画布上做一个包含数据卡片的仪表盘组件" },
+                    { label: "计数器游戏", en: "Counter Game", prompt: "请帮我在画布上做一个趣味点击计数器小游戏" },
+                  ].map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => {
+                        if (isVoiceActive) {
+                          voiceChat.sendTextMessage(chip.prompt);
+                        } else {
+                          chat.onInputChange(chip.prompt);
+                        }
+                      }}
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: "11px",
+                        borderRadius: "14px",
+                        border: "1px solid var(--border-color)",
+                        background: "var(--bg-card)",
+                        color: "var(--text-primary)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      + {t(chip.label, chip.en)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : canvasView === "preview" ? (
+              <CanvasPreview code={canvasCode} mode={canvasMode} />
+            ) : (
+              <CanvasCodeView code={canvasCode} onCopy={() => copyTextToClipboard(canvasCode)} />
+            )}
+          </div>
+        </aside>
       )}
     </section>
   );

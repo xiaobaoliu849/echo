@@ -21,7 +21,8 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  Video
+  Video,
+  PanelRight
 } from "lucide-react";
 
 const IconMap: Record<string, React.ElementType> = {
@@ -33,7 +34,8 @@ const IconMap: Record<string, React.ElementType> = {
   Mic2,
   FileAudio,
   Settings,
-  Video
+  Video,
+  PanelRight
 };
 
 const brandMark = (

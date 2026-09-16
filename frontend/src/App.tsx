@@ -28,6 +28,7 @@ import useVoiceManagement from "./hooks/useVoiceManagement";
 const AudioOverviewPage = lazyWithRetry(() => import("./pages/AudioOverviewPage"));
 const ChatPage = lazyWithRetry(() => import("./pages/ChatPage"));
 const PalPage = lazyWithRetry(() => import("./pages/PalPage"));
+const CanvasPage = lazyWithRetry(() => import("./pages/CanvasPage"));
 const TranslatePage = lazyWithRetry(() => import("./pages/TranslatePage"));
 const VoiceCenterPage = lazyWithRetry(() => import("./pages/VoiceCenterPage"));
 import { I18nProvider, createInlineTranslator, localizeText, type UiLanguage } from "./i18n";
@@ -258,7 +259,8 @@ export default function App() {
   const selfScrollingTab =
     activeTab === "transcription" ||
     activeTab === "voice_center" ||
-    activeTab === "pal";
+    activeTab === "pal" ||
+    activeTab === "canvas";
   const normalizedConversationHistory = useMemo(
     () => normalizeConversationHistory(conversationHistory),
     [conversationHistory],
@@ -512,6 +514,12 @@ export default function App() {
                 {activeTab === "pal" ? (
                   <PalPage
                     formatErrorMessage={formatErrorMessage}
+                    errorRuntimeContext={errorRuntimeContext}
+                  />
+                ) : null}
+
+                {activeTab === "canvas" ? (
+                  <CanvasPage
                     errorRuntimeContext={errorRuntimeContext}
                   />
                 ) : null}

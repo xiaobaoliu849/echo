@@ -199,6 +199,8 @@ export function createVoiceChatController(
     startRecordingWithInitialPrompt: vi.fn(),
     micAnalyser: null,
     assistantAnalyser: null,
+    voiceChatCanvas: overrides.voiceChatCanvas ?? null,
+    setVoiceChatCanvas: overrides.setVoiceChatCanvas ?? vi.fn(),
     ...overrides
   };
 }
@@ -623,3 +625,5 @@ export function createVoiceCloneController(
     ...overrides
   };
 }
+
+export function createCanvasController(overrides: Partial<any> = {}) { return { messages: [], currentCode: '', codeHistory: [], isGenerating: false, thinkingContent: '', mode: 'react', activeView: 'preview', error: '', generateFromPrompt: vi.fn(), reviseCode: vi.fn(), undo: vi.fn(), clearCanvas: vi.fn(), setMode: vi.fn(), setActiveView: vi.fn(), ...overrides }; }

@@ -69,6 +69,12 @@ import {
 } from "./useVoiceChatHelpers";
 import { serializeSelectionTrace, traceSelection } from "./voiceSelectionTrace";
 
+export type VoiceChatCanvasData = {
+  code: string;
+  mode: "react" | "html";
+  title: string;
+};
+
 export default function useVoiceChat({
   formatErrorMessage,
   providerOptions = [],
@@ -151,6 +157,7 @@ export default function useVoiceChat({
     useState<VoiceAgentMetricsSummary | null>(null);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
   const [assistantAnalyser, setAssistantAnalyser] = useState<AnalyserNode | null>(null);
+  const [voiceChatCanvas, setVoiceChatCanvas] = useState<VoiceChatCanvasData | null>(null);
 
   const isMutedRef = useRef(false);
   isMutedRef.current = voiceChatMuted;
@@ -1399,6 +1406,18 @@ export default function useVoiceChat({
           sources: event.sources || [],
         });
         setVoiceChatAgentSources(event.sources || []);
+        if (
+          event.artifact?.type === "canvas" ||
+          event.artifact?.artifact_type === "canvas" ||
+          event.tool_name === "render_canvas" ||
+          Boolean(event.artifact?.code)
+        ) {
+          setVoiceChatCanvas({
+            code: event.artifact?.code || "",
+            mode: (event.artifact?.mode as "react" | "html") || "react",
+            title: event.artifact?.title || event.query || "Canvas Component",
+          });
+        }
         setVoiceChatAgentRunMeta(buildToolMeta({
           toolName: event.tool_name,
           turnId: event.turn_id,
@@ -1406,10 +1425,12 @@ export default function useVoiceChat({
           elapsedMs: event.elapsed_ms,
         }));
         setVoiceChatAgentToolStatus(
-          t(
-            `已基于 ${event.sources.length} 个来源生成搜索摘要`,
-            `Generated a search summary from ${event.sources.length} sources`
-          )
+          event.tool_name === "render_canvas"
+            ? t(`已在侧边画布上实时渲染「${event.artifact?.title || event.query || "组件"}」`, `Rendered "${event.artifact?.title || event.query || "component"}" on canvas`)
+            : t(
+                `已基于 ${event.sources.length} 个来源生成搜索摘要`,
+                `Generated a search summary from ${event.sources.length} sources`
+              )
         );
         setVoiceChatStatus(t("工具已完成，等待模型回答…", "Tool finished; waiting for the model…"));
         return;
@@ -2157,6 +2178,8 @@ export default function useVoiceChat({
     startRecordingWithInitialPrompt,
     micAnalyser,
     assistantAnalyser,
+    voiceChatCanvas,
+    setVoiceChatCanvas,
   };
 }
 

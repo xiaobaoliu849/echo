@@ -42,6 +42,32 @@ _TOOL_DECLARATIONS: tuple[dict[str, Any], ...] = (
             "additionalProperties": False,
         },
     },
+    {
+        "name": "render_canvas",
+        "description": (
+            "Render, draw, sketch, or update an interactive UI component, canvas diagram, or HTML/React visual mockup directly on the user's screen in real time. Call this tool whenever the user asks to create, draw, sketch, build, preview, or update a UI, component, form, dashboard, game, card, or visual design on the canvas."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "Complete, self-contained React functional component (exported as default or App) or complete HTML with embedded CSS/Tailwind classes to render in the user's visual canvas side panel.",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["react", "html"],
+                    "description": "The render framework mode: 'react' for a React component or 'html' for pure HTML/CSS/Tailwind.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Short title or label describing what was rendered.",
+                },
+            },
+            "required": ["code"],
+            "additionalProperties": False,
+        },
+    },
 )
 
 
@@ -97,6 +123,17 @@ def tool_call_to_request(call: RealtimeToolCall) -> VoiceToolRequest:
         return VoiceToolRequest(name, f"{source}\n目标语言:{target}", "翻译文本")
     if name == "summarize_transcript":
         return VoiceToolRequest(name, _required_text(arguments, "text", max_length=4000), "总结转录文本")
+    if name == "render_canvas":
+        code = _required_text(arguments, "code", max_length=50000)
+        mode = str(arguments.get("mode") or "react").strip().lower()
+        if mode not in {"react", "html"}:
+            mode = "react"
+        title = str(arguments.get("title") or "Canvas Component").strip()[:100]
+        return VoiceToolRequest(
+            name,
+            json.dumps({"code": code, "mode": mode, "title": title}, ensure_ascii=False),
+            "渲染画布组件",
+        )
     raise ValueError(f"Unsupported realtime tool: {name or '<empty>'}")
 
 

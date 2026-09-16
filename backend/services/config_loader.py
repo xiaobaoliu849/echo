@@ -65,6 +65,7 @@ PROVIDER_KEY_MAP = {
     "SiliconFlow": "siliconflow_api_key",
     "Groq": "groq_api_key",
     # 3. Global Cloud Providers (deprioritized if unconfigured)
+    "StepFun": "stepfun_api_key",
     "OpenAI": "openai_api_key",
     "Vercel": "vercel_api_key",
     # 4. Local Models & Specialized Voice Engines
@@ -129,6 +130,7 @@ DEFAULT_BASE_URLS = {
     "OpenRouter": "https://openrouter.ai/api/v1",
     "SiliconFlow": "https://api.siliconflow.cn/v1",
     "Groq": "https://api.groq.com/openai/v1",
+    "StepFun": "https://api.stepfun.ai/v1",
     "OpenAI": "https://api.openai.com/v1",
     "Vercel": "https://ai-gateway.vercel.sh",
     # PersonaPlex and GLM4Voice use local WebSocket URLs
@@ -148,6 +150,7 @@ PROVIDER_FALLBACK_MODELS = {
     "OpenRouter": "deepseek/deepseek-chat",
     "SiliconFlow": "Qwen/Qwen2.5-7B-Instruct",
     "Groq": "llama-3.3-70b-versatile",
+    "StepFun": "step-2-16k",
     "OpenAI": "gpt-4o-mini",
     "Google": "gemini-2.5-flash",
     "AgentPlatform": "gemini-2.5-flash",

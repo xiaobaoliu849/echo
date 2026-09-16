@@ -8,6 +8,7 @@ export type ActiveTab =
   | "voice_center"
   | "audio_overview"
   | "pal"
+  | "canvas"
   | "settings";
 
 export type SidebarItem = {
@@ -33,6 +34,7 @@ export const PROVIDERS = [
   "Doubao",
   "Cartesia",
   "Gradium",
+  "StepFun",
   "Vercel",
   "DeepSeek",
   "Xiaomi",
@@ -56,6 +58,7 @@ export function getDefaultText(t: TranslatePair): string {
 export function getSidebarItems(t: TranslatePair): SidebarItem[] {
   return [
     { tab: "chat", label: t("聊天", "Chat"), icon: "Bot", tooltip: t("AI 助理聊天", "AI assistant chat") },
+    { tab: "canvas", label: t("画布", "Canvas"), icon: "PanelRight", tooltip: t("画布", "Canvas") },
     { tab: "voice_center", label: t("语音中心", "Voice Center"), icon: "Mic2", tooltip: t("统一语音工作台", "Voice workspace") },
     { tab: "audio_overview", label: t("播客", "Podcast"), icon: "FileAudio", tooltip: t("播客与多人对白", "Podcast & mixed dialogue") },
     { tab: "translate", label: t("翻译", "Translate"), icon: "Languages", tooltip: t("智能翻译", "Translation") }

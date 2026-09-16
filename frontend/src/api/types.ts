@@ -39,6 +39,10 @@ export type VoiceAgentSource = {
 
 export type VoiceAgentArtifact = {
   type: string;
+  artifact_type?: string;
+  code?: string;
+  mode?: string;
+  title?: string;
   run_id?: number;
   agent_run_id?: string;
   status?: string;

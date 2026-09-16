@@ -416,9 +416,85 @@ class VoiceAgentToolService:
                 send_event=send_event,
                 turn_id=turn_id,
             )
+        if request.tool_name == "render_canvas":
+            return await self.run_render_canvas(request.query, send_event=send_event, turn_id=turn_id)
         if request.tool_name == "search_web":
             return await self.run_search(request.query, send_event=send_event, turn_id=turn_id)
         raise ValueError(f"Unsupported voice agent tool: {request.tool_name}")
+
+    async def run_render_canvas(
+        self,
+        query: str,
+        *,
+        send_event: SendEvent,
+        turn_id: str = "",
+    ) -> dict[str, Any]:
+        started_at = time.perf_counter()
+        try:
+            payload = json.loads(query)
+            code = str(payload.get("code", "")).strip()
+            mode = str(payload.get("mode", "react")).strip().lower()
+            if mode not in {"react", "html"}:
+                mode = "react"
+            title = str(payload.get("title", "Canvas Component")).strip()
+        except Exception:
+            code = str(query or "").strip()
+            mode = "react"
+            title = "Canvas Component"
+
+        if not code:
+            raise ValueError("Canvas code is empty.")
+
+        await send_event(
+            "tool_call_started",
+            {
+                "tool_name": "render_canvas",
+                "query": title,
+                "turn_id": turn_id,
+                "message": f"正在画布上渲染组件: {title}...",
+            },
+        )
+
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+
+        artifact = {
+            "artifact_type": "canvas",
+            "type": "canvas",
+            "code": code,
+            "mode": mode,
+            "title": title,
+        }
+
+        await send_event(
+            "tool_call_completed",
+            {
+                "tool_name": "render_canvas",
+                "query": title,
+                "turn_id": turn_id,
+                "source_count": 0,
+                "elapsed_ms": elapsed_ms,
+            },
+        )
+        await send_event(
+            "agent_result",
+            {
+                "tool_name": "render_canvas",
+                "query": title,
+                "turn_id": turn_id,
+                "answer": f"已在用户屏幕侧边画布上实时渲染组件「{title}」。",
+                "artifact": artifact,
+                "sources": [],
+                "source_count": 0,
+                "elapsed_ms": elapsed_ms,
+            },
+        )
+        return {
+            "tool_name": "render_canvas",
+            "query": title,
+            "answer": f"The UI component '{title}' has been rendered live on the user's canvas.",
+            "artifact": artifact,
+            "sources": [],
+        }
 
     async def run_recall_memory(
         self,
@@ -1320,6 +1396,12 @@ class VoiceAgentToolService:
                 f"Memory Search Query: {query}\n"
                 f"Recalled Memories:\n{answer}\n\n"
                 f"Tool summary:\n{answer}"
+            )
+        if tool_name == "render_canvas":
+            return (
+                "The UI component has been successfully rendered live on the user's visual canvas side panel! "
+                "Continue the live voice conversation naturally. Briefly explain to the user what you built or updated, "
+                "and ask if they'd like any adjustments or additions."
             )
         sources = result.get("sources", [])
         source_blocks: list[str] = []

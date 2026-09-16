@@ -89,6 +89,9 @@ from .realtime_constants import (  # noqa: F401 — re-exports
     DEFAULT_GRADIUM_REALTIME_VOICE,
     DEFAULT_VERCEL_REALTIME_MODEL,
     DEFAULT_VERCEL_REALTIME_VOICE,
+    DEFAULT_STEPFUN_REALTIME_MODEL,
+    DEFAULT_STEPFUN_REALTIME_VOICE,
+    STEPFUN_REALTIME_VOICES,
     DEFAULT_DOUBAO_REALTIME_MODEL,
     DEFAULT_DOUBAO_REALTIME_VOICE,
     DEFAULT_PERSONAPLEX_REALTIME_MODEL,
@@ -128,6 +131,7 @@ from .realtime_glm4voice_provider import RealtimeGlm4VoiceMixin
 from .realtime_cartesia_provider import CartesiaRealtimeMixin
 from .realtime_gradium_provider import GradiumRealtimeMixin
 from .realtime_vercel_provider import VercelRealtimeMixin
+from .realtime_stepfun_provider import StepFunRealtimeMixin
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +151,7 @@ class RealtimeVoiceService(
     CartesiaRealtimeMixin,
     GradiumRealtimeMixin,
     VercelRealtimeMixin,
+    StepFunRealtimeMixin,
 ):
     """Orchestrates realtime voice sessions across multiple providers.
 
@@ -783,6 +788,8 @@ __all__ = [
     "DEFAULT_CARTESIA_REALTIME_VOICE",
     "DEFAULT_GRADIUM_REALTIME_VOICE",
     "DEFAULT_VERCEL_REALTIME_VOICE",
+    "DEFAULT_STEPFUN_REALTIME_VOICE",
+    "STEPFUN_REALTIME_VOICES",
     # re-exported from sibling modules (used by tests)
     "RealtimeMemorySession",
     "VoiceAgentSessionRecorder",

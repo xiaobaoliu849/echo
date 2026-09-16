@@ -63,6 +63,7 @@ export const PERSONAPLEX_PROVIDER = "PersonaPlex";
 export const GLM4VOICE_PROVIDER = "GLM4Voice";
 export const CARTESIA_PROVIDER = "Cartesia";
 export const GRADIUM_PROVIDER = "Gradium";
+export const STEPFUN_PROVIDER = "StepFun";
 export const VERCEL_PROVIDER = "Vercel";
 export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_3_8_LIVE_MODEL = "gemini-3.8-live";
@@ -84,6 +85,7 @@ export function normalizeProviderKey(provider: string): string {
 }
 export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
+export const DEFAULT_STEPFUN_MODEL = "stepaudio-3-realtime-preview";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
 export const DEFAULT_PERSONAPLEX_MODEL = "personaplex-7b-v1-bnb-4bit";
 export const DEFAULT_GLM4VOICE_MODEL = "glm-4-voice-9b";
@@ -457,6 +459,21 @@ export const GRADIUM_REALTIME_VOICES = [
   { value: "_6Aslh2DxfmnRLmP", label: "Russell (Male, en-US)", description: "Gradium 高能量说服力男声" },
   { value: "r2sIQdqqoqgRJuXw", label: "Marcus (Male, en-US)", description: "Gradium 高能量共鸣男声" },
 ];
+
+export const STEPFUN_REALTIME_VOICES = [
+  { value: "cixingnansheng", label: "磁性男声 (Male)", description: "磁性沉稳，适合多场景" },
+  { value: "qingchunshaonv", label: "青春少女 (Female)", description: "活泼灵动，元气亲切" },
+  { value: "yuanqishaonv", label: "元气少女 (Female)", description: "青春阳光，活力充沛" },
+  { value: "tianmeinvsheng", label: "甜美女声 (Female)", description: "温柔甜美，富有亲和力" },
+  { value: "wenrounansheng", label: "温柔男声 (Male)", description: "舒缓温润，自然舒适" },
+  { value: "wenrougongzi", label: "温柔公子 (Male)", description: "儒雅风度，温和细腻" },
+  { value: "boyinnansheng", label: "播音男声 (Male)", description: "专业播音，吐字清晰" },
+  { value: "yuanqinansheng", label: "元气男声 (Male)", description: "朝气蓬勃，充满活力" },
+  { value: "qingniandaxuesheng", label: "青年大学生 (Male)", description: "真实自然，学生气息" },
+];
+
+// Must stay in sync with DEFAULT_STEPFUN_REALTIME_VOICE in backend
+export const DEFAULT_STEPFUN_VOICE = "cixingnansheng";
 
 // Must stay in sync with DEFAULT_PERSONAPLEX_REALTIME_VOICE in the backend's
 // realtime_constants.py — the backend falls back to it for unknown voices.

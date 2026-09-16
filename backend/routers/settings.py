@@ -333,7 +333,6 @@ def _filter_dashscope_models(model_ids: list[str]) -> list[str]:
     # Using keyword fragments that are unambiguous within the qwen namespace.
     _OFF_TOPIC_KEYWORDS = (
         "-image-",       # qwen-image-*, qwen-image-edit-*  → image generation
-        "-vl-",          # qwen-vl-*, qwen-vl-ocr-*         → vision-language
         "-ocr",          # qwen*-ocr, qwen3.5-ocr            → OCR, not voice-relevant
         "-coder-",       # qwen-coder-*                     → code generation
         "-math-",        # qwen-math-*                      → mathematics
