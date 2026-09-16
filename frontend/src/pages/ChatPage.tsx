@@ -1152,101 +1152,74 @@ export default function ChatPage({
       {showCanvas && (
         <aside className="vsChatCanvasSidePanel">
           <div className="vsCanvasToolbar">
-            <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
-              <span style={{ fontWeight: 600, fontSize: "13px", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+            <div className="vsCanvasTitleWrap">
+              <span className="vsCanvasTitle" title={canvasTitle || t("实时画布", "Realtime Canvas")}>
                 🎨 {canvasTitle || t("实时画布", "Realtime Canvas")}
               </span>
-              <div className="vsCanvasModeToggle">
+            </div>
+
+            <div className="vsCanvasControlsWrap">
+              {/* Tech Mode Toggle: React vs HTML */}
+              <div
+                className="vsCanvasSegmentedControl"
+                role="group"
+                aria-label={t("组件语言模式", "Component Mode")}
+              >
                 <button
                   type="button"
+                  className={`vsCanvasSegmentedBtn ${canvasMode === "react" ? "active" : ""}`}
                   onClick={() => setCanvasMode("react")}
-                  style={{
-                    padding: "2px 8px",
-                    border: "none",
-                    borderRadius: "4px",
-                    background: canvasMode === "react" ? "var(--surface-strong)" : "transparent",
-                    cursor: "pointer",
-                    fontSize: "11px",
-                    fontWeight: canvasMode === "react" ? 600 : 400,
-                    color: "var(--text-primary)",
-                  }}
+                  title={t("React 模式 (JSX / 组件渲染)", "React Mode (JSX / Component)")}
                 >
                   React
                 </button>
                 <button
                   type="button"
+                  className={`vsCanvasSegmentedBtn ${canvasMode === "html" ? "active" : ""}`}
                   onClick={() => setCanvasMode("html")}
-                  style={{
-                    padding: "2px 8px",
-                    border: "none",
-                    borderRadius: "4px",
-                    background: canvasMode === "html" ? "var(--surface-strong)" : "transparent",
-                    cursor: "pointer",
-                    fontSize: "11px",
-                    fontWeight: canvasMode === "html" ? 600 : 400,
-                    color: "var(--text-primary)",
-                  }}
+                  title={t("HTML 模式 (HTML / CSS / JS 页面渲染)", "HTML Mode (HTML / CSS / JS)")}
                 >
                   HTML
                 </button>
               </div>
-            </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div className="vsCanvasViewToggle">
+              <div className="vsCanvasDivider" />
+
+              {/* View Toggle: Preview vs Code */}
+              <div
+                className="vsCanvasSegmentedControl"
+                role="group"
+                aria-label={t("视图切换", "View Switch")}
+              >
                 <button
                   type="button"
+                  className={`vsCanvasSegmentedBtn ${canvasView === "preview" ? "active brandGlow" : ""}`}
                   onClick={() => setCanvasView("preview")}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "4px 8px",
-                    border: "none",
-                    background: canvasView === "preview" ? "var(--brand-soft)" : "transparent",
-                    color: canvasView === "preview" ? "var(--brand-dark)" : "var(--text-secondary)",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "12px",
-                  }}
-                  title={t("预览视图", "Preview view")}
+                  title={t("预览视图 (查看交互渲染效果)", "Preview View (Interactive Render)")}
                 >
-                  <Monitor size={13} /> {t("预览", "Preview")}
+                  <Monitor size={13} />
+                  <span>{t("预览", "Preview")}</span>
                 </button>
                 <button
                   type="button"
+                  className={`vsCanvasSegmentedBtn ${canvasView === "code" ? "active brandGlow" : ""}`}
                   onClick={() => setCanvasView("code")}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "4px 8px",
-                    border: "none",
-                    background: canvasView === "code" ? "var(--brand-soft)" : "transparent",
-                    color: canvasView === "code" ? "var(--brand-dark)" : "var(--text-secondary)",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "12px",
-                  }}
-                  title={t("代码视图", "Code view")}
+                  title={t("代码视图 (查看和复制源代码)", "Code View (Inspect and Copy Code)")}
                 >
-                  <Code2 size={13} /> {t("代码", "Code")}
+                  <Code2 size={13} />
+                  <span>{t("代码", "Code")}</span>
                 </button>
               </div>
+
+              <div className="vsCanvasDivider" />
 
               {Boolean(canvasCode) && (
                 <button
                   type="button"
+                  className="vsCanvasIconActionBtn danger"
                   onClick={() => setCanvasCode("")}
-                  style={{
-                    padding: "4px 6px",
-                    border: "none",
-                    background: "transparent",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    color: "var(--text-secondary)",
-                  }}
                   title={t("清空画布", "Clear Canvas")}
+                  aria-label={t("清空画布", "Clear Canvas")}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -1254,18 +1227,12 @@ export default function ChatPage({
 
               <button
                 type="button"
+                className="vsCanvasIconActionBtn"
                 onClick={() => setShowCanvas(false)}
-                style={{
-                  padding: "4px 6px",
-                  border: "none",
-                  background: "transparent",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  color: "var(--text-secondary)",
-                }}
-                title={t("关闭", "Close")}
+                title={t("关闭侧边画布", "Close Canvas")}
+                aria-label={t("关闭侧边画布", "Close Canvas")}
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
           </div>

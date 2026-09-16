@@ -78,29 +78,76 @@ export default function CanvasPage({ errorRuntimeContext: _ }: CanvasPageProps) 
       <div className="vsCanvasOutputPanel" style={{ flex: 1, display: "flex", flexDirection: "column", background: "var(--surface)", minWidth: 0 }}>
         
         {/* Toolbar */}
-        <div className="vsCanvasToolbar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--border-color)", background: "var(--bg-card)" }}>
-          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-            <div className="vsCanvasModeToggle" style={{ display: "flex", background: "var(--bg-primary)", borderRadius: "8px", padding: "2px", border: "1px solid var(--border-color)" }}>
-              <button onClick={() => canvas.setMode("react")} style={{ padding: "4px 12px", border: "none", borderRadius: "6px", background: canvas.mode === "react" ? "var(--surface-strong)" : "transparent", cursor: "pointer", fontWeight: canvas.mode === "react" ? 600 : 400, color: "var(--text-primary)" }}>React</button>
-              <button onClick={() => canvas.setMode("html")} style={{ padding: "4px 12px", border: "none", borderRadius: "6px", background: canvas.mode === "html" ? "var(--surface-strong)" : "transparent", cursor: "pointer", fontWeight: canvas.mode === "html" ? 600 : 400, color: "var(--text-primary)" }}>HTML</button>
-            </div>
-            
-            <div className="vsCanvasViewToggle" style={{ display: "flex", gap: "8px" }}>
-              <button onClick={() => canvas.setActiveView("preview")} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", border: "none", background: canvas.activeView === "preview" ? "var(--brand-soft)" : "transparent", color: canvas.activeView === "preview" ? "var(--brand-dark)" : "var(--text-secondary)", borderRadius: "6px", cursor: "pointer" }}>
-                <Monitor size={16} /> {t("预览", "Preview")}
+        <div className="vsCanvasToolbar">
+          <div className="vsCanvasControlsWrap">
+            <div className="vsCanvasSegmentedControl" role="group" aria-label={t("组件语言模式", "Component Mode")}>
+              <button
+                type="button"
+                className={`vsCanvasSegmentedBtn ${canvas.mode === "react" ? "active" : ""}`}
+                onClick={() => canvas.setMode("react")}
+                title={t("React 模式 (JSX / 组件渲染)", "React Mode (JSX / Component)")}
+              >
+                React
               </button>
-              <button onClick={() => canvas.setActiveView("code")} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", border: "none", background: canvas.activeView === "code" ? "var(--brand-soft)" : "transparent", color: canvas.activeView === "code" ? "var(--brand-dark)" : "var(--text-secondary)", borderRadius: "6px", cursor: "pointer" }}>
-                <Code2 size={16} /> {t("代码", "Code")}
+              <button
+                type="button"
+                className={`vsCanvasSegmentedBtn ${canvas.mode === "html" ? "active" : ""}`}
+                onClick={() => canvas.setMode("html")}
+                title={t("HTML 模式 (HTML / CSS / JS 页面渲染)", "HTML Mode (HTML / CSS / JS)")}
+              >
+                HTML
+              </button>
+            </div>
+
+            <div className="vsCanvasDivider" />
+
+            <div className="vsCanvasSegmentedControl" role="group" aria-label={t("视图切换", "View Switch")}>
+              <button
+                type="button"
+                className={`vsCanvasSegmentedBtn ${canvas.activeView === "preview" ? "active brandGlow" : ""}`}
+                onClick={() => canvas.setActiveView("preview")}
+                title={t("预览视图 (查看交互渲染效果)", "Preview View (Interactive Render)")}
+              >
+                <Monitor size={14} />
+                <span>{t("预览", "Preview")}</span>
+              </button>
+              <button
+                type="button"
+                className={`vsCanvasSegmentedBtn ${canvas.activeView === "code" ? "active brandGlow" : ""}`}
+                onClick={() => canvas.setActiveView("code")}
+                title={t("代码视图 (查看和复制源代码)", "Code View (Inspect and Copy Code)")}
+              >
+                <Code2 size={14} />
+                <span>{t("代码", "Code")}</span>
               </button>
             </div>
           </div>
-          
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={canvas.undo} disabled={canvas.codeHistory.length <= 1} style={{ padding: "6px 10px", border: "1px solid var(--border-color)", background: "var(--bg-primary)", borderRadius: "6px", cursor: canvas.codeHistory.length <= 1 ? "not-allowed" : "pointer", opacity: canvas.codeHistory.length <= 1 ? 0.5 : 1, display: "flex", alignItems: "center", gap: "6px", color: "var(--text-primary)" }}>
-              <Undo2 size={14} /> {t("撤销", "Undo")}
+
+          <div className="vsCanvasControlsWrap">
+            <button
+              type="button"
+              onClick={canvas.undo}
+              disabled={canvas.codeHistory.length <= 1}
+              className="vsCanvasSegmentedBtn"
+              style={{
+                border: "1px solid var(--border-color)",
+                opacity: canvas.codeHistory.length <= 1 ? 0.45 : 1,
+                cursor: canvas.codeHistory.length <= 1 ? "not-allowed" : "pointer",
+              }}
+              title={t("撤销上一步更改", "Undo change")}
+            >
+              <Undo2 size={13} />
+              <span>{t("撤销", "Undo")}</span>
             </button>
-            <button onClick={canvas.clearCanvas} style={{ padding: "6px 10px", border: "1px solid var(--border-color)", background: "var(--bg-primary)", borderRadius: "6px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", color: "var(--text-primary)" }}>
-              <Trash2 size={14} /> {t("清空", "Clear")}
+            <button
+              type="button"
+              onClick={canvas.clearCanvas}
+              className="vsCanvasSegmentedBtn"
+              style={{ border: "1px solid var(--border-color)" }}
+              title={t("清空画布内容", "Clear Canvas")}
+            >
+              <Trash2 size={13} />
+              <span>{t("清空", "Clear")}</span>
             </button>
           </div>
         </div>

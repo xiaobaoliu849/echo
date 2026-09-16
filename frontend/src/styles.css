@@ -13104,9 +13104,14 @@ button.vsPasswordToggleBtn:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border-color);
-  background: var(--bg-card);
+  background: color-mix(in oklab, var(--bg-card) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  min-height: 46px;
+  box-sizing: border-box;
 }
 .vsCanvasMessageList {
   flex: 1;
@@ -13177,16 +13182,126 @@ button.vsPasswordToggleBtn:focus-visible {
   overflow-x: auto;
   padding-bottom: 4px;
 }
-.vsCanvasModeToggle {
+.vsCanvasTitleWrap {
   display: flex;
-  background: var(--bg-primary);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.vsCanvasTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.vsCanvasControlsWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.vsCanvasDivider {
+  width: 1px;
+  height: 16px;
+  background: color-mix(in oklab, var(--border-color) 80%, transparent);
+  flex-shrink: 0;
+  margin: 0 1px;
+}
+
+.vsCanvasSegmentedControl {
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in oklab, var(--surface-strong) 40%, var(--bg-primary));
+  border: 1px solid color-mix(in oklab, var(--border-color) 85%, transparent);
   border-radius: 8px;
   padding: 2px;
-  border: 1px solid var(--border-color);
+  gap: 2px;
+  flex-shrink: 0;
 }
+
+.vsCanvasSegmentedBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.3;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.vsCanvasSegmentedBtn:hover {
+  color: var(--text-primary);
+  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+}
+
+.vsCanvasSegmentedBtn.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.vsCanvasSegmentedBtn.active.brandGlow {
+  background: color-mix(in oklab, var(--brand-soft) 85%, var(--bg-card));
+  color: var(--brand-dark);
+}
+
+.vsCanvasIconActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.vsCanvasIconActionBtn:hover {
+  background: color-mix(in oklab, var(--surface-strong) 60%, transparent);
+  color: var(--text-primary);
+}
+
+.vsCanvasIconActionBtn.danger:hover {
+  background: color-mix(in oklab, var(--danger) 15%, transparent);
+  color: var(--danger);
+}
+
+.vsCanvasModeToggle {
+  display: inline-flex;
+  background: color-mix(in oklab, var(--surface-strong) 40%, var(--bg-primary));
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 85%, transparent);
+  flex-shrink: 0;
+}
+
 .vsCanvasViewToggle {
-  display: flex;
-  gap: 8px;
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
 }
 @media (max-width: 768px) {
   .vsCanvasWorkspace {
