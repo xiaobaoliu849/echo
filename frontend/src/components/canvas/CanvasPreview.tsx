@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 
 interface CanvasPreviewProps {
@@ -9,6 +9,8 @@ interface CanvasPreviewProps {
 const tailwindCdn = '<script src="https://cdn.tailwindcss.com"></script>';
 
 function getReactHtml(code: string) {
+  // Keep generated source out of the surrounding script's HTML parser.
+  const source = JSON.stringify(code).replace(/</g, "\\u003c");
   return `<!DOCTYPE html>
 <html>
   <head>
@@ -17,33 +19,44 @@ function getReactHtml(code: string) {
     ${tailwindCdn}
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="text/babel">
+    <script>
+      function reportError(error) {
+        const message = String(error && error.message || error);
+        window.parent.postMessage({ type: 'CANVAS_ERROR', message }, '*');
+        document.getElementById('root').textContent = 'Error: ' + message;
+      }
+      window.addEventListener('error', event => reportError(event.error || event.message));
+      window.addEventListener('unhandledrejection', event => reportError(event.reason));
       try {
-        const { useState, useEffect, useRef, useMemo, useCallback } = React;
-        ${code}
+        // Compile as a module before evaluating: wrapping export/import in a
+        // try block makes otherwise valid generated components a syntax error.
+        const compiled = Babel.transform(${source}, {
+          filename: 'canvas.jsx',
+          presets: ['react'],
+          plugins: ['transform-modules-commonjs'],
+        }).code;
+        const module = { exports: {} };
+        const require = name => {
+          if (name === 'react') return React;
+          if (name === 'react-dom' || name === 'react-dom/client') return ReactDOM;
+          throw new Error('Unsupported canvas import: ' + name + '. Use a self-contained component.');
+        };
+        const evaluate = new Function('React', 'require',
+          'const { useState, useEffect, useRef, useMemo, useCallback } = React;\\n' +
+          'return function(module, exports) {\\n' +
+          compiled + '\\n;return module.exports.default || (typeof App !== "undefined" ? App : ' +
+          '(typeof DefaultComponent !== "undefined" ? DefaultComponent : null));\\n};');
+        const Component = evaluate(React, require)(module, module.exports);
+        if (!Component) throw new Error('No React component found (expected a default export or App).');
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        if (typeof App !== 'undefined') {
-          root.render(<App />);
-        } else if (typeof DefaultComponent !== 'undefined') {
-          root.render(<DefaultComponent />);
-        } else {
-          // If no App, look for the default export or last component
-          const comps = Object.keys(window).filter(k => /^[A-Z]/.test(k) && typeof window[k] === 'function');
-          if (comps.length > 0) {
-            const Comp = window[comps[comps.length - 1]];
-            root.render(<Comp />);
-          } else {
-            document.getElementById('root').innerHTML = '<div style="color:red;padding:20px;">No React component found (expected App).</div>';
-          }
-        }
+        root.render(React.createElement(Component));
       } catch (err) {
-        window.parent.postMessage({ type: 'CANVAS_ERROR', message: err.message }, '*');
-        document.getElementById('root').innerHTML = '<div style="color:red;padding:20px;">Error: ' + err.message + '</div>';
+        reportError(err);
       }
     </script>
   </body>
@@ -53,17 +66,18 @@ function getReactHtml(code: string) {
 export default function CanvasPreview({ code, mode }: CanvasPreviewProps) {
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     setError(null);
     const handleMessage = (e: MessageEvent) => {
-      if (e.data?.type === "CANVAS_ERROR") {
+      if (e.source === frameRef.current?.contentWindow && e.data?.type === "CANVAS_ERROR" && typeof e.data.message === "string") {
         setError(e.data.message);
       }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [code]);
+  }, [code, mode]);
 
   let srcDoc = code;
   if (mode === "html") {
@@ -85,7 +99,9 @@ export default function CanvasPreview({ code, mode }: CanvasPreviewProps) {
         </div>
       )}
       <iframe
-        key={code}
+        ref={frameRef}
+        title={t("画布预览", "Canvas preview")}
+        key={`${mode}:${code}`}
         srcDoc={srcDoc}
         sandbox="allow-scripts"
         className="vsCanvasPreviewFrame"

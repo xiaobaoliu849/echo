@@ -304,6 +304,8 @@ class VercelRealtimeMixin:
         # Tracking for native server-vad interruption repair
         vercel_provider_interrupted_early = False
         consume_next_vercel_terminal = False
+        background_interaction_status = ""
+        pending_background_terminal: dict[str, Any] | None = None
 
         async def dispatch_tool_call(
             call_id: str,
@@ -422,6 +424,25 @@ class VercelRealtimeMixin:
 
             event_type = str(event.get("type", "")).strip()
 
+            if event_type == "custom" and event.get("rawType") == "interactionStatus":
+                raw = event.get("raw")
+                content = raw.get("serverContent") if isinstance(raw, dict) else None
+                status = str(content.get("interactionStatus", "")).upper() if isinstance(content, dict) else ""
+                if status not in {"IN_PROGRESS", "IDLE", "WAITING_FOR_INPUT"}:
+                    continue
+                background_interaction_status = status
+                if status == "IN_PROGRESS":
+                    state["response_active"] = True
+                    continue
+                if pending_background_terminal is None or content.get("turnComplete"):
+                    # When turnComplete is present, the mapper also emits a
+                    # response-done. Let that event finalize the turn once.
+                    continue
+                # Background reasoning can become idle without another audio
+                # turn. Complete the deferred turn using this activity update.
+                event = {**pending_background_terminal, "raw": raw}
+                event_type = "response-done"
+
             if event_type == "session-created":
                 await self._send_event(
                     websocket,
@@ -499,6 +520,8 @@ class VercelRealtimeMixin:
 
             # Native interruption / server VAD speech onset detected
             if event_type in {"speech-started", "interrupted", "input_audio_buffer.speech_started"}:
+                background_interaction_status = ""
+                pending_background_terminal = None
                 assistant_active = bool(
                     state.get("response_active")
                     or interruption.active_response_id
@@ -629,6 +652,8 @@ class VercelRealtimeMixin:
                 )
 
                 if is_cancelled:
+                    background_interaction_status = ""
+                    pending_background_terminal = None
                     consume_next_vercel_terminal = False
                     suppressed_response_ids.discard(response_id)
                     if response_id and response_id == interruption.active_response_id:
@@ -645,6 +670,8 @@ class VercelRealtimeMixin:
                 assistant_audio_item_id = ""
                 state["response_active"] = False
                 if response_status in {"failed"}:
+                    background_interaction_status = ""
+                    pending_background_terminal = None
                     continue
 
                 raw_data = event.get("raw")
@@ -654,11 +681,16 @@ class VercelRealtimeMixin:
                     if isinstance(server_content, dict)
                     else ""
                 )
-                if interaction_status == "IN_PROGRESS":
+                if interaction_status:
+                    background_interaction_status = interaction_status
+                if background_interaction_status == "IN_PROGRESS":
                     # Gemini Live Extended Thinking: initial audio response finished, but background
                     # reasoning/tool-call generation is still in progress. Do NOT mark turn completed.
                     state["response_active"] = True
+                    pending_background_terminal = dict(event)
                     continue
+                pending_background_terminal = None
+                background_interaction_status = ""
                 if pending_prefill_context:
                     await vercel_ws.send(json.dumps({
                         "type": "conversation-item-create",
@@ -943,8 +975,16 @@ class VercelRealtimeMixin:
             "turn_id": tool_call_id or conversation_turn_id,
             "response_payload": response_payload,
         }
-        if recorder is not None:
-            await recorder.record_tool_event("tool_response_sent", payload)
+        if tool_name == "render_canvas" and isinstance(response_payload, dict):
+            # The UI already received the complete artifact. Echoing its code
+            # back can exceed the Gateway's 256 KB frame limit (especially
+            # after JSON escaping) and adds no information for the model.
+            artifact = response_payload.get("artifact")
+            if isinstance(artifact, dict):
+                response_payload = {
+                    **response_payload,
+                    "artifact": {key: value for key, value in artifact.items() if key != "code"},
+                }
 
         output_str = (
             json.dumps(response_payload, ensure_ascii=False)
@@ -955,19 +995,21 @@ class VercelRealtimeMixin:
         item = {
             "type": "function-call-output",
             "callId": provider_call_id,
-            "call_id": provider_call_id,
             "name": tool_name,
             "output": output_str,
         }
 
-        try:
-            await vercel_ws.send(json.dumps({
-                "type": "conversation-item-create",
-                "item": item,
-            }))
-            await vercel_ws.send(json.dumps({"type": "response-create"}))
-        except Exception:
-            logger.exception("Failed to send native tool response to Vercel Gateway for %s", tool_name)
+        # This is the normalized Gateway protocol, not OpenAI's native wire
+        # format. Extra fields such as call_id cause a 1008 transform rejection.
+        # Let delivery errors reach VoiceAgentToolSession so they are reported
+        # as tool_result_delivery_failed instead of successful tool completion.
+        await vercel_ws.send(json.dumps({
+            "type": "conversation-item-create",
+            "item": item,
+        }))
+        await vercel_ws.send(json.dumps({"type": "response-create"}))
+        if recorder is not None:
+            await recorder.record_tool_event("tool_response_sent", payload)
 
     async def stream_vercel_session(
         self,
@@ -1064,7 +1106,7 @@ class VercelRealtimeMixin:
             return
         except Exception as e:
             logger.exception("Vercel realtime session failed: %s", e)
-            await self._send_event(websocket, "error", message=f"Vercel 实时会话启动失败: {str(e)}")
+            await self._send_event(websocket, "error", message=f"Vercel 实时会话失败: {str(e)}")
             return
         finally:
             memory_result = await memory_session.flush_turn()

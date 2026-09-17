@@ -132,7 +132,7 @@ try:
 except ImportError:
     from tests.test_realtime_provider_replay import CollectingWebSocket, FakeMemorySession, RecordingToolSession
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from services.interruption_classifier import InterruptionDecisionCoordinator
 from services.realtime_session_recorder import VoiceAgentSessionRecorder
 
@@ -339,6 +339,52 @@ class VercelGeminiCanvasToolReplayTests(unittest.IsolatedAsyncioTestCase):
             model=model,
         )
         return vercel_ws
+
+    async def test_tool_response_uses_only_normalized_gateway_fields(self):
+        # The deployed gateway rejects the extra OpenAI-native call_id field
+        # with close code 1008, even when the required callId is also present.
+        for result in ({"ok": True, "answer": "Rendered 猫"}, {"ok": False, "error": "Invalid code"}):
+            with self.subTest(result=result):
+                gateway = FakeVercelWs([])
+                await self.service._send_vercel_tool_response(
+                    gateway, provider_call_id="call-canvas", tool_name="render_canvas",
+                    response_payload=result,
+                )
+                self.assertEqual(gateway.sent, [
+                    {"type": "conversation-item-create", "item": {
+                        "type": "function-call-output", "callId": "call-canvas",
+                        "name": "render_canvas", "output": json.dumps(result, ensure_ascii=False),
+                    }},
+                    {"type": "response-create"},
+                ])
+
+    async def test_tool_response_transport_failure_is_not_recorded_as_sent(self):
+        gateway = MagicMock()
+        gateway.send = AsyncMock(side_effect=ConnectionError("gateway disconnected"))
+        recorder = MagicMock()
+        recorder.record_tool_event = AsyncMock()
+        with self.assertRaises(ConnectionError):
+            await self.service._send_vercel_tool_response(
+                gateway, provider_call_id="call-canvas", tool_name="render_canvas",
+                response_payload={"ok": True}, recorder=recorder,
+            )
+        self.assertEqual(gateway.send.await_count, 1)
+        recorder.record_tool_event.assert_not_awaited()
+
+    async def test_large_unicode_canvas_is_delivered_without_echoing_code_to_gateway(self):
+        code = "<p>" + "\U0001f431" * 49000 + "</p>"
+        gateway = await self.replay([{
+            "type": "function-call-arguments-done", "callId": "large-canvas",
+            "name": "render_canvas", "arguments": {"code": code, "mode": "html"},
+        }])
+        artifact = next(e["artifact"] for e in self.ws.events if e["type"] == "agent_result")
+        self.assertEqual(artifact["code"], code)
+        frame = next(e for e in gateway.sent if e["type"] == "conversation-item-create")
+        result = json.loads(frame["item"]["output"])
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["artifact"]["mode"], "html")
+        self.assertNotIn("code", result["artifact"])
+        self.assertLess(len(json.dumps(frame).encode("utf-8")), 256 * 1024)
 
     async def test_render_canvas_tool_call_emits_canvas_artifact_and_responds(self):
         """Verify normalized tool-call event triggers render_canvas and returns function_call_output."""
@@ -589,6 +635,36 @@ class VercelGeminiCanvasToolReplayTests(unittest.IsolatedAsyncioTestCase):
         ])
         turn_completes = [e for e in self.ws.events if e.get("type") == "turn_complete"]
         self.assertEqual(len(turn_completes), 1)
+
+    async def test_standalone_background_status_defers_audio_terminal(self):
+        await self.replay([
+            {"type": "custom", "rawType": "interactionStatus", "raw": {
+                "serverContent": {"interactionStatus": "IN_PROGRESS"},
+            }},
+            {"type": "response-done", "responseId": "background", "status": "completed"},
+        ])
+        self.assertTrue(self.state["response_active"])
+        self.assertFalse(any(e["type"] == "turn_complete" for e in self.ws.events))
+
+    async def test_standalone_idle_completes_deferred_turn_once(self):
+        for has_terminal in (False, True):
+            with self.subTest(has_terminal=has_terminal):
+                self.ws.events.clear()
+                idle = {"interactionStatus": "IDLE"}
+                if has_terminal:
+                    idle["turnComplete"] = True
+                events = [
+                    {"type": "response-done", "responseId": "background", "raw": {
+                        "serverContent": {"interactionStatus": "IN_PROGRESS", "turnComplete": True},
+                    }},
+                    {"type": "custom", "rawType": "interactionStatus", "raw": {"serverContent": idle}},
+                ]
+                if has_terminal:
+                    events.append({"type": "response-done", "responseId": "final", "raw": {"serverContent": idle}})
+                events.append({"type": "custom", "rawType": "interactionStatus", "raw": {"serverContent": {"interactionStatus": "IDLE"}}})
+                await self.replay(events)
+                self.assertFalse(self.state["response_active"])
+                self.assertEqual(sum(e["type"] == "turn_complete" for e in self.ws.events), 1)
 
 
 if __name__ == "__main__":
