@@ -68,6 +68,8 @@ export const VERCEL_PROVIDER = "Vercel";
 export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_3_8_LIVE_MODEL = "gemini-3.8-live";
 export const GOOGLE_3_8_LIVE_THINKING_MODEL = "gemini-3.8-live-extended-thinking";
+export const VERCEL_GEMINI_3_8_LIVE = "google/gemini-3.8-live";
+export const VERCEL_GEMINI_3_8_LIVE_THINKING = "google/gemini-3.8-live-extended-thinking";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 export const GOOGLE_LIVE_TRANSLATE_MODEL = "gemini-3.5-live-translate-preview";
 export const AGENT_PLATFORM_FLASH_LIVE_MODEL = "gemini-live-2.5-flash-native-audio";
@@ -517,7 +519,11 @@ export function formatRealtimeVoiceOptions(
   } else if (provider === OPENAI_PROVIDER) {
     options = OPENAI_REALTIME_VOICES;
   } else if (provider === VERCEL_PROVIDER) {
-    options = VERCEL_REALTIME_VOICES;
+    if (model && (model.startsWith("google/") || model.includes("gemini"))) {
+      options = GOOGLE_REALTIME_VOICES;
+    } else {
+      options = VERCEL_REALTIME_VOICES;
+    }
   } else {
     options = GOOGLE_REALTIME_VOICES;
   }
@@ -748,9 +754,9 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   }
   if (normalizedProvider === VERCEL_PROVIDER.toLowerCase()) {
     // Gateway model ids are creator/model-name; realtime ones carry a
-    // realtime/voice token in the model-name half.
+    // realtime/voice/live token in the model-name half.
     return normalizedModel.includes("/") &&
-      (normalizedModel.includes("realtime") || normalizedModel.includes("voice"));
+      (normalizedModel.includes("realtime") || normalizedModel.includes("voice") || normalizedModel.includes("live"));
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
     return /^qwen3\.5-omni-(plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel) ||
@@ -818,6 +824,9 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   }
   if (normalized === TAVUS_PROVIDER) {
     return DEFAULT_TAVUS_MODEL;
+  }
+  if (normalized === VERCEL_PROVIDER) {
+    return DEFAULT_VERCEL_MODEL;
   }
   return "";
 }
@@ -892,6 +901,8 @@ export function resolveRealtimeModelOptions(
     : [];
   const vercelBuiltIns = provider === VERCEL_PROVIDER
     ? [
+        "google/gemini-3.8-live",
+        "google/gemini-3.8-live-extended-thinking",
         DEFAULT_VERCEL_MODEL,
         "openai/gpt-realtime-2.1",
         "openai/gpt-realtime-1.5",

@@ -16,7 +16,7 @@ from .evermem_config import EverMemConfig
 from .evermem_helper import prepare_memory_context, save_assistant_memory
 from .background_tasks import spawn_background_task
 
-SUPPORTED_PROVIDERS = {"DeepSeek", "OpenRouter", "SiliconFlow", "Groq", "DashScope", "Ollama", "Google", "AgentPlatform"}
+SUPPORTED_PROVIDERS = {"DeepSeek", "OpenRouter", "SiliconFlow", "Groq", "DashScope", "Ollama", "Google", "AgentPlatform", "Vercel"}
 
 
 class LLMService:
@@ -180,6 +180,13 @@ class LLMService:
             headers["HTTP-Referer"] = "https://echo.local"
             headers["X-Title"] = "Echo"
         return headers
+
+    @staticmethod
+    def _build_chat_completions_url(provider: str, base_url: str) -> str:
+        clean_base = base_url.rstrip("/")
+        if provider == "Vercel" and not clean_base.endswith("/v1"):
+            clean_base = f"{clean_base}/v1"
+        return f"{clean_base}/chat/completions"
 
     @staticmethod
     def _build_google_headers(api_key: str) -> dict[str, str]:
@@ -628,7 +635,7 @@ class LLMService:
         
         # Memory context already prepared above (mem_ctx)
 
-        url = f"{settings['base_url']}/chat/completions"
+        url = self._build_chat_completions_url(provider, settings["base_url"])
         payload = {
             "model": settings["model"],
             "messages": normalized_messages,
@@ -734,7 +741,7 @@ class LLMService:
             use_two_stage=True,
         )
 
-        url = f"{settings['base_url']}/chat/completions"
+        url = self._build_chat_completions_url(provider, settings["base_url"])
         payload = {
             "model": settings["model"],
             "messages": normalized_messages,

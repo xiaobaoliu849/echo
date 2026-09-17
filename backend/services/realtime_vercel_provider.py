@@ -33,9 +33,13 @@ import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 
 from .realtime_constants import (
+    DEFAULT_GOOGLE_REALTIME_VOICE,
     DEFAULT_VERCEL_REALTIME_MODEL,
     DEFAULT_VERCEL_REALTIME_VOICE,
+    GOOGLE_REALTIME_VOICES,
     VERCEL_GATEWAY_BASE_URL,
+    VERCEL_REALTIME_VOICES,
+    _is_google_thinking_realtime_model,
     _is_vercel_realtime_model,
 )
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
@@ -93,6 +97,26 @@ def _resample_pcm16_linear(data: bytes, src_rate: int, dst_rate: int) -> bytes:
         out.append(int(round(a + (b - a) * frac)))
     return struct.pack(f"<{len(out)}h", *out)
 
+
+
+def _normalize_vercel_voice(model: str | None, voice: str | None) -> str:
+    """Select a valid voice persona for Vercel AI Gateway realtime models.
+
+    Google Gemini models (google/gemini-3.8-live*) require Google's prebuilt
+    voices (defaulting to Puck). OpenAI models require OpenAI voices (defaulting
+    to alloy). Cross-family selections are automatically normalized to avoid
+    upstream rejection.
+    """
+    m = str(model or "").strip().lower()
+    v = str(voice or "").strip()
+    is_google = m.startswith("google/") or "gemini" in m
+    if is_google:
+        if v in GOOGLE_REALTIME_VOICES:
+            return v
+        return DEFAULT_GOOGLE_REALTIME_VOICE
+    if v in VERCEL_REALTIME_VOICES:
+        return v
+    return DEFAULT_VERCEL_REALTIME_VOICE
 
 
 class VercelRealtimeMixin:
@@ -154,14 +178,16 @@ class VercelRealtimeMixin:
         Mirrors the SDK's ``toGatewayRealtimeUrl``: the WS URL is
         ``<baseURL>/realtime-model`` where baseURL includes the ``/v4/ai``
         prefix (e.g. ``wss://ai-gateway.vercel.sh/v4/ai/realtime-model``).
-        Our settings store the bare origin, so the ``/v4/ai`` prefix is
-        re-applied here unless the caller already supplied a path.
+        Our settings store the bare origin or /v1, so the ``/v4/ai`` prefix is
+        re-applied here unless the caller already supplied a custom path.
         """
         base = settings["base_url"].replace("https://", "wss://").replace("http://", "ws://")
         from urllib.parse import quote, urlsplit
 
         parts = urlsplit(base)
-        path = parts.path.rstrip("/") or "/v4/ai"
+        path = parts.path.rstrip("/")
+        if not path or path == "/v1":
+            path = "/v4/ai"
         return f"{parts.scheme}://{parts.netloc}{path}/realtime-model?ai-model-id={quote(settings['model'], safe='')}"
 
     def _vercel_ws_protocols(self, client_secret: str) -> list[str]:
@@ -554,16 +580,17 @@ class VercelRealtimeMixin:
         voice: str = DEFAULT_VERCEL_REALTIME_VOICE,
     ) -> None:
         settings = self._resolve_vercel_settings(model)
+        resolved_voice = _normalize_vercel_voice(settings["model"], voice)
         memory_session = RealtimeMemorySession()
         tool_session = VoiceAgentToolSession(default_provider="Vercel")
         recorder = await self._create_voice_session_recorder(
             provider="Vercel",
             model=settings["model"],
-            voice=voice,
+            voice=resolved_voice,
         )
 
         self._current_vercel_model = settings["model"]
-        self._current_vercel_voice = voice
+        self._current_vercel_voice = resolved_voice
 
         try:
             client_secret = await self._mint_vercel_client_secret(settings)
@@ -585,23 +612,39 @@ class VercelRealtimeMixin:
             ) as vercel_ws:
                 # Normalized session config; the Gateway maps it to the
                 # upstream provider server-side.
+                session_config: dict[str, Any] = {
+                    "instructions": self._build_realtime_instructions(),
+                    "voice": resolved_voice,
+                    # The Gateway only accepts ['text'] or ['audio'] —
+                    # not the mixed ['text', 'audio'] the SDK type allows.
+                    # Voice call => audio output; outputAudioTranscription
+                    # makes the text side explicit (emits
+                    # audio-transcript-delta events).
+                    "outputModalities": ["audio"],
+                    "inputAudioFormat": {"type": "audio/pcm", "rate": VERCEL_INPUT_SAMPLE_RATE},
+                    "outputAudioFormat": {"type": "audio/pcm", "rate": VERCEL_OUTPUT_SAMPLE_RATE},
+                    "inputAudioTranscription": {},
+                    "outputAudioTranscription": {},
+                    "turnDetection": {"type": "server-vad"},
+                }
+
+                # Google Gemini 3.8 Live Extended Thinking on Vercel AI Gateway
+                # requires providerOptions.google.thinkingConfig.
+                m_lower = settings["model"].lower()
+                if "extended-thinking" in m_lower or (
+                    m_lower.startswith("google/") and "thinking" in m_lower
+                ):
+                    session_config["providerOptions"] = {
+                        "google": {
+                            "thinkingConfig": {
+                                "thinkingLevel": "LOW",
+                            }
+                        }
+                    }
+
                 await vercel_ws.send(json.dumps({
                     "type": "session-update",
-                    "config": {
-                        "instructions": self._build_realtime_instructions(),
-                        "voice": voice,
-                        # The Gateway only accepts ['text'] or ['audio'] —
-                        # not the mixed ['text', 'audio'] the SDK type allows.
-                        # Voice call => audio output; outputAudioTranscription
-                        # makes the text side explicit (emits
-                        # audio-transcript-delta events).
-                        "outputModalities": ["audio"],
-                        "inputAudioFormat": {"type": "audio/pcm", "rate": VERCEL_INPUT_SAMPLE_RATE},
-                        "outputAudioFormat": {"type": "audio/pcm", "rate": VERCEL_OUTPUT_SAMPLE_RATE},
-                        "inputAudioTranscription": {},
-                        "outputAudioTranscription": {},
-                        "turnDetection": {"type": "server-vad"},
-                    },
+                    "config": session_config,
                 }))
 
                 interruption = InterruptionDecisionCoordinator()

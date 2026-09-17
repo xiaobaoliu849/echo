@@ -157,6 +157,7 @@ PROVIDER_FALLBACK_MODELS = {
     "Doubao": "doubao-pro-32k",
     "Xiaomi": "mimo-v2-chat",
     "Ollama": "qwen2.5:7b",
+    "Vercel": "google/gemini-3.8-live",
 }
 
 

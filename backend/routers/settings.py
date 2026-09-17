@@ -257,6 +257,8 @@ GRADIUM_MODEL_LIST_SUPPLEMENTS = [
     "default",
 ]
 VERCEL_MODEL_LIST_SUPPLEMENTS = [
+    "google/gemini-3.8-live",
+    "google/gemini-3.8-live-extended-thinking",
     "openai/gpt-realtime-2",
     "openai/gpt-realtime-2.1",
     "openai/gpt-realtime-1.5",

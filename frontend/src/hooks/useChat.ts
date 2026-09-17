@@ -92,7 +92,16 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
   if (normalizedProv === "gradium" || model.toLowerCase().includes("gradium")) {
     return t("Gradium 实时语音", "Gradium Voice AI");
   }
-  if (normalizedProv === "vercel" || model.toLowerCase().includes("gpt-realtime")) {
+  if (normalizedProv === "vercel") {
+    if (model.toLowerCase().includes("extended-thinking")) {
+      return t("Gemini 3.8 深度思考实时", "Gemini 3.8 Extended Thinking");
+    }
+    if (model.toLowerCase().includes("gemini")) {
+      return t("Gemini 3.8 极速实时", "Gemini 3.8 Live");
+    }
+    return t("Vercel Gateway 实时语音", "Vercel Gateway realtime");
+  }
+  if (model.toLowerCase().includes("gpt-realtime")) {
     return t("Vercel Gateway 实时语音", "Vercel Gateway realtime");
   }
   if (normalizedProv === "glm4voice" || model.toLowerCase().includes("glm-4-voice")) {

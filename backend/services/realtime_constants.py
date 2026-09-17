@@ -106,6 +106,8 @@ GRADIUM_REALTIME_VOICES = (
 # are qualified `creator/model-name` (e.g. `openai/gpt-realtime-2`).
 DEFAULT_VERCEL_REALTIME_MODEL = "openai/gpt-realtime-2"
 DEFAULT_VERCEL_REALTIME_VOICE = "alloy"
+VERCEL_GEMINI_3_8_LIVE = "google/gemini-3.8-live"
+VERCEL_GEMINI_3_8_LIVE_EXTENDED_THINKING = "google/gemini-3.8-live-extended-thinking"
 VERCEL_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh"
 VERCEL_REALTIME_VOICES = (
     "alloy", "echo", "fable", "onyx", "nova", "shimmer", "verse", "sage", "coral",
@@ -292,14 +294,15 @@ def _is_vercel_realtime_model(model: str | None) -> bool:
     """True when the model id is a Vercel AI Gateway realtime model.
 
     Gateway model ids are `creator/model-name` strings; realtime ones are
-    matched by a `realtime`/`voice` token in the model-name half (e.g.
-    `openai/gpt-realtime-2`, `spacexai/grok-voice-think-fast-1.0`).
+    matched by a `realtime`/`voice`/`live` token in the model-name half (e.g.
+    `openai/gpt-realtime-2`, `spacexai/grok-voice-think-fast-1.0`,
+    `google/gemini-3.8-live`, `google/gemini-3.8-live-extended-thinking`).
     """
     m = str(model or "").strip().lower()
     if not m or "/" not in m:
         return False
     model_name = m.split("/", 1)[1]
-    return "realtime" in model_name or "voice" in model_name
+    return "realtime" in model_name or "voice" in model_name or "live" in model_name
 
 
 def _is_google_live_translate_model(model: str | None) -> bool:
