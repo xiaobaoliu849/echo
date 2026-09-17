@@ -46,6 +46,13 @@ from .interruption_classifier import InterruptionClassifier, InterruptionDecisio
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_session_recorder import VoiceAgentSessionRecorder
 from .voice_agent_tools import VoiceAgentToolService, VoiceAgentToolSession
+from .realtime_tool_protocol import (
+    RealtimeToolCall,
+    tool_call_to_request,
+    tool_error_payload,
+    tool_result_payload,
+    vercel_tool_declarations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -298,6 +305,115 @@ class VercelRealtimeMixin:
         vercel_provider_interrupted_early = False
         consume_next_vercel_terminal = False
 
+        async def dispatch_tool_call(
+            call_id: str,
+            tool_name: str,
+            raw_arguments: Any,
+        ) -> None:
+            nonlocal gated_tool_turn_id
+            call_id = str(call_id or "").strip()
+            tool_name = str(tool_name or "").strip()
+            if not call_id:
+                logger.warning("[VERCEL-TOOL] Missing call ID for tool '%s'", tool_name)
+                return
+            if tool_session.has_seen_provider_call(call_id) or call_id in getattr(tool_session, "_native_tasks", {}):
+                return
+
+            logger.info(
+                "[VERCEL-TOOL] Dispatched tool call '%s' (call_id=%s) args=%s",
+                tool_name,
+                call_id,
+                raw_arguments if isinstance(raw_arguments, dict) else str(raw_arguments)[:200],
+            )
+
+            conversation_turn_id = recorder.current_turn_id if recorder is not None else ""
+            tool_turn_id = tool_session.reserve_tool_call_id()
+
+            try:
+                native_call = RealtimeToolCall(
+                    provider="Vercel",
+                    provider_call_id=call_id,
+                    tool_name=tool_name,
+                    arguments=raw_arguments,
+                )
+                request = tool_call_to_request(native_call)
+            except Exception as exc:
+                logger.warning("Failed to parse Vercel tool call %s (%s): %s", tool_name, call_id, exc)
+                tool_session.mark_provider_call_seen(call_id)
+                await self._send_vercel_tool_response(
+                    vercel_ws,
+                    provider_call_id=call_id,
+                    tool_name=tool_name or "unknown_tool",
+                    response_payload=tool_error_payload(str(exc)),
+                    conversation_turn_id=conversation_turn_id,
+                    tool_call_id=tool_turn_id,
+                    recorder=recorder,
+                )
+                return
+
+            gated_tool_turn_id = tool_turn_id
+            await self._send_response_gated(
+                websocket,
+                provider="Vercel",
+                tool_name=tool_name,
+                query=request.query,
+                turn_id=tool_turn_id,
+                recorder=recorder,
+            )
+
+            async def on_vercel_native_result(
+                result: dict[str, Any],
+                *,
+                call_id: str = call_id,
+                name: str = tool_name,
+                canonical_turn_id: str = conversation_turn_id,
+                local_tool_call_id: str = tool_turn_id,
+            ) -> None:
+                nonlocal gated_tool_turn_id
+                gated_tool_turn_id = ""
+                await self._send_vercel_tool_response(
+                    vercel_ws,
+                    provider_call_id=call_id,
+                    tool_name=name,
+                    response_payload=tool_result_payload(result),
+                    result=result,
+                    conversation_turn_id=canonical_turn_id,
+                    tool_call_id=local_tool_call_id,
+                    recorder=recorder,
+                )
+                state["response_active"] = True
+
+            async def on_vercel_native_error(
+                message: str,
+                *,
+                call_id: str = call_id,
+                name: str = tool_name,
+                canonical_turn_id: str = conversation_turn_id,
+                local_tool_call_id: str = tool_turn_id,
+            ) -> None:
+                nonlocal gated_tool_turn_id
+                gated_tool_turn_id = ""
+                await self._send_vercel_tool_response(
+                    vercel_ws,
+                    provider_call_id=call_id,
+                    tool_name=name,
+                    response_payload=tool_error_payload(message),
+                    conversation_turn_id=canonical_turn_id,
+                    tool_call_id=local_tool_call_id,
+                    recorder=recorder,
+                )
+                state["response_active"] = True
+
+            await tool_session.handle_request(
+                request,
+                send_event=send_tool_event,
+                on_result=on_vercel_native_result,
+                on_error=on_vercel_native_error,
+                provider_call_id=call_id,
+                conversation_turn_id=conversation_turn_id,
+                tool_call_id=tool_turn_id,
+            )
+
         async for raw_message in vercel_ws:
             try:
                 event = json.loads(raw_message) if isinstance(raw_message, str) else json.loads(str(raw_message))
@@ -324,6 +440,61 @@ class VercelRealtimeMixin:
                 interruption.active_response_id = str(event.get("responseId", ""))
                 state["response_active"] = True
                 continue
+
+            # Native tool call events (AI SDK normalized or OpenAI Realtime)
+            if event_type in {
+                "tool-call",
+                "tool_call",
+                "response.function_call_arguments.done",
+                "function_call_arguments_done",
+            }:
+                call_id = str(
+                    event.get("toolCallId")
+                    or event.get("callId")
+                    or event.get("call_id")
+                    or event.get("id")
+                    or ""
+                ).strip()
+                tool_name = str(event.get("toolName") or event.get("name") or "").strip()
+                raw_args = event.get("args") if "args" in event else event.get("arguments", {})
+                await dispatch_tool_call(call_id, tool_name, raw_args)
+                continue
+
+            # Output item events (OpenAI Realtime function_call items)
+            if event_type in {
+                "response.output_item.done",
+                "response.output_item.added",
+                "response-output-item-done",
+                "response-output-item-added",
+            }:
+                item = event.get("item") or {}
+                if isinstance(item, dict) and str(item.get("type", "")).lower() in {
+                    "function_call",
+                    "tool_call",
+                    "custom_tool_call",
+                }:
+                    call_id = str(
+                        item.get("call_id")
+                        or item.get("id")
+                        or item.get("callId")
+                        or ""
+                    ).strip()
+                    tool_name = str(item.get("name") or item.get("toolName") or "").strip()
+                    raw_args = item.get("arguments") if "arguments" in item else item.get("args", {})
+                    await dispatch_tool_call(call_id, tool_name, raw_args)
+                    continue
+
+            # Direct Google / provider tool_call event with function_calls list
+            if event_type in {"tool_call", "function_calls"}:
+                f_calls = event.get("function_calls") or []
+                if isinstance(f_calls, list):
+                    for fc in f_calls:
+                        if isinstance(fc, dict):
+                            call_id = str(fc.get("id") or fc.get("call_id") or "").strip()
+                            tool_name = str(fc.get("name") or "").strip()
+                            raw_args = fc.get("args") if "args" in fc else fc.get("arguments", {})
+                            await dispatch_tool_call(call_id, tool_name, raw_args)
+                    continue
 
             # Native interruption / server VAD speech onset detected
             if event_type in {"speech-started", "interrupted", "input_audio_buffer.speech_started"}:
@@ -435,9 +606,21 @@ class VercelRealtimeMixin:
                     )
                 continue
 
-            if event_type == "response-done":
-                response_id = str(event.get("responseId", ""))
-                response_status = str(event.get("status", "completed")).lower()
+            if event_type in {"response-done", "response.done"}:
+                resp_data = event.get("response") or {}
+                if isinstance(resp_data, dict):
+                    output_items = resp_data.get("output") or []
+                    if isinstance(output_items, list):
+                        for out_item in output_items:
+                            if isinstance(out_item, dict) and str(out_item.get("type", "")).lower() in {"function_call", "tool_call"}:
+                                c_id = str(out_item.get("call_id") or out_item.get("id") or out_item.get("callId") or "").strip()
+                                t_name = str(out_item.get("name") or out_item.get("toolName") or "").strip()
+                                t_args = out_item.get("arguments") if "arguments" in out_item else out_item.get("args", {})
+                                if c_id and not tool_session.has_seen_provider_call(c_id):
+                                    await dispatch_tool_call(c_id, t_name, t_args)
+
+                response_id = str(event.get("responseId", "") or resp_data.get("id", ""))
+                response_status = str(event.get("status", "") or resp_data.get("status", "completed")).lower()
                 is_cancelled = (
                     response_status in {"cancelled", "canceled"}
                     or response_id in suppressed_response_ids
@@ -480,7 +663,7 @@ class VercelRealtimeMixin:
                     pending_prefill_context = ""
                 memory_result = await memory_session.flush_turn()
                 completed_turn_id = ""
-                if recorder is not None and not gated_tool_turn_id:
+                if recorder is not None and not gated_tool_turn_id and not tool_session.has_active_task:
                     completed_turn_id = await recorder.complete_turn(memory_result)
                 await self._send_event(
                     websocket,
@@ -491,7 +674,7 @@ class VercelRealtimeMixin:
                     local_pending_count=int(memory_result.get("local_pending_count", 0)),
                     reason=str(memory_result.get("reason", "")),
                 )
-                if not gated_tool_turn_id:
+                if not gated_tool_turn_id and not tool_session.has_active_task:
                     await self._send_event(
                         websocket,
                         "turn_complete",
@@ -694,6 +877,11 @@ class VercelRealtimeMixin:
                 await self._send_event(websocket, "error", message=f"Vercel AI Gateway: {error_msg}")
                 break
 
+        try:
+            await tool_session.drain(cancel=False)
+        except Exception:
+            pass
+
     async def _apply_vercel_tool_result(
         self,
         vercel_ws: Any,
@@ -719,6 +907,54 @@ class VercelRealtimeMixin:
             "item": {"type": "text-message", "role": "user", "text": prompt},
         }))
         await vercel_ws.send(json.dumps({"type": "response-create"}))
+
+    async def _send_vercel_tool_response(
+        self,
+        vercel_ws: Any,
+        *,
+        provider_call_id: str,
+        tool_name: str,
+        response_payload: dict[str, Any],
+        result: dict[str, Any] | None = None,
+        conversation_turn_id: str = "",
+        tool_call_id: str = "",
+        recorder: VoiceAgentSessionRecorder | None = None,
+    ) -> None:
+        if not provider_call_id:
+            logger.warning("Vercel native tool response missing provider_call_id for %s", tool_name)
+            return
+
+        payload = {
+            "provider": "Vercel",
+            "tool_name": tool_name,
+            "provider_call_id": provider_call_id,
+            "turn_id": tool_call_id or conversation_turn_id,
+            "response_payload": response_payload,
+        }
+        if recorder is not None:
+            await recorder.record_tool_event("tool_response_sent", payload)
+
+        output_str = (
+            json.dumps(response_payload, ensure_ascii=False)
+            if isinstance(response_payload, (dict, list))
+            else str(response_payload)
+        )
+
+        item = {
+            "type": "function_call_output",
+            "call_id": provider_call_id,
+            "callId": provider_call_id,
+            "output": output_str,
+        }
+
+        try:
+            await vercel_ws.send(json.dumps({
+                "type": "conversation-item-create",
+                "item": item,
+            }))
+            await vercel_ws.send(json.dumps({"type": "response-create"}))
+        except Exception:
+            logger.exception("Failed to send native tool response to Vercel Gateway for %s", tool_name)
 
     async def stream_vercel_session(
         self,
@@ -763,6 +999,7 @@ class VercelRealtimeMixin:
                 session_config: dict[str, Any] = {
                     "instructions": self._build_realtime_instructions(),
                     "voice": resolved_voice,
+                    "tools": vercel_tool_declarations(),
                     # The Gateway only accepts ['text'] or ['audio'] —
                     # not the mixed ['text', 'audio'] the SDK type allows.
                     # Voice call => audio output; outputAudioTranscription

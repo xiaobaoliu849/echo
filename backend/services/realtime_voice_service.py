@@ -226,11 +226,12 @@ class RealtimeVoiceService(
         base_inst = RealtimeVoiceService._get_base_instructions()
         memory_rules = (
             "\n\n[Memory & Tool Calling Rules]\n"
-            "You have access to long-term memory via the `recall_memory` tool and external search via `search_web`.\n"
+            "You have access to long-term memory via the `recall_memory` tool, external search via `search_web`, and canvas visualization via `render_canvas`.\n"
             "- When the user asks to recall or remember previous conversations, what you discussed days ago, "
             "what the user said earlier, or personal preferences/profile, you MUST use the `recall_memory` tool "
             "or the long-term memories provided below. NEVER use `search_web` to search the internet for user private memories or prior conversations.\n"
-            "- Only call `search_web` for real-time external public information (news, weather, sports scores, public facts) when explicitly needed."
+            "- Only call `search_web` for real-time external public information (news, weather, sports scores, public facts) when explicitly needed.\n"
+            "- When the user asks to design, draw, sketch, create, build, or preview a UI, component, webpage, or canvas visual mockup (in HTML or React), you MUST call the `render_canvas` tool with the complete code, mode ('react' or 'html'), and title. You can generate the code via the tool while continuing to speak with the user naturally."
         )
         if not ctx:
             return f"{base_inst}{memory_rules}"

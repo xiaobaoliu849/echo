@@ -101,6 +101,31 @@ class VercelGemini38LiveTests(unittest.TestCase):
         url_deepseek = LLMService._build_chat_completions_url("DeepSeek", "https://api.deepseek.com/v1")
         self.assertEqual(url_deepseek, "https://api.deepseek.com/v1/chat/completions")
 
+    def test_vercel_tool_declarations_contains_render_canvas(self):
+        from services.realtime_tool_protocol import vercel_tool_declarations
+        tools = vercel_tool_declarations()
+        self.assertTrue(isinstance(tools, list))
+        self.assertTrue(len(tools) >= 3)
+        tool_names = [t.get("name") for t in tools]
+        self.assertIn("render_canvas", tool_names)
+        self.assertIn("search_web", tool_names)
+        self.assertIn("recall_memory", tool_names)
+
+        canvas_tool = next(t for t in tools if t.get("name") == "render_canvas")
+        self.assertEqual(canvas_tool.get("type"), "function")
+        params = canvas_tool.get("parameters", {})
+        self.assertEqual(params.get("type"), "object")
+        props = params.get("properties", {})
+        self.assertIn("code", props)
+        self.assertIn("mode", props)
+        self.assertEqual(props["mode"].get("enum"), ["react", "html"])
+        self.assertIn("code", params.get("required", []))
+
+    def test_build_realtime_instructions_includes_canvas_rule(self):
+        inst = RealtimeVoiceService._build_realtime_instructions()
+        self.assertIn("render_canvas", inst)
+        self.assertIn("HTML or React", inst)
+
 
 try:
     from test_realtime_provider_replay import CollectingWebSocket, FakeMemorySession, RecordingToolSession
@@ -283,6 +308,217 @@ class VercelGeminiInterruptionReplayTests(unittest.IsolatedAsyncioTestCase):
         ])
         interrupted_events = [e for e in self.ws.events if e["type"] == "interrupted"]
         self.assertEqual(len(interrupted_events), 1)
+
+
+from services.voice_agent_tools import VoiceAgentToolSession
+
+
+class VercelGeminiCanvasToolReplayTests(unittest.IsolatedAsyncioTestCase):
+    """Replay tests verifying Gemini 3.8 Live canvas and native tool calling on Vercel AI Gateway."""
+
+    async def asyncSetUp(self):
+        self.service = RealtimeVoiceService()
+        self.ws = CollectingWebSocket()
+        self.memory = FakeMemorySession()
+        self.tools = VoiceAgentToolSession(default_provider="Vercel")
+        self.recorder = VoiceAgentSessionRecorder(repository=MagicMock(), session_id="vercel-tool-test")
+        await self.recorder.note_user_transcript("Draw a todo list app on the canvas")
+        self.coordinator = InterruptionDecisionCoordinator()
+        self.state = {"response_active": True}
+
+    async def replay(self, events: list[dict], model: str = "google/gemini-3.8-live"):
+        vercel_ws = FakeVercelWs(events)
+        await self.service._vercel_to_client_loop(
+            self.ws,
+            vercel_ws,
+            self.memory,
+            self.tools,
+            self.recorder,
+            interruption=self.coordinator,
+            state=self.state,
+            model=model,
+        )
+        return vercel_ws
+
+    async def test_render_canvas_tool_call_emits_canvas_artifact_and_responds(self):
+        """Verify normalized tool-call event triggers render_canvas and returns function_call_output."""
+        canvas_code = "export default function TodoApp() { return <div className='p-4'><h1>My Todos</h1></div>; }"
+        vercel_ws = await self.replay([
+            {
+                "type": "tool-call",
+                "toolCallId": "call-cv-101",
+                "toolName": "render_canvas",
+                "args": {
+                    "code": canvas_code,
+                    "mode": "react",
+                    "title": "My Todo App",
+                },
+            },
+            # Response done arriving while tool or post-tool speech executes
+            {
+                "type": "response-done",
+                "responseId": "resp-cv-1",
+                "status": "completed",
+            },
+        ])
+
+        # 1. response_gated emitted
+        gated_events = [e for e in self.ws.events if e.get("type") == "response_gated"]
+        self.assertEqual(len(gated_events), 1)
+        self.assertEqual(gated_events[0]["tool_name"], "render_canvas")
+        self.assertEqual(gated_events[0]["provider"], "Vercel")
+
+        # 2. tool_call_started, tool_call_completed, and agent_result emitted
+        agent_results = [e for e in self.ws.events if e.get("type") == "agent_result"]
+        self.assertEqual(len(agent_results), 1)
+        res = agent_results[0]
+        self.assertEqual(res["tool_name"], "render_canvas")
+        self.assertEqual(res["query"], "My Todo App")
+        artifact = res.get("artifact", {})
+        self.assertEqual(artifact.get("type"), "canvas")
+        self.assertEqual(artifact.get("artifact_type"), "canvas")
+        self.assertEqual(artifact.get("mode"), "react")
+        self.assertEqual(artifact.get("title"), "My Todo App")
+        self.assertEqual(artifact.get("code"), canvas_code)
+
+        # 3. conversation-item-create with function_call_output sent to Vercel Gateway
+        function_outputs = [
+            m for m in vercel_ws.sent
+            if m.get("type") == "conversation-item-create"
+            and isinstance(m.get("item"), dict)
+            and m["item"].get("type") == "function_call_output"
+        ]
+        self.assertEqual(len(function_outputs), 1)
+        item = function_outputs[0]["item"]
+        self.assertEqual(item.get("call_id"), "call-cv-101")
+        output_data = json.loads(item.get("output", "{}"))
+        self.assertTrue(output_data.get("ok"))
+        self.assertEqual(output_data.get("tool_name"), "render_canvas")
+
+        # 4. response-create triggered
+        response_creates = [m for m in vercel_ws.sent if m.get("type") == "response-create"]
+        self.assertTrue(len(response_creates) >= 1)
+
+    async def test_render_canvas_html_mode_via_output_item_done(self):
+        """Verify OpenAI Realtime output_item.done format triggers HTML canvas rendering."""
+        html_code = "<!DOCTYPE html><html><body><h1 class='text-blue-500'>Dashboard</h1></body></html>"
+        vercel_ws = await self.replay([
+            {
+                "type": "response.output_item.done",
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call-cv-102",
+                    "name": "render_canvas",
+                    "arguments": json.dumps({
+                        "code": html_code,
+                        "mode": "html",
+                        "title": "HTML Dashboard",
+                    }),
+                },
+            },
+        ])
+
+        agent_results = [e for e in self.ws.events if e.get("type") == "agent_result"]
+        self.assertEqual(len(agent_results), 1)
+        artifact = agent_results[0].get("artifact", {})
+        self.assertEqual(artifact.get("mode"), "html")
+        self.assertEqual(artifact.get("code"), html_code)
+        self.assertEqual(artifact.get("title"), "HTML Dashboard")
+
+        function_outputs = [
+            m for m in vercel_ws.sent
+            if m.get("type") == "conversation-item-create"
+            and isinstance(m.get("item"), dict)
+            and m["item"].get("type") == "function_call_output"
+        ]
+        self.assertEqual(len(function_outputs), 1)
+        self.assertEqual(function_outputs[0]["item"]["call_id"], "call-cv-102")
+
+    async def test_render_canvas_inside_response_done_output(self):
+        """Verify function_call items inside response-done are dispatched safely."""
+        react_code = "export default function Counter() { return <button>0</button>; }"
+        vercel_ws = await self.replay([
+            {
+                "type": "response-done",
+                "responseId": "resp-nested-1",
+                "status": "completed",
+                "response": {
+                    "output": [
+                        {
+                            "type": "function_call",
+                            "call_id": "call-cv-103",
+                            "name": "render_canvas",
+                            "arguments": {
+                                "code": react_code,
+                                "mode": "react",
+                                "title": "Interactive Counter",
+                            },
+                        }
+                    ]
+                },
+            },
+        ])
+
+        agent_results = [e for e in self.ws.events if e.get("type") == "agent_result"]
+        self.assertEqual(len(agent_results), 1)
+        self.assertEqual(agent_results[0]["artifact"]["code"], react_code)
+
+    async def test_tool_deduplication_between_added_and_done(self):
+        """Verify duplicate output_item.added and output_item.done executes exactly once."""
+        vercel_ws = await self.replay([
+            {
+                "type": "response.output_item.added",
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call-dup-104",
+                    "name": "render_canvas",
+                    "arguments": {"code": "<div>Once</div>", "title": "Once"},
+                },
+            },
+            {
+                "type": "response.output_item.done",
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call-dup-104",
+                    "name": "render_canvas",
+                    "arguments": {"code": "<div>Once</div>", "title": "Once"},
+                },
+            },
+        ])
+
+        agent_results = [e for e in self.ws.events if e.get("type") == "agent_result"]
+        self.assertEqual(len(agent_results), 1)
+
+        function_outputs = [
+            m for m in vercel_ws.sent
+            if m.get("type") == "conversation-item-create"
+            and isinstance(m.get("item"), dict)
+            and m["item"].get("type") == "function_call_output"
+        ]
+        self.assertEqual(len(function_outputs), 1)
+
+    async def test_tool_error_handling_does_not_crash_loop(self):
+        """Verify invalid tool call returns structured error payload without raising."""
+        vercel_ws = await self.replay([
+            {
+                "type": "tool-call",
+                "toolCallId": "call-err-105",
+                "toolName": "render_canvas",
+                "args": {"code": ""},  # empty code violates schema
+            },
+        ])
+
+        # Error payload sent back to provider
+        function_outputs = [
+            m for m in vercel_ws.sent
+            if m.get("type") == "conversation-item-create"
+            and isinstance(m.get("item"), dict)
+            and m["item"].get("type") == "function_call_output"
+        ]
+        self.assertEqual(len(function_outputs), 1)
+        err_output = json.loads(function_outputs[0]["item"]["output"])
+        self.assertFalse(err_output.get("ok"))
+        self.assertIn("error", err_output)
 
 
 if __name__ == "__main__":

@@ -83,6 +83,18 @@ def dashscope_tool_declarations() -> list[dict[str, Any]]:
     ]
 
 
+def vercel_tool_declarations() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "function",
+            "name": declaration["name"],
+            "description": declaration["description"],
+            "parameters": declaration["parameters"],
+        }
+        for declaration in native_tool_declarations()
+    ]
+
+
 def dashscope_supports_native_tools(model: str | None) -> bool:
     normalized = str(model or "").strip().lower()
     return bool(
