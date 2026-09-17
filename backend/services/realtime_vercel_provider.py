@@ -202,6 +202,7 @@ class VercelRealtimeMixin:
         recorder: VoiceAgentSessionRecorder | None = None,
         interruption: InterruptionDecisionCoordinator | None = None,
         state: dict[str, Any] | None = None,
+        model: str | None = None,
     ) -> None:
         interruption = interruption or InterruptionDecisionCoordinator()
         state = state if state is not None else _new_vercel_session_state()
@@ -219,6 +220,10 @@ class VercelRealtimeMixin:
                     await self._send_event(websocket, "error", message="无效的实时语音消息。")
                     continue
                 command_type = str(payload.get("type", "")).strip()
+                if command_type == "speech_activity_started":
+                    # Automatic server VAD owns turn taking for realtime models on Vercel Gateway.
+                    # Local RMS energy hints must not duck/buffer output.
+                    continue
                 if command_type in {"text_input", "media_input"}:
                     content = str(payload.get("text", "")).strip()
                     if content:
@@ -232,6 +237,7 @@ class VercelRealtimeMixin:
                         }))
                         if not state["response_active"]:
                             await vercel_ws.send(json.dumps({"type": "response-create"}))
+                            state["response_active"] = True
                     continue
                 result = await self._handle_common_client_command(
                     command_type, payload,
@@ -270,10 +276,12 @@ class VercelRealtimeMixin:
         recorder: VoiceAgentSessionRecorder | None = None,
         interruption: InterruptionDecisionCoordinator | None = None,
         state: dict[str, Any] | None = None,
+        model: str | None = None,
     ) -> None:
         send_tool_event = self._tool_event_sender(websocket, recorder)
         state = state if state is not None else _new_vercel_session_state()
 
+        resolved_model = model or getattr(self, "_current_vercel_model", "")
         gated_tool_turn_id = ""
         pending_prefill_context = ""
         interruption = interruption or InterruptionDecisionCoordinator()
@@ -285,6 +293,10 @@ class VercelRealtimeMixin:
         assistant_audio_item_id = ""
         # NOTE: the response-active flag lives in the shared `state` dict
         # (set by stream_vercel_session), because the client loop reads it too.
+
+        # Tracking for native server-vad interruption repair
+        vercel_provider_interrupted_early = False
+        consume_next_vercel_terminal = False
 
         async for raw_message in vercel_ws:
             try:
@@ -299,7 +311,7 @@ class VercelRealtimeMixin:
                     websocket,
                     "session_open",
                     provider="Vercel",
-                    model=getattr(self, "_current_vercel_model", ""),
+                    model=resolved_model,
                     voice=getattr(self, "_current_vercel_voice", "") or DEFAULT_VERCEL_REALTIME_VOICE,
                     session_id=recorder.session_id if recorder is not None else str(event.get("sessionId", "")),
                 )
@@ -313,12 +325,253 @@ class VercelRealtimeMixin:
                 state["response_active"] = True
                 continue
 
-            # User speech transcription completed (interruption entry point)
-            if event_type == "input-transcription-completed":
-                user_text = str(event.get("transcript", "")).strip()
+            # Native interruption / server VAD speech onset detected
+            if event_type in {"speech-started", "interrupted", "input_audio_buffer.speech_started"}:
+                assistant_active = bool(
+                    state.get("response_active")
+                    or interruption.active_response_id
+                    or tool_session.has_active_task
+                    or (recorder is not None and bool(recorder.current_assistant_text))
+                    or (recorder is not None and getattr(recorder, "has_assistant_output", False))
+                )
+                if assistant_active:
+                    interrupted_response_id = interruption.active_response_id
+
+                    async def cancel_vercel_response() -> None:
+                        payload: dict[str, Any] = {"type": "response-cancel"}
+                        if interrupted_response_id:
+                            payload["responseId"] = interrupted_response_id
+                        try:
+                            await vercel_ws.send(json.dumps(payload))
+                        except Exception:
+                            logger.warning("Failed to send response-cancel to Vercel Gateway", exc_info=True)
+                        if assistant_audio_item_id:
+                            try:
+                                await vercel_ws.send(
+                                    json.dumps({
+                                        "type": "conversation-item-truncate",
+                                        "itemId": assistant_audio_item_id,
+                                        "contentIndex": 0,
+                                        "audioEndMs": 0,
+                                    })
+                                )
+                            except Exception:
+                                logger.warning("Failed to send conversation-item-truncate to Vercel Gateway", exc_info=True)
+
+                    if not (vercel_provider_interrupted_early and consume_next_vercel_terminal):
+                        await self._begin_interruption(
+                            websocket,
+                            interruption,
+                            provider="Vercel",
+                            provider_event_type=event_type,
+                            recorder=recorder,
+                            tool_session=tool_session,
+                            supersede_timed_out=True,
+                        )
+                        await self._decide_interruption(
+                            websocket,
+                            interruption,
+                            "",
+                            memory_session=memory_session,
+                            tool_session=tool_session,
+                            recorder=recorder,
+                            cancel_provider=cancel_vercel_response,
+                            provider_interrupted=True,
+                        )
+                    else:
+                        await cancel_vercel_response()
+
+                    vercel_provider_interrupted_early = True
+                    consume_next_vercel_terminal = True
+                    if interrupted_response_id:
+                        suppressed_response_ids.add(interrupted_response_id)
+                    gated_tool_turn_id = ""
+                    pending_prefill_context = ""
+                    state["response_active"] = False
+                continue
+
+            if event_type == "audio-delta":
+                audio_b64 = event.get("delta", "")
+                response_id = str(event.get("responseId", ""))
+                if event.get("itemId"):
+                    assistant_audio_item_id = str(event.get("itemId"))
+                if (
+                    response_id in suppressed_response_ids
+                    or consume_next_vercel_terminal
+                    or vercel_provider_interrupted_early
+                ):
+                    continue
+                if audio_b64 and not gated_tool_turn_id:
+                    await self._emit_assistant_output(
+                        websocket,
+                        interruption,
+                        {
+                            "type": "assistant_audio",
+                            "audio": audio_b64,
+                            "encoding": "pcm_s16le",
+                            "sample_rate": 24000,
+                        },
+                        memory_session=memory_session,
+                        recorder=recorder,
+                    )
+                continue
+
+            if event_type == "audio-transcript-delta":
+                text_delta = event.get("delta", "")
+                response_id = str(event.get("responseId", ""))
+                if (
+                    response_id in suppressed_response_ids
+                    or consume_next_vercel_terminal
+                    or vercel_provider_interrupted_early
+                ):
+                    continue
+                if text_delta and not gated_tool_turn_id:
+                    await self._emit_assistant_output(
+                        websocket,
+                        interruption,
+                        {"type": "assistant_text", "text": str(text_delta)},
+                        memory_session=memory_session,
+                        recorder=recorder,
+                    )
+                continue
+
+            if event_type == "response-done":
+                response_id = str(event.get("responseId", ""))
+                response_status = str(event.get("status", "completed")).lower()
+                is_cancelled = (
+                    response_status in {"cancelled", "canceled"}
+                    or response_id in suppressed_response_ids
+                    or consume_next_vercel_terminal
+                )
+
+                if is_cancelled:
+                    consume_next_vercel_terminal = False
+                    suppressed_response_ids.discard(response_id)
+                    if response_id and response_id == interruption.active_response_id:
+                        interruption.active_response_id = ""
+                    assistant_audio_item_id = ""
+                    state["response_active"] = False
+                    interruption.discard_deferred_terminal()
+                    continue
+
+                if interruption.defer_terminal(dict(event)):
+                    continue
+                if response_id and response_id == interruption.active_response_id:
+                    interruption.active_response_id = ""
+                # The response's audio item is complete; never truncate a
+                # stale item from a finished turn.
+                assistant_audio_item_id = ""
+                state["response_active"] = False
+                if response_status in {"failed"}:
+                    continue
+                if pending_prefill_context:
+                    await vercel_ws.send(json.dumps({
+                        "type": "conversation-item-create",
+                        "item": {
+                            "type": "text-message",
+                            "role": "user",
+                            "text": (
+                                "Context note for personalization only. These long-term memories may help with "
+                                "the user's next turn. Use them only when relevant, and do not mention this note.\n"
+                                f"{pending_prefill_context}"
+                            ),
+                        },
+                    }))
+                    pending_prefill_context = ""
+                memory_result = await memory_session.flush_turn()
+                completed_turn_id = ""
+                if recorder is not None and not gated_tool_turn_id:
+                    completed_turn_id = await recorder.complete_turn(memory_result)
+                await self._send_event(
+                    websocket,
+                    "memory_write",
+                    attempted_count=int(memory_result.get("attempted_count", 0)),
+                    saved_count=int(memory_result.get("saved_count", 0)),
+                    failed_count=int(memory_result.get("failed_count", 0)),
+                    local_pending_count=int(memory_result.get("local_pending_count", 0)),
+                    reason=str(memory_result.get("reason", "")),
+                )
+                if not gated_tool_turn_id:
+                    await self._send_event(
+                        websocket,
+                        "turn_complete",
+                        turn_id=completed_turn_id,
+                        interrupted=False,
+                    )
+                continue
+
+            # User speech transcription completed
+            if event_type in {"input-transcription-completed", "conversation.item.input_audio_transcription.completed"}:
+                user_text = str(event.get("transcript", "") or event.get("text", "")).strip()
                 item_id = str(event.get("itemId", ""))
+                was_interrupted_early = vercel_provider_interrupted_early
+                vercel_provider_interrupted_early = False
+
+                if was_interrupted_early:
+                    # Provider already interrupted and stopped previous assistant generation.
+                    # This transcript is the user's new utterance following the interruption.
+                    if InterruptionClassifier.classify_interruption(user_text) == InterruptionIntent.NOISE_OR_SILENCE:
+                        continue
+                    if user_text:
+                        memory_session.note_user_transcript(user_text)
+                        voice_turn_id = ""
+                        if recorder is not None:
+                            voice_turn_id = await recorder.note_user_transcript(user_text)
+                        retrieval = await memory_session.retrieve_memory_context()
+                        memory_context = str(retrieval.get("context", ""))
+                        memory_count = int(retrieval.get("memories_retrieved", 0))
+                        local_pending_count = int(retrieval.get("local_pending_count", 0))
+                        cloud_count = int(retrieval.get("cloud_count", 0))
+                        if retrieval.get("attempted"):
+                            await self._send_event(
+                                websocket,
+                                "memory_context",
+                                memories_retrieved=memory_count,
+                                local_pending_count=local_pending_count,
+                                cloud_count=cloud_count,
+                                attempted=True,
+                            )
+                        if memory_context:
+                            logger.info(
+                                "voice_memory_inject provider=Vercel scope=%s count=%s local_pending=%s cloud=%s",
+                                memory_session._config.memory_scope,
+                                memory_count,
+                                local_pending_count,
+                                cloud_count,
+                            )
+                            pending_prefill_context = memory_context
+                        await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+
+                        async def on_vercel_tool_result(result: dict[str, Any]) -> None:
+                            nonlocal gated_tool_turn_id
+                            gated_tool_turn_id = ""
+                            await self._apply_vercel_tool_result(vercel_ws, result, recorder)
+                            state["response_active"] = True
+
+                        tool_request = VoiceAgentToolService.extract_tool_request(user_text)
+                        tool_turn_id = await tool_session.handle_user_transcript(
+                            user_text,
+                            send_event=send_tool_event,
+                            on_result=on_vercel_tool_result,
+                        )
+                        if tool_turn_id:
+                            gated_tool_turn_id = tool_turn_id
+                            await self._send_response_gated(
+                                websocket,
+                                provider="Vercel",
+                                tool_name=tool_request.tool_name if tool_request else "voice_tool",
+                                query=tool_request.query if tool_request else "",
+                                turn_id=tool_turn_id,
+                                recorder=recorder,
+                            )
+                        else:
+                            await vercel_ws.send(json.dumps({"type": "response-create"}))
+                            state["response_active"] = True
+                    continue
+
                 if interruption.pending is None and (
-                    interruption.active_response_id
+                    state.get("response_active")
+                    or interruption.active_response_id
                     or tool_session.has_active_task
                     or (recorder is not None and bool(recorder.current_assistant_text))
                 ):
@@ -362,6 +615,8 @@ class VercelRealtimeMixin:
                     interruption_decision.get("classification") == InterruptionIntent.TRUE_BARGE_IN.value
                 ) and interrupted_response_id and not had_deferred_terminal:
                     suppressed_response_ids.add(interrupted_response_id)
+                    consume_next_vercel_terminal = True
+                    state["response_active"] = False
                 if not should_process_user:
                     if interruption_decision is None:
                         await discard_vercel_candidate()
@@ -431,114 +686,7 @@ class VercelRealtimeMixin:
                     else:
                         if not state["response_active"]:
                             await vercel_ws.send(json.dumps({"type": "response-create"}))
-                continue
-
-            if event_type == "speech-started":
-                if interruption.active_response_id or tool_session.has_active_task or (
-                    recorder is not None and bool(recorder.current_assistant_text)
-                ):
-                    await self._begin_interruption(
-                        websocket,
-                        interruption,
-                        provider="Vercel",
-                        provider_event_type=event_type,
-                        recorder=recorder,
-                        tool_session=tool_session,
-                    )
-                continue
-
-            if event_type == "audio-delta":
-                audio_b64 = event.get("delta", "")
-                response_id = str(event.get("responseId", ""))
-                if event.get("itemId"):
-                    assistant_audio_item_id = str(event.get("itemId"))
-                if response_id in suppressed_response_ids:
-                    continue
-                if audio_b64 and not gated_tool_turn_id:
-                    await self._emit_assistant_output(
-                        websocket,
-                        interruption,
-                        {
-                            "type": "assistant_audio",
-                            "audio": audio_b64,
-                            "encoding": "pcm_s16le",
-                            "sample_rate": 24000,
-                        },
-                        memory_session=memory_session,
-                        recorder=recorder,
-                    )
-                continue
-
-            if event_type == "audio-transcript-delta":
-                text_delta = event.get("delta", "")
-                response_id = str(event.get("responseId", ""))
-                if response_id in suppressed_response_ids:
-                    continue
-                if text_delta and not gated_tool_turn_id:
-                    await self._emit_assistant_output(
-                        websocket,
-                        interruption,
-                        {"type": "assistant_text", "text": str(text_delta)},
-                        memory_session=memory_session,
-                        recorder=recorder,
-                    )
-                continue
-
-            if event_type == "response-done":
-                response_id = str(event.get("responseId", ""))
-                response_status = str(event.get("status", "completed"))
-                if response_id in suppressed_response_ids:
-                    suppressed_response_ids.discard(response_id)
-                    if response_id == interruption.active_response_id:
-                        interruption.active_response_id = ""
-                    # A cancelled/suppressed response is over either way; the
-                    # flag must be cleared or no new response can be requested.
-                    state["response_active"] = False
-                    continue
-                if interruption.defer_terminal(dict(event)):
-                    continue
-                if response_id and response_id == interruption.active_response_id:
-                    interruption.active_response_id = ""
-                # The response's audio item is complete; never truncate a
-                # stale item from a finished turn.
-                assistant_audio_item_id = ""
-                state["response_active"] = False
-                if response_status in {"cancelled", "canceled", "failed"}:
-                    continue
-                if pending_prefill_context:
-                    await vercel_ws.send(json.dumps({
-                        "type": "conversation-item-create",
-                        "item": {
-                            "type": "text-message",
-                            "role": "user",
-                            "text": (
-                                "Context note for personalization only. These long-term memories may help with "
-                                "the user's next turn. Use them only when relevant, and do not mention this note.\n"
-                                f"{pending_prefill_context}"
-                            ),
-                        },
-                    }))
-                    pending_prefill_context = ""
-                memory_result = await memory_session.flush_turn()
-                completed_turn_id = ""
-                if recorder is not None and not gated_tool_turn_id:
-                    completed_turn_id = await recorder.complete_turn(memory_result)
-                await self._send_event(
-                    websocket,
-                    "memory_write",
-                    attempted_count=int(memory_result.get("attempted_count", 0)),
-                    saved_count=int(memory_result.get("saved_count", 0)),
-                    failed_count=int(memory_result.get("failed_count", 0)),
-                    local_pending_count=int(memory_result.get("local_pending_count", 0)),
-                    reason=str(memory_result.get("reason", "")),
-                )
-                if not gated_tool_turn_id:
-                    await self._send_event(
-                        websocket,
-                        "turn_complete",
-                        turn_id=completed_turn_id,
-                        interrupted=False,
-                    )
+                            state["response_active"] = True
                 continue
 
             if event_type == "error":
@@ -651,12 +799,14 @@ class VercelRealtimeMixin:
                 state = _new_vercel_session_state()
                 send_task = asyncio.create_task(
                     self._client_to_vercel_loop(
-                        websocket, vercel_ws, memory_session, tool_session, recorder, interruption, state
+                        websocket, vercel_ws, memory_session, tool_session, recorder, interruption, state,
+                        model=settings["model"],
                     )
                 )
                 receive_task = asyncio.create_task(
                     self._vercel_to_client_loop(
-                        websocket, vercel_ws, memory_session, tool_session, recorder, interruption, state
+                        websocket, vercel_ws, memory_session, tool_session, recorder, interruption, state,
+                        model=settings["model"],
                     )
                 )
                 await self._run_duplex_tasks(send_task, receive_task)
