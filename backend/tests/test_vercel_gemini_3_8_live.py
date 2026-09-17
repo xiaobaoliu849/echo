@@ -381,16 +381,17 @@ class VercelGeminiCanvasToolReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(artifact.get("title"), "My Todo App")
         self.assertEqual(artifact.get("code"), canvas_code)
 
-        # 3. conversation-item-create with function_call_output sent to Vercel Gateway
+        # 3. conversation-item-create with function-call-output sent to Vercel Gateway
         function_outputs = [
             m for m in vercel_ws.sent
             if m.get("type") == "conversation-item-create"
             and isinstance(m.get("item"), dict)
-            and m["item"].get("type") == "function_call_output"
+            and m["item"].get("type") in {"function-call-output", "function_call_output"}
         ]
         self.assertEqual(len(function_outputs), 1)
         item = function_outputs[0]["item"]
-        self.assertEqual(item.get("call_id"), "call-cv-101")
+        self.assertEqual(item.get("callId"), "call-cv-101")
+        self.assertEqual(item.get("name"), "render_canvas")
         output_data = json.loads(item.get("output", "{}"))
         self.assertTrue(output_data.get("ok"))
         self.assertEqual(output_data.get("tool_name"), "render_canvas")
@@ -429,10 +430,11 @@ class VercelGeminiCanvasToolReplayTests(unittest.IsolatedAsyncioTestCase):
             m for m in vercel_ws.sent
             if m.get("type") == "conversation-item-create"
             and isinstance(m.get("item"), dict)
-            and m["item"].get("type") == "function_call_output"
+            and m["item"].get("type") in {"function-call-output", "function_call_output"}
         ]
         self.assertEqual(len(function_outputs), 1)
-        self.assertEqual(function_outputs[0]["item"]["call_id"], "call-cv-102")
+        self.assertEqual(function_outputs[0]["item"]["callId"], "call-cv-102")
+        self.assertEqual(function_outputs[0]["item"]["name"], "render_canvas")
 
     async def test_render_canvas_inside_response_done_output(self):
         """Verify function_call items inside response-done are dispatched safely."""
@@ -493,7 +495,7 @@ class VercelGeminiCanvasToolReplayTests(unittest.IsolatedAsyncioTestCase):
             m for m in vercel_ws.sent
             if m.get("type") == "conversation-item-create"
             and isinstance(m.get("item"), dict)
-            and m["item"].get("type") == "function_call_output"
+            and m["item"].get("type") in {"function-call-output", "function_call_output"}
         ]
         self.assertEqual(len(function_outputs), 1)
 
@@ -513,12 +515,80 @@ class VercelGeminiCanvasToolReplayTests(unittest.IsolatedAsyncioTestCase):
             m for m in vercel_ws.sent
             if m.get("type") == "conversation-item-create"
             and isinstance(m.get("item"), dict)
-            and m["item"].get("type") == "function_call_output"
+            and m["item"].get("type") in {"function-call-output", "function_call_output"}
         ]
         self.assertEqual(len(function_outputs), 1)
         err_output = json.loads(function_outputs[0]["item"]["output"])
         self.assertFalse(err_output.get("ok"))
         self.assertIn("error", err_output)
+
+    async def test_vercel_function_call_arguments_done_wire_event(self):
+        """Verify actual Vercel AI Gateway wire event (function-call-arguments-done) triggers canvas."""
+        canvas_code = "export default function City() { return <div>Cyber City</div>; }"
+        vercel_ws = await self.replay([
+            {
+                "type": "function-call-arguments-done",
+                "responseId": "google-resp-1",
+                "itemId": "google-item-1",
+                "callId": "call_wire_999",
+                "name": "render_canvas",
+                "arguments": json.dumps({
+                    "code": canvas_code,
+                    "mode": "react",
+                    "title": "Cyber City Wire",
+                }),
+            },
+        ])
+
+        agent_results = [e for e in self.ws.events if e.get("type") == "agent_result"]
+        self.assertEqual(len(agent_results), 1)
+        self.assertEqual(agent_results[0]["artifact"]["title"], "Cyber City Wire")
+        self.assertEqual(agent_results[0]["artifact"]["code"], canvas_code)
+
+        function_outputs = [
+            m for m in vercel_ws.sent
+            if m.get("type") == "conversation-item-create"
+            and isinstance(m.get("item"), dict)
+            and m["item"].get("type") in {"function-call-output", "function_call_output"}
+        ]
+        self.assertEqual(len(function_outputs), 1)
+        self.assertEqual(function_outputs[0]["item"]["callId"], "call_wire_999")
+        self.assertEqual(function_outputs[0]["item"]["name"], "render_canvas")
+
+    async def test_extended_thinking_in_progress_defers_turn_complete(self):
+        """Verify response-done with interactionStatus IN_PROGRESS does not emit premature turn_complete."""
+        # 1. Opener audio finished with interactionStatus IN_PROGRESS: turn_complete must NOT be emitted
+        await self.replay([
+            {
+                "type": "response-done",
+                "responseId": "google-resp-0",
+                "status": "completed",
+                "raw": {
+                    "serverContent": {
+                        "turnComplete": True,
+                        "interactionStatus": "IN_PROGRESS",
+                    }
+                },
+            },
+        ])
+        turn_completes = [e for e in self.ws.events if e.get("type") == "turn_complete"]
+        self.assertEqual(len(turn_completes), 0)
+
+        # 2. Standard response-done without IN_PROGRESS emits turn_complete
+        await self.replay([
+            {
+                "type": "response-done",
+                "responseId": "google-resp-1",
+                "status": "completed",
+                "raw": {
+                    "serverContent": {
+                        "turnComplete": True,
+                    }
+                },
+            },
+        ])
+        turn_completes = [e for e in self.ws.events if e.get("type") == "turn_complete"]
+        self.assertEqual(len(turn_completes), 1)
 
 
 if __name__ == "__main__":

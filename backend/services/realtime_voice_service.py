@@ -231,7 +231,7 @@ class RealtimeVoiceService(
             "what the user said earlier, or personal preferences/profile, you MUST use the `recall_memory` tool "
             "or the long-term memories provided below. NEVER use `search_web` to search the internet for user private memories or prior conversations.\n"
             "- Only call `search_web` for real-time external public information (news, weather, sports scores, public facts) when explicitly needed.\n"
-            "- When the user asks to design, draw, sketch, create, build, or preview a UI, component, webpage, or canvas visual mockup (in HTML or React), you MUST call the `render_canvas` tool with the complete code, mode ('react' or 'html'), and title. You can generate the code via the tool while continuing to speak with the user naturally."
+            "- When the user asks to design, draw, sketch, create, build, or preview a UI, component, webpage, or canvas visual mockup (in HTML or React), you MUST execute the `render_canvas` tool call immediately with the complete code, mode ('react' or 'html'), and title. Never verbally claim you are drawing, designing, or working on it without actually executing the `render_canvas` tool call."
         )
         if not ctx:
             return f"{base_inst}{memory_rules}"

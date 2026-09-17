@@ -443,20 +443,21 @@ class VercelRealtimeMixin:
 
             # Native tool call events (AI SDK normalized or OpenAI Realtime)
             if event_type in {
+                "function-call-arguments-done",
+                "function_call_arguments_done",
+                "response.function_call_arguments.done",
                 "tool-call",
                 "tool_call",
-                "response.function_call_arguments.done",
-                "function_call_arguments_done",
             }:
                 call_id = str(
-                    event.get("toolCallId")
-                    or event.get("callId")
+                    event.get("callId")
+                    or event.get("toolCallId")
                     or event.get("call_id")
                     or event.get("id")
                     or ""
                 ).strip()
-                tool_name = str(event.get("toolName") or event.get("name") or "").strip()
-                raw_args = event.get("args") if "args" in event else event.get("arguments", {})
+                tool_name = str(event.get("name") or event.get("toolName") or "").strip()
+                raw_args = event.get("arguments") if "arguments" in event else event.get("args", {})
                 await dispatch_tool_call(call_id, tool_name, raw_args)
                 continue
 
@@ -641,11 +642,22 @@ class VercelRealtimeMixin:
                     continue
                 if response_id and response_id == interruption.active_response_id:
                     interruption.active_response_id = ""
-                # The response's audio item is complete; never truncate a
-                # stale item from a finished turn.
                 assistant_audio_item_id = ""
                 state["response_active"] = False
                 if response_status in {"failed"}:
+                    continue
+
+                raw_data = event.get("raw")
+                server_content = raw_data.get("serverContent") if isinstance(raw_data, dict) else None
+                interaction_status = (
+                    str(server_content.get("interactionStatus", "")).upper()
+                    if isinstance(server_content, dict)
+                    else ""
+                )
+                if interaction_status == "IN_PROGRESS":
+                    # Gemini Live Extended Thinking: initial audio response finished, but background
+                    # reasoning/tool-call generation is still in progress. Do NOT mark turn completed.
+                    state["response_active"] = True
                     continue
                 if pending_prefill_context:
                     await vercel_ws.send(json.dumps({
@@ -941,9 +953,10 @@ class VercelRealtimeMixin:
         )
 
         item = {
-            "type": "function_call_output",
-            "call_id": provider_call_id,
+            "type": "function-call-output",
             "callId": provider_call_id,
+            "call_id": provider_call_id,
+            "name": tool_name,
             "output": output_str,
         }
 
