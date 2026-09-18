@@ -23,6 +23,8 @@ import type {
   CustomVoiceListResponse,
   DesktopStatusResponse,
   EverMemConversationMetaResponse,
+  LocalVoiceSetupJob,
+  LocalVoiceStatusResponse,
   SettingsResponse,
   StreamEventHandlers,
   SubtitleCueItem,
@@ -1314,6 +1316,80 @@ export async function fetchSettings(): Promise<SettingsResponse> {
 
 export async function fetchDesktopStatus(): Promise<DesktopStatusResponse> {
   const response = await apiFetch(`${API_BASE_URL}/api/settings/desktop-status`);
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+// ── Local realtime voice runtimes (GLM-4-Voice / PersonaPlex) ────────────────
+
+export async function fetchLocalVoiceStatus(): Promise<LocalVoiceStatusResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/api/realtime-local/status`);
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function startLocalVoiceSetup(
+  provider: string,
+  hfToken: string = ""
+): Promise<LocalVoiceSetupJob> {
+  const response = await apiFetch(`${API_BASE_URL}/api/realtime-local/setup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, hf_token: hfToken }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function fetchLocalVoiceSetupJob(jobId: string): Promise<LocalVoiceSetupJob> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/realtime-local/setup/${encodeURIComponent(jobId)}`
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function cancelLocalVoiceSetup(jobId: string): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/realtime-local/setup/${encodeURIComponent(jobId)}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+}
+
+export async function startLocalVoiceServer(
+  provider: string,
+  hfToken: string = ""
+): Promise<{ provider: string; server_running: boolean }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/realtime-local/server/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, hf_token: hfToken }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function stopLocalVoiceServer(
+  provider: string
+): Promise<{ provider: string; server_running: boolean }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/realtime-local/server/stop`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider }),
+  });
   if (!response.ok) {
     await throwApiError(response);
   }

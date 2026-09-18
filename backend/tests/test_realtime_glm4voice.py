@@ -56,5 +56,5 @@ async def test_stream_glm4voice_session_connection_failure():
     service._send_event.assert_called_with(
         mock_ws,
         "error",
-        message="无法连接本地 GLM-4-Voice 服务（ws://127.0.0.1:8999/api/chat）：Connection refused。请确认已双击运行 run_glm4voice_server.bat，且该服务支持 WebSocket 语音对语音协议。",
+        message="无法连接本地 GLM-4-Voice 服务（ws://127.0.0.1:8999/api/chat）：Connection refused。可前往 设置 → 本地语音模型 一键安装并启动；开发者模式也可手动运行 run_glm4voice_server.bat。",
     )

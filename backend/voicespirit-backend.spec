@@ -6,7 +6,11 @@ a = Analysis(
     pathex=[],
     # Speech SDK uses ctypes with computed filenames, invisible to Analysis.
     binaries=collect_dynamic_libs('azure.cognitiveservices.speech'),
-    datas=[],
+    datas=[
+        # The GLM-4-Voice s2s bridge runs under the on-demand local runtime
+        # venv (services/local_voice_runtime.py locates it via _MEIPASS).
+        ('../glm4voice_s2s_server.py', 'local_runtime'),
+    ],
     hiddenimports=['uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.auto', 'uvicorn.protocols.websockets.websockets_impl', 'uvicorn.lifespan.on', 'pydub', 'pydub.utils', 'pydub.generators', 'edge_tts', 'dashscope', 'google.genai', 'azure.cognitiveservices.speech', 'aiohttp', 'sqlite3'],
     hookspath=[],
     hooksconfig={},
