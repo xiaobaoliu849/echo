@@ -399,11 +399,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     <span className="vsVoiceSettingsRowLabel">
                       {getProviderDisplayName(group.provider, "short", t)}
                     </span>
-                    {badge ? (
-                      <span className={`vsProviderBadge ${badge.type}`}>{badge.label}</span>
-                    ) : null}
                     {localBadge ? (
                       <span className={`vsProviderBadge ${localBadge.cls}`}>{localBadge.label}</span>
+                    ) : badge ? (
+                      <span className={`vsProviderBadge ${badge.type}`}>{badge.label}</span>
                     ) : null}
                     <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
                   </button>

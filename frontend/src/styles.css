@@ -1982,7 +1982,7 @@ button:focus-visible {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  width: 188px;
+  width: 216px;
   background: var(--bg-card);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -2220,7 +2220,9 @@ button:focus-visible {
   align-items: flex-start;
   gap: 2px;
   width: 100%;
-  padding: 7px 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 7px 8px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -2268,7 +2270,7 @@ button:focus-visible {
 .vsVoiceSettingsProviderRow {
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .vsVoiceSettingsProviderGroup {
@@ -2332,6 +2334,10 @@ button:focus-visible {
 
 .vsVoiceSettingsProviderRow .vsVoiceSettingsRowLabel {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vsProviderBadge {
