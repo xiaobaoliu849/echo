@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from typing import Any
 from urllib.parse import urlparse, parse_qsl, urlunparse, urlencode
 
 import websockets
+
+logger = logging.getLogger(__name__)
 
 from .background_tasks import spawn_background_task
 from .realtime_constants import DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE
@@ -37,6 +40,12 @@ class DashScopeRealtimeCallback:
 
         if self.loop is not None and self.queue is not None:
             self.loop.call_soon_threadsafe(self.queue.put_nowait, event)
+
+    def reset_turn_state(self) -> None:
+        """Reset turn-local guards (monotonicity and text deduplication) between turns."""
+        if hasattr(self, "_last_confirmed_by_response"):
+            self._last_confirmed_by_response.clear()
+        self._last_text_sig = None
 
     def on_open(self) -> None:
         return None
@@ -107,7 +116,7 @@ class DashScopeRealtimeCallback:
             )
             return
         if event_type == "response.audio.delta":
-            delta = str(response.get("delta", "")).strip()
+            delta = str(response.get("delta", ""))
             if delta:
                 self._push(
                     {
@@ -174,6 +183,7 @@ class DashScopeRealtimeCallback:
             )
             return
         if event_type == "response.done":
+            self.reset_turn_state()
             response_data = response.get("response") or {}
             output_items = response_data.get("output") or []
             has_function_call = any(
@@ -223,6 +233,8 @@ class DashScopeAudioRealtimeConversation:
         self.voiceprint_audio_urls = list(voiceprint_audio_urls) if voiceprint_audio_urls is not None else []
         self._ws = None
         self._receiver_task = None
+        self._sender_task: asyncio.Task[None] | None = None
+        self._send_queue: asyncio.Queue[str | None] = asyncio.Queue()
         self._closed = False
         self._session_update_count = 0
 
@@ -251,6 +263,23 @@ class DashScopeAudioRealtimeConversation:
         )
         self.callback.on_open()
         self._receiver_task = asyncio.create_task(self._receive_loop())
+        self._sender_task = asyncio.create_task(self._send_loop())
+
+    async def _send_loop(self) -> None:
+        """Serialize outbound WebSocket messages sequentially to preserve audio chunk order."""
+        try:
+            while not self._closed:
+                payload = await self._send_queue.get()
+                if payload is None:
+                    break
+                if self._ws is not None and not self._closed:
+                    try:
+                        await self._ws.send(payload)
+                    except Exception as exc:
+                        logger.warning("DashScope websocket send failed: %s", exc)
+                        break
+        except asyncio.CancelledError:
+            pass
 
     async def _receive_loop(self) -> None:
         close_code = 1000
@@ -287,7 +316,7 @@ class DashScopeAudioRealtimeConversation:
     def _send_event(self, event: dict[str, Any]) -> None:
         if self._closed or self._ws is None:
             raise RuntimeError('Qwen Audio realtime websocket is not connected.')
-        spawn_background_task(self._ws.send(json.dumps(event, ensure_ascii=False)))
+        self._send_queue.put_nowait(json.dumps(event, ensure_ascii=False))
 
     def update_session(self, **kwargs: Any) -> None:
         if self._session_update_count == 0:
@@ -338,7 +367,7 @@ class DashScopeAudioRealtimeConversation:
             raise TypeError('raw DashScope event payload must be a string.')
         if self._closed or self._ws is None:
             raise RuntimeError('Qwen Audio realtime websocket is not connected.')
-        spawn_background_task(self._ws.send(payload))
+        self._send_queue.put_nowait(payload)
 
     def create_response(self) -> None:
         self._send_event({
@@ -368,6 +397,8 @@ class DashScopeAudioRealtimeConversation:
 
     def close(self) -> None:
         self._closed = True
+        if self._sender_task is not None:
+            self._sender_task.cancel()
         if self._receiver_task is not None:
             self._receiver_task.cancel()
         if self._ws is not None:

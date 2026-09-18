@@ -754,6 +754,7 @@ class DashScopeRealtimeMixin:
         queue: asyncio.Queue[dict[str, Any]],
         memory_session: RealtimeMemorySession,
         recorder: VoiceAgentSessionRecorder | None = None,
+        callback: Any | None = None,
     ) -> None:
         """Map DashScope LiveTranslate server events to client events.
 
@@ -795,6 +796,8 @@ class DashScopeRealtimeMixin:
             await self._send_event(
                 websocket, "turn_complete", turn_id=completed_turn_id, interrupted=False
             )
+            if callback is not None and hasattr(callback, "reset_turn_state"):
+                callback.reset_turn_state()
             display_translation = ""
             pending_user = ""
             last_activity = time.time()
@@ -1019,7 +1022,7 @@ class DashScopeRealtimeMixin:
             )
             receive_task = asyncio.create_task(
                 self._dashscope_live_translate_to_client_loop(
-                    websocket, event_queue, memory_session, recorder
+                    websocket, event_queue, memory_session, recorder, callback=callback
                 )
             )
             await self._run_duplex_tasks(send_task, receive_task)

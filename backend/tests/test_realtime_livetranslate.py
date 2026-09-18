@@ -400,6 +400,73 @@ class LiveTranslateLoopTests(unittest.TestCase):
         self.assertEqual(len(audio_events), 1)
         self.assertEqual(audio_events[0]["audio"], "AAAA")
 
+    def test_multi_sentence_translation_flow(self):
+        # Two consecutive sentences separated by turn_complete.
+        # Both must produce assistant_text and turn_complete without being blocked.
+        ws = self._run_loop(
+            [
+                # Turn 1
+                {"type": "user_transcript", "text": "第一句话"},
+                {"type": "assistant_text", "text": "This is a very long first sentence translated.", "cumulative": True},
+                {"type": "turn_complete"},
+                # Turn 2: initial text is much shorter than turn 1's final text
+                {"type": "user_transcript", "text": "第二句"},
+                {"type": "assistant_text", "text": "Short second", "cumulative": True},
+                {"type": "turn_complete"},
+            ]
+        )
+        assistant_events = ws.of_type("assistant_text")
+        self.assertTrue(any("first sentence" in e.get("text", "") for e in assistant_events))
+        self.assertTrue(any("Short second" in e.get("text", "") for e in assistant_events))
+        turn_completes = ws.of_type("turn_complete")
+        self.assertEqual(len(turn_completes), 2)
+
+
+class MonotonicityResetTests(unittest.TestCase):
+    def test_monotonicity_resets_on_response_done(self):
+        async def run():
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue = asyncio.Queue()
+            callback = DashScopeRealtimeCallback(loop=loop, queue=queue)
+
+            # Sentence 1: long translation
+            callback.on_event({"type": "response.audio_transcript.text", "text": "This is a long sentence.", "response_id": ""})
+            callback.on_event({"type": "response.done", "response": {"id": "r1"}})
+
+            # Sentence 2: shorter initial chunk (must NOT be dropped)
+            callback.on_event({"type": "response.audio_transcript.text", "text": "Hi", "response_id": ""})
+
+            await asyncio.sleep(0)
+            out = []
+            while not queue.empty():
+                out.append(queue.get_nowait())
+
+            texts = [e.get("text") for e in out if e.get("type") == "assistant_text"]
+            self.assertIn("This is a long sentence.", texts)
+            self.assertIn("Hi", texts)
+
+        asyncio.run(run())
+
+    def test_manual_reset_turn_state(self):
+        async def run():
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue = asyncio.Queue()
+            callback = DashScopeRealtimeCallback(loop=loop, queue=queue)
+
+            callback.on_event({"type": "response.audio_transcript.text", "text": "A long text before reset", "response_id": ""})
+            callback.reset_turn_state()
+            callback.on_event({"type": "response.audio_transcript.text", "text": "Short", "response_id": ""})
+
+            await asyncio.sleep(0)
+            out = []
+            while not queue.empty():
+                out.append(queue.get_nowait())
+
+            texts = [e.get("text") for e in out if e.get("type") == "assistant_text"]
+            self.assertIn("Short", texts)
+
+        asyncio.run(run())
+
 
 class StreamRoutingTests(unittest.TestCase):
     def test_livetranslate_routes_to_translate_session(self):

@@ -1450,7 +1450,8 @@ export default function useVoiceChat({
           const retrievedCount = currentMemoriesRetrievedRef.current;
           const retrieveAttempted = currentMemoryRetrieveAttemptedRef.current;
           if (voiceChatLiveTranslate) {
-            if (!commitPendingLiveTranslatePair()) {
+            const hasCommitted = commitPendingLiveTranslatePair();
+            if (!hasCommitted) {
               // Boundary timer may have already committed; falling through
               // to commitCompletedTurn() would re-commit currentUserTurnRef /
               // currentAssistantTurnRef from the last syncPendingLiveTranslatePair
@@ -1460,7 +1461,14 @@ export default function useVoiceChat({
               setVoiceChatTranscript("");
               setVoiceChatReply("");
             }
-            resetLiveTranslateStreamTracking();
+            const now = Date.now();
+            const speechInFlight =
+              liveTranslateSpeechActiveRef.current ||
+              now - liveTranslateLastSourceActivityAtRef.current < 1200 ||
+              now - liveTranslateLastTargetActivityAtRef.current < 1200;
+            if (!speechInFlight) {
+              resetLiveTranslateStreamTracking();
+            }
           } else {
             commitCompletedTurn();
           }
