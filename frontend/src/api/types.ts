@@ -358,6 +358,39 @@ export type DesktopStatusResponse = {
   };
 };
 
+// ── Local realtime voice runtimes (GLM-4-Voice / PersonaPlex) ───────────────
+
+export type LocalVoiceProviderStatus = {
+  provider: string;
+  server_running: boolean;
+  installed: boolean;
+  models_downloaded: boolean;
+  requirements: {
+    min_vram_gb: number;
+    approx_download_gb: number;
+  };
+  gpu: {
+    available: boolean;
+    name?: string;
+    vram_gb?: number;
+  };
+  disk_free_gb: number;
+};
+
+export type LocalVoiceStatusResponse = {
+  providers: LocalVoiceProviderStatus[];
+};
+
+export type LocalVoiceSetupJob = {
+  job_id: string;
+  provider?: string;
+  status: "running" | "done" | "error" | "cancelled";
+  percent?: number;
+  step?: string;
+  message?: string;
+  error?: string | null;
+};
+
 export type AudioOverviewScriptLine = {
   role: string;
   text: string;

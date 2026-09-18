@@ -428,7 +428,8 @@ class PersonaPlexRealtimeMixin:
                 "error",
                 message=(
                     f"无法连接本地 PersonaPlex 服务（{settings['server_url']}）：{exc}。"
-                    "请确认 moshi.server 已启动。"
+                    "可前往 设置 → 本地语音模型 一键安装并启动；"
+                    "开发者模式也可手动启动 moshi.server（见 run_personaplex_server.bat）。"
                 ),
             )
             return

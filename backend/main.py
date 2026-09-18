@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from routers import agent_runs, audio_agent, audio_overview, auth, canvas, chat, documents, evermem, settings, tavus, transcription, translate, tts, voice_chat, voices
+from routers import agent_runs, audio_agent, audio_overview, auth, canvas, chat, documents, evermem, realtime_local, settings, tavus, transcription, translate, tts, voice_chat, voices
 from services.api_auth_guard import (
     is_auth_enabled,
     should_enforce_auth,
@@ -31,10 +31,21 @@ def create_app() -> FastAPI:
     if log_path:
         logging.getLogger("voicespirit").info("log_file_ready: %s", log_path)
 
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        yield
+        # Kill any local voice servers (GLM-4-Voice / PersonaPlex) that the
+        # backend spawned, so they never outlive the app.
+        from services.local_voice_runtime import runtime as local_runtime
+        await local_runtime.shutdown()
+
     app = FastAPI(
         title="Echo API",
         description="Echo — local-first realtime voice AI assistant backend",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     # NOTE: no "null" origin here — sandboxed iframes send Origin: null, and
@@ -311,6 +322,7 @@ def create_app() -> FastAPI:
     app.include_router(audio_overview.router, prefix="/api/audio-overview", tags=["audio-overview"])
     app.include_router(transcription.router, prefix="/api/transcription", tags=["transcription"])
     app.include_router(voice_chat.router, prefix="/api/voice-chat", tags=["voice-chat"])
+    app.include_router(realtime_local.router, prefix="/api/realtime-local", tags=["realtime-local"])
     app.include_router(canvas.router, prefix="/api/canvas", tags=["canvas"])
 
     frontend_dist_env = os.environ.get("VOICESPIRIT_FRONTEND_DIST", "").strip()

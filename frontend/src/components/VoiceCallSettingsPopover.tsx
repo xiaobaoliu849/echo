@@ -4,6 +4,8 @@ import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseC
 import {
   DASHSCOPE_PROVIDER,
   DEFAULT_TAVUS_MODEL,
+  GLM4VOICE_PROVIDER,
+  PERSONAPLEX_PROVIDER,
   TAVUS_PROVIDER,
   formatVoiceChatSecondaryLabel,
   getProviderBadge,
@@ -11,6 +13,7 @@ import {
   getProviderSortOrder,
   isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
+import { useLocalVoiceStatus } from "../hooks/useLocalVoiceStatus";
 import { useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
 import { traceSelection } from "../hooks/voiceSelectionTrace";
 
@@ -50,6 +53,36 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const [hoveredModel, setHoveredModel] = useState<string>("");
 
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // Local provider (PersonaPlex / GLM-4-Voice) runtime status; only polled
+  // while the popover is open so idle sessions don't hit the endpoint.
+  const localVoice = useLocalVoiceStatus(open);
+
+  const localStatusBadge = (provider: string): { label: string; cls: string } | null => {
+    if (provider !== PERSONAPLEX_PROVIDER && provider !== GLM4VOICE_PROVIDER) return null;
+    // Status endpoint unreachable (older backend) → show no badge rather
+    // than a wrong "未安装" while a manually started server is running.
+    if (!localVoice.loaded) return null;
+    const state = localVoice.providers[provider];
+    if (!state) {
+      return { label: t("⬇ 未安装", "⬇ Not set up"), cls: "local-missing" };
+    }
+    switch (state.phase) {
+      case "running":
+        return { label: t("● 运行中", "● Running"), cls: "local-running" };
+      case "installing":
+        return {
+          label: t(`⏳ 安装中 ${state.setupJob?.percent ?? 0}%`, `⏳ Installing ${state.setupJob?.percent ?? 0}%`),
+          cls: "local-installing",
+        };
+      case "starting":
+        return { label: t("⏳ 启动中", "⏳ Starting"), cls: "local-installing" };
+      case "installed":
+        return { label: t("▶ 待启动", "▶ Ready to start"), cls: "local-ready" };
+      default:
+        return { label: t("⬇ 未安装", "⬇ Not set up"), cls: "local-missing" };
+    }
+  };
 
   // Build unified provider groups (merging catalog choices and realtime choices)
   const providerGroups = useMemo<ProviderGroup[]>(() => {
@@ -342,6 +375,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                 const isSelectedProvider = group.provider === (chat ? chat.chatProvider : voiceChat.voiceChatProvider);
                 const isActiveProvider = group.provider === (activeProvider || currentProviderName);
                 const badge = getProviderBadge(group.provider, t);
+                const localBadge = localStatusBadge(group.provider);
                 return (
                   <button
                     key={group.provider}
@@ -367,6 +401,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     </span>
                     {badge ? (
                       <span className={`vsProviderBadge ${badge.type}`}>{badge.label}</span>
+                    ) : null}
+                    {localBadge ? (
+                      <span className={`vsProviderBadge ${localBadge.cls}`}>{localBadge.label}</span>
                     ) : null}
                     <span className="vsVoiceSettingsProviderChevron" aria-hidden="true">›</span>
                   </button>

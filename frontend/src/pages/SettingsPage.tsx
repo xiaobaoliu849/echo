@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Globe, Cpu, Brain, Mic, Monitor, ArrowLeft } from "lucide-react";
+import { Globe, Cpu, Brain, Mic, Monitor, AudioLines, ArrowLeft } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import { useI18n } from "../i18n";
@@ -8,6 +8,7 @@ import ProviderSettingsSection from "../components/settings/ProviderSettingsSect
 import TranscriptionSettingsSection from "../components/settings/TranscriptionSettingsSection";
 import MemorySettingsSection from "../components/settings/MemorySettingsSection";
 import DesktopSettingsSection from "../components/settings/DesktopSettingsSection";
+import LocalVoiceSettingsSection from "../components/settings/LocalVoiceSettingsSection";
 
 type Props = {
   settings: UseSettingsResult;
@@ -15,7 +16,7 @@ type Props = {
   onClose?: () => void;
 };
 
-type SettingCategory = "general" | "provider" | "transcription" | "memory" | "desktop";
+type SettingCategory = "general" | "provider" | "transcription" | "memory" | "desktop" | "local-voice";
 
 export default function SettingsPage({ settings, errorRuntimeContext, onClose }: Props) {
   const { t } = useI18n();
@@ -106,6 +107,18 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose }:
             <li>
               <button
                 type="button"
+                className={`vsSettingsNavItem ${activeCategory === "local-voice" ? "active" : ""}`}
+                onClick={() => setActiveCategory("local-voice")}
+              >
+                <div className="vsSettingsNavIcon">
+                  <AudioLines size={16} />
+                </div>
+                <div className="vsSettingsNavItemTitle">{t("本地语音", "Local Voice")}</div>
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
                 className={`vsSettingsNavItem ${activeCategory === "desktop" ? "active" : ""}`}
                 onClick={() => setActiveCategory("desktop")}
               >
@@ -130,6 +143,7 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose }:
                 {activeCategory === "memory" && t("EverMem 长期记忆中心", "EverMem Memory Center")}
                 {activeCategory === "transcription" && t("文件转写与上传配置", "Transcription & Upload Settings")}
                 {activeCategory === "desktop" && t("系统与运行时状态", "System & Runtime Status")}
+                {activeCategory === "local-voice" && t("本地语音模型（免 API Key）", "Local Voice Models (No API Key)")}
               </h1>
             </div>
           </header>
@@ -182,6 +196,7 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose }:
           {activeCategory === "memory" && <MemorySettingsSection settings={settings} />}
           {activeCategory === "transcription" && <TranscriptionSettingsSection settings={settings} />}
           {activeCategory === "desktop" && <DesktopSettingsSection settings={settings} />}
+          {activeCategory === "local-voice" && <LocalVoiceSettingsSection />}
 
           <footer className="vsSettingsFormFooter">
             <div className="vsSettingsFooterStatus">
