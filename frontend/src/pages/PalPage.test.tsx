@@ -194,9 +194,14 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
+      },
+      // Starting a call awaits the mocked conversation API and the Daily join;
+      // the RTL default 1s budget is not enough under full-suite parallel load.
+      { timeout: 5000 }
+    );
     expect(createTavusConversation).toHaveBeenCalledWith({
       palId: "pal-9",
       conversationName: undefined
@@ -259,9 +264,14 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
+      },
+      // Starting a call awaits the mocked conversation API and the Daily join;
+      // the RTL default 1s budget is not enough under full-suite parallel load.
+      { timeout: 5000 }
+    );
     fireEvent.click(screen.getByTestId("pal-leave-button"));
 
     await waitFor(() => {
@@ -318,9 +328,14 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
+      },
+      // Starting a call awaits the mocked conversation API and the Daily join;
+      // the RTL default 1s budget is not enough under full-suite parallel load.
+      { timeout: 5000 }
+    );
 
     // Simulate incoming speech transcript
     const appMessageHandler = call.on.mock.calls.find(([name]) => name === "app-message")?.[1];
@@ -374,9 +389,14 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
+      },
+      // Starting a call awaits the mocked conversation API and the Daily join;
+      // the RTL default 1s budget is not enough under full-suite parallel load.
+      { timeout: 5000 }
+    );
 
     const appMessageHandler = call.on.mock.calls.find(([name]) => name === "app-message")?.[1];
     appMessageHandler?.({
