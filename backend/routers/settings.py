@@ -237,6 +237,7 @@ DASHSCOPE_MODEL_LIST_SUPPLEMENTS = [
     # Realtime omni models
     "qwen3.5-omni-plus-realtime-2026-03-15",
     # Live translation (DashScope Realtime WebSocket — integrated)
+    "qwen3.8-livetranslate-flash-realtime",
     "qwen3.5-livetranslate-flash-realtime",
 ]
 DOUBAO_MODEL_LIST_SUPPLEMENTS = [

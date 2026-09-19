@@ -9,6 +9,16 @@ import {
 } from "./useVoiceChatHelpers";
 
 describe("isLiveTranslateModel", () => {
+  it("recognizes 3.8 and rejects undocumented lookalikes", () => {
+    const model = "qwen3.8-livetranslate-flash-realtime";
+    expect(isLiveTranslateModel(DASHSCOPE_PROVIDER, model)).toBe(true);
+    expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, model)).toBe(true);
+    expect(isLiveTranslateModel(DASHSCOPE_PROVIDER, model.toUpperCase())).toBe(true);
+    for (const invalid of [model + "-fake", model.replace("flash", "plus")]) {
+      expect(isLiveTranslateModel(DASHSCOPE_PROVIDER, invalid)).toBe(false);
+      expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, invalid)).toBe(false);
+    }
+  });
   it("recognizes Google live-translate models", () => {
     expect(isLiveTranslateModel(GOOGLE_PROVIDER, "gemini-3.5-live-translate-preview")).toBe(true);
   });

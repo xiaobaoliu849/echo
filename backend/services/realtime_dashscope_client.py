@@ -27,7 +27,7 @@ class DashScopeRealtimeCallback:
         text = str(event.get("text", ""))
         stash = str(event.get("stash", ""))
         response_id = str(event.get("response_id", ""))
-        if event_type == "assistant_text" and (text or stash):
+        if event_type == "assistant_text" and not event.get("incremental") and (text or stash):
             # Dedup signature uses only (response_id, text, is_final).
             # Previously including `stash` here caused the same confirmed prefix
             # to bypass deduplication whenever only the prediction changed,
@@ -55,6 +55,17 @@ class DashScopeRealtimeCallback:
             return
 
         event_type = str(response.get("type", "")).strip()
+        if event_type in {"session.updated", "session.finished"}:
+            self._push({"type": event_type})
+            return
+        if event_type == "conversation.item.input_audio_transcription.delta":
+            self._push({
+                "type": "user_transcript",
+                "text": str(response.get("delta", "")),
+                "incremental": True,
+                "item_id": str(response.get("item_id", "")),
+            })
+            return
         if event_type == "input_audio_buffer.speech_started":
             self._push(
                 {
@@ -135,6 +146,7 @@ class DashScopeRealtimeCallback:
                     {
                         "type": "assistant_text",
                         "text": delta,
+                        "incremental": True,
                         "response_id": str(response.get("response_id", "")),
                     }
                 )
@@ -409,7 +421,7 @@ DEFAULT_QWEN_LIVETRANSLATE_VOICE = DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE  # back
 
 
 class DashScopeLiveTranslateConversation(DashScopeAudioRealtimeConversation):
-    """Raw-WebSocket conversation for qwen3(.5)-livetranslate-*-realtime.
+    """Raw-WebSocket conversation for Qwen 3.5 and 3.8 LiveTranslate.
 
     Reuses the connect/receive/append/close machinery of the Qwen-Audio raw
     client but sends a translation-specific ``session.update`` (source/target
@@ -474,6 +486,24 @@ class DashScopeLiveTranslateConversation(DashScopeAudioRealtimeConversation):
         phrases = {str(k): str(v) for k, v in (corpus_phrases or {}).items() if str(k).strip()}
         if phrases:
             session["translation"]["corpus"] = {"phrases": phrases}
+
+        if self.model.strip().lower() == "qwen3.8-livetranslate-flash-realtime":
+            # 3.8 always emits ASR and uses nested audio configuration. Never
+            # send the 3.5 transcription model or flat format/voice fields.
+            session = {
+                "output_modalities": session["modalities"],
+                "translation": session["translation"],
+                "audio": {
+                    "input": {"format": {"type": "pcm", "sample_rate": 16000}},
+                    "output": {
+                        "format": {"type": "pcm", "sample_rate": 24000},
+                        "voice": target_voice,
+                    },
+                },
+                **({"enable_voice_clone": True,
+                    "voice_clone_options": {"frequency": voice_clone_frequency}}
+                   if enable_voice_clone else {}),
+            }
 
         self._send_event(
             {

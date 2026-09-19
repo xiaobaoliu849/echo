@@ -191,6 +191,7 @@ export default function useVoiceChat({
   // for a session-cumulative snapshot just because it repeats earlier words.
   const liveTranslateSourceItemIdRef = useRef("");
   const liveTranslateBoundaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveTranslateFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveTranslateLastSourceActivityAtRef = useRef(0);
   const liveTranslateLastTargetActivityAtRef = useRef(0);
   const liveTranslatePairStartedAtRef = useRef(0);
@@ -424,6 +425,10 @@ export default function useVoiceChat({
   }
 
   function stopSessionResources() {
+    if (liveTranslateFinishTimerRef.current !== null) {
+      clearTimeout(liveTranslateFinishTimerRef.current);
+      liveTranslateFinishTimerRef.current = null;
+    }
     const ws = websocketRef.current;
     websocketRef.current = null;
     audioInputReadyRef.current = false;
@@ -1107,6 +1112,9 @@ export default function useVoiceChat({
         setVoiceChatStatus(t("助手正在说话…", "Assistant speaking…"));
         return;
       case "assistant_audio":
+        if (liveTranslateFinishTimerRef.current !== null) {
+          return;
+        }
         if (voiceChatLiveTranslate) {
           liveTranslateLastTargetActivityAtRef.current = Date.now();
           scheduleLiveTranslateBoundary();
@@ -1534,6 +1542,12 @@ export default function useVoiceChat({
         setVoiceChatStatus(t("实时语音会话出错", "Realtime voice session failed"));
         stopSessionResources();
         return;
+      case "session_finished":
+        commitPendingLiveTranslatePair();
+        markNewSessionEpoch();
+        stopSessionResources();
+        setVoiceChatStatus(t("实时语音会话已结束", "Realtime voice session ended"));
+        return;
       case "pong":
       default:
         return;
@@ -1820,6 +1834,26 @@ export default function useVoiceChat({
 
   function stopSession() {
     const ws = websocketRef.current;
+    if (ws?.readyState === WebSocket.OPEN && voiceChatProvider === DASHSCOPE_PROVIDER &&
+        voiceChatModel.trim().toLowerCase() === "qwen3.8-livetranslate-flash-realtime") {
+      // Stop capture/playback immediately but retain the socket and event epoch
+      // until the server flushes the final translation segment.
+      audioInputReadyRef.current = false;
+      processorRef.current?.disconnect();
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      stopAssistantPlayback();
+      setVoiceChatBusy(true);
+      setVoiceChatRecording(false);
+      setVoiceChatStatus(t("正在完成最后一句翻译…", "Finishing the final translation…"));
+      liveTranslateFinishTimerRef.current = setTimeout(() => {
+        commitPendingLiveTranslatePair();
+        markNewSessionEpoch();
+        stopSessionResources();
+        setVoiceChatStatus(t("实时语音会话已结束", "Realtime voice session ended"));
+      }, 16000);
+      ws.send(JSON.stringify({ type: "stop" }));
+      return;
+    }
     markNewSessionEpoch();
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "stop" }));

@@ -721,12 +721,12 @@ class DashScopeRealtimeMixin:
         self,
         websocket: WebSocket,
         conversation: Any,
-    ) -> None:
+    ) -> bool:
         """Forward mic audio to the LiveTranslate model; ignore chat-only commands."""
         while True:
             message = await websocket.receive()
             if message.get("type") == "websocket.disconnect":
-                break
+                return False
 
             text_data = message.get("text")
             if text_data:
@@ -739,7 +739,7 @@ class DashScopeRealtimeMixin:
                 if command_type == "ping":
                     await self._send_event(websocket, "pong")
                 elif command_type == "stop":
-                    break
+                    return True
                 # config / text_input / interruption_* are not meaningful in
                 # simultaneous-translation mode — silently ignore them.
                 continue
@@ -755,6 +755,7 @@ class DashScopeRealtimeMixin:
         memory_session: RealtimeMemorySession,
         recorder: VoiceAgentSessionRecorder | None = None,
         callback: Any | None = None,
+        incremental_protocol: bool = False,
     ) -> None:
         """Map DashScope LiveTranslate server events to client events.
 
@@ -771,6 +772,7 @@ class DashScopeRealtimeMixin:
         has_content = False
         input_finished = False
         output_finished = False
+        source_by_item: dict[str, str] = {}
 
         async def complete_turn(force: bool = False) -> None:
             nonlocal display_translation, pending_user, last_activity
@@ -806,7 +808,7 @@ class DashScopeRealtimeMixin:
             try:
                 while True:
                     await asyncio.sleep(0.5)
-                    if has_content and time.time() - last_activity >= 2.0:
+                    if not incremental_protocol and has_content and time.time() - last_activity >= 2.0:
                         await complete_turn(force=True)
             except asyncio.CancelledError:
                 pass
@@ -820,11 +822,24 @@ class DashScopeRealtimeMixin:
                 event_type = str(event.get("type", "")).strip()
                 if event_type == "closed":
                     break
+                if event_type == "session.finished":
+                    await complete_turn(force=True)
+                    if incremental_protocol:
+                        await self._send_event(websocket, "session_finished")
+                    break
 
                 if event_type == "user_transcript":
                     last_activity = time.time()
                     has_content = True
-                    if event.get("cumulative"):
+                    if event.get("incremental"):
+                        item_id = str(event.get("item_id", ""))
+                        text = source_by_item.get(item_id, "") + str(event.get("text", ""))
+                        source_by_item[item_id] = text
+                        await self._send_event(
+                            websocket, "user_transcript", text=text,
+                            cumulative=True, item_id=item_id, turn_id="",
+                        )
+                    elif event.get("cumulative"):
                         # Only the confirmed prefix is canonical/monotonic; the
                         # tentative `stash` is sent as a separate non-accumulating
                         # field so it can never corrupt the running transcript.
@@ -845,6 +860,8 @@ class DashScopeRealtimeMixin:
                                 **extra,
                             )
                     else:
+                        item_id = str(event.get("item_id", ""))
+                        source_by_item.pop(item_id, None)
                         text = str(event.get("text", "")).strip()
                         if text:
                             pending_user = text
@@ -852,7 +869,8 @@ class DashScopeRealtimeMixin:
                             if recorder is not None:
                                 voice_turn_id = await recorder.note_user_transcript(text)
                             await self._send_event(
-                                websocket, "user_transcript", text=text, final=True, turn_id=voice_turn_id
+                                websocket, "user_transcript", text=text, final=True,
+                                turn_id=voice_turn_id, item_id=item_id
                             )
                             input_finished = True
                     await complete_turn()
@@ -886,7 +904,8 @@ class DashScopeRealtimeMixin:
                                     recorder=recorder,
                                     record_memory=False,
                                 )
-                        output_finished = True
+                        # 3.8 text completion can precede the final audio chunk.
+                        output_finished = not incremental_protocol
                     else:
                         # Merge the confirmed prefix only (monotonic). The
                         # tentative `stash` is exposed as an ephemeral preview
@@ -895,9 +914,13 @@ class DashScopeRealtimeMixin:
                         # prefix, so merging them would garble/duplicate output.
                         confirmed = str(event.get("text", ""))
                         stash = str(event.get("stash", ""))
-                        display_translation, delta = _merge_streaming_text(
-                            display_translation, confirmed
-                        )
+                        if event.get("incremental"):
+                            delta = confirmed
+                            display_translation += delta
+                        else:
+                            display_translation, delta = _merge_streaming_text(
+                                display_translation, confirmed
+                            )
                         if delta:
                             await self._emit_assistant_output(
                                 websocket,
@@ -918,7 +941,7 @@ class DashScopeRealtimeMixin:
                         await self._send_event(
                             websocket,
                             "translation_preview",
-                            text=confirmed,
+                            text=display_translation,
                             tentative=stash,
                         )
                     await complete_turn()
@@ -988,6 +1011,9 @@ class DashScopeRealtimeMixin:
             callback=callback,
             url=url,
         )
+        incremental_protocol = settings["model"].strip().lower() == "qwen3.8-livetranslate-flash-realtime"
+        finish_sent = False
+        tasks: list[asyncio.Task] = []
         try:
             await conversation.connect()
             await asyncio.sleep(0.5)
@@ -1005,7 +1031,17 @@ class DashScopeRealtimeMixin:
                 enable_voice_clone=enable_voice_clone,
                 voice_clone_frequency=voice_clone_frequency,
             )
-            await asyncio.sleep(0.5)
+            if incremental_protocol:
+                async def wait_until_configured() -> None:
+                    while True:
+                        event = await event_queue.get()
+                        if event.get("type") == "session.updated":
+                            return
+                        if event.get("type") in {"error", "closed"}:
+                            raise RuntimeError(event.get("message") or "Qwen session closed during configuration")
+                await asyncio.wait_for(wait_until_configured(), timeout=15)
+            else:
+                await asyncio.sleep(0.5)
             await self._send_event(
                 websocket,
                 "session_open",
@@ -1026,10 +1062,23 @@ class DashScopeRealtimeMixin:
             )
             receive_task = asyncio.create_task(
                 self._dashscope_live_translate_to_client_loop(
-                    websocket, event_queue, memory_session, recorder, callback=callback
+                    websocket, event_queue, memory_session, recorder, callback=callback,
+                    incremental_protocol=incremental_protocol,
                 )
             )
-            await self._run_duplex_tasks(send_task, receive_task)
+            tasks = [send_task, receive_task]
+            if incremental_protocol:
+                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                if send_task in done and send_task.result() and not receive_task.done():
+                    conversation.finish_session()
+                    finish_sent = True
+                    # Consume the final segment until acknowledgement, with a
+                    # bounded wait if the upstream never sends session.finished.
+                    await asyncio.wait_for(receive_task, timeout=15)
+                for task in done:
+                    task.result()
+            else:
+                await self._run_duplex_tasks(send_task, receive_task)
         except WebSocketDisconnect:
             return
         except Exception as e:
@@ -1039,8 +1088,14 @@ class DashScopeRealtimeMixin:
             )
             return
         finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
             try:
-                conversation.finish_session()
+                if not finish_sent:
+                    conversation.finish_session()
                 # finish_session() schedules the send as a background task; give
                 # it a moment to flush before the socket is closed so the final
                 # translation segment is not dropped on stop/disconnect.
