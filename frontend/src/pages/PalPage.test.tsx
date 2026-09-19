@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import Daily from "@daily-co/daily-js";
 import PalPage, { getRollingSubtitleText } from "./PalPage";
 import {
   createTavusConversation,
@@ -49,14 +50,11 @@ function renderPage() {
   );
 }
 
-// A connected call only appears once the hook has lazily imported the Daily
-// WebRTC SDK and joined the room. On a cold dependency cache (the packaging
-// build runs `npm ci` first) that first import can exceed vitest's default
-// five-second test budget, so call-starting tests declare their own.
-const PAL_CALL_TEST_TIMEOUT_MS = 15000;
-
 describe("PalPage", () => {
   beforeEach(() => {
+    // Resolve the SDK mock before starting any asynchronous call. Otherwise a
+    // cold dynamic import can outlive an API-only test and cross its cleanup.
+    expect(Daily.createFrame).toBe(dailyMocks.createFrame);
     vi.mocked(getPersistedTavusPalId).mockReturnValue("");
     vi.mocked(listTavusPals).mockReset();
     vi.mocked(listTavusPals).mockResolvedValue({ pals: [] });
@@ -213,7 +211,7 @@ describe("PalPage", () => {
       conversationName: undefined
     });
     expect(screen.getByText("通话中")).toBeInTheDocument();
-  }, PAL_CALL_TEST_TIMEOUT_MS);
+  });
 
   it("offers PALs from the account and starts with the selected one", async () => {
     vi.mocked(listTavusPals).mockResolvedValue({
@@ -285,7 +283,7 @@ describe("PalPage", () => {
     });
     expect(endTavusConversation).toHaveBeenCalledWith("conv-3");
     expect(screen.getByText("上一场通话已结束。")).toBeInTheDocument();
-  }, PAL_CALL_TEST_TIMEOUT_MS);
+  });
 
   it("supports subtitles toggle and opening the transcript drawer during a call", async () => {
     vi.mocked(listTavusPals).mockRejectedValue(new Error("not configured"));
@@ -377,7 +375,7 @@ describe("PalPage", () => {
       expect(screen.queryByText("通话已结束")).not.toBeInTheDocument();
       expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();
     });
-  }, PAL_CALL_TEST_TIMEOUT_MS);
+  });
 
   it("dismisses post-call summary when pressing Escape key", async () => {
     vi.mocked(listTavusPals).mockRejectedValue(new Error("not configured"));
@@ -424,7 +422,7 @@ describe("PalPage", () => {
       expect(screen.queryByText("通话已结束")).not.toBeInTheDocument();
       expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();
     });
-  }, PAL_CALL_TEST_TIMEOUT_MS);
+  });
 });
 
 describe("getRollingSubtitleText", () => {

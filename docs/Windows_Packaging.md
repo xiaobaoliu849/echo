@@ -35,6 +35,36 @@ except the explicit build version. The API URL is fixed to the local backend;
 API tokens must be supplied by the installed user's configuration. Backend
 configuration, databases, logs and audio caches are never build inputs.
 
+## Publishing a GitHub release
+
+End users download the installer from
+[GitHub Releases](https://github.com/xiaobaoliu849/echo/releases/latest). They do
+not need the source archive, Python, Node.js, or a separate FFmpeg installation.
+Provider credentials and separately hosted local models remain user setup steps.
+
+For future versions, update the Electron package version and lockfile before
+building. Always use a new version once an installer has been published; do not
+replace a published installer with different bytes under the same version.
+The build script remains the supported complete verification path. If it fails,
+inspect and resolve the failed stage; running the three packaging commands alone
+does not replace the test and executable verification gates.
+
+After a successful build, commit and push the corresponding source, then create
+a draft release targeting that exact commit. Upload these assets together:
+
+- `Echo-Setup-<version>.exe`: the built installer, renamed with hyphens to match
+  the URL in `electron/dist/latest.yml` (do not change its contents).
+- `Echo-Setup-<version>.exe.blockmap`: the matching generated blockmap.
+- `latest.yml`: generated update metadata; its size and SHA512 must match the
+  uploaded installer.
+- `SHA256SUMS.txt`: SHA256 checksums for the three assets above.
+
+Include install instructions, verification results, and known limitations in the
+release notes. Verify all asset uploads before publishing the draft as a regular
+release. Keep generated binaries out of Git commits. The application updater
+uses the same GitHub release and metadata; attaching only an EXE is insufficient
+for that flow. The unsigned installer may trigger Windows publisher warnings.
+
 ## Verification and data isolation
 
 ```powershell

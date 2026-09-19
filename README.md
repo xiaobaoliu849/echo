@@ -35,7 +35,17 @@ Edge TTS · 通义 Qwen TTS · MiniMax · OpenAI · ElevenLabs · ChatTTS · GPT
 ### 🎧 更多
 播客/多人对白生成 · 智能翻译（实时双向口译）· AI 聊天（DeepSeek / OpenRouter / Groq / SiliconFlow / Google Gemini / 通义 Qwen / Ollama，支持自定义 Provider）· PDF 文档朗读与润色 · Tavus 实时视频形象对话
 
-## 快速开始
+## 下载并安装（Windows 用户）
+
+1. 打开 [最新版本下载页](https://github.com/xiaobaoliu849/echo/releases/latest)，在 **Assets** 中下载 `Echo-Setup-1.0.1.exe`（后续版本选择对应版本的 `.exe`）。不要下载 Source code。
+2. 运行安装程序，按向导安装，然后从开始菜单打开 **Echo**。
+3. 在「设置」中填写所选 AI 服务的 API Key，再开始聊天或语音体验。
+
+适用于 Windows x64；无需克隆仓库，也无需安装 Python、Node.js 或 FFmpeg。云端 AI 功能仍需要网络及相应服务的凭据；本地大模型服务和模型权重不随安装包提供。
+
+当前安装包未做代码签名，Windows 可能显示未知发布者提示。请核对下载来源及 Release 提供的 SHA256 校验文件。启动失败时查看 `%APPDATA%/echo-desktop/logs/desktop-startup.log`；打开 Echo 前请关闭占用 8000 端口的开发服务。
+
+## 从源码运行（开发者）
 
 **环境要求**：Python 3.10+ · Node.js 20+（Vite 7 要求 ≥ 20.19）· ffmpeg（音频处理）
 

@@ -35,7 +35,17 @@ Edge TTS · Qwen TTS · MiniMax · OpenAI · ElevenLabs · ChatTTS · GPT-SoVITS
 ### 🎧 その他
 ポッドキャスト/複数話者対話生成 · 翻訳（リアルタイム双方向通訳を含む）· AI チャット（DeepSeek / OpenRouter / Groq / SiliconFlow / Google Gemini / 通義 Qwen / Ollama、カスタムプロバイダー対応）· PDF の読み上げと推敲 · Tavus によるリアルタイム映像ペルソナ対話
 
-## クイックスタート
+## ダウンロードとインストール（Windows）
+
+1. [最新リリース](https://github.com/xiaobaoliu849/echo/releases/latest) の **Assets** から `Echo-Setup-1.0.1.exe`（新しいバージョンでは対応する `.exe`）をダウンロードします。Source code は不要です。
+2. インストーラーの案内に従い、スタートメニューから **Echo** を起動します。
+3. 「設定」で利用する AI サービスの API キーを入力します。
+
+Windows x64 向けです。リポジトリのクローンや Python、Node.js、FFmpeg のインストールは不要です。クラウド AI 機能にはネットワーク接続と対応サービスの認証情報が必要です。ローカルモデルのサーバーや重みは含まれません。
+
+インストーラーは未署名のため、Windows が不明な発行元の警告を表示する場合があります。配布元とリリースの SHA256 ファイルを確認してください。起動時のログは `%APPDATA%/echo-desktop/logs/desktop-startup.log` にあります。起動前にポート 8000 を使用する開発サーバーを終了してください。
+
+## ソースから実行（開発者向け）
 
 **必要環境**：Python 3.10+ · Node.js 20+（Vite 7 の要件は ≥ 20.19）· ffmpeg（音声処理）
 

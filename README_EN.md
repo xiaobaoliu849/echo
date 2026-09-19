@@ -35,7 +35,17 @@ Voice design (text-to-voice) and voice cloning from a short sample
 ### 🎧 More
 Podcast / multi-speaker dialogue generation · translation (incl. realtime bidirectional interpreting) · AI chat (DeepSeek / OpenRouter / Groq / SiliconFlow / Google Gemini / Qwen / Ollama, plus custom providers) · PDF reading & polishing · realtime video personas via Tavus
 
-## Quick Start
+## Download and install (Windows)
+
+1. Open the [latest release](https://github.com/xiaobaoliu849/echo/releases/latest). Under **Assets**, download `Echo-Setup-1.0.1.exe` (or the matching `.exe` for a newer version), rather than Source code.
+2. Run the installer, follow the wizard, and launch **Echo** from the Start menu.
+3. Open **Settings**, enter the API key for your chosen AI provider, and start a conversation.
+
+For Windows x64. No repository clone, Python, Node.js, or FFmpeg installation is needed. Cloud AI features require a network connection and the relevant provider credentials. Local model servers and model weights are not included.
+
+The installer is currently unsigned, so Windows may show an unknown publisher prompt. Check the download source and the SHA256 file provided with the release. For startup failures, check `%APPDATA%/echo-desktop/logs/desktop-startup.log`; close development servers using port 8000 before opening Echo.
+
+## Run from source (developers)
 
 **Requirements**: Python 3.10+ · Node.js 20+ (Vite 7 needs ≥ 20.19) · ffmpeg
 
