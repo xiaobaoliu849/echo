@@ -833,11 +833,15 @@ class DashScopeRealtimeMixin:
                         pending_user = confirmed
                         if confirmed or stash:
                             extra: dict[str, Any] = {"tentative": stash} if stash else {}
+                            item_id = str(event.get("item_id", ""))
+                            if item_id:
+                                extra["item_id"] = item_id
                             await self._send_event(
                                 websocket,
                                 "user_transcript",
                                 text=confirmed,
                                 turn_id="",
+                                cumulative=True,
                                 **extra,
                             )
                     else:

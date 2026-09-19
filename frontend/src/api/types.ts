@@ -691,7 +691,7 @@ export type VoiceChatServerEvent =
       local_pending_count?: number;
       reason?: string;
     }
-  | { type: "user_transcript"; text: string; turn_id?: string; tentative?: string; final?: boolean; interim?: boolean }
+  | { type: "user_transcript"; text: string; turn_id?: string; tentative?: string; final?: boolean; interim?: boolean; cumulative?: boolean; item_id?: string }
   | { type: "translation_preview"; text?: string; tentative?: string; turn_id?: string }
   // `cumulative` marks a whole-transcript snapshot (or a final canonical
   // correction) that replaces what was streamed so far. Without it, `text` is a

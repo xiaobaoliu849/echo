@@ -803,6 +803,199 @@ describe("useVoiceChat", () => {
     vi.useRealTimers();
   });
 
+  it("replaces the pending source with a cumulative DashScope snapshot instead of merging it", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-live-translate-dashscope-cumulative");
+
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        providerOptions: ["DashScope"],
+        preferredProvider: "DashScope",
+        preferredModel: "qwen3.5-livetranslate-flash-realtime",
+        providerModelCatalog: {
+          DashScope: {
+            defaultModel: "qwen3.5-livetranslate-flash-realtime",
+            availableModels: ["qwen3.5-livetranslate-flash-realtime"],
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+
+    const socket = FakeWebSocket.instances[0];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({
+        type: "session_open",
+        provider: "DashScope",
+        model: "qwen3.5-livetranslate-flash-realtime",
+        voice: "Cherry",
+        mode: "live_translate",
+      });
+      // Qwen LiveTranslate streams `input_audio_transcription.text` as a
+      // per-item cumulative snapshot: each frame replaces the whole in-progress
+      // utterance instead of extending it.
+      socket.emitMessage({
+        type: "user_transcript",
+        text: "Um, do you",
+        cumulative: true,
+        item_id: "item-1",
+      });
+      socket.emitMessage({
+        type: "user_transcript",
+        text: "Um, do you know Longcha?",
+        cumulative: true,
+        item_id: "item-1",
+      });
+      socket.emitMessage({ type: "assistant_text", text: "あの、ご存知ですか？" });
+    });
+
+    // A cumulative snapshot must not be merged onto the previous pending draft,
+    // which would show the utterance twice.
+    expect(result.current.voiceChatTranscript).toBe("Um, do you know Longcha?");
+    expect(result.current.voiceChatReply).toBe("あの、ご存知ですか？");
+  });
+
+  it("keeps a per-item DashScope transcript whole after the previous pair is committed", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-live-translate-dashscope-items");
+
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        providerOptions: ["DashScope"],
+        preferredProvider: "DashScope",
+        preferredModel: "qwen3.5-livetranslate-flash-realtime",
+        providerModelCatalog: {
+          DashScope: {
+            defaultModel: "qwen3.5-livetranslate-flash-realtime",
+            availableModels: ["qwen3.5-livetranslate-flash-realtime"],
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+
+    const socket = FakeWebSocket.instances[0];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({
+        type: "session_open",
+        provider: "DashScope",
+        model: "qwen3.5-livetranslate-flash-realtime",
+        voice: "Cherry",
+        mode: "live_translate",
+      });
+      socket.emitMessage({
+        type: "user_transcript",
+        text: "你好。",
+        cumulative: true,
+        item_id: "item-1",
+      });
+      socket.emitMessage({ type: "assistant_text", text: "Hello." });
+      socket.emitMessage({ type: "turn_complete" });
+    });
+
+    expect(result.current.voiceChatMessages.map((message) => message.content)).toEqual([
+      "你好。",
+      "Hello.",
+    ]);
+
+    act(() => {
+      socket.emitMessage({
+        type: "user_transcript",
+        text: "早上好。",
+        cumulative: true,
+        item_id: "item-2",
+      });
+      socket.emitMessage({ type: "assistant_text", text: "Good morning." });
+    });
+
+    expect(result.current.voiceChatTranscript).toBe("早上好。");
+    expect(result.current.voiceChatReply).toBe("Good morning.");
+
+    act(() => {
+      socket.emitMessage({ type: "turn_complete" });
+    });
+
+    expect(result.current.voiceChatMessages.map((message) => message.content)).toEqual([
+      "你好。",
+      "Hello.",
+      "早上好。",
+      "Good morning.",
+    ]);
+  });
+
+  it("does not treat a new DashScope utterance as a session-cumulative snapshot", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-live-translate-dashscope-prefix");
+
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage,
+        providerOptions: ["DashScope"],
+        preferredProvider: "DashScope",
+        preferredModel: "qwen3.5-livetranslate-flash-realtime",
+        providerModelCatalog: {
+          DashScope: {
+            defaultModel: "qwen3.5-livetranslate-flash-realtime",
+            availableModels: ["qwen3.5-livetranslate-flash-realtime"],
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await result.current.onToggleRecording();
+    });
+
+    const socket = FakeWebSocket.instances[0];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({
+        type: "session_open",
+        provider: "DashScope",
+        model: "qwen3.5-livetranslate-flash-realtime",
+        voice: "Cherry",
+        mode: "live_translate",
+      });
+      socket.emitMessage({
+        type: "user_transcript",
+        text: "你好",
+        cumulative: true,
+        item_id: "item-1",
+      });
+      socket.emitMessage({ type: "assistant_text", text: "Hello" });
+      socket.emitMessage({ type: "turn_complete" });
+    });
+
+    expect(result.current.voiceChatMessages.map((message) => message.content)).toEqual([
+      "你好",
+      "Hello",
+    ]);
+
+    // The committed text happens to be a prefix of the next utterance. Qwen
+    // LiveTranslate sends per-item snapshots, so this must stay one full
+    // utterance rather than being sliced into "吗？".
+    act(() => {
+      socket.emitMessage({
+        type: "user_transcript",
+        text: "你好吗？",
+        cumulative: true,
+        item_id: "item-2",
+      });
+    });
+
+    expect(result.current.voiceChatTranscript).toBe("你好吗？");
+  });
+
   it("waits for a lagging Live Translate target before committing the pair", async () => {
     vi.useFakeTimers();
     const formatErrorMessage = createFormatErrorMessageStub();

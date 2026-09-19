@@ -184,6 +184,12 @@ export default function useVoiceChat({
   const liveTranslatePreviewRef = useRef("");  // speculative text from stash — NOT in the confirmed stream
   const liveTranslateConsumedSourceLengthRef = useRef(0);
   const liveTranslateConsumedTargetLengthRef = useRef(0);
+  // Provider input item that produced the current source snapshot. Providers
+  // differ in transcript scope: Gemini Live Translate sends one growing
+  // session-wide string, while Qwen LiveTranslate re-sends the current input
+  // item only. Tracking the item id keeps a new utterance from being mistaken
+  // for a session-cumulative snapshot just because it repeats earlier words.
+  const liveTranslateSourceItemIdRef = useRef("");
   const liveTranslateBoundaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveTranslateLastSourceActivityAtRef = useRef(0);
   const liveTranslateLastTargetActivityAtRef = useRef(0);
@@ -410,6 +416,7 @@ export default function useVoiceChat({
     liveTranslatePreviewRef.current = "";
     liveTranslateConsumedSourceLengthRef.current = 0;
     liveTranslateConsumedTargetLengthRef.current = 0;
+    liveTranslateSourceItemIdRef.current = "";
     liveTranslateLastSourceActivityAtRef.current = 0;
     liveTranslateLastTargetActivityAtRef.current = 0;
     liveTranslatePairStartedAtRef.current = 0;
@@ -864,48 +871,77 @@ export default function useVoiceChat({
           liveTranslateLastSourceActivityAtRef.current = Date.now();
           const incomingSource = event.text || event.tentative || "";
 
-          if (event.final && event.text) {
-            // Completed ASR event: Qwen's canonical final text for this input item.
-            // Replace the uncommitted portion of the source stream with this exact
-            // text instead of merging (which would append the corrected text onto
-            // early flawed ASR drafts).
-            const consumed = liveTranslateConsumedSourceLengthRef.current;
-            const prefix = liveTranslateSourceStreamRef.current.slice(0, consumed);
-            const finalText = event.text.trim();
-            if (prefix) {
-              const needsSpace =
-                !isCJKPredominant(prefix) && !isCJKPredominant(finalText);
-              liveTranslateSourceStreamRef.current = `${prefix}${needsSpace ? " " : ""}${finalText}`;
-            } else {
-              liveTranslateSourceStreamRef.current = finalText;
-            }
+          const consumed = liveTranslateConsumedSourceLengthRef.current;
+          const committedPrefix = liveTranslateSourceStreamRef.current.slice(0, consumed);
+          const previousPendingSource = liveTranslateSourceStreamRef.current
+            .slice(consumed)
+            .trim();
+          const pendingTarget = getPendingLiveTranslatePair().target;
+
+          const trimmedCommitted = committedPrefix.trim();
+          const trimmedIncoming = incomingSource.trim();
+          // A snapshot carrying a different provider item id starts a new input
+          // item (Qwen LiveTranslate), so its text can never be a session-wide
+          // cumulative snapshot — even when it happens to repeat the committed
+          // words. Without this, "你好" then "你好吗？" would slice away "你好"
+          // and commit only "吗？".
+          const incomingItemId = event.item_id || "";
+          const startsNewSourceItem =
+            Boolean(incomingItemId) && incomingItemId !== liveTranslateSourceItemIdRef.current;
+          if (incomingItemId) {
+            liveTranslateSourceItemIdRef.current = incomingItemId;
+          }
+          const isSessionCumulative =
+            !startsNewSourceItem &&
+            trimmedCommitted.length > 0 &&
+            trimmedIncoming.startsWith(trimmedCommitted);
+
+          const incomingUtterance = isSessionCumulative
+            ? trimmedIncoming.slice(trimmedCommitted.length).trim()
+            : trimmedIncoming;
+
+          if (
+            previousPendingSource &&
+            incomingUtterance &&
+            pendingTarget &&
+            endsWithSentencePunctuation(pendingTarget) &&
+            endsWithSentencePunctuation(previousPendingSource) &&
+            !shouldCoalesceLiveTranslateSegment(previousPendingSource, incomingUtterance)
+          ) {
+            commitPendingLiveTranslatePair();
+          }
+
+          const activeConsumed = liveTranslateConsumedSourceLengthRef.current;
+          const activePrefix = liveTranslateSourceStreamRef.current.slice(0, activeConsumed);
+          const activePreviousPending = liveTranslateSourceStreamRef.current
+            .slice(activeConsumed)
+            .trim();
+
+          if (isSessionCumulative) {
+            liveTranslateSourceStreamRef.current = trimmedIncoming;
+            liveTranslateConsumedSourceLengthRef.current = trimmedCommitted.length;
           } else {
-            // Streaming cumulative transcript: compute pending source delta & merge
-            const previousPendingSource = liveTranslateSourceStreamRef.current
-              .slice(liveTranslateConsumedSourceLengthRef.current)
-              .trim();
-            const mergedSource = mergeAssistantText(
-              liveTranslateSourceStreamRef.current,
-              incomingSource
-            );
-            const newPendingSource = mergedSource
-              .slice(liveTranslateConsumedSourceLengthRef.current)
-              .trim();
-            const sourceDelta = newPendingSource.startsWith(previousPendingSource)
-              ? newPendingSource.slice(previousPendingSource.length).trim()
-              : newPendingSource;
-            const pendingTarget = getPendingLiveTranslatePair().target;
-            if (
-              previousPendingSource &&
-              sourceDelta &&
-              pendingTarget &&
-              endsWithSentencePunctuation(pendingTarget) &&
-              endsWithSentencePunctuation(previousPendingSource) &&
-              !shouldCoalesceLiveTranslateSegment(previousPendingSource, sourceDelta)
-            ) {
-              commitPendingLiveTranslatePair();
+            let newPendingSource = incomingUtterance;
+            if (activePreviousPending && !event.final && !event.cumulative) {
+              if (incomingUtterance.startsWith(activePreviousPending)) {
+                newPendingSource = incomingUtterance;
+              } else if (activePreviousPending.startsWith(incomingUtterance)) {
+                newPendingSource = activePreviousPending;
+              } else {
+                newPendingSource = mergeAssistantText(activePreviousPending, incomingUtterance);
+              }
             }
-            liveTranslateSourceStreamRef.current = mergedSource;
+
+            if (activePrefix) {
+              const needsSpace =
+                newPendingSource.length > 0 &&
+                !isCJKPredominant(activePrefix) &&
+                !isCJKPredominant(newPendingSource);
+              liveTranslateSourceStreamRef.current = `${activePrefix}${needsSpace ? " " : ""}${newPendingSource}`;
+            } else {
+              liveTranslateSourceStreamRef.current = newPendingSource;
+              liveTranslateConsumedSourceLengthRef.current = 0;
+            }
           }
 
           syncPendingLiveTranslatePair();
