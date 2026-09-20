@@ -773,11 +773,13 @@ class DashScopeRealtimeMixin:
         input_finished = False
         output_finished = False
         source_by_item: dict[str, str] = {}
-        # Incremental (3.8) source-utterance bookkeeping. The 3.8 server does
-        # not reliably send a per-utterance transcription `completed` event, so
-        # the recorder never learned the user's source text. An input item is
-        # closed when speech stops (or when the next item starts), and the text
-        # collected so far is attached to the turn the translation opens.
+        # Incremental (3.8) source-utterance bookkeeping. The normal path is the
+        # per-item transcription `completed` event, but it only arrives when the
+        # turn closes — an abrupt disconnect mid-utterance leaves the source text
+        # unrecorded. An input item is therefore closed when speech stops (or
+        # when the next item starts) and its accumulated text is attached to the
+        # turn the translation opens; a queue entry whose text `completed`
+        # already consumed resolves to nothing and is skipped.
         open_source_item = ""
         closed_source_items: set[str] = set()
         pending_source_order: list[str] = []
@@ -822,8 +824,8 @@ class DashScopeRealtimeMixin:
                 # before the turn is closed: an assistant-authored turn already
                 # exists at this point with no user text, so note_user_transcript
                 # fills that same row in instead of opening a second turn.
-                # (3.5 records its source text from the transcription
-                # `completed` event instead, so the queue stays empty there.)
+                # (When `completed` already recorded it, take_pending_source
+                # yields nothing and this is a no-op.)
                 pending_source = take_pending_source() if incremental_protocol else ""
                 if pending_source:
                     await recorder.note_user_transcript(pending_source)

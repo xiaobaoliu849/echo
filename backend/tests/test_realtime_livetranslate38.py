@@ -39,6 +39,12 @@ def test_session_payload(clone, voice, frequency):
     assert session["audio"]["input"]["format"]["sample_rate"] == 16000
     assert session["audio"]["output"]["format"]["sample_rate"] == 24000
     assert session["audio"]["output"]["voice"] == ("default" if clone else voice)
+    # Turn detection must be sent explicitly: the server default (2500 ms of
+    # silence) held an utterance open seconds after the speaker stopped.
+    turn_detection = session["audio"]["input"]["turn_detection"]
+    assert turn_detection["type"] == "speaker_detection"
+    assert turn_detection["silence_duration_ms"] == 500
+    assert 200 <= turn_detection["silence_duration_ms"] <= 6000
     if clone or voice.startswith("qwen-translate-vc-"):
         assert session["enable_voice_clone"] is True
         assert session["voice_clone_options"]["frequency"] == (frequency if clone else "never")

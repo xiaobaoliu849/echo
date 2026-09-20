@@ -12,7 +12,10 @@ import websockets
 logger = logging.getLogger(__name__)
 
 from .background_tasks import spawn_background_task
-from .realtime_constants import DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE
+from .realtime_constants import (
+    DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE,
+    QWEN_LIVETRANSLATE_38_TURN_DETECTION,
+)
 
 DEFAULT_QWEN_AUDIO_REALTIME_VOICE = "longanqian"
 
@@ -113,10 +116,11 @@ class DashScopeRealtimeCallback:
             return
         if event_type == "input_audio_buffer.speech_stopped":
             if self.incremental_asr:
-                # Clean end-of-utterance signal for the translation protocol:
-                # the 3.8 server does not reliably send a per-utterance
-                # transcription `completed` event, so this is what tells the
-                # provider a source item is closed.
+                # End-of-utterance signal for the translation protocol. 3.8
+                # emits ``...input_audio_transcription.completed`` too, but
+                # only once the turn closes; this arrives earlier and is what
+                # lets the provider close a source item even when the
+                # transcription finalisation never lands (abrupt disconnect).
                 self._push(
                     {
                         "type": "speech_stopped",
@@ -551,11 +555,18 @@ class DashScopeLiveTranslateConversation(DashScopeAudioRealtimeConversation):
         if self.model.strip().lower() == "qwen3.8-livetranslate-flash-realtime":
             # 3.8 always emits ASR and uses nested audio configuration. Never
             # send the 3.5 transcription model or flat format/voice fields.
+            # ``turn_detection`` is not optional here: the server default keeps
+            # an utterance open for 2.5s of silence before flushing its text and
+            # audio, which is what made the last sentence appear "ages" after
+            # the speaker stopped. See QWEN_LIVETRANSLATE_38_TURN_DETECTION.
             session = {
                 "output_modalities": session["modalities"],
                 "translation": session["translation"],
                 "audio": {
-                    "input": {"format": {"type": "pcm", "sample_rate": 16000}},
+                    "input": {
+                        "format": {"type": "pcm", "sample_rate": 16000},
+                        "turn_detection": dict(QWEN_LIVETRANSLATE_38_TURN_DETECTION),
+                    },
                     "output": {
                         "format": {"type": "pcm", "sample_rate": 24000},
                         "voice": target_voice,
