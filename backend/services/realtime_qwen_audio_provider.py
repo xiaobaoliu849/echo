@@ -18,8 +18,7 @@ from .realtime_constants import (
     DEFAULT_DASHSCOPE_REALTIME_MODEL,
     QWEN_AUDIO_BENIGN_ERROR_PATTERNS,
     QWEN_AUDIO_REALTIME_INSTRUCTIONS,
-    QWEN_AUDIO_REALTIME_VOICES,
-    DEFAULT_QWEN_AUDIO_REALTIME_VOICE,
+    _normalize_dashscope_realtime_voice,
     _audio_energy_qwen,
     _clean_transcript_text,
     _is_dashscope_audio_realtime_model,
@@ -945,13 +944,14 @@ class QwenAudioRealtimeMixin:
         settings = self._resolve_dashscope_settings(model)
         memory_session = RealtimeMemorySession()
         tool_session = VoiceAgentToolSession(default_provider="DashScope")
-        resolved_voice = (voice or DEFAULT_QWEN_AUDIO_REALTIME_VOICE).strip()
-        if resolved_voice not in QWEN_AUDIO_REALTIME_VOICES:
+        # Model-aware: 3.1 defaults to longanqian_v3.1 and rejects the 3.1-only
+        # voices' absence correctly, 3.0 keeps longanqian.
+        resolved_voice = _normalize_dashscope_realtime_voice(settings["model"], voice)
+        if str(voice or "").strip() and resolved_voice != str(voice).strip():
             logger.warning(
-                "qwen_audio_unsupported_voice voice=%s fallback=%s",
-                resolved_voice, DEFAULT_QWEN_AUDIO_REALTIME_VOICE,
+                "qwen_audio_unsupported_voice model=%s voice=%s fallback=%s",
+                settings["model"], voice, resolved_voice,
             )
-            resolved_voice = DEFAULT_QWEN_AUDIO_REALTIME_VOICE
         recorder = await self._create_voice_session_recorder(
             provider="DashScope",
             model=settings["model"],

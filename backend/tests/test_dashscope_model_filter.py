@@ -105,6 +105,11 @@ class MergeDashScopeSupplementsTests(unittest.TestCase):
 
         # Chat/realtime supplements land in "available".
         self.assertIn("qwen3.8-livetranslate-flash-realtime", entry["available"])
+        # The 3.8 omni realtime model is NOT supplemented: it is missing from the
+        # account's model catalog, so advertising it only offers a model the
+        # server answers with AccessDenied. Discovery, not the supplement list,
+        # is what surfaces it. See docs/Qwen_3_8_Omni_Realtime.md.
+        self.assertNotIn("qwen3.8-omni-flash-realtime", entry["available"])
         self.assertIn("qwen3.5-omni-plus-realtime-2026-03-15", entry["available"])
         # A superseded alias is never re-advertised by the merge.
         self.assertNotIn("qwen3.5-livetranslate-flash-realtime", entry["available"])
@@ -181,14 +186,29 @@ class RetiredDashScopeModelTests(unittest.TestCase):
 
     def test_current_qwen35_and_audio_models_are_not_retired(self) -> None:
         for current in (
+            "qwen3.8-omni-flash-realtime",
             "qwen3.5-omni-plus-realtime",
             "qwen3.5-omni-plus-realtime-2026-03-15",
             "qwen3.5-omni-flash-realtime",
             "qwen3.8-livetranslate-flash-realtime",
-            "qwen-audio-3.0-realtime-plus",
+            "qwen-audio-3.1-realtime-plus",
             "qwen-plus",
         ):
             self.assertFalse(_is_retired_dashscope_model(current), current)
+
+    def test_superseded_qwen_audio_30_realtime_is_retired(self) -> None:
+        """3.1 replaces 3.0; only the current generation stays in the picker."""
+        self.assertTrue(_is_retired_dashscope_model("qwen-audio-3.0-realtime-plus"))
+        self.assertTrue(_is_retired_dashscope_model("qwen-audio-3.0-realtime-flash"))
+        # The non-realtime/TTS 3.0 models are a different question.
+        self.assertFalse(_is_retired_dashscope_model("qwen-audio-3.0-tts-flash"))
+
+    def test_filter_keeps_the_38_omni_realtime_model_for_discovery(self) -> None:
+        """When the vendor does list it, the picker must not filter it out."""
+        filtered = _filter_dashscope_models(
+            ["qwen3.8-omni-flash-realtime", "qwen3.8-omni-flash", "qwen-plus"]
+        )
+        self.assertIn("qwen3.8-omni-flash-realtime", filtered)
 
     def test_filter_drops_legacy_qwen3_omni_keeps_qwen35(self) -> None:
         filtered = _filter_dashscope_models(
@@ -225,7 +245,12 @@ class GetSettingsEnabledSanitizationTests(unittest.TestCase):
         self.assertNotIn("qwen3-omni-flash-2025-12-01", ds["enabled"])
         self.assertNotIn("qwen3-omni-flash-2025-12-01", ds["available"])
         self.assertIn("qwen3.5-omni-plus-realtime-2026-03-15", ds["enabled"])
-        self.assertIn("qwen-audio-3.0-realtime-plus", ds["enabled"])
+        # Superseded by 3.1, which the supplement merge restores. NOTE: every
+        # `qwen-audio-*` id is routed to `tts_available` by _is_tts_model_id
+        # ("qwen-audio" is a TTS keyword) — pre-existing behaviour for the
+        # qwen-audio realtime models, not something this swap changed.
+        self.assertNotIn("qwen-audio-3.0-realtime-plus", ds["enabled"])
+        self.assertIn("qwen-audio-3.1-realtime-plus", ds["tts_available"])
         self.assertIn("qwen-plus", ds["available"])
 
     def test_superseded_qwen35_livetranslate_leaves_the_picker(self) -> None:

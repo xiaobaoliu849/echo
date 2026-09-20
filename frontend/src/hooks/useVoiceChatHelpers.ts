@@ -85,6 +85,9 @@ export function normalizeProviderKey(provider: string): string {
   const trimmed = (provider || "").trim();
   return LEGACY_PROVIDER_ALIASES[trimmed] ?? trimmed;
 }
+// Shipped DashScope realtime default. Mirrors DEFAULT_DASHSCOPE_REALTIME_MODEL
+// in backend/services/realtime_constants.py: 3.5 until a 3.8 omni call is
+// verified live (the 3.8 realtime session is closed by the server today).
 export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_STEPFUN_MODEL = "stepaudio-3-realtime-preview";
@@ -343,9 +346,9 @@ export const DOUBAO_REALTIME_VOICES = [
   { value: "en_female_stokie_uranus_bigtts", label: "Stokie · American English (Female)", description: "美式英语女声（仅 O2.0）" },
 ];
 
-// Voices for qwen3.5-omni-*-realtime models (default: Tina), per the official
-// omni voice list (docs/全模态.txt). The older Cherry-era voices belong to
-// qwen3-omni / qwen-omni-turbo and are rejected by qwen3.5-omni models.
+// Voices for the qwen3.5 / qwen3.8 omni realtime models (default: Tina), per the
+// official omni voice list (docs/全模态.txt). The older Cherry-era voices belong
+// to qwen3-omni / qwen-omni-turbo and are rejected by the omni realtime models.
 export const QWEN_OMNI_REALTIME_VOICES = [
   { value: "Tina", label: "Tina · 甜甜 (Female)", description: "像温热的奶茶，甜甜的暖暖的" },
   { value: "Ethan", label: "Ethan · 晨煦 (Male)", description: "标准普通话，阳光温暖有活力" },
@@ -367,6 +370,22 @@ export const QWEN_AUDIO_VOICES = [
   { value: "longanlingxi", label: "longanlingxi · 龙灵犀 (Female)", description: "qwen-audio 女声" },
   { value: "longanxiaoxin", label: "longanxiaoxin · 龙小新 (Female)", description: "qwen-audio 女声" },
   { value: "longanlufeng", label: "longanlufeng · 龙陆风 (Male)", description: "qwen-audio 男声" },
+];
+
+// qwen-audio-3.1-realtime-plus takes the five 3.0 voices plus eight new ones,
+// and its own default is longanqian_v3.1 (mirrors
+// QWEN_AUDIO_31_REALTIME_VOICES in backend/services/realtime_constants.py).
+// Only the ids are certain for the new voices, so they stay labelled by id.
+export const QWEN_AUDIO_31_VOICES = [
+  { value: "longanqian_v3.1", label: "longanqian_v3.1 · 3.1 默认 (Female)", description: "3.1 Plus 默认音色" },
+  ...QWEN_AUDIO_VOICES,
+  { value: "longanhuan_v3.1", label: "longanhuan_v3.1", description: "3.1 新增系统音色" },
+  { value: "longanlingxin_v3.1", label: "longanlingxin_v3.1", description: "3.1 新增系统音色" },
+  { value: "longanfengyue_v3.1", label: "longanfengyue_v3.1", description: "3.1 新增系统音色" },
+  { value: "xunanchuan", label: "xunanchuan", description: "3.1 新增系统音色" },
+  { value: "beth_v3.1", label: "beth_v3.1", description: "3.1 新增系统音色" },
+  { value: "betty_v3.1", label: "betty_v3.1", description: "3.1 新增系统音色" },
+  { value: "cally_v3.1", label: "cally_v3.1", description: "3.1 新增系统音色" },
 ];
 
 // Voices for qwen3.5-livetranslate-*-realtime (default: Tina), per the official
@@ -410,6 +429,12 @@ export const QWEN_LIVETRANSLATE_VOICES = [
 
 export function isQwenAudioModel(model: string | undefined): boolean {
   return !!(model && model.toLowerCase().includes("qwen-audio"));
+}
+
+// Mirrors DASHSCOPE_AUDIO_31_REALTIME_PATTERN in the backend: only 3.1 uses the
+// 3.1 voice table and the longanqian_v3.1 default.
+export function isQwenAudio31Model(model: string | undefined): boolean {
+  return /^qwen-audio-3\.1-realtime(?:-(?:plus|flash))?$/.test((model || "").trim().toLowerCase());
 }
 
 // Voice prompts shipped in the PersonaPlex voices.tgz bundle. NAT* are
@@ -509,7 +534,9 @@ export function formatRealtimeVoiceOptions(
   } else if (provider === TAVUS_PROVIDER) {
     options = [{ value: "default", label: "Tavus Avatar · 默认分身", description: "CVI 实时视频分身" }];
   } else if (provider === DASHSCOPE_PROVIDER) {
-    if (isQwenAudioModel(model)) {
+    if (isQwenAudio31Model(model)) {
+      options = QWEN_AUDIO_31_VOICES;
+    } else if (isQwenAudioModel(model)) {
       options = QWEN_AUDIO_VOICES;
     } else if (isLiveTranslateModel(provider, model ?? "")) {
       options = QWEN_LIVETRANSLATE_VOICES;
@@ -759,8 +786,10 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
       (normalizedModel.includes("realtime") || normalizedModel.includes("voice") || normalizedModel.includes("live"));
   }
   if (normalizedProvider === DASHSCOPE_PROVIDER.toLowerCase()) {
-    return /^qwen3\.5-omni-(plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel) ||
-           /^qwen-audio-3\.0-realtime-(plus|flash)$/.test(normalizedModel) ||
+    // Mirrors DASHSCOPE_OMNI_REALTIME_PATTERN in the backend: 3.5 and 3.8.
+    return /^qwen3\.(?:5|8)-omni-(plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?$/.test(normalizedModel) ||
+           // Mirrors DASHSCOPE_AUDIO_REALTIME_PATTERN in the backend (3.0 and 3.1).
+           /^qwen-audio-3\.(?:0|1)-realtime(?:-(?:plus|flash))?$/.test(normalizedModel) ||
            /^(?:qwen3\.8-livetranslate-flash-realtime|qwen3\.5-livetranslate-(flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?)$/.test(normalizedModel);
   }
   if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase() ||
@@ -883,8 +912,9 @@ export function resolveRealtimeModelOptions(
     ? [
         DEFAULT_DASHSCOPE_MODEL,
         "qwen3.8-livetranslate-flash-realtime",
-        "qwen-audio-3.0-realtime-plus",
-        "qwen-audio-3.0-realtime-flash",
+        // Qwen-Audio realtime: 3.1 replaces 3.0 (which the backend retires from
+        // the picker; a saved 3.0 selection still runs).
+        "qwen-audio-3.1-realtime-plus",
       ]
     : [];
   const doubaoBuiltIns = provider === DOUBAO_PROVIDER

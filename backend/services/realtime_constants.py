@@ -30,8 +30,23 @@ GOOGLE_REALTIME_VOICES = (
     "Laomedeia", "Pulcherrima", "Rasalgethi", "Sadachbia", "Sadaltager",
     "Schedar", "Sulafat", "Umbriel", "Vindemiatrix", "Zubenelgenubi",
 )
+# Shipped DashScope default. Qwen3.8-Omni-Flash-Realtime exists
+# (``qwen3.8-omni-flash-realtime`` is listed by the vendor's voice-cloning API
+# reference) but its session is closed by the server right after the socket
+# opens in the configured workspace, and the vendor's own model-selection page
+# still routes realtime audio/video dialogue to 3.5. The 3.5 alias stays the
+# default until a live call on 3.8 succeeds — see docs/Qwen_3_8_Omni_Realtime.md
+# for the evidence and the one-line flip.
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-plus-realtime"
 DEFAULT_DASHSCOPE_REALTIME_VOICE = "Tina"
+
+# Realtime omni model ids Echo can drive. Mirrored by
+# realtime_tool_protocol.dashscope_supports_native_tools and the frontend's
+# isRealtimeVoiceModel (useVoiceChatHelpers.ts) — keep all three in sync, or a
+# model will be offered in the picker but rejected when the call starts.
+DASHSCOPE_OMNI_REALTIME_PATTERN = (
+    r"qwen3\.(?:5|8)-omni-(?:plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?"
+)
 # Default voice for the qwen livetranslate realtime family, 3.5 and 3.8
 # (official default: Tina).
 DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE = "Tina"
@@ -59,10 +74,12 @@ QWEN_LIVETRANSLATE_38_TURN_DETECTION: dict[str, Any] = {
     "silence_duration_ms": QWEN_LIVETRANSLATE_SILENCE_MS,
 }
 
-# Voices supported by qwen3.5-omni-*-realtime models (default: Tina), per the
-# official omni voice list. The provider rejects voices from the older
-# qwen3-omni / qwen-omni-turbo family (e.g. "Cherry"), so the backend
+# Voices supported by the qwen3.5 / qwen3.8 omni realtime models (default:
+# Tina), per the official omni voice list. The provider rejects voices from the
+# older qwen3-omni / qwen-omni-turbo family (e.g. "Cherry"), so the backend
 # defensively falls back to a valid default instead of failing the session.
+# The 3.8 release reuses the same voice set; an unsupported 3.8-only voice
+# would be caught by the same fallback rather than breaking the call.
 QWEN_OMNI_REALTIME_VOICES = (
     "Tina", "Cindy", "Liora Mira", "Sunnybobi", "Raymond", "Ethan", "Theo Calm",
     "Serena", "Harvey", "Maia", "Evan", "Qiao", "Momo", "Wil", "Angel",
@@ -75,7 +92,7 @@ QWEN_OMNI_REALTIME_VOICES = (
 )
 DEFAULT_QWEN_OMNI_REALTIME_VOICE = "Tina"
 
-# Voices supported by Qwen-Audio realtime models (qwen-audio-*).
+# Voices supported by Qwen-Audio 3.0 realtime models (qwen-audio-3.0-realtime-*).
 QWEN_AUDIO_REALTIME_VOICES = (
     "longanqian", "longanlingxin", "longanlufeng", "longanlingxi", "longanxiaoxin",
     "longanfengyue", "longanyuanfei", "longanhuan_v3.6", "longjielidou_v3.6",
@@ -83,6 +100,21 @@ QWEN_AUDIO_REALTIME_VOICES = (
     "loongeva_v3.6", "loongjohn",
 )
 DEFAULT_QWEN_AUDIO_REALTIME_VOICE = "longanqian"
+
+# Voices supported by qwen-audio-3.1-realtime-plus, per the vendor's voice table:
+# the five 3.0 voices plus eight new 3.1 ones. 3.1 keeps 3.0's protocol
+# ("WebSocket 事件协议保持不变") but its own default voice, longanqian_v3.1.
+QWEN_AUDIO_31_REALTIME_VOICES = (
+    "longanqian", "longanlingxin", "longanlingxi", "longanxiaoxin", "longanlufeng",
+    "longanqian_v3.1", "longanhuan_v3.1", "longanlingxin_v3.1", "longanfengyue_v3.1",
+    "xunanchuan", "beth_v3.1", "betty_v3.1", "cally_v3.1",
+)
+DEFAULT_QWEN_AUDIO_31_REALTIME_VOICE = "longanqian_v3.1"
+
+# Qwen-Audio realtime model ids. Mirrored by dashscope_supports_native_tools and
+# the frontend's isRealtimeVoiceModel — keep them in sync.
+DASHSCOPE_AUDIO_REALTIME_PATTERN = r"qwen-audio-3\.(?:0|1)-realtime(?:-(?:plus|flash))?"
+DASHSCOPE_AUDIO_31_REALTIME_PATTERN = r"qwen-audio-3\.1-realtime(?:-(?:plus|flash))?"
 
 # Server-side error messages that indicate a benign race with the server's own
 # turn management rather than a real failure; logged and ignored so the session
@@ -347,7 +379,16 @@ def _is_google_realtime_model(model: str | None) -> bool:
 def _is_dashscope_audio_realtime_model(model: str | None) -> bool:
     return bool(
         re.fullmatch(
-            r"qwen-audio-3\.0-realtime(?:-(?:plus|flash))?",
+            DASHSCOPE_AUDIO_REALTIME_PATTERN,
+            str(model or "").strip().lower(),
+        )
+    )
+
+
+def _is_dashscope_audio_31_realtime_model(model: str | None) -> bool:
+    return bool(
+        re.fullmatch(
+            DASHSCOPE_AUDIO_31_REALTIME_PATTERN,
             str(model or "").strip().lower(),
         )
     )
@@ -356,7 +397,7 @@ def _is_dashscope_audio_realtime_model(model: str | None) -> bool:
 def _is_dashscope_omni_realtime_model(model: str | None) -> bool:
     return bool(
         re.fullmatch(
-            r"qwen3\.5-omni-(?:plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?",
+            DASHSCOPE_OMNI_REALTIME_PATTERN,
             str(model or "").strip().lower(),
         )
     )
@@ -419,6 +460,10 @@ def normalize_qwen_translate_language(code: str | None, default: str = "en") -> 
 
 def _normalize_dashscope_realtime_voice(model: str | None, voice: str | None) -> str:
     selected = str(voice or "").strip()
+    if _is_dashscope_audio_31_realtime_model(model):
+        if selected in QWEN_AUDIO_31_REALTIME_VOICES:
+            return selected
+        return DEFAULT_QWEN_AUDIO_31_REALTIME_VOICE
     if _is_dashscope_audio_realtime_model(model):
         if selected in QWEN_AUDIO_REALTIME_VOICES:
             return selected

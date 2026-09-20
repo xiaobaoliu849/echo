@@ -51,6 +51,7 @@ import {
   formatRealtimeVoiceOptions,
   getAudioContextCtor,
   isLiveTranslateModel,
+  isQwenAudio31Model,
   isQwenAudioModel,
   isRealtimeVoiceModel,
   isTranscriptContinuation,
@@ -106,7 +107,9 @@ export default function useVoiceChat({
   const [voiceChatModel, setVoiceChatModel] = useState(initialModel);
   const [voiceChatVoice, setVoiceChatVoice] = useState(
     initialProvider === DASHSCOPE_PROVIDER
-      ? (isQwenAudioModel(initialModel) ? "longanqian" : "Tina")
+      ? (isQwenAudio31Model(initialModel) ? "longanqian_v3.1"
+        : isQwenAudioModel(initialModel) ? "longanqian"
+        : "Tina")
       : initialProvider === OPENAI_PROVIDER ? "alloy"
       : initialProvider === DOUBAO_PROVIDER ? "zh_female_vv_jupiter_bigtts"
       : initialProvider === CARTESIA_PROVIDER ? "f786b574-daa5-4673-aa0c-cbe3e8534c02"

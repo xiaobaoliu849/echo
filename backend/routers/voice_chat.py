@@ -15,7 +15,7 @@ from services.realtime_voice_service import (
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_GOOGLE_REALTIME_VOICE,
     DEFAULT_OPENAI_REALTIME_VOICE,
-    DEFAULT_QWEN_AUDIO_REALTIME_VOICE,
+
     DEFAULT_DOUBAO_REALTIME_VOICE,
     DEFAULT_PERSONAPLEX_REALTIME_VOICE,
     DEFAULT_GLM4VOICE_REALTIME_VOICE,
@@ -349,7 +349,10 @@ async def voice_chat_ws(
                 await voice_chat_service.stream_dashscope_audio_session(
                     websocket,
                     model=model,
-                    voice=(voice or DEFAULT_QWEN_AUDIO_REALTIME_VOICE).strip(),
+                    # The provider normalizes the voice per generation (3.1
+                    # defaults to longanqian_v3.1, 3.0 to longanqian), so pass
+                    # the user's choice through untouched.
+                    voice=(voice or "").strip(),
                 )
             else:
                 await voice_chat_service.stream_dashscope_session(

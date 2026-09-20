@@ -231,10 +231,18 @@ DASHSCOPE_MODEL_LIST_SUPPLEMENTS = [
     # TTS synthesis models (current generation only)
     "qwen-audio-3.0-tts-plus",
     "qwen-audio-3.0-tts-flash",
-    "qwen-audio-3.0-realtime-plus",
-    "qwen-audio-3.0-realtime-flash",
+    # Qwen-Audio realtime conversation: 3.1 replaces 3.0, which is retired from
+    # the picker below (a saved 3.0 selection still runs). 3.1 ships only a plus
+    # alias and keeps 3.0's wire protocol, so the swap is model-id + voice.
+    "qwen-audio-3.1-realtime-plus",
     "qwen3-tts-flash-2025-11-27",
-    # Realtime omni models
+    # Realtime omni checkpoints. `qwen3.8-omni-flash-realtime` is deliberately
+    # NOT supplemented: it is absent from the account's own model catalog
+    # (`GET /compatible-mode/v1/models` returns `qwen3.8-omni-flash` and
+    # `qwen3.8-livetranslate-flash-realtime` but no 3.8 omni realtime entry), so
+    # force-adding it only offers a model whose session the server refuses with
+    # AccessDenied. Discovery surfaces it the moment the vendor releases it —
+    # _filter_dashscope_models keeps `qwen3.8-omni-*-realtime`.
     "qwen3.5-omni-plus-realtime-2026-03-15",
     # Live translation (DashScope Realtime WebSocket — integrated). Only the
     # current generation ships; superseded aliases are dropped by
@@ -288,9 +296,11 @@ GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
 
 
 # Superseded DashScope realtime families that must never surface in the model picker:
-#   qwen3-omni-*            -> superseded by qwen3.5-omni-*
+#   qwen3-omni-*            -> superseded by qwen3.5-omni-* -> qwen3.8-omni-*
 #   qwen3-livetranslate-*   -> superseded by qwen3.5-livetranslate-* -> qwen3.8-livetranslate-*
-#   qwen3.5-livetranslate-* -> superseded by qwen3.8-livetranslate-flash-realtime
+#   qwen-audio-3.0-realtime-* -> superseded by qwen-audio-3.1-realtime-plus
+#     (3.1 keeps the 3.0 event protocol; the runtime still accepts a saved 3.0
+#      selection — see realtime_constants._is_dashscope_audio_realtime_model)
 # The first pattern requires a hyphen immediately after "qwen3", so the current
 # qwen3.5-* chat/omni models (which carry a minor version: "qwen3.5-") never match;
 # only the livetranslate family is retired across both generations.  The runtime
@@ -300,6 +310,7 @@ GOOGLE_MODELS_BASE_URL = GOOGLE_INTERACTIONS_BASE_URL
 _RETIRED_DASHSCOPE_REALTIME_RES = (
     re.compile(r"^qwen3-(?:omni|livetranslate)-", re.IGNORECASE),
     re.compile(r"^qwen3\.5-livetranslate-", re.IGNORECASE),
+    re.compile(r"^qwen-audio-3\.0-realtime-", re.IGNORECASE),
 )
 
 
@@ -385,8 +396,8 @@ def _filter_dashscope_models(model_ids: list[str]) -> list[str]:
 
         # 1b. Drop retired legacy realtime families: qwen3-omni-*,
         #     qwen3-livetranslate-* and the superseded qwen3.5-livetranslate-*
-        #     aliases. The current qwen3.5-omni-* / qwen3.8-livetranslate-* models
-        #     are unaffected.
+        #     aliases. The current qwen3.5/qwen3.8 omni and qwen3.8-livetranslate-*
+        #     models are unaffected.
         if _is_retired_dashscope_model(low):
             continue
 
@@ -470,8 +481,9 @@ def _merge_dashscope_supplements(ds_entry: dict[str, Any]) -> None:
       - chat / realtime / livetranslate models -> ``available``
 
     This mirrors the fetch-models endpoint (filter first, then append supplements) so that
-    versioned production voice models — e.g. ``qwen3.8-livetranslate-flash-realtime`` and the
-    omni/tts checkpoints whose date suffixes the filter strips — are guaranteed present on
+    versioned production voice models — e.g. ``qwen3.8-livetranslate-flash-realtime``,
+    ``qwen3.8-omni-flash-realtime`` and the omni/tts checkpoints whose date suffixes the
+    filter strips — are guaranteed present on
     every settings load, even when the persisted list in config.json predates them.  Dedupes
     against whatever is already in each list; order of existing entries is preserved.
 
