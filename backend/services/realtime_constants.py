@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import struct
+from typing import Any
 
 
 # ---------------------------------------------------------------------------
@@ -31,8 +32,32 @@ GOOGLE_REALTIME_VOICES = (
 )
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-plus-realtime"
 DEFAULT_DASHSCOPE_REALTIME_VOICE = "Tina"
-# Default voice for qwen3.5-livetranslate-*-realtime (official default: Tina).
+# Default voice for the qwen livetranslate realtime family, 3.5 and 3.8
+# (official default: Tina).
 DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE = "Tina"
+
+# End-of-speech window for qwen3.8-livetranslate-flash-realtime.
+#
+# The server's own default is ``speaker_detection`` with
+# ``silence_duration_ms: 2500`` — reported in its ``session.updated`` echo, even
+# though the published server-event reference still documents 1000. That window
+# is exactly what tells the server an utterance has ended, so leaving it unset
+# made every sentence wait seconds after the speaker stopped before its
+# transcript, translation and audio were flushed. The live before/after numbers
+# are in docs/Qwen_3_8_LiveTranslate.md; the same translation text came back in
+# both cases.
+#
+# 500 ms matches the frontend's own end-of-speech detector (~430 ms of local
+# silence) and stays far above the 200 ms floor, but it does end an input item
+# at a natural mid-sentence pause — the frontend coalesces those fragments
+# back into one sentence. Raise it (range 200–6000) if a speaker's pauses are
+# consistently long.
+QWEN_LIVETRANSLATE_SILENCE_MS = 500
+QWEN_LIVETRANSLATE_38_TURN_DETECTION: dict[str, Any] = {
+    "type": "speaker_detection",
+    "threshold": 0.5,
+    "silence_duration_ms": QWEN_LIVETRANSLATE_SILENCE_MS,
+}
 
 # Voices supported by qwen3.5-omni-*-realtime models (default: Tina), per the
 # official omni voice list. The provider rejects voices from the older
@@ -338,11 +363,10 @@ def _is_dashscope_omni_realtime_model(model: str | None) -> bool:
 
 
 def _is_dashscope_live_translate_model(model: str | None) -> bool:
-    # Only the qwen3.5-livetranslate series is supported; the legacy
-    # qwen3-livetranslate series has been removed (superseded by 3.5).
+    # Keep 3.5 compatibility; 3.8 currently documents only the flash alias.
     return bool(
         re.fullmatch(
-            r"qwen3\.5-livetranslate-(?:flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?",
+            r"(?:qwen3\.8-livetranslate-flash-realtime|qwen3\.5-livetranslate-(?:flash|plus)-realtime(?:-\d{4}-\d{2}-\d{2})?)",
             str(model or "").strip().lower(),
         )
     )

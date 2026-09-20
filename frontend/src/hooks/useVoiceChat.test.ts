@@ -442,9 +442,10 @@ describe("useVoiceChat", () => {
     );
 
     expect(result.current.voiceChatModel).toBe("qwen3.5-omni-plus-realtime");
+    // Only the current live-translate generation is offered.
     expect(result.current.voiceChatModelOptions).toEqual([
       "qwen3.5-omni-plus-realtime",
-      "qwen3.5-livetranslate-flash-realtime",
+      "qwen3.8-livetranslate-flash-realtime",
       "qwen-audio-3.0-realtime-plus",
       "qwen-audio-3.0-realtime-flash",
     ]);
@@ -497,7 +498,7 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatModel).toBe("qwen3.5-omni-plus-realtime");
     expect(result.current.voiceChatModelOptions).toEqual([
       "qwen3.5-omni-plus-realtime",
-      "qwen3.5-livetranslate-flash-realtime",
+      "qwen3.8-livetranslate-flash-realtime",
       "qwen-audio-3.0-realtime-plus",
       "qwen-audio-3.0-realtime-flash",
       "qwen3.5-omni-flash-realtime",
@@ -1927,18 +1928,18 @@ describe("useVoiceChat", () => {
     expect(FakeAudioContext.bufferSources).toHaveLength(0);
   });
 
-  it("handles Qwen LiveTranslate streaming without duplicating messages or previews", async () => {
+  it.each(["qwen3.5-livetranslate-flash-realtime", "qwen3.8-livetranslate-flash-realtime"])("handles %s streaming without duplicating messages or previews", async (model) => {
     ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-livetranslate");
     const { result } = renderHook(() =>
       useVoiceChat({
         formatErrorMessage: createFormatErrorMessageStub(),
         providerOptions: ["DashScope"],
         preferredProvider: "DashScope",
-        preferredModel: "qwen3.5-livetranslate-flash-realtime",
+        preferredModel: model,
         providerModelCatalog: {
           DashScope: {
-            defaultModel: "qwen3.5-livetranslate-flash-realtime",
-            availableModels: ["qwen3.5-livetranslate-flash-realtime"],
+            defaultModel: model,
+            availableModels: [model],
           },
         },
       })
@@ -1954,7 +1955,7 @@ describe("useVoiceChat", () => {
       socket.emitMessage({
         type: "session_open",
         provider: "DashScope",
-        model: "qwen3.5-livetranslate-flash-realtime",
+        model,
         voice: "Tina",
         mode: "live_translate",
       });
@@ -2000,6 +2001,37 @@ describe("useVoiceChat", () => {
     ]);
     expect(result.current.voiceChatReply).toBe("");
     expect(result.current.voiceChatTranscript).toBe("");
+  });
+
+  it("keeps the 3.8 socket alive on stop until the final translation is flushed", async () => {
+    const model = "qwen3.8-livetranslate-flash-realtime";
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["DashScope"], preferredProvider: "DashScope", preferredModel: model,
+      providerModelCatalog: { DashScope: { defaultModel: model, availableModels: [model] } },
+    }));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({ type: "session_open", provider: "DashScope", model, voice: "Tina", mode: "live_translate" });
+    });
+    await act(async () => { await result.current.onToggleRecording(); });
+    expect(socket.sent).toContain(JSON.stringify({ type: "stop" }));
+    expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+    expect(result.current.voiceChatBusy).toBe(true);
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "再见", final: true, item_id: "last" });
+      socket.emitMessage({ type: "assistant_text", text: "Bye" });
+      socket.emitMessage({ type: "assistant_text", text: " bye" });
+      socket.emitMessage({ type: "turn_complete" });
+      socket.emitMessage({ type: "session_finished" });
+    });
+    expect(result.current.voiceChatMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "assistant", content: "Bye bye" }),
+    ]));
+    expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(result.current.voiceChatBusy).toBe(false);
   });
 
   it("correctly resolves Doubao provider and defaults to doubao-realtime model and voice", () => {

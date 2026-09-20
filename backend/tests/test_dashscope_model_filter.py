@@ -16,23 +16,32 @@ class FilterDashScopeModelsTests(unittest.TestCase):
     def test_keeps_current_livetranslate_realtime(self) -> None:
         # The undated production alias must survive the filter (no date suffix to strip,
         # and the "-flash-" off-topic keyword is overridden for voice/realtime models).
-        filtered = _filter_dashscope_models(["qwen3.5-livetranslate-flash-realtime"])
-        self.assertIn("qwen3.5-livetranslate-flash-realtime", filtered)
+        filtered = _filter_dashscope_models(["qwen3.8-livetranslate-flash-realtime"])
+        self.assertIn("qwen3.8-livetranslate-flash-realtime", filtered)
 
-    def test_drops_legacy_qwen3_livetranslate_keeps_qwen35(self) -> None:
-        # VoiceSpirit ships only the newest LiveTranslate model; the legacy
-        # qwen3-livetranslate series must be filtered out (dated or not), while
-        # qwen3.5-livetranslate-flash-realtime is kept.
+    def test_drops_legacy_and_qwen35_livetranslate_aliases(self) -> None:
+        # VoiceSpirit ships only the newest LiveTranslate model; both the legacy
+        # qwen3-livetranslate series and the superseded qwen3.5-livetranslate
+        # aliases must be filtered out (dated or not).
         filtered = _filter_dashscope_models(
             [
                 "qwen3-livetranslate-flash",
                 "qwen3-livetranslate-flash-realtime",
                 "qwen3.5-livetranslate-flash-realtime",
+                "qwen3.5-livetranslate-flash-realtime-2026-05-19",
+                "qwen3.5-livetranslate-plus-realtime",
+                "qwen3.8-livetranslate-flash-realtime",
             ]
         )
-        self.assertNotIn("qwen3-livetranslate-flash", filtered)
-        self.assertNotIn("qwen3-livetranslate-flash-realtime", filtered)
-        self.assertIn("qwen3.5-livetranslate-flash-realtime", filtered)
+        for dropped in (
+            "qwen3-livetranslate-flash",
+            "qwen3-livetranslate-flash-realtime",
+            "qwen3.5-livetranslate-flash-realtime",
+            "qwen3.5-livetranslate-flash-realtime-2026-05-19",
+            "qwen3.5-livetranslate-plus-realtime",
+        ):
+            self.assertNotIn(dropped, filtered)
+        self.assertIn("qwen3.8-livetranslate-flash-realtime", filtered)
 
     def test_drops_date_snapshots_and_off_topic_families(self) -> None:
         noisy = [
@@ -68,12 +77,20 @@ class SupplementClassificationTests(unittest.TestCase):
 
     def test_livetranslate_and_omni_supplements_are_chat(self) -> None:
         chat_supplements = [
-            "qwen3.5-livetranslate-flash-realtime",
+            "qwen3.8-livetranslate-flash-realtime",
             "qwen3.5-omni-plus-realtime-2026-03-15",
         ]
         for model in chat_supplements:
             self.assertIn(model, DASHSCOPE_MODEL_LIST_SUPPLEMENTS)
             self.assertFalse(_is_tts_model_id(model), model)
+
+    def test_superseded_livetranslate_alias_is_not_supplemented(self) -> None:
+        for retired in (
+            "qwen3.5-livetranslate-flash-realtime",
+            "qwen3.5-livetranslate-plus-realtime",
+            "qwen3-livetranslate-flash-realtime",
+        ):
+            self.assertNotIn(retired, DASHSCOPE_MODEL_LIST_SUPPLEMENTS)
 
     def test_non_realtime_omni_flash_is_not_supplemented(self) -> None:
         # qwen3-omni-flash-2025-12-01 is a multimodal but NOT realtime model;
@@ -87,8 +104,10 @@ class MergeDashScopeSupplementsTests(unittest.TestCase):
         _merge_dashscope_supplements(entry)
 
         # Chat/realtime supplements land in "available".
-        self.assertIn("qwen3.5-livetranslate-flash-realtime", entry["available"])
+        self.assertIn("qwen3.8-livetranslate-flash-realtime", entry["available"])
         self.assertIn("qwen3.5-omni-plus-realtime-2026-03-15", entry["available"])
+        # A superseded alias is never re-advertised by the merge.
+        self.assertNotIn("qwen3.5-livetranslate-flash-realtime", entry["available"])
         # TTS supplements land in "tts_available", never in chat "available".
         self.assertIn("qwen-audio-3.0-tts-plus", entry["tts_available"])
         self.assertIn("qwen3-tts-flash-2025-11-27", entry["tts_available"])
@@ -117,15 +136,15 @@ class MergeDashScopeSupplementsTests(unittest.TestCase):
 class GetSettingsRefilterIntegrationTests(unittest.TestCase):
     """Replicates the GET /settings re-filter path: filter first, then merge supplements."""
 
-    def test_qwen35_livetranslate_recovered_even_when_absent_from_config(self) -> None:
-        # The original bug: config.json persisted a list WITHOUT the undated qwen3.5
-        # livetranslate alias (only dated snapshots the filter drops). The old path did
-        # not merge supplements, so qwen3.5 never reappeared. The fixed path must restore it.
+    def test_current_livetranslate_is_restored_from_supplements(self) -> None:
+        # config.json may persist a list WITHOUT the current livetranslate alias (only
+        # superseded/dated snapshots). Because the supplements merge runs after the
+        # filter, the shipped qwen3.8 alias must be present in the response.
         raw_avail = [
             "qwen-plus",
             "qwen-max",
             "qwen3-livetranslate-flash",
-            "qwen3-livetranslate-flash-realtime",
+            "qwen3.5-livetranslate-flash-realtime",
             "qwen3.5-livetranslate-flash-realtime-2026-05-19",  # dated -> dropped by filter
         ] + [f"qwen2.5-{n}b-instruct" for n in range(7, 73)]  # pad past the >30 re-filter gate
 
@@ -133,11 +152,15 @@ class GetSettingsRefilterIntegrationTests(unittest.TestCase):
         # Mirror settings.py get_settings(): filter when bloated, then always merge.
         if len(entry["available"]) > 30:
             entry["available"] = _filter_dashscope_models(entry["available"])
+        entry["available"] = [
+            item for item in entry["available"] if not _is_retired_dashscope_model(str(item))
+        ]
         _merge_dashscope_supplements(entry)
 
-        self.assertIn("qwen3.5-livetranslate-flash-realtime", entry["available"])
-        # Legacy qwen3-livetranslate is filtered out; only the newest model ships.
+        self.assertIn("qwen3.8-livetranslate-flash-realtime", entry["available"])
+        # Superseded aliases are filtered out; only the newest model ships.
         self.assertNotIn("qwen3-livetranslate-flash-realtime", entry["available"])
+        self.assertNotIn("qwen3.5-livetranslate-flash-realtime", entry["available"])
         self.assertLess(len(entry["available"]), 30)
         self.assertNotIn("qwen2.5-72b-instruct", entry["available"])
 
@@ -149,6 +172,10 @@ class RetiredDashScopeModelTests(unittest.TestCase):
             "qwen3-omni-flash",
             "qwen3-omni-flash-realtime",
             "qwen3-livetranslate-flash-realtime",
+            # Superseded generation: only qwen3.8-livetranslate ships now.
+            "qwen3.5-livetranslate-flash-realtime",
+            "qwen3.5-livetranslate-plus-realtime",
+            "qwen3.5-livetranslate-flash-realtime-2026-05-19",
         ):
             self.assertTrue(_is_retired_dashscope_model(legacy), legacy)
 
@@ -157,7 +184,7 @@ class RetiredDashScopeModelTests(unittest.TestCase):
             "qwen3.5-omni-plus-realtime",
             "qwen3.5-omni-plus-realtime-2026-03-15",
             "qwen3.5-omni-flash-realtime",
-            "qwen3.5-livetranslate-flash-realtime",
+            "qwen3.8-livetranslate-flash-realtime",
             "qwen-audio-3.0-realtime-plus",
             "qwen-plus",
         ):
@@ -183,6 +210,48 @@ class GetSettingsEnabledSanitizationTests(unittest.TestCase):
     DashScope enabled/available lists so they no longer reach the model picker."""
 
     def test_legacy_models_removed_from_enabled_and_available_on_load(self) -> None:
+        ds = self._settings_for(
+            {
+                "default": "",
+                "available": ["qwen-plus", "qwen3-omni-flash-2025-12-01"],
+                "enabled": [
+                    "qwen3-omni-flash-2025-12-01",
+                    "qwen3.5-omni-plus-realtime-2026-03-15",
+                    "qwen-audio-3.0-realtime-plus",
+                ],
+            }
+        )
+        # Legacy model stripped from both lists; current models preserved.
+        self.assertNotIn("qwen3-omni-flash-2025-12-01", ds["enabled"])
+        self.assertNotIn("qwen3-omni-flash-2025-12-01", ds["available"])
+        self.assertIn("qwen3.5-omni-plus-realtime-2026-03-15", ds["enabled"])
+        self.assertIn("qwen-audio-3.0-realtime-plus", ds["enabled"])
+        self.assertIn("qwen-plus", ds["available"])
+
+    def test_superseded_qwen35_livetranslate_leaves_the_picker(self) -> None:
+        """A config.json still holding the 3.5 alias must serve qwen3.8 instead."""
+        ds = self._settings_for(
+            {
+                "default": "qwen-plus",
+                "available": [
+                    "qwen-plus",
+                    "qwen3.8-livetranslate-flash-realtime",
+                    "qwen3.5-livetranslate-flash-realtime",
+                ],
+                "enabled": [
+                    "qwen-plus",
+                    "qwen3.8-livetranslate-flash-realtime",
+                    "qwen3.5-livetranslate-flash-realtime",
+                ],
+            }
+        )
+        for key in ("available", "enabled"):
+            self.assertNotIn("qwen3.5-livetranslate-flash-realtime", ds[key], key)
+            self.assertIn("qwen3.8-livetranslate-flash-realtime", ds[key], key)
+        self.assertIn("qwen-plus", ds["available"])
+
+    @staticmethod
+    def _settings_for(dashscope_entry: dict) -> dict:
         import asyncio
         import json
         import tempfile
@@ -194,21 +263,7 @@ class GetSettingsEnabledSanitizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "config.json"
             config_path.write_text(
-                json.dumps(
-                    {
-                        "default_models": {
-                            "DashScope": {
-                                "default": "",
-                                "available": ["qwen-plus", "qwen3-omni-flash-2025-12-01"],
-                                "enabled": [
-                                    "qwen3-omni-flash-2025-12-01",
-                                    "qwen3.5-omni-plus-realtime-2026-03-15",
-                                    "qwen-audio-3.0-realtime-plus",
-                                ],
-                            }
-                        }
-                    }
-                ),
+                json.dumps({"default_models": {"DashScope": dashscope_entry}}),
                 encoding="utf-8",
             )
             test_service = SettingsService(config=BackendConfig(config_path))
@@ -218,14 +273,7 @@ class GetSettingsEnabledSanitizationTests(unittest.TestCase):
                 response = asyncio.run(settings_router.get_settings())
             finally:
                 settings_router.settings_service = original_service
-
-            ds = response.settings["default_models"]["DashScope"]
-            # Legacy model stripped from both lists; current models preserved.
-            self.assertNotIn("qwen3-omni-flash-2025-12-01", ds["enabled"])
-            self.assertNotIn("qwen3-omni-flash-2025-12-01", ds["available"])
-            self.assertIn("qwen3.5-omni-plus-realtime-2026-03-15", ds["enabled"])
-            self.assertIn("qwen-audio-3.0-realtime-plus", ds["enabled"])
-            self.assertIn("qwen-plus", ds["available"])
+        return response.settings["default_models"]["DashScope"]
 
 
 if __name__ == "__main__":

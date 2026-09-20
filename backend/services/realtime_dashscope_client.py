@@ -12,22 +12,56 @@ import websockets
 logger = logging.getLogger(__name__)
 
 from .background_tasks import spawn_background_task
-from .realtime_constants import DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE
+from .realtime_constants import (
+    DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE,
+    QWEN_LIVETRANSLATE_38_TURN_DETECTION,
+)
 
 DEFAULT_QWEN_AUDIO_REALTIME_VOICE = "longanqian"
 
 
 class DashScopeRealtimeCallback:
-    def __init__(self, *, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue[dict[str, Any]]) -> None:
+    """Server-event funnel shared by the Qwen-Omni and LiveTranslate protocols.
+
+    ``incremental_asr`` selects which *input* ASR protocol the session speaks,
+    because two different families reuse the same event names with different
+    payloads:
+
+    * ``qwen3.8-livetranslate-flash-realtime`` streams the source transcript as
+      verbatim ``delta`` tokens (``...input_audio_transcription.delta``) and
+      reports the end of an utterance with
+      ``input_audio_buffer.speech_stopped`` — both carry an ``item_id``.
+    * Qwen-Omni / Qwen-Audio send an interim ``{text, stash}`` snapshot on that
+      same-named delta event and manage turns through server VAD instead.
+
+    Forwarding the omni interim frames as ``user_transcript`` made the turn
+    owner treat every single ASR frame as a *completed* user utterance (empty
+    transcript -> interruption pipeline + recorder write), so the mapping is
+    keyed on the session type rather than on the event name alone.
+    """
+
+    def __init__(
+        self,
+        *,
+        loop: asyncio.AbstractEventLoop,
+        queue: asyncio.Queue[dict[str, Any]],
+        incremental_asr: bool = False,
+    ) -> None:
         self.loop = loop
         self.queue = queue
+        self.incremental_asr = bool(incremental_asr)
 
     def _push(self, event: dict[str, Any]) -> None:
         event_type = event.get("type")
         text = str(event.get("text", ""))
         stash = str(event.get("stash", ""))
         response_id = str(event.get("response_id", ""))
-        if event_type == "assistant_text" and (text or stash):
+        if event_type == "assistant_text" and not event.get("incremental") and (text or stash):
+            # ``incremental`` marks a verbatim token delta (Qwen 3.8 translation
+            # text and the ``response.*.delta`` events of every family).  Those
+            # must NOT be deduplicated: a repeated fragment ("ha", "ha") is
+            # real text, not a re-sent cumulative snapshot.  Cumulative frames
+            # (text/stash, response.*.done) still pass through the guard below.
             # Dedup signature uses only (response_id, text, is_final).
             # Previously including `stash` here caused the same confirmed prefix
             # to bypass deduplication whenever only the prediction changed,
@@ -55,6 +89,48 @@ class DashScopeRealtimeCallback:
             return
 
         event_type = str(response.get("type", "")).strip()
+        if event_type in {"session.updated", "session.finished"}:
+            self._push({"type": event_type})
+            return
+        if event_type == "conversation.item.input_audio_transcription.delta":
+            if not self.incremental_asr:
+                # Omni / Qwen-Audio carry the interim transcript as
+                # {text, stash} (confirmed prefix + tentative prediction) on
+                # this same event and have no `delta` field.  Those frames
+                # belong to the family-specific loops (which merge text+stash);
+                # pushing them here would emit an empty, non-final
+                # user_transcript that the turn owner treats as a completed
+                # utterance, running the interruption pipeline per ASR frame.
+                return
+            delta = str(response.get("delta", ""))
+            if not delta:
+                # Defensive: an unexpected {text, stash} snapshot on the same
+                # event must not inject an empty interim user utterance.
+                return
+            self._push({
+                "type": "user_transcript",
+                "text": delta,
+                "incremental": True,
+                "item_id": str(response.get("item_id", "")),
+            })
+            return
+        if event_type == "input_audio_buffer.speech_stopped":
+            if self.incremental_asr:
+                # End-of-utterance signal for the translation protocol. 3.8
+                # emits ``...input_audio_transcription.completed`` too, but
+                # only once the turn closes; this arrives earlier and is what
+                # lets the provider close a source item even when the
+                # transcription finalisation never lands (abrupt disconnect).
+                self._push(
+                    {
+                        "type": "speech_stopped",
+                        "provider_event_type": event_type,
+                        "event_id": str(response.get("event_id", "")),
+                        "item_id": str(response.get("item_id", "")),
+                        "audio_end_ms": response.get("audio_end_ms"),
+                    }
+                )
+            return
         if event_type == "input_audio_buffer.speech_started":
             self._push(
                 {
@@ -135,6 +211,7 @@ class DashScopeRealtimeCallback:
                     {
                         "type": "assistant_text",
                         "text": delta,
+                        "incremental": True,
                         "response_id": str(response.get("response_id", "")),
                     }
                 )
@@ -409,7 +486,7 @@ DEFAULT_QWEN_LIVETRANSLATE_VOICE = DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE  # back
 
 
 class DashScopeLiveTranslateConversation(DashScopeAudioRealtimeConversation):
-    """Raw-WebSocket conversation for qwen3(.5)-livetranslate-*-realtime.
+    """Raw-WebSocket conversation for Qwen 3.5 and 3.8 LiveTranslate.
 
     Reuses the connect/receive/append/close machinery of the Qwen-Audio raw
     client but sends a translation-specific ``session.update`` (source/target
@@ -474,6 +551,31 @@ class DashScopeLiveTranslateConversation(DashScopeAudioRealtimeConversation):
         phrases = {str(k): str(v) for k, v in (corpus_phrases or {}).items() if str(k).strip()}
         if phrases:
             session["translation"]["corpus"] = {"phrases": phrases}
+
+        if self.model.strip().lower() == "qwen3.8-livetranslate-flash-realtime":
+            # 3.8 always emits ASR and uses nested audio configuration. Never
+            # send the 3.5 transcription model or flat format/voice fields.
+            # ``turn_detection`` is not optional here: the server default keeps
+            # an utterance open for 2.5s of silence before flushing its text and
+            # audio, which is what made the last sentence appear "ages" after
+            # the speaker stopped. See QWEN_LIVETRANSLATE_38_TURN_DETECTION.
+            session = {
+                "output_modalities": session["modalities"],
+                "translation": session["translation"],
+                "audio": {
+                    "input": {
+                        "format": {"type": "pcm", "sample_rate": 16000},
+                        "turn_detection": dict(QWEN_LIVETRANSLATE_38_TURN_DETECTION),
+                    },
+                    "output": {
+                        "format": {"type": "pcm", "sample_rate": 24000},
+                        "voice": target_voice,
+                    },
+                },
+                **({"enable_voice_clone": True,
+                    "voice_clone_options": {"frequency": voice_clone_frequency}}
+                   if enable_voice_clone else {}),
+            }
 
         self._send_event(
             {
