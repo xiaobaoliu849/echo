@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  DEFAULT_DASHSCOPE_MODEL,
+  QWEN_AUDIO_31_VOICES,
+  isQwenAudio31Model,
   isLiveTranslateModel,
   isRealtimeVoiceModel,
   formatVoiceChatSecondaryLabel,
@@ -51,6 +54,32 @@ describe("isRealtimeVoiceModel (DashScope livetranslate)", () => {
   it("still recognizes omni and qwen-audio realtime models", () => {
     expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen3.5-omni-plus-realtime")).toBe(true);
     expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen-audio-3.0-realtime-plus")).toBe(true);
+  });
+
+  it("recognizes the qwen-audio 3.1 generation and its voices", () => {
+    // Mirrors DASHSCOPE_AUDIO_REALTIME_PATTERN on the backend.
+    expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen-audio-3.1-realtime-plus")).toBe(true);
+    expect(isQwenAudio31Model("qwen-audio-3.1-realtime-plus")).toBe(true);
+    expect(isQwenAudio31Model("qwen-audio-3.0-realtime-plus")).toBe(false);
+    // The 3.1 list carries the 3.1-only voices plus the inherited ones.
+    const voices = QWEN_AUDIO_31_VOICES.map((v) => v.value);
+    expect(voices).toContain("longanqian_v3.1");
+    expect(voices).toContain("cally_v3.1");
+    expect(voices).toContain("longanqian");
+    expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen-audio-3.2-realtime-plus")).toBe(false);
+  });
+
+  it("recognizes the 3.8 omni generation that ships as the DashScope default", () => {
+    // Keep in sync with the backend's DASHSCOPE_OMNI_REALTIME_PATTERN: a model
+    // the picker accepts must also be accepted when the call actually starts.
+    expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, DEFAULT_DASHSCOPE_MODEL)).toBe(true);
+    expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen3.8-omni-flash-realtime")).toBe(true);
+    expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen3.8-omni-plus-realtime")).toBe(true);
+    expect(
+      isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen3.8-omni-flash-realtime-2026-09-18")
+    ).toBe(true);
+    // The non-realtime omni chat model must stay out of the voice picker.
+    expect(isRealtimeVoiceModel(DASHSCOPE_PROVIDER, "qwen3.8-omni-flash")).toBe(false);
   });
 
   it("rejects non-realtime DashScope models", () => {

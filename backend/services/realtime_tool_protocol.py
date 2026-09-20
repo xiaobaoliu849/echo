@@ -5,6 +5,10 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .realtime_constants import (
+    DASHSCOPE_AUDIO_REALTIME_PATTERN,
+    DASHSCOPE_OMNI_REALTIME_PATTERN,
+)
 from .voice_agent_tools import VoiceToolRequest
 
 
@@ -96,10 +100,17 @@ def vercel_tool_declarations() -> list[dict[str, Any]]:
 
 
 def dashscope_supports_native_tools(model: str | None) -> bool:
+    """True for DashScope realtime models that accept Function Calling.
+
+    Both family patterns are shared with realtime_constants.py (the omni and
+    Qwen-Audio detectors) so the picker and the runtime cannot drift apart: every
+    omni generation we support (3.5, 3.8) and every Qwen-Audio generation
+    (3.0, 3.1) is accepted here.
+    """
     normalized = str(model or "").strip().lower()
     return bool(
         re.fullmatch(
-            r"(?:qwen3\.5-omni-(?:plus|flash)-realtime(?:-\d{4}-\d{2}-\d{2})?|qwen-audio-3\.0-realtime(?:-(?:plus|flash))?)",
+            rf"(?:{DASHSCOPE_OMNI_REALTIME_PATTERN}|{DASHSCOPE_AUDIO_REALTIME_PATTERN})",
             normalized,
         )
     )

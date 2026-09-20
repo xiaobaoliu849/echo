@@ -335,7 +335,9 @@ class RealtimeVoiceService(
         if not _is_dashscope_live_translate_model(resolved_model) and not dashscope_supports_native_tools(resolved_model):
             raise RuntimeError(
                 "Echo 实时语音仅支持具备原生 Function Calling 的 "
-                "qwen3.5-omni-plus-realtime、qwen3.5-omni-flash-realtime，或 qwen-audio-3.0-realtime-plus/flash；请在设置中升级模型。"
+                "qwen3.8-omni-flash-realtime、qwen3.5-omni-plus-realtime、"
+                "qwen3.5-omni-flash-realtime，或 qwen-audio-3.1/3.0-realtime-plus、"
+                "qwen-audio-3.0-realtime-flash；请在设置中升级模型。"
             )
         realtime_base_url = (
             str(provider_settings.get("realtime_base_url", "")).strip()
@@ -350,7 +352,7 @@ class RealtimeVoiceService(
         endpoint_host = (parsed_url.hostname or "").lower()
         if _is_dashscope_audio_realtime_model(resolved_model) and not endpoint_host.endswith(".cn-beijing.maas.aliyuncs.com"):
             raise RuntimeError(
-                "qwen-audio-3.0-realtime 仅支持北京地域业务空间 Realtime WebSocket URL，"
+                "qwen-audio 实时语音模型（3.1 / 3.0）仅支持北京地域业务空间 Realtime WebSocket URL，"
                 "格式如 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime。"
             )
         return {

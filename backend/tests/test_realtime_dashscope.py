@@ -197,7 +197,9 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         }
         self.service.config = config
 
-        with self.assertRaisesRegex(RuntimeError, "qwen3.5-omni-plus-realtime"):
+        with self.assertRaisesRegex(
+            RuntimeError, "qwen3.8-omni-flash-realtime.*qwen3.5-omni-plus-realtime"
+        ):
             self.service._resolve_dashscope_settings(None)
 
     def test_dashscope_settings_accept_qwen_audio_beijing_workspace_endpoint(self) -> None:
@@ -578,6 +580,123 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("interruption_pending", sent_types)
         self.assertNotIn("interruption_decision", sent_types)
 
+    async def test_unexpected_server_close_is_reported_to_the_client(self) -> None:
+        """A server-initiated close must say so instead of ending silently.
+
+        The 3.8 omni session ends right after the socket opens in a workspace
+        where the model is not usable; the close code and message used to be
+        dropped on the floor, leaving users with a call that "just closes".
+        """
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_close(1011, "internal error: model not available")
+
+        websocket = _FakeWebSocket()
+        await self.service._dashscope_to_client_loop(
+            websocket,
+            queue,
+            _MemorySession(),
+            _StubOmniConversation("qwen3.8-omni-flash-realtime"),
+            "Tina",
+            VoiceAgentToolSession(default_provider="DashScope"),
+            recorder=None,
+            interruption=InterruptionDecisionCoordinator(),
+        )
+
+        errors = [event for event in websocket.sent_events if event["type"] == "error"]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("1011", errors[0]["message"])
+        self.assertIn("model not available", errors[0]["message"])
+        self.assertIn("qwen3.8-omni-flash-realtime", errors[0]["message"])
+
+    async def test_access_denied_error_explains_what_to_do(self) -> None:
+        """The vendor's bare "Access denied" must become an actionable message."""
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_event(
+            {"code": "AccessDenied", "message": "Access denied", "request_id": "req-1"}
+        )
+
+        websocket = _FakeWebSocket()
+        await self.service._dashscope_to_client_loop(
+            websocket,
+            queue,
+            _MemorySession(),
+            _StubOmniConversation("qwen3.8-omni-flash-realtime"),
+            "Tina",
+            VoiceAgentToolSession(default_provider="DashScope"),
+            recorder=None,
+            interruption=InterruptionDecisionCoordinator(),
+        )
+
+        errors = [event for event in websocket.sent_events if event["type"] == "error"]
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(errors[0]["code"], "AccessDenied")
+        self.assertIn("未在当前 DashScope 工作空间开通", errors[0]["message"])
+        self.assertIn("qwen3.8-omni-flash-realtime", errors[0]["message"])
+
+    async def test_clean_client_close_stays_silent(self) -> None:
+        """A user-initiated stop closes with 1000 and must not raise an error."""
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_close(1000, "")
+
+        websocket = _FakeWebSocket()
+        await self.service._dashscope_to_client_loop(
+            websocket,
+            queue,
+            _MemorySession(),
+            _StubOmniConversation("qwen3.5-omni-plus-realtime"),
+            "Tina",
+            VoiceAgentToolSession(default_provider="DashScope"),
+            recorder=None,
+            interruption=InterruptionDecisionCoordinator(),
+        )
+
+        self.assertEqual(
+            [event for event in websocket.sent_events if event["type"] == "error"], []
+        )
+
+    async def test_untyped_access_denied_frame_is_surfaced(self) -> None:
+        """An unentitled model answers `session.created` then AccessDenied.
+
+        The frame has no ``type`` at all, so it used to be dropped on the floor:
+        the socket was then closed by the server with no close frame and the call
+        simply ended. Measured live on 2026-09-20 against a cn-beijing workspace
+        for `qwen3.8-omni-flash-realtime`.
+        """
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_event({"type": "session.created", "session": {"id": "session-1"}})
+        callback.on_event(
+            {"code": "AccessDenied", "message": "Access denied", "request_id": "req-1"}
+        )
+
+        event = await asyncio.wait_for(queue.get(), timeout=1)
+
+        self.assertEqual(event["type"], "error")
+        self.assertEqual(event["code"], "AccessDenied")
+        self.assertEqual(event["message"], "Access denied")
+        # session.created is bookkeeping, not a client event: nothing else queues.
+        self.assertTrue(queue.empty())
+
+    async def test_server_error_frame_carries_the_vendor_code(self) -> None:
+        """The error frame must keep the vendor's code for diagnostics."""
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_event(
+            {
+                "type": "error",
+                "error": {"code": "InvalidParameter", "message": "model is not supported"},
+            }
+        )
+
+        event = await asyncio.wait_for(queue.get(), timeout=1)
+
+        self.assertEqual(event["type"], "error")
+        self.assertEqual(event["message"], "model is not supported")
+        self.assertEqual(event["code"], "InvalidParameter")
+
     async def test_dashscope_callback_distinguishes_function_phase_terminal(self) -> None:
         queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
         callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
@@ -605,9 +724,15 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
 
 
 class _StubOmniConversation:
-    """Minimal stand-in for the SDK OmniRealtimeConversation."""
+    """Minimal stand-in for the SDK OmniRealtimeConversation.
 
-    def __init__(self) -> None:
+    ``model`` is read by the mixin to pick the per-family session profile, so a
+    stub built with a real omni id exercises the omni branch (semantic_vad,
+    incremental ASR) instead of the generic server_vad fallback.
+    """
+
+    def __init__(self, model: str = "") -> None:
+        self.model = model
         self.update_session_calls: list[dict[str, object]] = []
         self.raw_payloads: list[dict[str, object]] = []
 
@@ -640,6 +765,29 @@ class TestDashScopeOmniSessionConfig(unittest.TestCase):
         turn_param = kwargs.get("turn_detection_param") or {}
         self.assertNotEqual(turn_param.get("create_response"), False)
         self.assertIs(turn_param.get("interrupt_response"), False)
+        self.assertTrue(conversation._vs_omni_session_configured)
+
+    def test_qwen38_omni_gets_the_omni_session_profile(self) -> None:
+        """A 3.8 omni model must be configured exactly like the 3.5 generation.
+
+        The branch was keyed on the literal "qwen3.5-omni" substring, so a 3.8
+        session silently fell through to the generic profile (server_vad, no
+        ASR model, 1200 ms silence) — the model connected but turn-taking and
+        transcription degraded.
+        """
+        service = RealtimeVoiceService.__new__(RealtimeVoiceService)
+        conversation = _StubOmniConversation("qwen3.8-omni-flash-realtime")
+
+        service._configure_dashscope_conversation(conversation, voice="Tina", instructions="hello")
+
+        self.assertEqual(len(conversation.update_session_calls), 1)
+        kwargs = conversation.update_session_calls[0]
+        self.assertEqual(kwargs.get("turn_detection_type"), "semantic_vad")
+        self.assertEqual(kwargs.get("turn_detection_threshold"), 0.5)
+        self.assertEqual(kwargs.get("turn_detection_silence_duration_ms"), 900)
+        self.assertEqual(kwargs.get("prefix_padding_ms"), 500)
+        self.assertEqual(kwargs.get("input_audio_transcription_model"), "qwen3-asr-flash-realtime")
+        self.assertTrue(kwargs.get("enable_input_audio_transcription"))
         self.assertTrue(conversation._vs_omni_session_configured)
 
     def test_followup_config_sends_instructions_only(self) -> None:

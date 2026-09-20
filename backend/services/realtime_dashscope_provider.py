@@ -176,7 +176,8 @@ class DashScopeRealtimeMixin:
             )
             return
         if getattr(conversation, "_vs_omni_session_configured", False):
-            # qwen3.5-omni-*-realtime (SDK path): voice / turn_detection /
+            # Qwen-Omni realtime (SDK path: qwen3.5-/qwen3.8-omni-*-realtime):
+            # voice / turn_detection /
             # input_audio_transcription are only honored on the FIRST
             # session.update. Re-sending the full config mid-session is
             # accepted (session.updated) but leaves the session deaf — the
@@ -195,11 +196,18 @@ class DashScopeRealtimeMixin:
             )
             return
         model_str = str(getattr(conversation, "model", "") or "").lower()
-        is_qwen35_omni = "qwen3.5-omni" in model_str
-        turn_type = "semantic_vad" if is_qwen35_omni else "server_vad"
-        threshold = 0.5 if is_qwen35_omni else 0.2
-        silence_duration_ms = 900 if is_qwen35_omni else 1200
-        asr_model = "qwen3-asr-flash-realtime" if is_qwen35_omni else None
+        is_omni = _is_dashscope_omni_realtime_model(model_str)
+        logger.info(
+            "dashscope_omni_session_update model=%s voice=%s omni_profile=%s asr_model=%s",
+            model_str,
+            voice,
+            is_omni,
+            "qwen3-asr-flash-realtime" if is_omni else None,
+        )
+        turn_type = "semantic_vad" if is_omni else "server_vad"
+        threshold = 0.5 if is_omni else 0.2
+        silence_duration_ms = 900 if is_omni else 1200
+        asr_model = "qwen3-asr-flash-realtime" if is_omni else None
 
         conversation.update_session(
             output_modalities=[MultiModality.AUDIO, MultiModality.TEXT],  # type: ignore[union-attr]
@@ -211,7 +219,7 @@ class DashScopeRealtimeMixin:
             enable_turn_detection=True,
             turn_detection_type=turn_type,
             turn_detection_threshold=threshold,
-            prefix_padding_ms=500 if is_qwen35_omni else 300,
+            prefix_padding_ms=500 if is_omni else 300,
             turn_detection_silence_duration_ms=silence_duration_ms,
             turn_detection_param={"interrupt_response": False},
             instructions=instructions,
@@ -343,6 +351,31 @@ class DashScopeRealtimeMixin:
             event = await queue.get()
             event_type = str(event.get("type", "")).strip()
             if event_type == "closed":
+                close_code = event.get("code")
+                close_message = str(event.get("message", "")).strip()
+                session_model = str(getattr(conversation, "model", "") or "")
+                logger.warning(
+                    "dashscope_realtime_socket_closed model=%s code=%s message=%s",
+                    session_model,
+                    close_code,
+                    close_message,
+                )
+                # A clean client-initiated stop closes with 1000 and no message;
+                # anything else is the server (or the transport) ending the call.
+                # Previously the code and message were dropped on the floor, so a
+                # rejected model or session config looked like a silent hang-up.
+                if close_code not in (None, 1000) or close_message:
+                    await self._send_event(
+                        websocket,
+                        "error",
+                        message=(
+                            f"DashScope 实时语音连接被服务端关闭"
+                            f"（code={close_code or '未知'}"
+                            f"{', ' + close_message if close_message else ''}）。"
+                            f"模型 {session_model} 可能未在当前工作空间开通，"
+                            "或会话配置被服务端拒绝；后端日志中有原始错误。"
+                        ),
+                    )
                 break
             if event_type == "speech_started":
                 if interruption.active_response_id or tool_session.has_active_task or (
@@ -714,6 +747,26 @@ class DashScopeRealtimeMixin:
                     else:
                         logger.warning("DashScope returned error: %s. Max retries exceeded. Ignoring.", error_msg)
                     continue
+                session_model = str(getattr(conversation, "model", "") or "")
+                logger.warning(
+                    "dashscope_realtime_server_error model=%s code=%s message=%s",
+                    session_model,
+                    event.get("code", ""),
+                    error_msg,
+                )
+                if str(event.get("code", "")).strip() == "AccessDenied":
+                    # Measured 2026-09-20: a model the workspace is not entitled
+                    # to answers `session.created` and then an AccessDenied
+                    # envelope, and the vendor message is a bare "Access denied".
+                    # Say what the user can actually do about it.
+                    event = {
+                        **event,
+                        "message": (
+                            f"模型 {session_model} 未在当前 DashScope 工作空间开通（AccessDenied）。"
+                            "请在百炼控制台为该工作空间开通此模型，"
+                            "或改选 qwen3.5-omni-plus-realtime 等已开通的实时模型。"
+                        ),
+                    }
                 await websocket.send_json(event)
                 break
             await websocket.send_json(event)
@@ -1210,7 +1263,7 @@ class DashScopeRealtimeMixin:
         memory_session = RealtimeMemorySession()
         tool_session = VoiceAgentToolSession(default_provider="DashScope")
         resolved_voice = (voice or DEFAULT_QWEN_OMNI_REALTIME_VOICE).strip()
-        if "qwen3.5-omni" in settings["model"].lower() and resolved_voice not in QWEN_OMNI_REALTIME_VOICES:
+        if _is_dashscope_omni_realtime_model(settings["model"]) and resolved_voice not in QWEN_OMNI_REALTIME_VOICES:
             logger.warning(
                 "qwen_omni_unsupported_voice voice=%s fallback=%s",
                 resolved_voice, DEFAULT_QWEN_OMNI_REALTIME_VOICE,
@@ -1255,6 +1308,11 @@ class DashScopeRealtimeMixin:
             )
 
         try:
+            logger.info(
+                "dashscope_realtime_connecting model=%s voice=%s",
+                settings["model"],
+                resolved_voice,
+            )
             if isinstance(conversation, DashScopeAudioRealtimeConversation):
                 await conversation.connect()
             else:

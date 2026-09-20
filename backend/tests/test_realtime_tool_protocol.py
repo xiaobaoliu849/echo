@@ -1,5 +1,9 @@
 import unittest
 
+from services.realtime_constants import (
+    DEFAULT_DASHSCOPE_REALTIME_MODEL,
+    _is_dashscope_omni_realtime_model,
+)
 from services.realtime_tool_protocol import (
     RealtimeToolCall,
     dashscope_supports_native_tools,
@@ -26,16 +30,41 @@ class RealtimeToolProtocolTests(unittest.TestCase):
         self.assertNotIn("name", tools[0])
 
     def test_model_support_is_explicitly_current_qwen_realtime_only(self) -> None:
+        self.assertTrue(dashscope_supports_native_tools("qwen3.8-omni-flash-realtime"))
+        self.assertTrue(dashscope_supports_native_tools("qwen3.8-omni-plus-realtime-2026-09-18"))
         self.assertTrue(dashscope_supports_native_tools("qwen3.5-omni-plus-realtime"))
         self.assertTrue(dashscope_supports_native_tools("qwen3.5-omni-flash-realtime-2026-03-15"))
+        self.assertTrue(dashscope_supports_native_tools("qwen-audio-3.1-realtime-plus"))
         self.assertTrue(dashscope_supports_native_tools("qwen-audio-3.0-realtime-plus"))
         self.assertTrue(dashscope_supports_native_tools("qwen-audio-3.0-realtime-flash"))
         self.assertFalse(dashscope_supports_native_tools("qwen3-omni-flash-realtime-2025-12-01"))
         self.assertFalse(dashscope_supports_native_tools("qwen-audio-2.0-realtime-plus"))
+        self.assertFalse(dashscope_supports_native_tools("qwen-audio-3.2-realtime-plus"))
         self.assertFalse(dashscope_supports_native_tools("qwen3.5-omni-plus"))
+        self.assertFalse(dashscope_supports_native_tools("qwen3.8-omni-flash"))
         self.assertFalse(dashscope_supports_native_tools("custom-qwen3.5-omni-plus-realtime"))
         self.assertFalse(dashscope_supports_native_tools("qwen3.5-omni-plus-realtime-fake"))
         self.assertFalse(dashscope_supports_native_tools("qwen3.5-omni-plus-livetranslate"))
+
+    def test_default_dashscope_model_passes_every_runtime_gate(self) -> None:
+        """The shipped default must satisfy both the omni and tool-calling checks.
+
+        A fresh install starts a call on this id, so a default that fails either
+        gate would break voice calls until the user picked a model by hand.
+        """
+        self.assertTrue(_is_dashscope_omni_realtime_model(DEFAULT_DASHSCOPE_REALTIME_MODEL))
+        self.assertTrue(dashscope_supports_native_tools(DEFAULT_DASHSCOPE_REALTIME_MODEL))
+
+    def test_qwen38_omni_is_detected_by_the_shared_family_pattern(self) -> None:
+        for model in (
+            "qwen3.8-omni-flash-realtime",
+            "qwen3.8-omni-plus-realtime",
+            "qwen3.8-omni-flash-realtime-2026-09-18",
+            "Qwen3.8-Omni-Flash-Realtime",
+        ):
+            self.assertTrue(_is_dashscope_omni_realtime_model(model), model)
+        for not_omni in ("qwen3.8-omni-flash", "qwen3.8-livetranslate-flash-realtime", ""):
+            self.assertFalse(_is_dashscope_omni_realtime_model(not_omni), not_omni)
 
     def test_arguments_require_json_object_and_required_fields(self) -> None:
         self.assertEqual(parse_tool_arguments('{"query":"weather"}'), {"query": "weather"})

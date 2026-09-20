@@ -15,8 +15,12 @@ from .background_tasks import spawn_background_task
 from .realtime_constants import (
     DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE,
     QWEN_LIVETRANSLATE_38_TURN_DETECTION,
+    _normalize_dashscope_realtime_voice,
 )
 
+# Kept as the module-level default for callers that only need a name; the wire
+# value per model comes from _normalize_dashscope_realtime_voice (3.1 defaults to
+# longanqian_v3.1, 3.0 to longanqian).
 DEFAULT_QWEN_AUDIO_REALTIME_VOICE = "longanqian"
 
 
@@ -89,6 +93,25 @@ class DashScopeRealtimeCallback:
             return
 
         event_type = str(response.get("type", "")).strip()
+        if not event_type:
+            # DashScope also sends error envelopes with NO ``type`` at all. The
+            # one that matters for model selection is
+            # ``{"code": "AccessDenied", "message": "Access denied",
+            #   "request_id": "..."}`` — the server answers ``session.created``
+            # and then this frame, and drops the socket without a close frame.
+            # Because nothing here matched, an unentitled model looked exactly
+            # like a call that opens and then closes by itself.
+            code = str(response.get("code", "")).strip()
+            message = str(response.get("message", "")).strip()
+            if code or message:
+                logger.warning(
+                    "dashscope_untyped_error code=%s message=%s request_id=%s",
+                    code,
+                    message,
+                    response.get("request_id", ""),
+                )
+                self._push({"type": "error", "message": message or str(response), "code": code})
+            return
         if event_type in {"session.updated", "session.finished"}:
             self._push({"type": event_type})
             return
@@ -277,11 +300,16 @@ class DashScopeRealtimeCallback:
             return
         if event_type == "error":
             error_data = response.get("error")
+            code = ""
             if isinstance(error_data, dict):
                 message = str(error_data.get("message", "")).strip() or str(response)
+                code = str(error_data.get("code", "")).strip()
             else:
                 message = str(error_data or response).strip()
-            self._push({"type": "error", "message": message})
+            # ``code`` is what the vendor returns for "model not found" / rejected
+            # session fields; without it a failing model swap is indistinguishable
+            # from a transient network error in the logs.
+            self._push({"type": "error", "message": message, "code": code})
 
     def on_close(self, close_status_code: Any, close_msg: Any) -> None:
         self._push(
@@ -410,7 +438,9 @@ class DashScopeAudioRealtimeConversation:
             
             session = {
                 'modalities': ['text', 'audio'],
-                'voice': str(kwargs.get('voice') or DEFAULT_QWEN_AUDIO_REALTIME_VOICE),
+                'voice': _normalize_dashscope_realtime_voice(
+                    self.model, kwargs.get('voice') or DEFAULT_QWEN_AUDIO_REALTIME_VOICE
+                ),
                 'instructions': str(kwargs.get('instructions') or ''),
                 'input_audio_format': 'pcm',
                 'output_audio_format': 'pcm',

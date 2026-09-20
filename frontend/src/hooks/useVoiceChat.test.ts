@@ -441,13 +441,13 @@ describe("useVoiceChat", () => {
       })
     );
 
+    // The DashScope fallback stays on 3.5 omni until a 3.8 omni call is verified.
     expect(result.current.voiceChatModel).toBe("qwen3.5-omni-plus-realtime");
     // Only the current live-translate generation is offered.
     expect(result.current.voiceChatModelOptions).toEqual([
       "qwen3.5-omni-plus-realtime",
       "qwen3.8-livetranslate-flash-realtime",
-      "qwen-audio-3.0-realtime-plus",
-      "qwen-audio-3.0-realtime-flash",
+      "qwen-audio-3.1-realtime-plus",
     ]);
   });
 
@@ -499,8 +499,7 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatModelOptions).toEqual([
       "qwen3.5-omni-plus-realtime",
       "qwen3.8-livetranslate-flash-realtime",
-      "qwen-audio-3.0-realtime-plus",
-      "qwen-audio-3.0-realtime-flash",
+      "qwen-audio-3.1-realtime-plus",
       "qwen3.5-omni-flash-realtime",
     ]);
   });

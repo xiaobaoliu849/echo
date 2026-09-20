@@ -10,9 +10,14 @@ import unittest
 
 from services.realtime_constants import (
     DEFAULT_GOOGLE_REALTIME_VOICE,
+    DEFAULT_QWEN_AUDIO_31_REALTIME_VOICE,
     GOOGLE_REALTIME_VOICES,
+    QWEN_AUDIO_31_REALTIME_VOICES,
+    _is_dashscope_audio_31_realtime_model,
+    _is_dashscope_audio_realtime_model,
     _is_text_primarily_cjk,
     _merge_streaming_text,
+    _normalize_dashscope_realtime_voice,
 )
 
 
@@ -344,6 +349,45 @@ class GoogleRealtimeVoicesTests(unittest.TestCase):
     def test_invalid_voices_excluded(self):
         self.assertNotIn("Lyra", GOOGLE_REALTIME_VOICES)
         self.assertNotIn("alloy", GOOGLE_REALTIME_VOICES)
+
+
+class QwenAudioGenerationTests(unittest.TestCase):
+    """qwen-audio-3.1 replaces 3.0 with its own voice table and default."""
+
+    def test_31_is_detected_and_30_still_matches(self):
+        for model in ("qwen-audio-3.1-realtime-plus", "qwen-audio-3.0-realtime-plus",
+                      "qwen-audio-3.0-realtime-flash"):
+            self.assertTrue(_is_dashscope_audio_realtime_model(model), model)
+        self.assertTrue(_is_dashscope_audio_31_realtime_model("qwen-audio-3.1-realtime-plus"))
+        self.assertFalse(_is_dashscope_audio_31_realtime_model("qwen-audio-3.0-realtime-plus"))
+        # Not a realtime model, and no future generation is accepted implicitly.
+        self.assertFalse(_is_dashscope_audio_realtime_model("qwen-audio-3.0-tts-flash"))
+        self.assertFalse(_is_dashscope_audio_realtime_model("qwen-audio-3.2-realtime-plus"))
+
+    def test_31_defaults_to_its_own_voice(self):
+        self.assertEqual(DEFAULT_QWEN_AUDIO_31_REALTIME_VOICE, "longanqian_v3.1")
+        self.assertEqual(
+            _normalize_dashscope_realtime_voice("qwen-audio-3.1-realtime-plus", ""),
+            "longanqian_v3.1",
+        )
+        # 3.0 keeps the old default so a saved session does not change voice.
+        self.assertEqual(
+            _normalize_dashscope_realtime_voice("qwen-audio-3.0-realtime-plus", ""),
+            "longanqian",
+        )
+
+    def test_31_accepts_inherited_and_new_voices(self):
+        for voice in ("longanqian", "cally_v3.1", "xunanchuan"):
+            self.assertIn(voice, QWEN_AUDIO_31_REALTIME_VOICES)
+            self.assertEqual(
+                _normalize_dashscope_realtime_voice("qwen-audio-3.1-realtime-plus", voice),
+                voice,
+            )
+        # A 3.1-only voice on a 3.0 session must fall back, not be sent blind.
+        self.assertEqual(
+            _normalize_dashscope_realtime_voice("qwen-audio-3.0-realtime-plus", "cally_v3.1"),
+            "longanqian",
+        )
 
 
 if __name__ == "__main__":
