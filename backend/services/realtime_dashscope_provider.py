@@ -773,6 +773,30 @@ class DashScopeRealtimeMixin:
         input_finished = False
         output_finished = False
         source_by_item: dict[str, str] = {}
+        # Incremental (3.8) source-utterance bookkeeping. The 3.8 server does
+        # not reliably send a per-utterance transcription `completed` event, so
+        # the recorder never learned the user's source text. An input item is
+        # closed when speech stops (or when the next item starts), and the text
+        # collected so far is attached to the turn the translation opens.
+        open_source_item = ""
+        closed_source_items: set[str] = set()
+        pending_source_order: list[str] = []
+
+        def close_source_item(item_id: str) -> None:
+            """Mark one input item's speech as finished (idempotent per item)."""
+            key = str(item_id or "")
+            if not key or key in closed_source_items:
+                return
+            closed_source_items.add(key)
+            pending_source_order.append(key)
+
+        def take_pending_source() -> str:
+            """Return the next finished source utterance, in arrival order."""
+            while pending_source_order:
+                item_text = source_by_item.pop(pending_source_order.pop(0), "").strip()
+                if item_text:
+                    return item_text
+            return ""
 
         async def complete_turn(force: bool = False) -> None:
             nonlocal display_translation, pending_user, last_activity
@@ -794,6 +818,15 @@ class DashScopeRealtimeMixin:
             output_finished = False
             completed_turn_id = ""
             if recorder is not None:
+                # Backfill the source utterance this translation belongs to
+                # before the turn is closed: an assistant-authored turn already
+                # exists at this point with no user text, so note_user_transcript
+                # fills that same row in instead of opening a second turn.
+                # (3.5 records its source text from the transcription
+                # `completed` event instead, so the queue stays empty there.)
+                pending_source = take_pending_source() if incremental_protocol else ""
+                if pending_source:
+                    await recorder.note_user_transcript(pending_source)
                 completed_turn_id = await recorder.complete_turn({})
             await self._send_event(
                 websocket, "turn_complete", turn_id=completed_turn_id, interrupted=False
@@ -828,11 +861,21 @@ class DashScopeRealtimeMixin:
                         await self._send_event(websocket, "session_finished")
                     break
 
+                if event_type == "speech_stopped":
+                    close_source_item(str(event.get("item_id", "")) or open_source_item)
+                    continue
+
                 if event_type == "user_transcript":
                     last_activity = time.time()
                     has_content = True
                     if event.get("incremental"):
                         item_id = str(event.get("item_id", ""))
+                        if open_source_item and item_id and item_id != open_source_item:
+                            # A new input item means the previous utterance ended
+                            # even if no speech_stopped frame ever arrived.
+                            close_source_item(open_source_item)
+                        if item_id:
+                            open_source_item = item_id
                         text = source_by_item.get(item_id, "") + str(event.get("text", ""))
                         source_by_item[item_id] = text
                         await self._send_event(
@@ -980,6 +1023,25 @@ class DashScopeRealtimeMixin:
                 # translation mode (no barge-in arbitration, no function calling).
         finally:
             monitor_task.cancel()
+            # An utterance captured right before stop/finish may never get a
+            # translation response (or its last deltas arrive after the turn was
+            # closed); record whatever is left so the session export is not
+            # missing the user's last sentence(s).
+            if recorder is not None and incremental_protocol:
+                leftover_sources = [
+                    item_text
+                    for item_text in (
+                        source_by_item.pop(item_id, "").strip()
+                        for item_id in list(source_by_item)
+                    )
+                    if item_text
+                ]
+                try:
+                    for item_text in leftover_sources:
+                        await recorder.note_user_transcript(item_text)
+                        await recorder.complete_turn({})
+                except Exception:
+                    logger.exception("dashscope_live_translate_trailing_source_record_failed")
 
     async def _stream_dashscope_live_translate_session(
         self,
@@ -1004,14 +1066,18 @@ class DashScopeRealtimeMixin:
         url = settings["realtime_base_url"]
         event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         loop = asyncio.get_running_loop()
-        callback = DashScopeRealtimeCallback(loop=loop, queue=event_queue)
+        incremental_protocol = settings["model"].strip().lower() == "qwen3.8-livetranslate-flash-realtime"
+        # The 3.8 session speaks the incremental (delta + speech_stopped) ASR
+        # protocol; 3.5 keeps the cumulative {text, stash} snapshots.
+        callback = DashScopeRealtimeCallback(
+            loop=loop, queue=event_queue, incremental_asr=incremental_protocol
+        )
         conversation = DashScopeLiveTranslateConversation(
             model=settings["model"],
             api_key=settings["api_key"],
             callback=callback,
             url=url,
         )
-        incremental_protocol = settings["model"].strip().lower() == "qwen3.8-livetranslate-flash-realtime"
         finish_sent = False
         tasks: list[asyncio.Task] = []
         try:

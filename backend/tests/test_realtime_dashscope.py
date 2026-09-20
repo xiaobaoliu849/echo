@@ -12,6 +12,7 @@ from services.realtime_voice_service import (
     DashScopeRealtimeCallback,
     RealtimeVoiceService,
 )
+from services.interruption_classifier import InterruptionDecisionCoordinator
 from services.realtime_tool_protocol import tool_error_payload, tool_result_payload
 from services.voice_agent_tools import VoiceAgentToolSession
 
@@ -538,6 +539,44 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(
             any(call.args[0].get("type") == "error" for call in websocket.send_json.await_args_list)
         )
+
+    async def test_omni_interim_asr_frames_are_not_completed_utterances(self) -> None:
+        """Qwen-Omni's ``input_audio_transcription.delta`` carries {text, stash}.
+
+        Mapping that frame into user_transcript made the turn owner treat every
+        ASR frame as a finished user utterance: the interruption pipeline ran on
+        each one, and the real interim transcript was dropped.
+        """
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_event({"type": "response.created", "response": {"id": "response-1"}})
+        callback.on_event(
+            {
+                "type": "conversation.item.input_audio_transcription.delta",
+                "text": "你好",
+                "stash": "世界",
+                "item_id": "item-1",
+            }
+        )
+        callback.on_close(1000, "")
+
+        websocket = _FakeWebSocket()
+        conversation = MagicMock()
+        await self.service._dashscope_to_client_loop(
+            websocket,
+            queue,
+            _MemorySession(),
+            conversation,
+            "Tina",
+            VoiceAgentToolSession(default_provider="DashScope"),
+            recorder=None,
+            interruption=InterruptionDecisionCoordinator(),
+        )
+
+        sent_types = [event["type"] for event in websocket.sent_events]
+        self.assertNotIn("user_transcript", sent_types)
+        self.assertNotIn("interruption_pending", sent_types)
+        self.assertNotIn("interruption_decision", sent_types)
 
     async def test_dashscope_callback_distinguishes_function_phase_terminal(self) -> None:
         queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()

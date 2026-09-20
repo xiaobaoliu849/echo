@@ -31,7 +31,8 @@ GOOGLE_REALTIME_VOICES = (
 )
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-plus-realtime"
 DEFAULT_DASHSCOPE_REALTIME_VOICE = "Tina"
-# Default voice for qwen3.5-livetranslate-*-realtime (official default: Tina).
+# Default voice for the qwen livetranslate realtime family, 3.5 and 3.8
+# (official default: Tina).
 DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE = "Tina"
 
 # Voices supported by qwen3.5-omni-*-realtime models (default: Tina), per the

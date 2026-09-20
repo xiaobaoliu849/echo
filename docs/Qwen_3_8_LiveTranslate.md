@@ -3,7 +3,11 @@
 Echo supports `qwen3.8-livetranslate-flash-realtime` in the DashScope realtime
 model picker. Select it in the voice call settings and choose a target language.
 It uses the existing DashScope API key and workspace Realtime WebSocket URL.
-Saved Qwen 3.5 selections remain supported with their original protocol.
+
+Only this generation is offered. The superseded `qwen3.5-livetranslate-*` aliases
+are stripped from the DashScope model lists on every settings load, so they never
+reach the picker again. An already-saved 3.5 selection still runs on its original
+protocol until the user picks a model from the list.
 
 ## Protocol references
 
@@ -25,6 +29,17 @@ is accumulated per provider item, then reconciled with the final transcript.
 For 3.8, `response.done` completes a turn; text completion alone does not.
 Startup waits for configuration acknowledgement before enabling microphone input.
 
+Because 3.8 streamed translations are not paired with a per-utterance
+transcription `completed` event, a source item is treated as finished when
+`input_audio_buffer.speech_stopped` arrives or when the next item's first delta
+appears. Its accumulated text is attached to the recorder turn of the
+translation that follows it, and any utterance still pending when the socket
+closes is written as its own turn so the session export never loses the user's
+words. The incremental ASR mapping is scoped to this model: Qwen-Omni and
+Qwen-Audio reuse the same `conversation.item.input_audio_transcription.delta`
+event name with a `{text, stash}` payload, which the omni turn owner must not
+see as a completed user utterance.
+
 Stop immediately disables capture and playback, while keeping the socket open
 to receive the final text. The backend sends `session.finish` and waits up to
 15 seconds for the server to flush; the frontend has a 16-second cleanup timeout.
@@ -45,6 +60,16 @@ and compatibility with existing 3.5 sessions. Findings addressed:
    provider acknowledges completion, with bounded cleanup on both sides.
 4. A fixed startup delay could announce a usable session after configuration
    rejection. The 3.8 path waits for `session.updated` and propagates errors.
+5. Review of the shipped adapter found the incremental ASR mapping applied to
+   every DashScope family. Qwen-Omni / Qwen-Audio send `{text, stash}` on that
+   event, so each omni ASR frame was forwarded as an empty completed user
+   utterance: the turn owner ran the interruption pipeline per frame and the
+   real interim transcript was dropped. The delta mapping — plus the new
+   `speech_stopped` forward — is now keyed on the session type.
+6. The same review found 3.8 source utterances never reached the session
+   recorder, because `note_user_transcript` was only called from the
+   `completed` branch. Recorded 3.8 sessions contained assistant text only and
+   carried no turn id for the user's speech.
 
 These scenarios have mocked regression coverage. No unresolved blocker was
 identified in the reviewed changes. The review was performed by the implementing

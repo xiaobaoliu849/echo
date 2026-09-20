@@ -18,9 +18,35 @@ DEFAULT_QWEN_AUDIO_REALTIME_VOICE = "longanqian"
 
 
 class DashScopeRealtimeCallback:
-    def __init__(self, *, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue[dict[str, Any]]) -> None:
+    """Server-event funnel shared by the Qwen-Omni and LiveTranslate protocols.
+
+    ``incremental_asr`` selects which *input* ASR protocol the session speaks,
+    because two different families reuse the same event names with different
+    payloads:
+
+    * ``qwen3.8-livetranslate-flash-realtime`` streams the source transcript as
+      verbatim ``delta`` tokens (``...input_audio_transcription.delta``) and
+      reports the end of an utterance with
+      ``input_audio_buffer.speech_stopped`` — both carry an ``item_id``.
+    * Qwen-Omni / Qwen-Audio send an interim ``{text, stash}`` snapshot on that
+      same-named delta event and manage turns through server VAD instead.
+
+    Forwarding the omni interim frames as ``user_transcript`` made the turn
+    owner treat every single ASR frame as a *completed* user utterance (empty
+    transcript -> interruption pipeline + recorder write), so the mapping is
+    keyed on the session type rather than on the event name alone.
+    """
+
+    def __init__(
+        self,
+        *,
+        loop: asyncio.AbstractEventLoop,
+        queue: asyncio.Queue[dict[str, Any]],
+        incremental_asr: bool = False,
+    ) -> None:
         self.loop = loop
         self.queue = queue
+        self.incremental_asr = bool(incremental_asr)
 
     def _push(self, event: dict[str, Any]) -> None:
         event_type = event.get("type")
@@ -28,6 +54,11 @@ class DashScopeRealtimeCallback:
         stash = str(event.get("stash", ""))
         response_id = str(event.get("response_id", ""))
         if event_type == "assistant_text" and not event.get("incremental") and (text or stash):
+            # ``incremental`` marks a verbatim token delta (Qwen 3.8 translation
+            # text and the ``response.*.delta`` events of every family).  Those
+            # must NOT be deduplicated: a repeated fragment ("ha", "ha") is
+            # real text, not a re-sent cumulative snapshot.  Cumulative frames
+            # (text/stash, response.*.done) still pass through the guard below.
             # Dedup signature uses only (response_id, text, is_final).
             # Previously including `stash` here caused the same confirmed prefix
             # to bypass deduplication whenever only the prediction changed,
@@ -59,12 +90,42 @@ class DashScopeRealtimeCallback:
             self._push({"type": event_type})
             return
         if event_type == "conversation.item.input_audio_transcription.delta":
+            if not self.incremental_asr:
+                # Omni / Qwen-Audio carry the interim transcript as
+                # {text, stash} (confirmed prefix + tentative prediction) on
+                # this same event and have no `delta` field.  Those frames
+                # belong to the family-specific loops (which merge text+stash);
+                # pushing them here would emit an empty, non-final
+                # user_transcript that the turn owner treats as a completed
+                # utterance, running the interruption pipeline per ASR frame.
+                return
+            delta = str(response.get("delta", ""))
+            if not delta:
+                # Defensive: an unexpected {text, stash} snapshot on the same
+                # event must not inject an empty interim user utterance.
+                return
             self._push({
                 "type": "user_transcript",
-                "text": str(response.get("delta", "")),
+                "text": delta,
                 "incremental": True,
                 "item_id": str(response.get("item_id", "")),
             })
+            return
+        if event_type == "input_audio_buffer.speech_stopped":
+            if self.incremental_asr:
+                # Clean end-of-utterance signal for the translation protocol:
+                # the 3.8 server does not reliably send a per-utterance
+                # transcription `completed` event, so this is what tells the
+                # provider a source item is closed.
+                self._push(
+                    {
+                        "type": "speech_stopped",
+                        "provider_event_type": event_type,
+                        "event_id": str(response.get("event_id", "")),
+                        "item_id": str(response.get("item_id", "")),
+                        "audio_end_ms": response.get("audio_end_ms"),
+                    }
+                )
             return
         if event_type == "input_audio_buffer.speech_started":
             self._push(

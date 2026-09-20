@@ -875,11 +875,14 @@ export function resolveRealtimeModelOptions(
   const openaiBuiltIns = provider === OPENAI_PROVIDER
     ? [DEFAULT_OPENAI_MODEL]
     : [];
+  // Only the current live-translate generation is offered; the superseded
+  // qwen3.5-livetranslate alias stays accepted by isRealtimeVoiceModel /
+  // isLiveTranslateModel so an existing selection keeps working until the
+  // user picks a model from the list.
   const dashscopeBuiltIns = provider === DASHSCOPE_PROVIDER
     ? [
         DEFAULT_DASHSCOPE_MODEL,
         "qwen3.8-livetranslate-flash-realtime",
-        "qwen3.5-livetranslate-flash-realtime",
         "qwen-audio-3.0-realtime-plus",
         "qwen-audio-3.0-realtime-flash",
       ]

@@ -442,10 +442,10 @@ describe("useVoiceChat", () => {
     );
 
     expect(result.current.voiceChatModel).toBe("qwen3.5-omni-plus-realtime");
+    // Only the current live-translate generation is offered.
     expect(result.current.voiceChatModelOptions).toEqual([
       "qwen3.5-omni-plus-realtime",
       "qwen3.8-livetranslate-flash-realtime",
-      "qwen3.5-livetranslate-flash-realtime",
       "qwen-audio-3.0-realtime-plus",
       "qwen-audio-3.0-realtime-flash",
     ]);
@@ -499,7 +499,6 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatModelOptions).toEqual([
       "qwen3.5-omni-plus-realtime",
       "qwen3.8-livetranslate-flash-realtime",
-      "qwen3.5-livetranslate-flash-realtime",
       "qwen-audio-3.0-realtime-plus",
       "qwen-audio-3.0-realtime-flash",
       "qwen3.5-omni-flash-realtime",
