@@ -375,17 +375,21 @@ export const QWEN_AUDIO_VOICES = [
 // qwen-audio-3.1-realtime-plus takes the five 3.0 voices plus eight new ones,
 // and its own default is longanqian_v3.1 (mirrors
 // QWEN_AUDIO_31_REALTIME_VOICES in backend/services/realtime_constants.py).
-// Only the ids are certain for the new voices, so they stay labelled by id.
+// Names/genders/accents per the official Qwen-Audio voice list
+// (help.aliyun.com/zh/model-studio/qwen-audio-tts-voice-list): the four
+// longan/xunan voices are the multi-language & dialect set, the three
+// b*-v3.1 voices are American-English female. longanqian_v3.1 has no
+// published Chinese name, so it stays labelled by id.
 export const QWEN_AUDIO_31_VOICES = [
   { value: "longanqian_v3.1", label: "longanqian_v3.1 · 3.1 默认 (Female)", description: "3.1 Plus 默认音色" },
   ...QWEN_AUDIO_VOICES,
-  { value: "longanhuan_v3.1", label: "longanhuan_v3.1", description: "3.1 新增系统音色" },
-  { value: "longanlingxin_v3.1", label: "longanlingxin_v3.1", description: "3.1 新增系统音色" },
-  { value: "longanfengyue_v3.1", label: "longanfengyue_v3.1", description: "3.1 新增系统音色" },
-  { value: "xunanchuan", label: "xunanchuan", description: "3.1 新增系统音色" },
-  { value: "beth_v3.1", label: "beth_v3.1", description: "3.1 新增系统音色" },
-  { value: "betty_v3.1", label: "betty_v3.1", description: "3.1 新增系统音色" },
-  { value: "cally_v3.1", label: "cally_v3.1", description: "3.1 新增系统音色" },
+  { value: "longanhuan_v3.1", label: "longanhuan_v3.1 · 龙安欢 (Female)", description: "多语种方言女声（重庆话/宁波话/韩语/印尼语等）" },
+  { value: "longanlingxin_v3.1", label: "longanlingxin_v3.1 · 龙安灵心 (Female)", description: "多语种方言女声（上海话/陕西话/法语/意大利语等）" },
+  { value: "longanfengyue_v3.1", label: "longanfengyue_v3.1 · 龙安风悦 (Female)", description: "多语种方言女声（东北话/日语/越南语等）" },
+  { value: "xunanchuan", label: "xunanchuan · 许南川 (Male)", description: "多语种方言男声（甘肃话/东北话/葡萄牙语等）" },
+  { value: "beth_v3.1", label: "beth_v3.1 · Beth (Female)", description: "美式英语女声" },
+  { value: "betty_v3.1", label: "betty_v3.1 · Betty (Female)", description: "美式英语女声" },
+  { value: "cally_v3.1", label: "cally_v3.1 · Cally (Female)", description: "美式英语女声" },
 ];
 
 // Voices for qwen3.5-livetranslate-*-realtime (default: Tina), per the official

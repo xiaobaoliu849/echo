@@ -40,10 +40,18 @@ its default is `longanqian_v3.1` (3.0's default is `longanqian`):
     3.1-only  : longanqian_v3.1, longanhuan_v3.1, longanlingxin_v3.1,
                 longanfengyue_v3.1, xunanchuan, beth_v3.1, betty_v3.1, cally_v3.1
 
-Only the ids are documented; the eight new ones are labelled by id in the UI
-rather than with invented display names. A 3.1-only voice on a 3.0 session is
+A 3.1-only voice on a 3.0 session is
 rejected by the normalizer and falls back, so a stale selection can never send a
 voice the model will refuse.
+
+Official names (from the vendor's voice list,
+`help.aliyun.com/zh/model-studio/qwen-audio-tts-voice-list`, which names the
+same v3.1 voice family): the four Chinese voices are the multi-language &
+dialect set — 龙安欢 `longanhuan_v3.1` (F), 龙安灵心 `longanlingxin_v3.1` (F),
+龙安风悦 `longanfengyue_v3.1` (F), 许南川 `xunanchuan` (M) — and the three
+English voices are American-English female: `beth_v3.1`, `betty_v3.1`,
+`cally_v3.1`. `longanqian_v3.1` has no published Chinese name, so the UI keeps
+its id.
 
 ## Migration claim, verified live
 
@@ -79,8 +87,10 @@ server does not echo the transport format), so that is not a 3.1 regression.
    model, so the Qwen-Audio *realtime* models are advertised under the settings'
    TTS list rather than the chat/realtime list. Pre-existing; the voice picker is
    unaffected because the frontend merges its own DashScope built-ins.
-3. **New voice display names.** The eight 3.1-only voices show their raw ids
-   until the vendor publishes Chinese names.
+3. **Voice display names.** Seven of the eight 3.1-only voices now show their
+   official names (龙安欢 / 龙安灵心 / 龙安风悦 / 许南川 / Beth / Betty / Cally, see
+   Voices above). Only `longanqian_v3.1` still shows its raw id — the vendor has
+   not published a Chinese name for it.
 4. **Region.** Echo still requires a `.cn-beijing.maas.aliyuncs.com` workspace
    for the whole Qwen-Audio family; if 3.1 is ever offered in Singapore, that
    gate needs relaxing.
