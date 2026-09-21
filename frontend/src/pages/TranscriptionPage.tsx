@@ -133,6 +133,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
   const {
     history,
     historyBusy,
+    historyError,
     activeFilter,
     setActiveFilter,
     refreshHistory,
@@ -149,17 +150,19 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [memorySaving, setMemorySaving] = useState(false);
 
-  // Filter history by search term (title, transcript preview, or job id)
+  // Filter the merged cache locally: filtered server responses intentionally
+  // retain cached records of other statuses.
   const filteredHistory = useMemo(() => {
-    if (!searchQuery.trim()) return history;
-    const q = searchQuery.toLowerCase();
-    return history.filter(
-      (item) =>
-        (item.file_name && item.file_name.toLowerCase().includes(q)) ||
-        (item.transcript_preview && item.transcript_preview.toLowerCase().includes(q)) ||
-        (item.job_id && item.job_id.toLowerCase().includes(q))
-    );
-  }, [history, searchQuery]);
+    const q = searchQuery.trim().toLowerCase();
+    return history.filter((item) => {
+      const matchesStatus = activeFilter === "all"
+        || (activeFilter === "running"
+          ? isPollingStatus(item.status) || item.status === "uploaded"
+          : item.status === activeFilter);
+      return matchesStatus && (!q || [item.file_name, item.transcript_preview, item.job_id]
+        .some(value => value?.toLowerCase().includes(q)));
+    });
+  }, [history, searchQuery, activeFilter]);
 
   const activePollingJobId = isPollingStatus(job?.status) ? job?.job_id : null;
 
@@ -334,6 +337,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
   }
 
   async function handleCardClick(item: HistoryItem) {
+    setError(null);
     setDetailLoading(true);
     setViewMode("detail");
     setAudioDuration(0);
@@ -348,6 +352,7 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
         void loadJobWords(fullJob.job_id);
       }
     } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
       if (isJobNotFoundError(err)) {
         // The record is gone server-side. Do NOT rebuild it with the stale
         // queued/running history status — that previously spawned an eternal
@@ -505,6 +510,15 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
 
   function clearSelection() {
     setSelectedIds(new Set());
+  }
+
+  async function handleDeleteJob(jobId: string) {
+    setError(null);
+    try {
+      await removeJob(jobId);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    }
   }
 
   async function handleBatchDelete() {
@@ -947,12 +961,12 @@ export function TranscriptionPage({ onSendToChat, initialTab = "file", onDetailM
             searchQuery={searchQuery}
             historyBusy={historyBusy}
             activeJobId={job?.job_id}
-            error={error}
+            error={error ?? (historyError ? new Error(historyError) : null)}
             onSearchChange={setSearchQuery}
             onFilterChange={handleFilterChange}
             onRefresh={refreshHistory}
             onCardClick={handleCardClick}
-            onDeleteJob={removeJob}
+            onDeleteJob={handleDeleteJob}
             onRetryJob={(id) =>
               retryJob(id).catch((err) => {
                 // A record that 404s on retry is gone server-side; reflect it

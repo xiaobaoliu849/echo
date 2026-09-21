@@ -5,15 +5,31 @@ import {
   retryTranscriptionJob,
   deleteTranscriptionJob,
   renameTranscriptionJob,
+  batchDeleteTranscriptionJobs,
+  ApiRequestError,
+  type TranscriptionJobResponse,
 } from "../api";
 import { useTranscriptionHistory } from "./useTranscriptionHistory";
 
-vi.mock("../api", () => ({
+vi.mock("../api", async () => ({
+  ApiRequestError: (await vi.importActual<typeof import("../api")>("../api")).ApiRequestError,
   listTranscriptionJobs: vi.fn(),
   retryTranscriptionJob: vi.fn(),
   deleteTranscriptionJob: vi.fn(),
   renameTranscriptionJob: vi.fn(),
+  batchDeleteTranscriptionJobs: vi.fn(),
 }));
+
+function job(job_id = "tx_001", file_name = "meeting.wav"): TranscriptionJobResponse {
+  return { job_id, file_name, mode: "async", status: "completed" };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
 
 describe("useTranscriptionHistory", () => {
   beforeEach(() => {
@@ -22,6 +38,7 @@ describe("useTranscriptionHistory", () => {
     vi.mocked(retryTranscriptionJob).mockReset();
     vi.mocked(deleteTranscriptionJob).mockReset();
     vi.mocked(renameTranscriptionJob).mockReset();
+    vi.mocked(batchDeleteTranscriptionJobs).mockReset();
     vi.mocked(listTranscriptionJobs).mockResolvedValue({
       count: 1,
       jobs: [
@@ -228,7 +245,7 @@ describe("useTranscriptionHistory", () => {
     expect(JSON.parse(localStorage.getItem("vs_transcription_history") || "[]")).toHaveLength(0);
   });
 
-  it("removes job locally even if server delete fails", async () => {
+  it("preserves the job and reports a failed server delete", async () => {
     vi.mocked(deleteTranscriptionJob).mockRejectedValue(new Error("Network error"));
 
     const { result } = renderHook(() => useTranscriptionHistory());
@@ -240,11 +257,98 @@ describe("useTranscriptionHistory", () => {
     expect(result.current.history).toHaveLength(1);
 
     await act(async () => {
-      await result.current.removeJob("tx_001");
+      await expect(result.current.removeJob("tx_001")).rejects.toThrow("Network error");
     });
 
     expect(vi.mocked(deleteTranscriptionJob)).toHaveBeenCalledWith("tx_001");
-    expect(result.current.history).toHaveLength(0);
+    expect(result.current.history).toHaveLength(1);
+  });
+
+  it("ignores malformed cached records while the server is unavailable", async () => {
+    const valid = { ...job(), timestamp: 123 };
+    localStorage.setItem("vs_transcription_history", JSON.stringify([
+      null, 42, {}, { ...valid, file_name: 5 }, { ...valid, transcript_preview: {} }, valid,
+    ]));
+    vi.mocked(listTranscriptionJobs).mockRejectedValue(new Error("Offline"));
+    const { result } = renderHook(() => useTranscriptionHistory());
+    await waitFor(() => expect(result.current.historyBusy).toBe(false));
+    expect(result.current.history).toEqual([valid]);
+    expect(result.current.historyError).toBe("Offline");
+  });
+
+  it("removes a stale local job when the server confirms it is missing", async () => {
+    vi.mocked(deleteTranscriptionJob).mockRejectedValue(new ApiRequestError("Not found", 404));
+    const { result } = renderHook(() => useTranscriptionHistory());
+    await waitFor(() => expect(result.current.historyBusy).toBe(false));
+    await act(async () => { await result.current.removeJob("tx_001"); });
+    expect(result.current.history).toEqual([]);
+  });
+
+  it("keeps failed batch deletions visible and cached", async () => {
+    vi.mocked(listTranscriptionJobs).mockResolvedValue({ count: 2, jobs: [job(), job("tx_002")] });
+    vi.mocked(batchDeleteTranscriptionJobs).mockResolvedValue({ deleted: ["tx_001"], failed: ["tx_002"], deleted_count: 1, failed_count: 1 });
+    const { result } = renderHook(() => useTranscriptionHistory());
+    await waitFor(() => expect(result.current.historyBusy).toBe(false));
+    await act(async () => { await result.current.removeJobs(["tx_001", "tx_002"]); });
+    expect(result.current.history.map(item => item.job_id)).toEqual(["tx_002"]);
+    expect(JSON.parse(localStorage.getItem("vs_transcription_history")!)).toEqual(result.current.history);
+  });
+
+  it("does not claim success when the batch request fails", async () => {
+    vi.mocked(batchDeleteTranscriptionJobs).mockRejectedValue(new Error("Offline"));
+    const { result } = renderHook(() => useTranscriptionHistory());
+    await waitFor(() => expect(result.current.historyBusy).toBe(false));
+    await act(async () => { await expect(result.current.removeJobs(["tx_001"])).rejects.toThrow("Offline"); });
+    expect(result.current.history).toHaveLength(1);
+  });
+
+  it("ignores an older refresh when a newer refresh has completed", async () => {
+    const old = deferred<Awaited<ReturnType<typeof listTranscriptionJobs>>>();
+    vi.mocked(listTranscriptionJobs).mockReturnValueOnce(old.promise);
+    const { result } = renderHook(() => useTranscriptionHistory());
+    await act(async () => { await result.current.refreshHistory(); });
+    await act(async () => { old.resolve({ count: 0, jobs: [] }); });
+    expect(result.current.history[0]?.job_id).toBe("tx_001");
+  });
+
+  it.each(["delete", "update", "clear"])("ignores refreshes started before a local %s", async (action) => {
+    const { result } = renderHook(() => useTranscriptionHistory());
+    await waitFor(() => expect(result.current.historyBusy).toBe(false));
+    const old = deferred<Awaited<ReturnType<typeof listTranscriptionJobs>>>();
+    vi.mocked(listTranscriptionJobs).mockReturnValueOnce(old.promise);
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.refreshHistory(); });
+    await act(async () => {
+      if (action === "delete") await result.current.removeJob("tx_001");
+      if (action === "update") result.current.addOrUpdateJob(job("tx_001", "renamed.wav"));
+      if (action === "clear") result.current.clearHistory();
+    });
+    await act(async () => { old.resolve({ count: 1, jobs: [job()] }); await pending; });
+    expect(result.current.history.map(item => item.file_name)).toEqual(action === "update" ? ["renamed.wav"] : []);
+  });
+
+  it("ignores a failed stale refresh while the current refresh is pending", async () => {
+    const old = deferred<Awaited<ReturnType<typeof listTranscriptionJobs>>>();
+    const current = deferred<Awaited<ReturnType<typeof listTranscriptionJobs>>>();
+    vi.mocked(listTranscriptionJobs).mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+    const { result } = renderHook(() => useTranscriptionHistory());
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.refreshHistory(); });
+    await act(async () => { old.reject(new Error("stale failure")); });
+    expect(result.current.historyError).toBe("");
+    expect(result.current.historyBusy).toBe(true);
+    await act(async () => { current.resolve({ count: 0, jobs: [] }); await pending; });
+    expect(result.current.historyBusy).toBe(false);
+  });
+
+  it("does not overwrite the cache with a late response after unmount", async () => {
+    const old = deferred<Awaited<ReturnType<typeof listTranscriptionJobs>>>();
+    vi.mocked(listTranscriptionJobs).mockReturnValueOnce(old.promise);
+    const { unmount } = renderHook(() => useTranscriptionHistory());
+    unmount();
+    localStorage.setItem("vs_transcription_history", "[]");
+    await act(async () => { old.resolve({ count: 1, jobs: [job()] }); });
+    expect(localStorage.getItem("vs_transcription_history")).toBe("[]");
   });
 
   it("switches filters and requests matching backend statuses", async () => {
