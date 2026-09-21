@@ -16,7 +16,6 @@ import {
   listAudioAgentRunEvents,
   listAudioAgentRuns,
   listAudioOverviewPodcasts,
-  saveAudioOverviewScript,
   synthesizeAudioAgentRun,
   synthesizeAudioOverviewPodcast,
   updateAudioOverviewPodcast,
@@ -29,13 +28,11 @@ import {
 import { createInlineTranslator, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 
-// Thrown inside the agent-run polling loop when a newer generation/retry (or an
-// unmount) supersedes the in-flight run, so the stale loop exits without
-// touching state. Caught and ignored by the callers.
-class AgentRunSupersededError extends Error {
+// Switching drafts invalidates all pending work for the previous workspace.
+class WorkspaceSupersededError extends Error {
   constructor() {
-    super("Agent run superseded");
-    this.name = "AgentRunSupersededError";
+    super("Podcast workspace superseded");
+    this.name = "WorkspaceSupersededError";
   }
 }
 
@@ -52,11 +49,17 @@ type Options = {
 export default function useAudioOverview(options: Options) {
   const { formatErrorMessage, language = "zh-CN" } = options;
   const t = createInlineTranslator(language);
-  const agentRunEpochRef = useRef(0);
+  const workspaceEpochRef = useRef(0);
+  const podcastListRevision = useRef(0);
+  const runListRevision = useRef(0);
+  const mounted = useRef(false);
   useEffect(() => {
-    // Invalidate any in-flight agent-run polling loop on unmount.
+    mounted.current = true;
     return () => {
-      agentRunEpochRef.current += 1;
+      mounted.current = false;
+      workspaceEpochRef.current += 1;
+      podcastListRevision.current += 1;
+      runListRevision.current += 1;
     };
   }, []);
   const [audioOverviewWorkspaceMode, setAudioOverviewWorkspaceMode] =
@@ -248,17 +251,34 @@ export default function useAudioOverview(options: Options) {
   }, []);
 
   function setAudioOverviewAudioBlob(blob: Blob) {
-    if (audioOverviewAudioUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(audioOverviewAudioUrl);
-    }
+    // The URL effect owns revocation on replacement and unmount.
     setAudioOverviewAudioUrl(URL.createObjectURL(blob));
   }
 
   function clearAudioOverviewAudio() {
-    if (audioOverviewAudioUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(audioOverviewAudioUrl);
-    }
     setAudioOverviewAudioUrl("");
+  }
+
+  function beginWorkspaceOperation() {
+    setAudioOverviewBusy(false);
+    setAudioOverviewSaving(false);
+    setAudioOverviewSynthBusy(false);
+    return ++workspaceEpochRef.current;
+  }
+
+  function assertCurrentWorkspace(epoch: number) {
+    if (workspaceEpochRef.current !== epoch) throw new WorkspaceSupersededError();
+  }
+
+  async function inWorkspace<T>(epoch: number, promise: Promise<T>): Promise<T> {
+    try {
+      const value = await promise;
+      assertCurrentWorkspace(epoch);
+      return value;
+    } catch (error) {
+      assertCurrentWorkspace(epoch);
+      throw error;
+    }
   }
 
   function normalizeAudioOverviewScriptLines(lines: AudioOverviewScriptLine[]) {
@@ -313,20 +333,15 @@ export default function useAudioOverview(options: Options) {
   async function waitForAudioAgentRunCompletion(runId: number, epoch: number) {
     const maxAttempts = 120;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      if (agentRunEpochRef.current !== epoch) {
-        throw new AgentRunSupersededError();
-      }
-      const [current, eventData] = await Promise.all([
+      assertCurrentWorkspace(epoch);
+      const [current, eventData] = await inWorkspace(epoch, Promise.all([
         getAudioAgentRun(runId),
         listAudioAgentRunEvents(runId, 50)
-      ]);
-      if (agentRunEpochRef.current !== epoch) {
-        throw new AgentRunSupersededError();
-      }
+      ]));
       applyAudioAgentRun(current);
       applyAudioAgentEvents(eventData.events);
       setAudioOverviewInfo(buildAgentStepInfo(current));
-      if (current.status === "draft_ready") {
+      if (current.status === "draft_ready" || current.status === "completed") {
         return current;
       }
       if (current.status === "failed") {
@@ -338,7 +353,7 @@ export default function useAudioOverview(options: Options) {
     throw new Error(t("Agent 执行超时，请稍后重试。", "Agent execution timed out. Please try again later."));
   }
 
-  async function syncRunBackToPodcast(run: AudioAgentRunDetail) {
+  async function syncRunBackToPodcast(run: AudioAgentRunDetail, epoch: number) {
     const nextPodcastId =
       typeof run.podcast_id === "number" && run.podcast_id > 0 ? run.podcast_id : null;
     if (nextPodcastId === null) {
@@ -349,7 +364,7 @@ export default function useAudioOverview(options: Options) {
         )
       );
     }
-    const savedPodcast = await getAudioOverviewPodcast(nextPodcastId);
+    const savedPodcast = await inWorkspace(epoch, getAudioOverviewPodcast(nextPodcastId));
     applyAudioOverviewPodcast(savedPodcast);
     setAudioOverviewScriptLines(normalizeAudioOverviewScriptLines(savedPodcast.script_lines));
     setAudioOverviewLanguage(savedPodcast.language?.toLowerCase().startsWith("en") ? "en" : "zh");
@@ -365,39 +380,51 @@ export default function useAudioOverview(options: Options) {
   }
 
   async function loadAudioOverviewPodcasts() {
+    const revision = ++podcastListRevision.current;
+    const epoch = workspaceEpochRef.current;
     setAudioOverviewListBusy(true);
     try {
       const data = await listAudioOverviewPodcasts(30);
+      if (podcastListRevision.current !== revision) return;
       setAudioOverviewPodcasts(data.podcasts);
     } catch (err) {
+      if (podcastListRevision.current !== revision || workspaceEpochRef.current !== epoch) return;
       setAudioOverviewError(formatErrorMessage(err, t("加载播客列表失败。", "Failed to load the podcast list.")));
     } finally {
-      setAudioOverviewListBusy(false);
+      if (podcastListRevision.current === revision) setAudioOverviewListBusy(false);
     }
   }
 
+  async function loadPodcastIntoWorkspace(podcastId: number, epoch: number) {
+    const podcast = await inWorkspace(epoch, getAudioOverviewPodcast(podcastId));
+    applyAudioOverviewPodcast(podcast);
+    if (podcast.audio_path) {
+      const blob = await inWorkspace(epoch, fetchAudioOverviewPodcastAudio(podcastId));
+      setAudioOverviewAudioBlob(blob);
+    } else {
+      clearAudioOverviewAudio();
+    }
+    return podcast;
+  }
+
   async function loadAudioOverviewPodcastById(podcastId: number) {
+    const epoch = beginWorkspaceOperation();
     setAudioOverviewError("");
     setAudioOverviewInfo("");
     setAudioOverviewMemoriesRetrieved(0);
     setAudioOverviewMemorySaved(false);
     resetAudioAgentState();
+    clearAudioOverviewAudio();
     try {
-      const podcast = await getAudioOverviewPodcast(podcastId);
-      applyAudioOverviewPodcast(podcast);
-      if (podcast.audio_path) {
-        const blob = await fetchAudioOverviewPodcastAudio(podcastId);
-        setAudioOverviewAudioBlob(blob);
-      } else {
-        clearAudioOverviewAudio();
-      }
+      const podcast = await loadPodcastIntoWorkspace(podcastId, epoch);
       setAudioOverviewInfo(t(`已载入播客 #${podcast.id}。`, `Loaded podcast #${podcast.id}.`));
     } catch (err) {
+      if (err instanceof WorkspaceSupersededError) return;
       setAudioOverviewError(formatErrorMessage(err, t("加载播客详情失败。", "Failed to load podcast details.")));
     }
   }
 
-  async function ensureAudioOverviewPodcastSaved() {
+  async function ensureAudioOverviewPodcastSaved(epoch: number) {
     const topic = audioOverviewTopic.trim();
     const scriptLines = normalizeAudioOverviewScriptLines(audioOverviewScriptLines);
     if (!topic) {
@@ -407,23 +434,23 @@ export default function useAudioOverview(options: Options) {
       throw new Error(t("脚本至少需要 2 条非空台词。", "The script needs at least 2 non-empty lines."));
     }
 
-    if (audioOverviewPodcastId === null) {
-      const created = await createAudioOverviewPodcast({
-        topic,
-        language: audioOverviewLanguage,
-        script_lines: scriptLines
-      });
-      applyAudioOverviewPodcast(created);
-      return created.id;
-    }
-
-    const updated = await updateAudioOverviewPodcast(audioOverviewPodcastId, {
+    const payload = {
       topic,
       language: audioOverviewLanguage,
       script_lines: scriptLines
-    });
-    applyAudioOverviewPodcast(updated);
-    return updated.id;
+    };
+    const saved = await inWorkspace(epoch, audioOverviewPodcastId === null
+      ? createAudioOverviewPodcast(payload)
+      : updateAudioOverviewPodcast(audioOverviewPodcastId, payload));
+    setAudioOverviewPodcastId(saved.id);
+    // Apply server normalization only to fields unchanged since this save began.
+    // New edits remain in the editor and use the same ID on the next save.
+    setAudioOverviewTopic(current => current === audioOverviewTopic ? saved.topic : current);
+    setAudioOverviewLanguage(current => current === audioOverviewLanguage
+      ? (saved.language?.toLowerCase().startsWith("en") ? "en" : "zh") : current);
+    setAudioOverviewScriptLines(current => current === audioOverviewScriptLines ? saved.script_lines : current);
+    setAudioOverviewMenuOpen(false);
+    return saved.id;
   }
 
   async function onGenerateScript(event: FormEvent) {
@@ -434,13 +461,13 @@ export default function useAudioOverview(options: Options) {
       return;
     }
 
+    const epoch = beginWorkspaceOperation();
     setAudioOverviewError("");
     setAudioOverviewInfo("");
     setAudioOverviewBusy(true);
     setAudioOverviewMemoriesRetrieved(0);
     setAudioOverviewMemorySaved(false);
     resetAudioAgentState();
-    const epoch = (agentRunEpochRef.current += 1);
     try {
       const runtimeMemory = getEverMemRuntimeConfig();
       const memoryConfigured = runtimeMemory.enabled;
@@ -450,7 +477,7 @@ export default function useAudioOverview(options: Options) {
         t("Agent 正在检索资料并生成脚本...", "The agent is retrieving context and generating the script...")
       );
 
-      const run = await createAudioAgentRun({
+      const run = await inWorkspace(epoch, createAudioAgentRun({
         topic,
         language: audioOverviewLanguage,
         provider: audioOverviewProvider,
@@ -464,12 +491,13 @@ export default function useAudioOverview(options: Options) {
         generation_constraints: audioAgentGenerationConstraints.trim() || undefined,
         turn_count: audioOverviewTurnCount,
         auto_execute: true
-      });
+      }));
       applyAudioAgentRun(run);
       const completedRun =
-        run.status === "draft_ready" ? run : await waitForAudioAgentRunCompletion(run.id, epoch);
+        run.status === "draft_ready" || run.status === "completed"
+          ? run : await waitForAudioAgentRunCompletion(run.id, epoch);
       clearAudioOverviewAudio();
-      const nextPodcastId = await syncRunBackToPodcast(completedRun);
+      const nextPodcastId = await syncRunBackToPodcast(completedRun, epoch);
       setAudioOverviewInfo(
         t(
           `Agent 已完成检索与写稿，并保存为播客 #${nextPodcastId}。`,
@@ -477,16 +505,12 @@ export default function useAudioOverview(options: Options) {
         )
       );
 
-      await loadAudioOverviewPodcasts();
+      await inWorkspace(epoch, loadAudioOverviewPodcasts());
     } catch (err) {
-      if (err instanceof AgentRunSupersededError) {
-        return;
-      }
+      if (err instanceof WorkspaceSupersededError) return;
       setAudioOverviewError(formatErrorMessage(err, t("生成脚本失败。", "Failed to generate script.")));
     } finally {
-      if (agentRunEpochRef.current === epoch) {
-        setAudioOverviewBusy(false);
-      }
+      if (workspaceEpochRef.current === epoch) setAudioOverviewBusy(false);
     }
   }
 
@@ -495,20 +519,20 @@ export default function useAudioOverview(options: Options) {
       setAudioOverviewError(t("当前没有可重试的 Agent 任务。", "There is no agent run to retry."));
       return;
     }
+    const epoch = beginWorkspaceOperation();
     setAudioOverviewError("");
     setAudioOverviewInfo(t("正在重试 Agent 任务...", "Retrying the agent run..."));
     setAudioOverviewBusy(true);
-    const epoch = (agentRunEpochRef.current += 1);
     try {
-      const scheduled = await executeAudioAgentRun(audioAgentRunId);
+      const scheduled = await inWorkspace(epoch, executeAudioAgentRun(audioAgentRunId));
       applyAudioAgentRun(scheduled);
       const completedRun =
         scheduled.status === "draft_ready" || scheduled.status === "completed"
           ? scheduled
           : await waitForAudioAgentRunCompletion(audioAgentRunId, epoch);
-      const nextPodcastId = await syncRunBackToPodcast(completedRun);
+      const nextPodcastId = await syncRunBackToPodcast(completedRun, epoch);
       clearAudioOverviewAudio();
-      await loadAudioOverviewPodcasts();
+      await inWorkspace(epoch, loadAudioOverviewPodcasts());
       setAudioOverviewInfo(
         t(
           `Agent 重试完成，已更新播客 #${nextPodcastId}。`,
@@ -516,47 +540,42 @@ export default function useAudioOverview(options: Options) {
         )
       );
     } catch (err) {
-      if (err instanceof AgentRunSupersededError) {
-        return;
-      }
+      if (err instanceof WorkspaceSupersededError) return;
       setAudioOverviewError(formatErrorMessage(err, t("重试 Agent 任务失败。", "Failed to retry the agent run.")));
     } finally {
-      if (agentRunEpochRef.current === epoch) {
-        setAudioOverviewBusy(false);
-      }
+      if (workspaceEpochRef.current === epoch) setAudioOverviewBusy(false);
     }
   }
 
   async function loadAgentRunHistory() {
+    const revision = ++runListRevision.current;
+    const epoch = workspaceEpochRef.current;
     setAgentRunHistoryBusy(true);
     try {
       const data = await listAudioAgentRuns(30);
+      if (runListRevision.current !== revision) return;
       setAgentRunHistory(data.runs);
     } catch (err) {
+      if (runListRevision.current !== revision || workspaceEpochRef.current !== epoch) return;
       setAudioOverviewError(formatErrorMessage(err, t("加载 Agent 运行记录失败。", "Failed to load agent run history.")));
     } finally {
-      setAgentRunHistoryBusy(false);
+      if (runListRevision.current === revision) setAgentRunHistoryBusy(false);
     }
   }
 
   async function onOpenAgentRunById(runId: number) {
+    const epoch = beginWorkspaceOperation();
     setAudioOverviewError("");
     setAudioOverviewInfo("");
     setAudioOverviewBusy(true);
+    clearAudioOverviewAudio();
     try {
-      const detail = await getAudioAgentRun(runId);
+      const detail = await inWorkspace(epoch, getAudioAgentRun(runId));
       applyAudioAgentRun(detail);
-      const eventData = await listAudioAgentRunEvents(runId, 50);
+      const eventData = await inWorkspace(epoch, listAudioAgentRunEvents(runId, 50));
       applyAudioAgentEvents(eventData.events);
       if (detail.podcast_id && detail.podcast_id > 0) {
-        const podcast = await getAudioOverviewPodcast(detail.podcast_id);
-        applyAudioOverviewPodcast(podcast);
-        if (podcast.audio_path) {
-          const blob = await fetchAudioOverviewPodcastAudio(detail.podcast_id);
-          setAudioOverviewAudioBlob(blob);
-        } else {
-          clearAudioOverviewAudio();
-        }
+        await loadPodcastIntoWorkspace(detail.podcast_id, epoch);
       } else {
         setAudioOverviewPodcastId(null);
         setAudioOverviewScriptLines([]);
@@ -566,9 +585,10 @@ export default function useAudioOverview(options: Options) {
         t(`已载入 Agent 运行 #${runId}。`, `Loaded agent run #${runId}.`)
       );
     } catch (err) {
+      if (err instanceof WorkspaceSupersededError) return;
       setAudioOverviewError(formatErrorMessage(err, t("加载 Agent 运行记录失败。", "Failed to load agent run.")));
     } finally {
-      setAudioOverviewBusy(false);
+      if (workspaceEpochRef.current === epoch) setAudioOverviewBusy(false);
     }
   }
 
@@ -577,26 +597,26 @@ export default function useAudioOverview(options: Options) {
   }
 
   async function onSaveScript() {
+    const epoch = beginWorkspaceOperation();
     setAudioOverviewError("");
     setAudioOverviewInfo("");
     setAudioOverviewSaving(true);
     try {
-      const podcastId = await ensureAudioOverviewPodcastSaved();
-      const scriptLines = normalizeAudioOverviewScriptLines(audioOverviewScriptLines);
-      const updated = await saveAudioOverviewScript(podcastId, scriptLines);
-      applyAudioOverviewPodcast(updated);
-      await loadAudioOverviewPodcasts();
+      const podcastId = await ensureAudioOverviewPodcastSaved(epoch);
+      await inWorkspace(epoch, loadAudioOverviewPodcasts());
       setAudioOverviewInfo(
         t(`播客 #${podcastId} 的脚本已保存。`, `Script for podcast #${podcastId} saved.`)
       );
     } catch (err) {
+      if (err instanceof WorkspaceSupersededError) return;
       setAudioOverviewError(formatErrorMessage(err, t("保存脚本失败。", "Failed to save script.")));
     } finally {
-      setAudioOverviewSaving(false);
+      if (workspaceEpochRef.current === epoch) setAudioOverviewSaving(false);
     }
   }
 
   async function onSynthesize() {
+    const epoch = beginWorkspaceOperation();
     setAudioOverviewError("");
     setAudioOverviewInfo("");
     setAudioOverviewSynthBusy(true);
@@ -612,7 +632,7 @@ export default function useAudioOverview(options: Options) {
         intro_music_style: audioOverviewIntroMusicStyle,
         intro_music_duration_ms: audioOverviewIntroMusicDurationMs
       } as const;
-      let podcastId = await ensureAudioOverviewPodcastSaved();
+      let podcastId = await ensureAudioOverviewPodcastSaved(epoch);
       let result:
         | {
           line_count: number;
@@ -629,9 +649,9 @@ export default function useAudioOverview(options: Options) {
         setAudioOverviewInfo(
           t("Agent 正在合成音频...", "The agent is synthesizing audio...")
         );
-        const run = await synthesizeAudioAgentRun(audioAgentRunId, payload);
+        const run = await inWorkspace(epoch, synthesizeAudioAgentRun(audioAgentRunId, payload));
         applyAudioAgentRun(run);
-        const eventData = await listAudioAgentRunEvents(audioAgentRunId, 50);
+        const eventData = await inWorkspace(epoch, listAudioAgentRunEvents(audioAgentRunId, 50));
         applyAudioAgentEvents(eventData.events);
         podcastId =
           typeof run.podcast_id === "number" && run.podcast_id > 0 ? run.podcast_id : podcastId;
@@ -670,7 +690,7 @@ export default function useAudioOverview(options: Options) {
                 : 0
         };
       } else {
-        const synthResult = await synthesizeAudioOverviewPodcast(podcastId, payload);
+        const synthResult = await inWorkspace(epoch, synthesizeAudioOverviewPodcast(podcastId, payload));
         result = {
           line_count: synthResult.line_count,
           merge_strategy: synthResult.merge_strategy,
@@ -684,9 +704,9 @@ export default function useAudioOverview(options: Options) {
       if (podcastId === null) {
         throw new Error(t("当前没有可合成的播客草稿。", "There is no podcast draft to synthesize."));
       }
-      const blob = await fetchAudioOverviewPodcastAudio(podcastId);
+      const blob = await inWorkspace(epoch, fetchAudioOverviewPodcastAudio(podcastId));
       setAudioOverviewAudioBlob(blob);
-      await loadAudioOverviewPodcasts();
+      await inWorkspace(epoch, loadAudioOverviewPodcasts());
       const introText = result.intro_music
         ? t(
             `，片头 ${result.intro_music_style} ${result.intro_music_duration_ms}ms`,
@@ -700,19 +720,26 @@ export default function useAudioOverview(options: Options) {
         )
       );
     } catch (err) {
+      if (err instanceof WorkspaceSupersededError) return;
       setAudioOverviewError(formatErrorMessage(err, t("合成音频失败。", "Failed to synthesize audio.")));
     } finally {
-      setAudioOverviewSynthBusy(false);
+      if (workspaceEpochRef.current === epoch) setAudioOverviewSynthBusy(false);
     }
   }
 
   async function onDeletePodcastById(id: number) {
+    const epoch = workspaceEpochRef.current;
     setAudioOverviewError("");
     setAudioOverviewInfo("");
     try {
       await deleteAudioOverviewPodcast(id);
+      if (!mounted.current) return;
+      podcastListRevision.current += 1;
+      setAudioOverviewListBusy(false);
       setAudioOverviewPodcasts((prev) => prev.filter((item) => item.id !== id));
+      if (workspaceEpochRef.current !== epoch) return;
       if (audioOverviewPodcastId === id) {
+        beginWorkspaceOperation();
         setAudioOverviewPodcastId(null);
         setAudioOverviewTopic("");
         setAudioOverviewScriptLines([]);
@@ -725,6 +752,7 @@ export default function useAudioOverview(options: Options) {
       }
       setAudioOverviewInfo(t(`播客 #${id} 已删除。`, `Podcast #${id} deleted.`));
     } catch (err) {
+      if (workspaceEpochRef.current !== epoch) return;
       setAudioOverviewError(formatErrorMessage(err, t("删除播客失败。", "Failed to delete podcast.")));
     }
   }
@@ -738,6 +766,7 @@ export default function useAudioOverview(options: Options) {
   }
 
   function onNewDraft() {
+    beginWorkspaceOperation();
     setAudioOverviewPodcastId(null);
     setAudioOverviewTopic("");
     setAudioOverviewScriptLines([]);
