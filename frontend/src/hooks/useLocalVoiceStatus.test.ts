@@ -1,7 +1,110 @@
-import { describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { derivePhase } from "./useLocalVoiceStatus";
-import type { LocalVoiceProviderStatus } from "../api/types";
+import { derivePhase, useLocalVoiceStatus } from "./useLocalVoiceStatus";
+import { cancelLocalVoiceSetup, fetchLocalVoiceSetupJob, fetchLocalVoiceStatus, startLocalVoiceSetup } from "../api/client";
+import type { LocalVoiceProviderStatus, LocalVoiceSetupJob } from "../api/types";
+
+vi.mock("../api/client", () => ({
+  cancelLocalVoiceSetup: vi.fn(),
+  fetchLocalVoiceSetupJob: vi.fn(),
+  fetchLocalVoiceStatus: vi.fn(),
+  startLocalVoiceSetup: vi.fn(),
+  startLocalVoiceServer: vi.fn(),
+  stopLocalVoiceServer: vi.fn(),
+}));
+
+describe("setup polling cleanup", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.resetAllMocks();
+    vi.mocked(startLocalVoiceSetup).mockResolvedValue({ job_id: "j1", status: "running" });
+    vi.mocked(cancelLocalVoiceSetup).mockResolvedValue(undefined);
+    vi.mocked(fetchLocalVoiceStatus).mockResolvedValue({ providers: [makeStatus()] });
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it.each(["cancel", "unmount"])("does not revive polling after %s while a request is pending", async (action) => {
+    let resolve!: (job: LocalVoiceSetupJob) => void;
+    vi.mocked(fetchLocalVoiceSetupJob).mockReturnValue(new Promise((done) => { resolve = done; }));
+    const { result, unmount } = renderHook(() => useLocalVoiceStatus(false));
+    await act(async () => { await result.current.refresh(); await result.current.setup("GLM4Voice"); });
+    if (action === "cancel") {
+      await act(async () => { await result.current.cancelSetup("GLM4Voice"); });
+    } else {
+      unmount();
+    }
+    await act(async () => {
+      resolve({ job_id: "j1", status: "running" });
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(fetchLocalVoiceSetupJob).toHaveBeenCalledTimes(1);
+    if (action === "cancel") expect(result.current.providers.GLM4Voice.setupJob).toBeNull();
+    unmount();
+  });
+
+  it("does not schedule retries when an in-flight request fails after unmount", async () => {
+    let reject!: (error: Error) => void;
+    vi.mocked(fetchLocalVoiceSetupJob).mockReturnValue(new Promise((_, fail) => { reject = fail; }));
+    const { result, unmount } = renderHook(() => useLocalVoiceStatus(false));
+    await act(async () => { await result.current.setup("GLM4Voice"); });
+    unmount();
+    await act(async () => {
+      reject(new Error("network unavailable"));
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(fetchLocalVoiceSetupJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start polling when the setup request completes after unmount", async () => {
+    let resolve!: (job: LocalVoiceSetupJob) => void;
+    vi.mocked(startLocalVoiceSetup).mockReturnValue(new Promise((done) => { resolve = done; }));
+    const { result, unmount } = renderHook(() => useLocalVoiceStatus(false));
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.setup("GLM4Voice"); });
+    unmount();
+    await act(async () => {
+      resolve({ job_id: "j1", status: "running" });
+      await pending;
+    });
+    expect(fetchLocalVoiceSetupJob).not.toHaveBeenCalled();
+  });
+
+  it("retries transient failures and stops polling after completion", async () => {
+    vi.mocked(fetchLocalVoiceSetupJob)
+      .mockRejectedValueOnce(new Error("temporarily offline"))
+      .mockResolvedValueOnce({ job_id: "j1", status: "running" })
+      .mockResolvedValueOnce({ job_id: "j1", status: "done" });
+    const { result, unmount } = renderHook(() => useLocalVoiceStatus(false));
+    await act(async () => { await result.current.setup("GLM4Voice"); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    expect(fetchLocalVoiceSetupJob).toHaveBeenCalledTimes(3);
+    expect(result.current.providers.GLM4Voice.setupJob?.status).toBe("done");
+    unmount();
+  });
+
+  it("ignores a late response from a replaced setup watcher", async () => {
+    let resolveOld!: (job: LocalVoiceSetupJob) => void;
+    vi.mocked(fetchLocalVoiceSetupJob)
+      .mockReturnValueOnce(new Promise((done) => { resolveOld = done; }))
+      .mockResolvedValue({ job_id: "j2", status: "running" });
+    const { result, unmount } = renderHook(() => useLocalVoiceStatus(false));
+    await act(async () => { await result.current.refresh(); await result.current.setup("GLM4Voice"); });
+    vi.mocked(startLocalVoiceSetup).mockResolvedValue({ job_id: "j2", status: "running" });
+    await act(async () => { await result.current.setup("GLM4Voice"); });
+    await act(async () => { resolveOld({ job_id: "j1", status: "error", error: "old failure" }); });
+    expect(result.current.providers.GLM4Voice.setupJob?.job_id).toBe("j2");
+    expect(result.current.providers.GLM4Voice.error).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+    expect(fetchLocalVoiceSetupJob).toHaveBeenCalledTimes(3);
+    expect(fetchLocalVoiceSetupJob).toHaveBeenLastCalledWith("j2");
+    unmount();
+  });
+});
 
 function makeStatus(overrides: Partial<LocalVoiceProviderStatus> = {}): LocalVoiceProviderStatus {
   return {
