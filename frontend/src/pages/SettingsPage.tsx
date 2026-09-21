@@ -14,13 +14,14 @@ type Props = {
   settings: UseSettingsResult;
   errorRuntimeContext?: ErrorRuntimeContext;
   onClose?: () => void;
+  initialCategory?: "provider" | "desktop";
 };
 
 type SettingCategory = "general" | "provider" | "transcription" | "memory" | "desktop" | "local-voice";
 
-export default function SettingsPage({ settings, errorRuntimeContext, onClose }: Props) {
+export default function SettingsPage({ settings, errorRuntimeContext, onClose, initialCategory = "provider" }: Props) {
   const { t } = useI18n();
-  const [activeCategory, setActiveCategory] = useState<SettingCategory>("provider");
+  const [activeCategory, setActiveCategory] = useState<SettingCategory>(initialCategory);
 
   return (
     <div className="vsSettingsLayout">

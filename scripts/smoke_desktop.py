@@ -170,8 +170,11 @@ def main() -> None:
                               }
                               const health = await (await fetch('/health')).json();
                               const version = await window.electronAPI.getAppVersion();
+                              const update = await window.electronAPI.getUpdateState();
                               const root = document.getElementById('root');
-                              return {health: health.status, version, electron: window.isElectron,
+                              return {health: health.status, version, update, electron: window.isElectron,
+                                sidebarHasUpdates: /更新|updates?/i.test(root.querySelector(".vsSidebar").innerText),
+                                updateNotice: !!root.querySelector(".vsUpdateNotice"),
                                 chatLoaded: !!root.querySelector('textarea'),
                                 buttons: root.querySelectorAll('button').length,
                                 text: root.innerText.slice(0, 1000)};
@@ -186,7 +189,33 @@ def main() -> None:
                                 time.sleep(0.25)
                             assert result.get('electron') and result.get('health') == 'healthy', result
                             assert result.get('chatLoaded'), result
+                            assert not result.get('sidebarHasUpdates'), result
+                            assert not result.get('updateNotice'), result
+                            assert result['update']['appVersion'] == result['version'], result
+                            assert result['update']['phase'] == 'idle', result
+                            cdp('Runtime.evaluate', {'expression': "document.querySelector('[data-testid=nav-settings]').click()"})
+                            for attempt in range(60):
+                                opened = cdp('Runtime.evaluate', {'expression': """(() => {
+                                  const button = [...document.querySelectorAll('.vsSettingsNavItem')]
+                                    .find(button => ['系统', 'System'].includes(button.innerText.trim()));
+                                  if (!button) return false;
+                                  button.click(); return true;
+                                })()""", 'returnByValue': True})
+                                if opened['result'].get('value'):
+                                    break
+                                time.sleep(0.1)
+                            for attempt in range(60):
+                                card = cdp('Runtime.evaluate', {'expression': """(() => {
+                                  const card = document.querySelector('.vsUpdateCard');
+                                  return card ? {text: card.innerText, check: !!card.querySelector('button')} : null;
+                                })()""", 'returnByValue': True})
+                                if card['result'].get('value'):
+                                    break
+                                time.sleep(0.1)
+                            assert card['result']['value']['check'], card
+                            assert result['version'] in card['result']['value']['text'], card
                             screenshot = cdp('Page.captureScreenshot', {'format': 'png'})
+                            (output / 'electron-update-settings.png').write_bytes(base64.b64decode(screenshot['data']))
                             (output / 'electron-smoke.png').write_bytes(base64.b64decode(screenshot['data']))
                             print(json.dumps(result, ensure_ascii=True))
                         # app.quit() takes the normal Electron quit path; a

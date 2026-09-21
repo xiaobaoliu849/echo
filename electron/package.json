@@ -1,12 +1,12 @@
 {
   "name": "echo-desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Echo Desktop Application",
   "main": "main.js",
   "author": "Echo Team",
   "license": "MIT",
   "scripts": {
-    "test": "node --test backend-runtime.test.js",
+    "test": "node --test *.test.js",
     "start": "electron .",
     "pack": "electron-builder --win --dir --publish never",
     "dist": "electron-builder --win nsis --publish never"

@@ -13512,3 +13512,15 @@ button.vsCanvasIconActionBtn.danger:hover:not(:disabled) {
   }
 }
 
+
+/* Update controls live in Settings; only new releases show a dismissible notice. */
+.vsUpdateNotice { position: fixed; z-index: 100; top: 64px; right: 24px; max-width: min(390px, calc(100vw - 48px)); display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; color: var(--text-primary); background: var(--bg-card, #faf8f2); box-shadow: 0 6px 24px rgba(20, 30, 25, .12); }
+.vsUpdateNotice > svg { flex-shrink: 0; margin-top: 4px; }
+.vsUpdateNotice p { margin: 0 0 8px; font-size: 14px; }
+.vsUpdateNotice .vsBtnGhost { font-size: 12px; }
+.vsUpdateCard p { margin: 10px 0; }
+.vsUpdateCard .vsSystemActions { margin-top: 16px; }
+.vsUpdateNotes { margin-top: 16px; }
+.vsUpdateNotes div { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; margin-top: 10px; }
+.vsUpdateProgress { display: grid; gap: 8px; margin-top: 12px; }
+.vsUpdateProgress progress { width: 100%; accent-color: #42634d; }

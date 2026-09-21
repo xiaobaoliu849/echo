@@ -4,6 +4,11 @@ import SettingsPage from "./SettingsPage";
 import { createSettingsController } from "../test/factories";
 
 describe("SettingsPage", () => {
+  it("opens System directly from an update notification", () => {
+    render(<SettingsPage settings={createSettingsController()} initialCategory="desktop" />);
+    expect(screen.getByText("系统与运行时状态")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("搜索供应商...")).not.toBeInTheDocument();
+  });
   it("renders provider settings by default", () => {
     render(<SettingsPage settings={createSettingsController()} errorRuntimeContext={{}} />);
 

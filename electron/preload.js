@@ -26,6 +26,12 @@ let updateStatusListener = null;
 
 const electronAPI = {
   platform: process.platform,
+  getUpdateState: () => ipcRenderer.invoke('get-update-state'),
+  onUpdateState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('update-state', listener);
+    return () => ipcRenderer.removeListener('update-state', listener);
+  },
   onNavigate: () => {},
   saveAudioFile,
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

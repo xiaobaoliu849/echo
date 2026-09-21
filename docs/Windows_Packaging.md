@@ -19,9 +19,14 @@ The script installs the exact Windows build/test dependencies from
 `backend/requirements-packaging.lock` into `.packaging-venv`, installs both npm
 lockfiles, runs all tests, builds the frontend in `desktop` mode, freezes the
 backend and builds Electron. It runs the real frozen executable and Electron
-before producing `electron/dist/Echo Setup <version>.exe`. It then extracts the
+before producing `electron/dist/Echo-Setup-<version>.exe`. It then extracts the
 NSIS application payload and runs that copy as well. Any failing stage stops
 the build. Nothing is automatically published to GitHub Releases.
+
+For the in-app update flow, signing requirements and release validation, see
+[Application Updates](Application_Updates.md). Before publishing, run
+`node scripts/verify_update_release.cjs`; an unsigned local test build is not a
+production release candidate.
 
 Do not freeze the backend from a global Conda/ML environment. Do not manually
 delete DLLs or package directories to reduce installer size. The tracked spec

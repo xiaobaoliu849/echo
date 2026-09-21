@@ -1,208 +1,72 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-export type UpdatePhase =
-  | "idle"
-  | "checking"
-  | "up-to-date"
-  | "available"
-  | "downloading"
-  | "ready"
-  | "error";
-
-export interface UpdateInfo {
-  version?: string;
-  releaseNotes?: string;
-}
-
-export interface DownloadProgress {
-  percent: number;
-  transferred: number;
-  total: number;
-  bytesPerSecond: number;
-}
-
+export type UpdatePhase = "idle" | "unsupported" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "installing" | "error";
+export interface UpdateInfo { version: string; releaseNotes: string }
+export interface DownloadProgress { percent: number; transferred: number; total: number; bytesPerSecond: number }
 export interface AppUpdaterState {
+  revision: number;
   phase: UpdatePhase;
   appVersion: string;
   updateInfo: UpdateInfo | null;
   progress: DownloadProgress | null;
   errorMessage: string | null;
+  lastChecked: number | null;
 }
-
-export interface UseAppUpdaterResult extends AppUpdaterState {
-  isElectron: boolean;
-  checkForUpdates: () => Promise<void>;
-  downloadUpdate: () => Promise<void>;
-  installNow: () => void;
-}
-
-// ── Electron API type shim (populated by preload.js) ──────────────────────
-
+interface UpdateResult { success: boolean; error?: string; cancelled?: boolean }
 interface ElectronAPI {
-  checkForUpdates: () => Promise<{ success: boolean; error?: string }>;
-  downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
-  installUpdate: () => Promise<{ success: boolean; error?: string }>;
+  checkForUpdates: () => Promise<UpdateResult>;
+  downloadUpdate: () => Promise<UpdateResult>;
+  installUpdate: () => Promise<UpdateResult>;
   getAppVersion: () => Promise<string>;
-  onUpdateStatus: (
-    cb: (status: string, data: unknown) => void
-  ) => unknown;
-  removeUpdateStatusListener: () => void;
+  getUpdateState: () => Promise<AppUpdaterState>;
+  onUpdateState: (callback: (state: AppUpdaterState) => void) => () => void;
 }
-
 declare global {
-  interface Window {
-    isElectron?: boolean;
-    electronAPI?: ElectronAPI;
-  }
+  interface Window { isElectron?: boolean; electronAPI?: ElectronAPI }
 }
+const initialState: AppUpdaterState = {
+  revision: -1, phase: "idle", appVersion: "", updateInfo: null,
+  progress: null, errorMessage: null, lastChecked: null,
+};
 
-// ── Hook ──────────────────────────────────────────────────────────────────
-
-export function useAppUpdater(): UseAppUpdaterResult {
-  const isElectron =
-    typeof window !== "undefined" && window.isElectron === true;
-
-  const [state, setState] = useState<AppUpdaterState>({
-    phase: "idle",
-    appVersion: "",
-    updateInfo: null,
-    progress: null,
-    errorMessage: null,
-  });
-
-  // Guard: only set state when component is still mounted
-  const mounted = useRef(true);
+export function useAppUpdater() {
+  const isElectron = typeof window !== "undefined" && window.isElectron === true;
+  const [state, setState] = useState(initialState);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
+    const api = window.electronAPI;
+    if (!isElectron || !api) return;
+    let active = true;
+    const receive = (next: AppUpdaterState) => {
+      if (!active) return;
+      setConnectionError(null);
+      setState(previous => next.revision >= previous.revision ? next : previous);
     };
-  }, []);
-
-  const safeSetState = useCallback(
-    (updater: (prev: AppUpdaterState) => AppUpdaterState) => {
-      if (mounted.current) setState(updater);
-    },
-    []
-  );
-
-  // ── Fetch app version on mount ───────────────────────────────────────────
-  useEffect(() => {
-    if (!isElectron || !window.electronAPI) return;
-    void window.electronAPI.getAppVersion().then((v) => {
-      if (v) safeSetState((prev) => ({ ...prev, appVersion: v }));
+    // Subscribe before reading; revisions reject snapshots overtaken by events.
+    const unsubscribe = api.onUpdateState(receive);
+    void api.getUpdateState().then(receive).catch(error => {
+      if (active) setConnectionError(String(error));
     });
-  }, [isElectron, safeSetState]);
+    return () => { active = false; unsubscribe(); };
+  }, [isElectron]);
 
-  // ── Subscribe to push events from main process ───────────────────────────
-  useEffect(() => {
-    if (!isElectron || !window.electronAPI) return;
-
-    window.electronAPI.onUpdateStatus((status: string, data: unknown) => {
-      safeSetState((prev) => {
-        switch (status) {
-          case "checking-for-update":
-            return { ...prev, phase: "checking", errorMessage: null };
-
-          case "available": {
-            const info = data as UpdateInfo | null;
-            return {
-              ...prev,
-              phase: "available",
-              updateInfo: info ?? null,
-              errorMessage: null,
-            };
-          }
-
-          case "not-available":
-            return {
-              ...prev,
-              phase: "up-to-date",
-              updateInfo: null,
-              errorMessage: null,
-            };
-
-          case "downloading": {
-            const progress = data as DownloadProgress | null;
-            return {
-              ...prev,
-              phase: "downloading",
-              progress: progress ?? null,
-            };
-          }
-
-          case "downloaded":
-            return {
-              ...prev,
-              phase: "ready",
-              progress: null,
-              errorMessage: null,
-            };
-
-          case "error": {
-            const msg = typeof data === "string" ? data : "更新出错";
-            return { ...prev, phase: "error", errorMessage: msg };
-          }
-
-          default:
-            return prev;
-        }
-      });
-    });
-
-    return () => {
-      window.electronAPI?.removeUpdateStatusListener();
-    };
-  }, [isElectron, safeSetState]);
-
-  // ── Actions ──────────────────────────────────────────────────────────────
-
-  const checkForUpdates = useCallback(async () => {
-    if (!window.electronAPI) return;
-    safeSetState((prev) => ({
-      ...prev,
-      phase: "checking",
-      errorMessage: null,
-    }));
-    const res = await window.electronAPI.checkForUpdates();
-    if (!res.success && res.error) {
-      safeSetState((prev) => ({
-        ...prev,
-        phase: "error",
-        errorMessage: res.error ?? "检查更新失败",
-      }));
-    }
-  }, [safeSetState]);
-
-  const downloadUpdate = useCallback(async () => {
-    if (!window.electronAPI) return;
-    safeSetState((prev) => ({
-      ...prev,
-      phase: "downloading",
-      progress: null,
-      errorMessage: null,
-    }));
-    const res = await window.electronAPI.downloadUpdate();
-    if (!res.success && res.error) {
-      safeSetState((prev) => ({
-        ...prev,
-        phase: "error",
-        errorMessage: res.error ?? "下载失败",
-      }));
-    }
-  }, [safeSetState]);
-
-  const installNow = useCallback(() => {
-    void window.electronAPI?.installUpdate();
+  const invoke = useCallback(async (action: "checkForUpdates" | "downloadUpdate" | "installUpdate") => {
+    const api = window.electronAPI;
+    if (!api) return;
+    try {
+      setConnectionError(null);
+      const result = await api[action]();
+      const next = await api.getUpdateState();
+      setState(previous => next.revision >= previous.revision ? next : previous);
+      if (!result.success) setConnectionError(result.error || "Update action failed.");
+    } catch (error) { setConnectionError(String(error)); }
   }, []);
 
   return {
-    ...state,
-    isElectron,
-    checkForUpdates,
-    downloadUpdate,
-    installNow,
+    ...state, isElectron, connectionError,
+    checkForUpdates: () => invoke("checkForUpdates"),
+    downloadUpdate: () => invoke("downloadUpdate"),
+    installNow: () => invoke("installUpdate"),
   };
 }
+export type UseAppUpdaterResult = ReturnType<typeof useAppUpdater>;

@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { BackendRuntime } = require('./backend-runtime');
 const { autoUpdater } = require('electron-updater');
+const { UpdateController, isTrustedUpdateSender } = require('./update-controller');
 
 // Allows smoke tests and portable profiles to avoid the installed user's data.
 if (process.env.ECHO_DESKTOP_USER_DATA_DIR) {
@@ -27,6 +28,7 @@ const BACKEND_PATH = path.join(__dirname, '../backend');
 let mainWindow = null;
 let tray = null;
 let backendRuntime = null;
+let updateController = null;
 app.isQuiting = false;
 
 // Shortcut settings management
@@ -340,40 +342,18 @@ function setupIpcHandlers() {
     return { ok: false, success: false, error: 'Cancelled', message: 'Cancelled', cancelled: true };
   });
 
-  // Auto-updater handlers
-  ipcMain.handle('check-for-updates', async () => {
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      return { success: true, result: result ? { updateInfo: result.updateInfo } : null };
-    } catch (err) {
-      console.error('Check for updates error:', err);
-      return { success: false, error: err.message };
+  // Only the trusted top-level app renderer can inspect or change updates.
+  const updateHandler = (action) => (event) => {
+    if (!isTrustedUpdateSender(event, mainWindow, getFrontendUrl())) {
+      throw new Error('Untrusted update request');
     }
-  });
-
-  ipcMain.handle('download-update', async () => {
-    try {
-      const result = await autoUpdater.downloadUpdate();
-      return { success: true, result };
-    } catch (err) {
-      console.error('Download update error:', err);
-      return { success: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle('install-update', () => {
-    try {
-      autoUpdater.quitAndInstall();
-      return { success: true };
-    } catch (err) {
-      console.error('Install update error:', err);
-      return { success: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle('get-app-version', () => {
-    return app.getVersion();
-  });
+    return action();
+  };
+  ipcMain.handle('get-update-state', updateHandler(() => updateController.state));
+  ipcMain.handle('check-for-updates', updateHandler(() => updateController.check()));
+  ipcMain.handle('download-update', updateHandler(() => updateController.download()));
+  ipcMain.handle('install-update', updateHandler(() => updateController.install()));
+  ipcMain.handle('get-app-version', updateHandler(() => app.getVersion()));
 
   // Shortcut handlers
   ipcMain.handle('get-shortcut-settings', () => {
@@ -395,38 +375,30 @@ function setupIpcHandlers() {
   });
 }
 
-// Auto-updater event registration
 function setupAutoUpdaterEvents() {
-  autoUpdater.autoDownload = false;
-
-  const sendUpdateStatus = (status, data = null) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-status', { status, data });
-    }
-  };
-
-  autoUpdater.on('checking-for-update', () => {
-    sendUpdateStatus('checking-for-update');
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    sendUpdateStatus('available', info);
-  });
-
-  autoUpdater.on('update-not-available', (info) => {
-    sendUpdateStatus('not-available', info);
-  });
-
-  autoUpdater.on('error', (err) => {
-    sendUpdateStatus('error', err ? err.message : 'Unknown error');
-  });
-
-  autoUpdater.on('download-progress', (progressObj) => {
-    sendUpdateStatus('downloading', progressObj);
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    sendUpdateStatus('downloaded', info);
+  updateController = new UpdateController({
+    updater: autoUpdater,
+    version: app.getVersion(),
+    supported: app.isPackaged && process.platform === 'win32',
+    publish: state => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-state', state);
+      }
+    },
+    setQuitting: value => { app.isQuiting = value; },
+    confirmInstall: async () => {
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        title: '重启并安装 / Restart and install',
+        message: '现在重启 Echo 并安装更新？ / Restart Echo and install the update now?',
+        detail: '请先保存工作并结束录音、通话及生成任务。 / Save your work and finish recordings, calls and generation tasks first.',
+        buttons: ['稍后 / Later', '重启并安装 / Restart and install'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      return response === 1;
+    },
   });
 }
 
@@ -457,11 +429,12 @@ if (!gotTheLock) {
     try {
       await startBackend();
       await waitForBackend(60000);
-      setupIpcHandlers();
       setupAutoUpdaterEvents();
+      setupIpcHandlers();
       await createWindow();
       createTray();
       setupMenus();
+      if (!process.argv.includes('--smoke-test')) updateController.start();
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       console.error('Backend startup failed:', message);
@@ -492,6 +465,7 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
+  updateController?.stop();
   globalShortcut.unregisterAll();
   killBackend();
 });

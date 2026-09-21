@@ -27,7 +27,7 @@ def main():
             subprocess.run(command, check=True, capture_output=True, timeout=120)
         installed = folder / 'app'
         # Verify the installer contains precisely the code/resources already tested.
-        for relative in ('resources/app.asar', 'resources/frontend/dist/index.html',
+        for relative in ('Echo.exe', 'resources/app-update.yml', 'resources/app.asar', 'resources/frontend/dist/index.html',
                          'resources/backend-dist/voicespirit-backend.exe'):
             expected = ROOT / 'electron/dist/win-unpacked' / relative
             assert hashlib.sha256((installed / relative).read_bytes()).digest() == hashlib.sha256(expected.read_bytes()).digest(), relative

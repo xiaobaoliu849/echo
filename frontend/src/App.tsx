@@ -16,6 +16,7 @@ import {
 } from "./appConfig";
 import AuthDialog from "./components/AuthDialog";
 import AppSidebar from "./components/AppSidebar";
+import AppUpdateNotice from "./components/AppUpdateNotice";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 const SettingsModal = lazyWithRetry(() => import("./components/SettingsModal"));
 import useChat from "./hooks/useChat";
@@ -195,6 +196,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("chat");
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialCategory, setSettingsInitialCategory] = useState<"provider" | "desktop">("provider");
   const [authRuntime, setAuthRuntime] = useState<AuthRuntimeConfig>(() => getAuthRuntimeConfig());
   const [conversationHistory, setConversationHistory] = useState<ConversationArchiveEntry[]>(
     () => normalizeConversationHistory(loadConversationHistory())
@@ -442,7 +444,10 @@ export default function App() {
   const stableDeleteHistoryItem = useCallback((id: string) => sidebarHandlersRef.current.handleDeleteConversationHistoryItem(id), []);
   const stableRenameHistoryItem = useCallback((id: string, newName: string) => sidebarHandlersRef.current.handleRenameConversationHistoryItem(id, newName), []);
   const stableAuthClick = useCallback(() => setAuthDialogOpen(true), []);
-  const stableOpenSettings = useCallback(() => setIsSettingsOpen(true), []);
+  const stableOpenSettings = useCallback(() => {
+    setSettingsInitialCategory("provider");
+    setIsSettingsOpen(true);
+  }, []);
 
   const sidebarHistoryItems = useMemo(
     () => normalizedConversationHistory.map((item) => ({ id: item.id, content: item.content })),
@@ -451,6 +456,10 @@ export default function App() {
 
   return (
     <I18nProvider language={uiLanguage}>
+      <AppUpdateNotice hidden={isSettingsOpen} onOpenUpdates={() => {
+        setSettingsInitialCategory("desktop");
+        setIsSettingsOpen(true);
+      }} />
       <main className={isDesktopEmbedded ? "vsApp desktopEmbedded" : "vsApp"}>
         <AppSidebar
           activeTab={activeTab}
@@ -532,6 +541,7 @@ export default function App() {
       <Suspense fallback={null}>
         <SettingsModal
           open={isSettingsOpen}
+          initialCategory={settingsInitialCategory}
           onClose={() => setIsSettingsOpen(false)}
           settings={settings}
           errorRuntimeContext={errorRuntimeContext}

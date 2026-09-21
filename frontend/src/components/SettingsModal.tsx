@@ -9,9 +9,10 @@ type Props = {
   onClose: () => void;
   settings: UseSettingsResult;
   errorRuntimeContext?: ErrorRuntimeContext;
+  initialCategory?: "provider" | "desktop";
 };
 
-export default function SettingsModal({ open, onClose, settings, errorRuntimeContext }: Props) {
+export default function SettingsModal({ open, onClose, settings, errorRuntimeContext, initialCategory }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Escape key dismisses the settings workspace
@@ -60,7 +61,7 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
         className="vsSettingsModalStage"
         tabIndex={-1}
       >
-        <SettingsPage settings={settings} errorRuntimeContext={errorRuntimeContext} onClose={onClose} />
+        <SettingsPage settings={settings} errorRuntimeContext={errorRuntimeContext} onClose={onClose} initialCategory={initialCategory} />
       </div>
     </div>,
     document.body

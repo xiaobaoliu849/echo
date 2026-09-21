@@ -1,5 +1,6 @@
 appId: com.echo.app
 productName: Echo
+artifactName: Echo-Setup-${version}.${ext}
 copyright: Copyright © 2024 Echo Team
 
 publish:
@@ -16,6 +17,7 @@ directories:
 files:
   - main.js
   - backend-runtime.js
+  - update-controller.js
   - preload.js
   - package.json
   - node_modules/**

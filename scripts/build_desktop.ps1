@@ -51,7 +51,7 @@ try {
     Invoke-Checked $buildPython @("scripts/smoke_desktop.py", "--electron", "electron/dist/win-unpacked/Echo.exe")
     Invoke-Checked "npm.cmd" @("--prefix", "electron", "run", "dist")
     $version = (Get-Content electron/package.json -Raw | ConvertFrom-Json).version
-    Invoke-Checked $buildPython @("scripts/verify_installer.py", "electron/dist/Echo Setup $version.exe")
+    Invoke-Checked $buildPython @("scripts/verify_installer.py", "electron/dist/Echo-Setup-$version.exe")
     Write-Host "Verified installer created in electron/dist. Nothing has been published."
 } finally {
     foreach ($name in $savedEnvironment.Keys) {
