@@ -267,6 +267,8 @@ export default function useChat({
     }
   }
 
+  useEffect(() => () => abortActiveStream(), []);
+
   function addChatAttachment(nameOrAttachment: string | ChatAttachment, content?: string) {
     if (typeof nameOrAttachment === "object") {
       setChatAttachments((prev) => [...prev, nameOrAttachment]);
@@ -351,57 +353,48 @@ export default function useChat({
     setChatModel(choice.model);
   }
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    const userText = chatInput.trim();
-    if (!userText) {
-      return;
-    }
-    if (isVoiceRealtimeModel(chatProvider, chatModel)) {
-      setChatError(t(
-        "当前选择的是实时语音/实时翻译模型，请点击实时通话按钮开始语音会话，或切换到普通文本模型后再发送文字。",
-        "The selected model is realtime voice/live translation only. Start a realtime call, or switch to a text model before sending text."
-      ));
-      return;
-    }
-    setChatError("");
-    setChatBusy(true);
-
-    let finalContent = userText;
-    if (chatAttachments.length > 0) {
-      const formattedAttachments = chatAttachments.map(
-        (att) => `[Attachment File: ${att.name}]\n---\n${att.content}\n---\n`
+  async function streamReply(nextHistory: ChatMessage[]) {
+    const userMessage = nextHistory[nextHistory.length - 1];
+    const assistantId = createMessageId();
+    let finalContent = userMessage.content;
+    if (userMessage.attachments?.length) {
+      const formattedAttachments = userMessage.attachments.map(
+        (attachment) => `[Attachment File: ${attachment.name}]\n---\n${attachment.content}\n---\n`
       ).join("\n\n");
-      finalContent = `${formattedAttachments}\n${userText}`;
+      finalContent = `${formattedAttachments}\n${userMessage.content}`;
     }
-
-    const nextHistory: ChatMessage[] = [
-      ...chatMessages,
-      { role: "user", content: userText, attachments: [...chatAttachments], id: createMessageId() }
-    ];
-
     const apiHistory: ChatMessage[] = [
-      ...chatMessages,
+      ...nextHistory.slice(0, -1),
       { role: "user", content: finalContent }
     ];
-
-    setChatMessages([...nextHistory, { role: "assistant", content: "", id: createMessageId() }]);
-    setChatInput("");
-    setChatAttachments([]);
 
     abortActiveStream();
     const controller = new AbortController();
     streamAbortRef.current = controller;
+    const isCurrent = () => streamAbortRef.current === controller && !controller.signal.aborted;
+    setChatError("");
+    setChatBusy(true);
+    setChatMessages([...nextHistory, { role: "assistant", content: "", id: assistantId }]);
+    setChatInput("");
+    setChatAttachments([]);
+
+    function updateReply(patch: Partial<ChatMessage>) {
+      if (!isCurrent()) return;
+      setChatMessages(previous => previous.map(message =>
+        message.id === assistantId ? { ...message, ...patch } : message
+      ));
+    }
+
     try {
       let memoryGroupId = "";
       try {
         memoryGroupId = await ensureEverMemConversationGroupId("chat", chatMemoryGroupId);
-        if (memoryGroupId && memoryGroupId !== chatMemoryGroupId) {
-          const persisted = persistEverMemConversationGroupId("chat", memoryGroupId);
-          setChatMemoryGroupId(persisted);
-        }
       } catch {
-        memoryGroupId = "";
+        // Memory is optional; a failed lookup must not block the reply.
+      }
+      if (!isCurrent()) return;
+      if (memoryGroupId && memoryGroupId !== chatMemoryGroupId) {
+        setChatMemoryGroupId(persistEverMemConversationGroupId("chat", memoryGroupId));
       }
 
       let streamedReply = "";
@@ -419,73 +412,32 @@ export default function useChat({
         {
           onDelta: (chunk) => {
             streamedReply += chunk;
-            setChatMessages((prev) => {
-              if (!prev.length) {
-                return prev;
-              }
-              const next = [...prev];
-              const lastIdx = next.length - 1;
-              const last = next[lastIdx];
-              if (last.role !== "assistant") {
-                return prev;
-              }
-              next[lastIdx] = { ...last, content: streamedReply };
-              return next;
-            });
+            updateReply({ content: streamedReply });
           },
           onReasoning: (chunk) => {
             streamedReasoning += chunk;
-            setChatMessages((prev) => {
-              if (!prev.length) {
-                return prev;
-              }
-              const next = [...prev];
-              const lastIdx = next.length - 1;
-              const last = next[lastIdx];
-              if (last.role !== "assistant") {
-                return prev;
-              }
-              next[lastIdx] = { ...last, reasoningContent: streamedReasoning };
-              return next;
-            });
+            updateReply({ reasoningContent: streamedReasoning });
           },
           onDone: (meta) => {
-            if (meta?.memoriesRetrieved || meta?.memorySaved) {
-              setChatMessages((prev) => {
-                const next = [...prev];
-                const lastIdx = next.length - 1;
-                const prevIdx = lastIdx - 1;
-
-                if (meta.memorySaved && prevIdx >= 0 && next[prevIdx].role === "user") {
-                  next[prevIdx] = { ...next[prevIdx], memorySaved: true };
-                }
-                if (meta.memoriesRetrieved && lastIdx >= 0 && next[lastIdx].role === "assistant") {
-                  next[lastIdx] = { ...next[lastIdx], memoriesUsed: meta.memoriesRetrieved };
-                }
-                return next;
-              });
-            }
+            if (!isCurrent() || !meta) return;
+            setChatMessages(previous => previous.map(message => {
+              if (message.id === userMessage.id && meta.memorySaved) {
+                return { ...message, memorySaved: true };
+              }
+              if (message.id === assistantId && meta.memoriesRetrieved) {
+                return { ...message, memoriesUsed: meta.memoriesRetrieved };
+              }
+              return message;
+            }));
           }
         },
-        {
-          memoryGroupId: memoryGroupId || undefined,
-          signal: controller.signal,
-        }
+        { memoryGroupId: memoryGroupId || undefined, signal: controller.signal }
       );
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        return;
-      }
-      setChatMessages((prev) => {
-        if (!prev.length) {
-          return prev;
-        }
-        const last = prev[prev.length - 1];
-        if (last.role === "assistant" && !last.content.trim()) {
-          return prev.slice(0, -1);
-        }
-        return prev;
-      });
+      if (!isCurrent() || (err instanceof DOMException && err.name === "AbortError")) return;
+      setChatMessages(previous => previous.filter(message =>
+        message.id !== assistantId || message.content.trim()
+      ));
       setChatError(formatErrorMessage(err, t("聊天请求失败。", "Chat request failed.")));
     } finally {
       if (streamAbortRef.current === controller) {
@@ -493,6 +445,23 @@ export default function useChat({
         setChatBusy(false);
       }
     }
+  }
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    const userText = chatInput.trim();
+    if (!userText) return;
+    if (isVoiceRealtimeModel(chatProvider, chatModel)) {
+      setChatError(t(
+        "当前选择的是实时语音/实时翻译模型，请点击实时通话按钮开始语音会话，或切换到普通文本模型后再发送文字。",
+        "The selected model is realtime voice/live translation only. Start a realtime call, or switch to a text model before sending text."
+      ));
+      return;
+    }
+    await streamReply([
+      ...chatMessages,
+      { role: "user", content: userText, attachments: [...chatAttachments], id: createMessageId() }
+    ]);
   }
 
   function onNewSession() {
@@ -532,142 +501,11 @@ export default function useChat({
   }
 
   async function regenerateMessage(index: number) {
-    if (chatBusy) return;
-    const msg = chatMessages[index];
-    if (!msg || msg.role !== "assistant") return;
-
-    // Get the messages list up to this assistant message
+    if (chatBusy || chatMessages[index]?.role !== "assistant") return;
     const historyBefore = chatMessages.slice(0, index);
-    // Find the last user message in that history
-    const lastUserIdx = historyBefore.map(m => m.role).lastIndexOf("user");
+    const lastUserIdx = historyBefore.map(message => message.role).lastIndexOf("user");
     if (lastUserIdx < 0) return;
-
-    setChatError("");
-    setChatBusy(true);
-
-    // Re-slice the messages up to the user message
-    const nextHistory = chatMessages.slice(0, lastUserIdx + 1);
-    const userMsg = nextHistory[nextHistory.length - 1];
-    let finalContent = userMsg.content;
-    if (userMsg.attachments && userMsg.attachments.length > 0) {
-      const formattedAttachments = userMsg.attachments.map(
-        (att) => `[Attachment File: ${att.name}]\n---\n${att.content}\n---\n`
-      ).join("\n\n");
-      finalContent = `${formattedAttachments}\n${userMsg.content}`;
-    }
-    const apiHistory: ChatMessage[] = [
-      ...nextHistory.slice(0, -1),
-      { role: "user" as const, content: finalContent }
-    ];
-
-    setChatMessages([...nextHistory, { role: "assistant", content: "", id: createMessageId() }]);
-    setChatInput("");
-    setChatAttachments([]);
-
-    abortActiveStream();
-    const controller = new AbortController();
-    streamAbortRef.current = controller;
-    try {
-      let memoryGroupId = "";
-      try {
-        memoryGroupId = await ensureEverMemConversationGroupId("chat", chatMemoryGroupId);
-        if (memoryGroupId && memoryGroupId !== chatMemoryGroupId) {
-          const persisted = persistEverMemConversationGroupId("chat", memoryGroupId);
-          setChatMemoryGroupId(persisted);
-        }
-      } catch {
-        memoryGroupId = "";
-      }
-
-      let streamedReply = "";
-      let streamedReasoning = "";
-      await streamChatCompletion(
-        {
-          provider: chatProvider,
-          model: chatModel.trim() || undefined,
-          messages: apiHistory,
-          temperature: 0.7,
-          max_tokens: 1024,
-          use_memory: useMemory,
-          deep_thinking: deepThinking
-        },
-        {
-          onDelta: (chunk) => {
-            streamedReply += chunk;
-            setChatMessages((prev) => {
-              if (!prev.length) {
-                return prev;
-              }
-              const next = [...prev];
-              const lastIdx = next.length - 1;
-              const last = next[lastIdx];
-              if (last.role !== "assistant") {
-                return prev;
-              }
-              next[lastIdx] = { ...last, content: streamedReply };
-              return next;
-            });
-          },
-          onReasoning: (chunk) => {
-            streamedReasoning += chunk;
-            setChatMessages((prev) => {
-              if (!prev.length) {
-                return prev;
-              }
-              const next = [...prev];
-              const lastIdx = next.length - 1;
-              const last = next[lastIdx];
-              if (last.role !== "assistant") {
-                return prev;
-              }
-              next[lastIdx] = { ...last, reasoningContent: streamedReasoning };
-              return next;
-            });
-          },
-          onDone: (meta) => {
-            if (meta?.memoriesRetrieved || meta?.memorySaved) {
-              setChatMessages((prev) => {
-                const next = [...prev];
-                const lastIdx = next.length - 1;
-                const prevIdx = lastIdx - 1;
-
-                if (meta.memorySaved && prevIdx >= 0 && next[prevIdx].role === "user") {
-                  next[prevIdx] = { ...next[prevIdx], memorySaved: true };
-                }
-                if (meta.memoriesRetrieved && lastIdx >= 0 && next[lastIdx].role === "assistant") {
-                  next[lastIdx] = { ...next[lastIdx], memoriesUsed: meta.memoriesRetrieved };
-                }
-                return next;
-              });
-            }
-          }
-        },
-        {
-          memoryGroupId: memoryGroupId || undefined,
-          signal: controller.signal,
-        }
-      );
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        return;
-      }
-      setChatMessages((prev) => {
-        if (!prev.length) {
-          return prev;
-        }
-        const last = prev[prev.length - 1];
-        if (last.role === "assistant" && !last.content.trim()) {
-          return prev.slice(0, -1);
-        }
-        return prev;
-      });
-      setChatError(formatErrorMessage(err, t("聊天请求失败。", "Chat request failed.")));
-    } finally {
-      if (streamAbortRef.current === controller) {
-        streamAbortRef.current = null;
-        setChatBusy(false);
-      }
-    }
+    await streamReply(historyBefore.slice(0, lastUserIdx + 1));
   }
 
   function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {

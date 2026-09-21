@@ -40,6 +40,16 @@ export type UseLocalVoiceStatusResult = {
   stopServer: (provider: string) => Promise<void>;
 };
 
+type SetupWatcher = {
+  cancelled: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+};
+
+function stopWatcher(watcher: SetupWatcher) {
+  watcher.cancelled = true;
+  clearTimeout(watcher.timer);
+}
+
 export function derivePhase(
   status: LocalVoiceProviderStatus,
   setupJob: LocalVoiceSetupJob | null,
@@ -65,7 +75,7 @@ export function useLocalVoiceStatus(active: boolean): UseLocalVoiceStatusResult 
   const [starting, setStarting] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
-  const setupTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const setupWatchers = useRef<Record<string, SetupWatcher>>({});
 
   const refresh = useCallback(async () => {
     try {
@@ -101,20 +111,22 @@ export function useLocalVoiceStatus(active: boolean): UseLocalVoiceStatusResult 
   }, [active, refresh]);
 
   const watchSetupJob = useCallback(
-    (provider: string, jobId: string) => {
+    (provider: string, jobId: string, watcher: SetupWatcher) => {
       const tick = async () => {
+        if (watcher.cancelled) return;
         let job: LocalVoiceSetupJob;
         try {
           job = await fetchLocalVoiceSetupJob(jobId);
         } catch {
-          setupTimers.current[provider] = setTimeout(tick, 4000);
+          if (!watcher.cancelled) watcher.timer = setTimeout(tick, 4000);
           return;
         }
+        if (watcher.cancelled) return;
         setSetupJobs((prev) => ({ ...prev, [provider]: job }));
         if (job.status === "running") {
-          setupTimers.current[provider] = setTimeout(tick, 2500);
+          watcher.timer = setTimeout(tick, 2500);
         } else {
-          delete setupTimers.current[provider];
+          delete setupWatchers.current[provider];
           if (job.status === "error") {
             setErrors((prev) => ({ ...prev, [provider]: job.error || "setup failed" }));
           }
@@ -127,20 +139,27 @@ export function useLocalVoiceStatus(active: boolean): UseLocalVoiceStatusResult 
   );
 
   useEffect(() => {
-    const timers = setupTimers.current;
+    const watchers = setupWatchers.current;
     return () => {
-      Object.values(timers).forEach(clearTimeout);
+      Object.values(watchers).forEach(stopWatcher);
     };
   }, []);
 
   const setup = useCallback(
     async (provider: string, hfToken: string = "") => {
+      const previous = setupWatchers.current[provider];
+      if (previous) stopWatcher(previous);
+      const watcher: SetupWatcher = { cancelled: false };
+      setupWatchers.current[provider] = watcher;
       setErrors((prev) => ({ ...prev, [provider]: null }));
       try {
         const job = await startLocalVoiceSetup(provider, hfToken);
+        if (watcher.cancelled) return;
         setSetupJobs((prev) => ({ ...prev, [provider]: { ...job, provider } }));
-        watchSetupJob(provider, job.job_id);
+        watchSetupJob(provider, job.job_id, watcher);
       } catch (err) {
+        if (watcher.cancelled) return;
+        delete setupWatchers.current[provider];
         setErrors((prev) => ({
           ...prev,
           [provider]: err instanceof Error ? err.message : String(err),
@@ -154,10 +173,10 @@ export function useLocalVoiceStatus(active: boolean): UseLocalVoiceStatusResult 
     // Read the job id outside the state updater — updaters must stay pure
     // (React StrictMode double-invokes them, which would fire two DELETEs).
     const jobId = setupJobs[provider]?.job_id;
-    const timer = setupTimers.current[provider];
-    if (timer) {
-      clearTimeout(timer);
-      delete setupTimers.current[provider];
+    const watcher = setupWatchers.current[provider];
+    if (watcher) {
+      stopWatcher(watcher);
+      delete setupWatchers.current[provider];
     }
     setSetupJobs((prev) => {
       const next = { ...prev };

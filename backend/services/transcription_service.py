@@ -433,11 +433,15 @@ class TranscriptionService:
         return self._write_job(job)
 
     def get_job(self, job_id: str) -> TranscriptionJob | None:
+        if job_id.endswith(("_words", "_translation")):
+            return None
         path = self._job_path(job_id)
         if not path.is_file():
             return None
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or payload.get("job_id") != job_id:
+                return None
             return TranscriptionJob(
                 file_path=str(payload.get("file_path", "")),
                 mode=str(payload.get("mode", "sync")),
@@ -472,28 +476,8 @@ class TranscriptionService:
             normalized_statuses.update({"submitted", "queued", "uploaded"})
         jobs: list[TranscriptionJob] = []
         for path in self.jobs_dir.glob("tx_*.json"):
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-                # Explicitly convert and validate types for dataclass unpacking
-                job = TranscriptionJob(
-                    file_path=str(payload.get("file_path", "")),
-                    mode=str(payload.get("mode", "sync")),
-                    status=str(payload.get("status", "queued")),
-                    job_id=payload.get("job_id"),
-                    created_at=payload.get("created_at"),
-                    updated_at=payload.get("updated_at"),
-                    transcript_path=payload.get("transcript_path"),
-                    error=payload.get("error"),
-                    remote_job_id=payload.get("remote_job_id"),
-                    source_url=payload.get("source_url"),
-                    memory_saved=bool(payload.get("memory_saved", False)),
-                    original_filename=payload.get("original_filename"),
-                    provider=payload.get("provider"),
-                    progress=payload.get("progress"),
-                    duration_seconds=payload.get("duration_seconds"),
-                    origin=payload.get("origin"),
-                )
-            except Exception:
+            job = self.get_job(path.stem)
+            if job is None:
                 continue
             # Self-heal records whose pipeline died with a previous process
             # before they enter the listing, so stale rows don't sit in the
@@ -531,9 +515,12 @@ class TranscriptionService:
         if job is None:
             return False
 
-        # Remove associated files
+        # The record is authoritative. If it cannot be removed, report the
+        # failure and preserve its artifacts so the user can still open/retry it.
+        self._job_path(job_id).unlink(missing_ok=True)
+
+        # Artifact cleanup is best-effort only after the record is removed.
         for path in [
-            self._job_path(job_id),
             self.jobs_dir / f"{job_id}_words.json",
             self.jobs_dir / f"{job_id}_translation.json",
             self.jobs_dir / f"{job_id}_burn.srt",

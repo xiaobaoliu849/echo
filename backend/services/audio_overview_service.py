@@ -370,44 +370,26 @@ class AudioOverviewService:
             podcast_id = int(cursor.lastrowid)
 
             if normalized_script:
-                for idx, line in enumerate(normalized_script):
-                    cursor.execute(
-                        """
-                        INSERT INTO podcast_scripts (podcast_id, line_index, role, content)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        (podcast_id, idx, line["role"], line["text"]),
-                    )
+                self._replace_script(cursor, podcast_id, normalized_script)
             conn.commit()
         result = self.get_podcast(podcast_id, include_script=True)
         if result is None:
             raise RuntimeError("Failed to load created podcast.")
         return result
 
-    def save_script(self, podcast_id: int, script_lines: list[dict[str, Any]]) -> list[dict[str, str]]:
-        normalized_script = normalize_script_lines(script_lines)
-        with self._connect() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM podcasts WHERE id = ?", (podcast_id,))
-            row = cursor.fetchone()
-            if row is None:
-                raise ValueError(f"podcast not found: {podcast_id}")
+    @staticmethod
+    def _replace_script(
+        cursor: sqlite3.Cursor, podcast_id: int, script_lines: list[dict[str, str]]
+    ) -> None:
+        """Replace lines inside the caller's transaction; never commit separately."""
+        cursor.execute("DELETE FROM podcast_scripts WHERE podcast_id = ?", (podcast_id,))
+        cursor.executemany(
+            "INSERT INTO podcast_scripts (podcast_id, line_index, role, content) VALUES (?, ?, ?, ?)",
+            [(podcast_id, index, line["role"], line["text"]) for index, line in enumerate(script_lines)],
+        )
 
-            cursor.execute("DELETE FROM podcast_scripts WHERE podcast_id = ?", (podcast_id,))
-            for idx, line in enumerate(normalized_script):
-                cursor.execute(
-                    """
-                    INSERT INTO podcast_scripts (podcast_id, line_index, role, content)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (podcast_id, idx, line["role"], line["text"]),
-                )
-            cursor.execute(
-                "UPDATE podcasts SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (podcast_id,),
-            )
-            conn.commit()
-        return normalized_script
+    def save_script(self, podcast_id: int, script_lines: list[dict[str, Any]]) -> list[dict[str, str]]:
+        return self.update_podcast(podcast_id, script_lines=script_lines)["script_lines"]
 
     def update_podcast(
         self,
@@ -420,6 +402,7 @@ class AudioOverviewService:
     ) -> dict[str, Any]:
         updates: list[str] = []
         params: list[Any] = []
+        normalized_script = normalize_script_lines(script_lines) if script_lines is not None else None
 
         if topic is not None:
             clean_topic = topic.strip()
@@ -438,20 +421,22 @@ class AudioOverviewService:
             params.append(audio_path.strip() or None)
 
         with self._connect() as conn:
+            # Keep the existence check, metadata, and script in one write
+            # transaction, including rollback when a script insert fails.
+            conn.execute("BEGIN IMMEDIATE")
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM podcasts WHERE id = ?", (podcast_id,))
             row = cursor.fetchone()
             if row is None:
                 raise ValueError(f"podcast not found: {podcast_id}")
 
-            if updates:
+            if normalized_script is not None:
+                self._replace_script(cursor, podcast_id, normalized_script)
+            if updates or normalized_script is not None:
                 updates.append("updated_at = CURRENT_TIMESTAMP")
                 params.append(podcast_id)
                 cursor.execute(f"UPDATE podcasts SET {', '.join(updates)} WHERE id = ?", params)
                 conn.commit()
-
-        if script_lines is not None:
-            self.save_script(podcast_id, script_lines)
 
         result = self.get_podcast(podcast_id, include_script=True)
         if result is None:

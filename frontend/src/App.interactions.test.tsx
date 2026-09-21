@@ -313,6 +313,7 @@ describe("App interactions", () => {
 
     // The first mount loads ChatPage's lazy module. Windows packaging CI can
     // exceed Testing Library's 1s default while other workers compile modules.
+    // The test's outer timeout must also allow this 10s load plus assertions.
     const textarea = await screen.findByPlaceholderText(/输入聊天内容/, {}, { timeout: 10000 });
     fireEvent.change(textarea, { target: { value: "请帮我起草一封语气专业但不生硬的项目进度更新邮件。" } });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
@@ -338,7 +339,7 @@ describe("App interactions", () => {
     // EverMem UI Badges verification
     expect(await screen.findByText("✓ 已记忆")).toBeInTheDocument();
     expect(await screen.findByText(/🧠 回忆了 2 条/)).toBeInTheDocument();
-  });
+  }, 15000);
 
   it("archives the previous conversation into the sidebar and restores it on click", async () => {
     render(<App />);

@@ -303,13 +303,17 @@ export default function TranscriptionDetailDrawer({
           <div className="vsTranscribeEmptySpeech">
             <div style={{ fontSize: "42px", marginBottom: "10px" }}>🔇</div>
             <h3 style={{ margin: "0 0 6px 0", fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>
-              {t("未检测到有效语音", "No Speech Detected")}
+              {error || job?.status === "failed"
+                ? t("转写内容不可用", "Transcript unavailable")
+                : t("转写内容为空", "Transcript is empty")}
             </h3>
             <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)", maxWidth: "420px", textAlign: "center", lineHeight: 1.5 }}>
-              {t(
-                "该音频已处理完成，但未检测到清晰人声或内容为空白。如果音频确有人声，可尝试在新建转写中选择其他引擎重试。",
-                "Audio was processed, but no clear speech was detected. If it contains speech, try re-transcribing with another engine."
-              )}
+              {error || job?.status === "failed"
+                ? t("请查看下方错误信息。返回转写库后可重新打开此记录。", "See the error below. Return to the library to open this record again.")
+                : t(
+                    "此记录没有转写文本。如果音频确有人声，可在新建转写中选择其他引擎重试。",
+                    "This record contains no transcript text. If the audio contains speech, try transcribing it again with another engine."
+                  )}
             </p>
           </div>
         </div>

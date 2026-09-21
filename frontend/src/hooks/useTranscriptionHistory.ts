@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listTranscriptionJobs,
   renameTranscriptionJob,
   retryTranscriptionJob,
   deleteTranscriptionJob,
   batchDeleteTranscriptionJobs,
+  ApiRequestError,
   type TranscriptionJobResponse
 } from "../api";
 
@@ -33,6 +34,17 @@ export type HistoryItem = Pick<
   timestamp: number;
 };
 
+function isStoredHistoryItem(value: unknown): value is HistoryItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  if (!["job_id", "file_name", "mode", "status"].every(key => typeof item[key] === "string")) return false;
+  if (!item.job_id || typeof item.timestamp !== "number" || !Number.isFinite(item.timestamp)) return false;
+  const textFields = ["updated_at", "remote_job_id", "source_url", "error", "progress", "origin", "transcript_preview"];
+  return textFields.every(key => item[key] == null || typeof item[key] === "string")
+    && ["has_transcript", "memory_saved"].every(key => item[key] === undefined || typeof item[key] === "boolean")
+    && (item.duration_seconds == null || (typeof item.duration_seconds === "number" && Number.isFinite(item.duration_seconds)));
+}
+
 function safeLoadStoredHistory(): HistoryItem[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -40,7 +52,7 @@ function safeLoadStoredHistory(): HistoryItem[] {
       return [];
     }
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.filter(isStoredHistoryItem).slice(0, MAX_HISTORY) : [];
   } catch (err) {
     console.warn("Failed to load transcription history:", err);
     return [];
@@ -95,71 +107,67 @@ function mergeHistory(
     .slice(0, MAX_HISTORY);
 }
 
-/** The unfiltered server listing is the source of truth: cached entries the
- * server no longer knows about (evicted, deleted on another surface, or left
- * by an older app version with missing fields) would otherwise sit in the
- * library forever as "未知文件 / 未知时间" zombies. */
-function pruneMissingEntries(
-  incomingJobs: TranscriptionJobResponse[],
-  existingHistory: HistoryItem[],
-): HistoryItem[] {
-  const serverIds = new Set(incomingJobs.map((job) => job.job_id));
-  const surviving = existingHistory.filter((item) => serverIds.has(item.job_id));
-  return mergeHistory(incomingJobs, surviving);
-}
-
 export function useTranscriptionHistory() {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>(safeLoadStoredHistory);
   const [historyBusy, setHistoryBusy] = useState(true);
   const [historyError, setHistoryError] = useState("");
   const [activeFilter, setActiveFilter] = useState<TranscriptionHistoryFilter>("all");
+  const revision = useRef(0);
+  const mounted = useRef(false);
 
   useEffect(() => {
-    const storedHistory = safeLoadStoredHistory();
-    setHistory(storedHistory);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      revision.current += 1;
+    };
   }, []);
 
-  async function refreshHistory(filter: TranscriptionHistoryFilter = activeFilter) {
+  useEffect(() => { safeSaveHistory(history); }, [history]);
+
+  // A local mutation makes all earlier list snapshots obsolete.
+  const updateHistory = useCallback((update: (previous: HistoryItem[]) => HistoryItem[]) => {
+    if (!mounted.current) return;
+    revision.current += 1;
+    setHistoryBusy(false);
+    setHistory(update);
+  }, []);
+
+  const refreshHistory = useCallback(async () => {
+    const requestRevision = ++revision.current;
     setHistoryBusy(true);
     setHistoryError("");
     try {
-      const statuses = filter === "all" ? undefined : [filter];
+      const statuses = activeFilter === "all" ? undefined : [activeFilter];
       const response = await listTranscriptionJobs({ statuses, limit: MAX_HISTORY });
+      if (revision.current !== requestRevision) return;
       setHistory((prev) => {
         // Only the unfiltered listing may prune: a status-filtered response is
         // partial by design and would wipe every non-matching local entry.
-        const next =
-          filter === "all"
-            ? pruneMissingEntries(response.jobs, prev)
-            : mergeHistory(response.jobs, prev);
-        safeSaveHistory(next);
-        return next;
+        return mergeHistory(response.jobs, activeFilter === "all" ? [] : prev);
       });
     } catch (err) {
+      if (revision.current !== requestRevision) return;
       const message = err instanceof Error ? err.message : "Failed to refresh transcription history.";
       setHistoryError(message);
     } finally {
-      setHistoryBusy(false);
+      if (revision.current === requestRevision) setHistoryBusy(false);
     }
-  }
-
-  useEffect(() => {
-    void refreshHistory(activeFilter);
   }, [activeFilter]);
 
+  useEffect(() => {
+    void refreshHistory();
+  }, [refreshHistory]);
+
   const addOrUpdateJob = useCallback((job: TranscriptionJobResponse) => {
-    setHistory((prev) => {
-      const next = mergeHistory([job], prev);
-      safeSaveHistory(next);
-      return next;
-    });
-  }, []);
+    updateHistory((prev) => mergeHistory([job], prev));
+  }, [updateHistory]);
 
   /** The backend confirmed a cached history entry no longer exists server-side.
    * Flip the local entry to failed so it stops masquerading as an active
    * "排队中" task the user can never open. */
   const markMissingJob = useCallback((jobId: string) => {
-    setHistory((prev) => {
+    updateHistory((prev) => {
       const target = prev.find((item) => item.job_id === jobId);
       if (!target) return prev;
       const next = prev.map((item) =>
@@ -172,10 +180,9 @@ export function useTranscriptionHistory() {
             }
           : item
       );
-      safeSaveHistory(next);
       return next;
     });
-  }, []);
+  }, [updateHistory]);
 
   const retryJob = async (jobId: string) => {
     const retried = await retryTranscriptionJob(jobId);
@@ -190,39 +197,24 @@ export function useTranscriptionHistory() {
   };
 
   const clearHistory = () => {
-    setHistory([]);
-    safeSaveHistory([]);
+    updateHistory(() => []);
   };
 
   const removeJob = async (jobId: string) => {
-    // Remove from server first
     try {
       await deleteTranscriptionJob(jobId);
-    } catch {
-      // If server delete fails (e.g. already gone), still remove locally
+    } catch (err) {
+      // A missing record is already deleted; other failures must remain visible.
+      if (!(err instanceof ApiRequestError && err.status === 404)) throw err;
     }
-    setHistory((prev) => {
-      const next = prev.filter(item => item.job_id !== jobId);
-      safeSaveHistory(next);
-      return next;
-    });
+    updateHistory((prev) => prev.filter(item => item.job_id !== jobId));
   };
 
   const removeJobs = async (jobIds: string[]) => {
     if (jobIds.length === 0) return { deleted: [], failed: [] };
-    let result: { deleted: string[]; failed: string[] } = { deleted: jobIds, failed: [] };
-    try {
-      result = await batchDeleteTranscriptionJobs(jobIds);
-    } catch {
-      // If the batch call fails (e.g. stale ids), still clear them locally,
-      // matching removeJob's tolerant behaviour.
-    }
-    const idSet = new Set(jobIds);
-    setHistory((prev) => {
-      const next = prev.filter(item => !idSet.has(item.job_id));
-      safeSaveHistory(next);
-      return next;
-    });
+    const result = await batchDeleteTranscriptionJobs(jobIds);
+    const idSet = new Set(result.deleted);
+    updateHistory((prev) => prev.filter(item => !idSet.has(item.job_id)));
     return result;
   };
 

@@ -12,6 +12,7 @@ vi.mock("../api", async () => {
     createTranscriptionJobFromUrl: vi.fn(),
     fetchTranscriptionJob: vi.fn(),
     getTranscriptionJobWords: vi.fn().mockResolvedValue([]),
+    deleteTranscriptionJob: vi.fn(),
     listTranscriptionJobs: vi.fn().mockResolvedValue({ jobs: [] })
   };
 });
@@ -67,6 +68,69 @@ describe("TranscriptionPage", () => {
     // After transcription, we enter detail view — transcript is shown as text content
     expect(await screen.findByText("同步转写结果")).toBeInTheDocument();
     expect(screen.getByText("已入记忆")).toBeInTheDocument();
+  });
+
+  it("keeps a record visible and displays a failed deletion", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(api.listTranscriptionJobs).mockResolvedValueOnce({ count: 1, jobs: [
+      { job_id: "keep-me", mode: "async", status: "completed", file_name: "Keep this.wav" },
+    ] });
+    vi.mocked(api.deleteTranscriptionJob).mockRejectedValueOnce(new Error("Deletion unavailable"));
+    render(<TranscriptionPage initialTab="library" />);
+    await screen.findByText("Keep this");
+    fireEvent.click(screen.getByTitle("删除记录"));
+    expect(await screen.findByText("Deletion unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Keep this")).toBeInTheDocument();
+  });
+
+  it("shows refresh errors in the library", async () => {
+    vi.mocked(api.listTranscriptionJobs).mockRejectedValueOnce(new Error("History unavailable"));
+    render(<TranscriptionPage initialTab="library" />);
+    expect(await screen.findByText("History unavailable")).toBeInTheDocument();
+  });
+
+  it("shows a detail-load failure instead of silently displaying an empty completed transcript", async () => {
+    vi.mocked(api.listTranscriptionJobs).mockResolvedValueOnce({ count: 1, jobs: [
+      { job_id: "tx_load_error", mode: "async", status: "completed", file_name: "Saved meeting.wav", has_transcript: true },
+    ] });
+    mockedFetchTranscriptionJob.mockRejectedValueOnce(new Error("Cannot load transcription"));
+    render(<TranscriptionPage initialTab="library" />);
+    fireEvent.click(await screen.findByText("Saved meeting"));
+    expect(await screen.findByText("Cannot load transcription")).toBeInTheDocument();
+    expect(screen.getByText("转写内容不可用")).toBeInTheDocument();
+    expect(screen.queryByText("转写内容为空")).not.toBeInTheDocument();
+  });
+
+  it("refreshes the active status filter without passing the click event to the API", async () => {
+    vi.mocked(api.listTranscriptionJobs).mockResolvedValue({ count: 0, jobs: [] });
+    render(<TranscriptionPage initialTab="library" />);
+    fireEvent.click(screen.getByRole("button", { name: "失败" }));
+    await waitFor(() => expect(api.listTranscriptionJobs).toHaveBeenLastCalledWith({ statuses: ["failed"], limit: 100 }));
+    fireEvent.click(screen.getByTitle("刷新"));
+    await waitFor(() => expect(api.listTranscriptionJobs).toHaveBeenLastCalledWith({ statuses: ["failed"], limit: 100 }));
+  });
+
+  it("applies status filters to cached records and combines them with search", async () => {
+    const jobs = ["completed", "failed", "running", "queued", "submitted", "uploaded"].map(status => ({
+      job_id: status, status, mode: "async", file_name: `${status}-record.wav`,
+    }));
+    vi.mocked(api.listTranscriptionJobs)
+      .mockResolvedValueOnce({ count: jobs.length, jobs })
+      .mockResolvedValueOnce({ count: 1, jobs: jobs.filter(item => item.status === "completed") })
+      .mockResolvedValueOnce({ count: 4, jobs: jobs.slice(2) });
+    render(<TranscriptionPage initialTab="library" />);
+    await screen.findByText("failed-record");
+    fireEvent.click(screen.getByRole("button", { name: "已完成" }));
+    await waitFor(() => expect(screen.queryByText("failed-record")).not.toBeInTheDocument());
+    expect(screen.getByText("completed-record")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "进行中" }));
+    for (const status of ["running", "queued", "submitted", "uploaded"]) {
+      expect(await screen.findByText(`${status}-record`)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("completed-record")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("搜索标题或转写内容…"), { target: { value: "queued" } });
+    expect(screen.getByText("queued-record")).toBeInTheDocument();
+    expect(screen.queryByText("running-record")).not.toBeInTheDocument();
   });
 
   it("resolves relative transcription audio URLs against the backend API origin", async () => {
