@@ -15,6 +15,7 @@ import os
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -170,6 +171,42 @@ class JobStoreRecoveryTests(unittest.TestCase):
         self.assertTrue(self.service.delete_job(job_id))
         for path in [self.service.jobs_dir / f"{job_id}.json", *paths]:
             self.assertFalse(path.exists(), path.name)
+
+    def test_listing_excludes_sidecars_and_invalid_records(self):
+        job_id = "tx_real"
+        self._write_record(job_id, "completed")
+        sidecars = {
+            f"{job_id}_translation.json": {"job_id": job_id, "cues": []},
+            f"{job_id}_words.json": [{"text": "hello", "start": 0, "end": 1}],
+            "tx_empty.json": {},
+            "tx_mismatched.json": {"job_id": "tx_somewhere_else", "status": "completed"},
+        }
+        for name, payload in sidecars.items():
+            (self.service.jobs_dir / name).write_text(json.dumps(payload), encoding="utf-8")
+        self.assertEqual([job.job_id for job in self.service.list_jobs()], [job_id])
+        for name in sidecars:
+            self.assertIsNone(self.service.get_job(Path(name).stem))
+
+    def test_failed_record_deletion_preserves_artifacts_and_reports_failure(self):
+        job_id = "tx_locked"
+        self._write_record(job_id, "completed")
+        record = self.service._job_path(job_id)
+        words = self.service.jobs_dir / f"{job_id}_words.json"
+        words.write_text("[]", encoding="utf-8")
+        original_unlink = Path.unlink
+
+        def unlink(path, *args, **kwargs):
+            if path == record:
+                raise PermissionError("record is locked")
+            return original_unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", unlink):
+            with self.assertRaisesRegex(PermissionError, "record is locked"):
+                self.service.delete_job(job_id)
+            result = self.service.delete_jobs([job_id])
+        self.assertEqual(result, {"deleted": [], "failed": [job_id]})
+        self.assertIsNotNone(self.service.get_job(job_id))
+        self.assertTrue(words.exists())
 
 
 if __name__ == "__main__":
