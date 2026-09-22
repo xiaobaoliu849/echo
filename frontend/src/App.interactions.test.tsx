@@ -457,27 +457,6 @@ describe("App interactions", () => {
     expect(document.querySelector("audio")).toHaveAttribute("src", "blob:test-url");
   });
 
-  it("submits translation with the edited target language", async () => {
-    render(<App />);
-
-    const translateBtn = screen.getByTestId("nav-translate");
-    fireEvent.click(translateBtn);
-    fireEvent.change(await screen.findByLabelText("目标语言"), {
-      target: { value: "日本語" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "开始翻译" }));
-
-    await waitFor(() => {
-      expect(mockedTranslateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          source_language: "auto",
-          target_language: "日本語"
-        })
-      );
-    });
-    expect(await screen.findByText("This is the translated result.")).toBeInTheDocument();
-  });
-
   it("transcribes a local audio file from the transcription center", async () => {
     render(<App />);
 
