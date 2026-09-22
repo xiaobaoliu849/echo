@@ -5,6 +5,7 @@ import { VoiceCard } from "../components/VoiceCard";
 import type { VoiceDesignController, VoiceProviderId } from "../hooks/useVoiceManagement";
 import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
+import "./VoiceStudio.css";
 
 type Props = {
   design: VoiceDesignController;
@@ -43,38 +44,34 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
 
   if (viewMode === "workspace") {
     return (
-      <form 
-        className="vsTranscribeDetail" 
+      <form
+        className="vsVoiceStudioWorkspace"
         onSubmit={async (e) => {
           setHasAttemptedSubmit(true);
           await design.onSubmit(e);
         }}
-        style={{ display: "flex", flexDirection: "column", height: "100%", margin: 0 }}
       >
         {/* Header (Action Bar) */}
-        <div className="vsTranscribeDetailHeader" style={{ borderBottom: "1px solid var(--line)", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <div className="vsVoiceStudioHeader">
+          <div className="vsVoiceStudioHeaderLeft">
             <button
               type="button"
-              className="vsTranscribeBackBtn"
+              className="vsVoiceStudioBack"
               onClick={handleBackToLibrary}
               title={t("返回音色库", "Back to library")}
             >
               <ArrowLeft size={16} strokeWidth={2.2} />
-              <span className="vsTranscribeBackBtnText">{t("返回", "Back")}</span>
+              <span>{t("返回", "Back")}</span>
             </button>
-            <div className="vsTranscribeDetailInfo">
-              <h2 className="vsTranscribeDetailFileName" style={{ fontSize: "16px", margin: 0 }}>
-                {t("创造专属音色", "Create Custom Voice")}
-              </h2>
-            </div>
+            <h2 className="vsVoiceStudioTitle">
+              {t("创造专属音色", "Create Custom Voice")}
+            </h2>
           </div>
 
           <button
             type="submit"
-            className="vsBtnPrimary"
+            className="vsVoiceStudioSubmit"
             disabled={design.designBusy}
-            style={{ height: "36px", minWidth: "120px", fontSize: "14px", borderRadius: "8px", fontWeight: 600 }}
           >
             {design.designBusy ? (
               <>
@@ -88,9 +85,9 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
         </div>
 
         {/* Content Area */}
-        <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "24px 24px 40px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div style={{ maxWidth: "800px", width: "100%", display: "flex", flexDirection: "column", gap: "24px" }}>
-            
+        <div className="vsVoiceStudioBody custom-scrollbar">
+          <div className="vsVoiceStudioFormInner">
+
             {/* Status / Errors (Top of form) */}
             {hasAttemptedSubmit && design.designError && (
               <ErrorNotice
@@ -107,16 +104,16 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
 
             {/* Design feedback & preview player inline */}
             {design.designPreviewAudio && (
-              <div style={{ padding: "16px", background: "rgba(255, 251, 245, 0.9)", border: "1px solid var(--brand-soft)", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--brand)" }}>
+              <div className="vsVoiceStudioPreview">
+                <p className="vsVoiceStudioPreviewTitle">
                   {t(`✨ 音色设计成功！这是新音色《${design.designName}》的试听：`, `✨ Voice design succeeded. Preview for "${design.designName}":`)}
-                </div>
+                </p>
                 <audio controls src={design.designPreviewAudio} className="vsAudioElement" style={{ width: "100%", height: "36px" }} />
               </div>
             )}
 
-            <div style={{ background: "var(--panel-strong)", padding: "32px", borderRadius: "16px", border: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: "24px" }}>
-              <p style={{ margin: "0 0 8px 0", color: "var(--muted)", fontSize: "14px" }}>
+            <div className="vsVoiceStudioFormCard">
+              <p className="vsVoiceStudioIntro">
                 {t("通过自然语言描述，创造独一无二的专属音色。", "Create a unique custom voice from a natural-language description.")}
               </p>
 
@@ -187,11 +184,11 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
   }
 
   return (
-    <section className="vsTranscribeLibrary">
+    <section className="vsVoiceStudioLibrary">
       {/* Toolbar */}
-      <div className="vsTranscribeToolbar">
-        <div className="vsTranscribeSearchBox">
-          <span className="vsTranscribeSearchIcon">🔍</span>
+      <div className="vsVoiceStudioToolbar">
+        <div className="vsVoiceStudioSearch">
+          <span className="vsVoiceStudioSearchIcon">🔍</span>
           <input
             type="text"
             value={searchQuery}
@@ -200,7 +197,7 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
           />
         </div>
 
-        <div className="vsTranscribeToolbarActions">
+        <div className="vsVoiceStudioActions">
           <button
             onClick={() => void design.onRefresh()}
             className="vsBtnGhost"
@@ -227,32 +224,32 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
       </div>
 
       {/* Card Grid */}
-      <div className="vsTranscribeGridWrap custom-scrollbar">
+      <div className="vsVoiceStudioGridWrap custom-scrollbar">
         {design.designListBusy && design.designVoices.length === 0 ? (
-          <div className="vsTranscribeEmpty">
-            <div className="vsTranscribeEmptyIcon">
+          <div className="vsVoiceStudioEmpty">
+            <div className="vsVoiceStudioEmptyIcon">
               <div className="spinner" style={{ width: 32, height: 32, border: "3px solid var(--line)", borderTopColor: "var(--brand)", borderRadius: "50%" }} />
             </div>
-            <p className="vsTranscribeEmptyDesc">
+            <p className="vsVoiceStudioEmptyDesc">
               {t("加载音色库中…", "Loading voice library...")}
             </p>
           </div>
         ) : filteredVoices.length === 0 ? (
-          <div className="vsTranscribeEmpty">
-            <div className="vsTranscribeEmptyIcon">✨</div>
-            <h3 className="vsTranscribeEmptyTitle">
+          <div className="vsVoiceStudioEmpty">
+            <div className="vsVoiceStudioEmptyIcon">✨</div>
+            <h3 className="vsVoiceStudioEmptyTitle">
               {searchQuery
                 ? t("没有匹配的音色", "No matching voices")
                 : t("暂无设计的音色", "No designed voices yet")}
             </h3>
-            <p className="vsTranscribeEmptyDesc">
+            <p className="vsVoiceStudioEmptyDesc">
               {searchQuery
                 ? t("尝试调整搜索条件。", "Try adjusting your search criteria.")
                 : t("点击右上角的「设计新音色」开始通过自然语言创造专属声音。", "Click 'Design New Voice' in the top right to create a custom voice using natural language.")}
             </p>
           </div>
         ) : (
-          <div className="vsTranscribeGrid">
+          <div className="vsVoiceStudioGrid">
             {filteredVoices.map((item) => (
               <VoiceCard
                 key={item.voice}

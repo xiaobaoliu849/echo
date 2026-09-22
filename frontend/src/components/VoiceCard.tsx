@@ -1,11 +1,14 @@
-import React, { useMemo } from "react";
-import type { CustomVoice } from "../api";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { fetchSpeakAudio, type CustomVoice } from "../api";
 import { useI18n } from "../i18n";
 
 type Props = {
   item: CustomVoice;
   onDelete: (e: React.MouseEvent) => void;
 };
+
+const PREVIEW_TEXT_ZH = "你好，这是 Echo 的音色试听，很高兴为你服务。";
+const PREVIEW_TEXT_EN = "Hello, this is an Echo voice preview. Nice to meet you.";
 
 /* Deterministic gradient palette based on string hash */
 const COVER_GRADIENTS = [
@@ -37,10 +40,63 @@ function DiamondPattern({ color }: { color: string }) {
 }
 
 export const VoiceCard: React.FC<Props> = ({ item, onDelete }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const hash = useMemo(() => hashStr(item.voice), [item.voice]);
   const palette = COVER_GRADIENTS[hash % COVER_GRADIENTS.length];
   const isDesign = item.type === "voice_design";
+
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  async function handlePreview() {
+    if (previewLoading) return;
+    if (previewUrl) {
+      const audio = audioRef.current;
+      if (!audio) return;
+      if (audio.paused) {
+        void audio.play();
+      } else {
+        audio.pause();
+      }
+      return;
+    }
+    setPreviewLoading(true);
+    setPreviewError("");
+    try {
+      const result = await fetchSpeakAudio({
+        text: language === "zh-CN" ? PREVIEW_TEXT_ZH : PREVIEW_TEXT_EN,
+        voice: item.voice,
+      });
+      setPreviewUrl(URL.createObjectURL(result.blob));
+    } catch {
+      setPreviewError(t("试听失败，请检查音色是否可用。", "Preview failed. Check if the voice is available."));
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function handleAudioEnded() {
+    setIsPlaying(false);
+  }
+
+  function handleAudioPlay() {
+    setIsPlaying(true);
+  }
+
+  function handleAudioPause() {
+    setIsPlaying(false);
+  }
 
   return (
     <div className="vsTranscribeCard completed">
@@ -73,11 +129,37 @@ export const VoiceCard: React.FC<Props> = ({ item, onDelete }) => {
             ? t("基于自然语言生成的专属音色", "Custom voice generated from description")
             : t("基于样本音频克隆的复刻音色", "Voice cloned from audio sample")}
         </p>
+        {previewError && (
+          <p className="vsTranscribeCardPreview error">{previewError}</p>
+        )}
       </div>
 
       {/* Footer */}
       <div className="vsTranscribeCardFooter">
-        <span />
+        <button
+          type="button"
+          className="vsVoiceCardPreviewBtn"
+          onClick={(e) => {
+            e.stopPropagation();
+            void handlePreview();
+          }}
+          disabled={previewLoading}
+          title={previewLoading ? t("试听生成中…", "Generating preview…") : isPlaying ? t("暂停", "Pause") : t("试听", "Preview")}
+        >
+          {previewLoading ? (
+            <span className="spinner-mini" style={{ width: 14, height: 14 }} />
+          ) : isPlaying ? (
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+              <rect x="6" y="4" width="4" height="16" rx="1" />
+              <rect x="14" y="4" width="4" height="16" rx="1" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          )}
+          <span>{previewLoading ? t("试听中…", "Loading…") : isPlaying ? t("暂停", "Pause") : t("试听", "Preview")}</span>
+        </button>
         <button
           className="vsTranscribeCardDeleteBtn"
           onClick={onDelete}
@@ -86,6 +168,18 @@ export const VoiceCard: React.FC<Props> = ({ item, onDelete }) => {
           {t("删除", "Delete")}
         </button>
       </div>
+
+      {/* Hidden audio element for preview playback */}
+      {previewUrl && (
+        <audio
+          ref={audioRef}
+          src={previewUrl}
+          onPlay={handleAudioPlay}
+          onPause={handleAudioPause}
+          onEnded={handleAudioEnded}
+          style={{ display: "none" }}
+        />
+      )}
     </div>
   );
 };

@@ -5,6 +5,7 @@ import { VoiceCard } from "../components/VoiceCard";
 import type { VoiceCloneController, VoiceProviderId } from "../hooks/useVoiceManagement";
 import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
+import "./VoiceStudio.css";
 
 type Props = {
   clone: VoiceCloneController;
@@ -41,40 +42,40 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
     );
   }, [clone.cloneVoices, searchQuery]);
 
+  const acceptedFormats = clone.cloneAcceptedFormats.length > 0
+    ? clone.cloneAcceptedFormats.join(", ")
+    : "mp3, wav, flac, m4a, ogg, webm";
+
   if (viewMode === "workspace") {
     return (
-      <form 
-        className="vsTranscribeDetail" 
+      <form
+        className="vsVoiceStudioWorkspace"
         onSubmit={async (e) => {
           setHasAttemptedSubmit(true);
           await clone.onSubmit(e);
         }}
-        style={{ display: "flex", flexDirection: "column", height: "100%", margin: 0 }}
       >
         {/* Header (Action Bar) */}
-        <div className="vsTranscribeDetailHeader" style={{ borderBottom: "1px solid var(--line)", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <div className="vsVoiceStudioHeader">
+          <div className="vsVoiceStudioHeaderLeft">
             <button
               type="button"
-              className="vsTranscribeBackBtn"
+              className="vsVoiceStudioBack"
               onClick={handleBackToLibrary}
               title={t("返回音色库", "Back to library")}
             >
               <ArrowLeft size={16} strokeWidth={2.2} />
-              <span className="vsTranscribeBackBtnText">{t("返回", "Back")}</span>
+              <span>{t("返回", "Back")}</span>
             </button>
-            <div className="vsTranscribeDetailInfo">
-              <h2 className="vsTranscribeDetailFileName" style={{ fontSize: "16px", margin: 0 }}>
-                {t("克隆复刻音色", "Clone Custom Voice")}
-              </h2>
-            </div>
+            <h2 className="vsVoiceStudioTitle">
+              {t("克隆复刻音色", "Clone Custom Voice")}
+            </h2>
           </div>
 
           <button
             type="submit"
-            className="vsBtnPrimary"
+            className="vsVoiceStudioSubmit"
             disabled={clone.cloneBusy || !clone.cloneAudioFile}
-            style={{ height: "36px", minWidth: "120px", fontSize: "14px", borderRadius: "8px", fontWeight: 600 }}
           >
             {clone.cloneBusy ? (
               <>
@@ -88,9 +89,9 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
         </div>
 
         {/* Content Area */}
-        <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "24px 24px 40px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div style={{ maxWidth: "800px", width: "100%", display: "flex", flexDirection: "column", gap: "24px" }}>
-            
+        <div className="vsVoiceStudioBody custom-scrollbar">
+          <div className="vsVoiceStudioFormInner">
+
             {/* Status / Errors (Top of form) */}
             {hasAttemptedSubmit && clone.cloneError && (
               <ErrorNotice
@@ -103,17 +104,17 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
 
             {/* Inline Training Status Indicators */}
             {clone.cloneBusy && (
-              <div style={{ padding: "16px", background: "rgba(107, 76, 246, 0.05)", border: "1px dashed var(--brand)", borderRadius: "12px", display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className="vsVoiceStudioBusy">
                 <span className="spinner-mini" style={{ width: "24px", height: "24px" }}></span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--brand)" }}>{t("音色克隆处理中", "Voice cloning in progress")}</div>
-                  <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "2px" }}>{t("正在通过大模型提取声纹特征，请稍候…", "Extracting voiceprint features with the model. Please wait.")}</div>
+                  <div className="vsVoiceStudioBusyTitle">{t("音色克隆处理中", "Voice cloning in progress")}</div>
+                  <div className="vsVoiceStudioBusyDesc">{t("正在通过大模型提取声纹特征，请稍候…", "Extracting voiceprint features with the model. Please wait.")}</div>
                 </div>
               </div>
             )}
 
-            <div style={{ background: "var(--panel-strong)", padding: "32px", borderRadius: "16px", border: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: "24px" }}>
-              <p style={{ margin: "0 0 8px 0", color: "var(--muted)", fontSize: "14px" }}>
+            <div className="vsVoiceStudioFormCard">
+              <p className="vsVoiceStudioIntro">
                 {t("通过上传音频样板复刻特定人声。", "Recreate a specific voice from an uploaded audio sample.")}
               </p>
 
@@ -144,38 +145,37 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
                 <span className="vsFieldHint">{t("请使用字母、数字或下划线，方便在模型调用时识别。", "Use letters, numbers, or underscores so the model can reference it reliably.")}</span>
               </label>
 
-              <div className="vsCardSection" style={{ background: "var(--surface)", padding: "24px", borderRadius: "8px", border: "1px dashed var(--brand)", textAlign: "center" }}>
+              <div className="vsVoiceStudioUpload">
                 <div className="vsField">
-                  <span className="vsFieldLabel" style={{ fontSize: "15px", marginBottom: "8px" }}>{t("🎙️ 上传音频样板", "🎙️ Upload audio sample")}</span>
+                  <span className="vsFieldLabel">{t("🎙️ 上传音频样板", "🎙️ Upload audio sample")}</span>
                   <input
                     type="file"
                     accept="audio/*"
                     className="vsInput"
-                    style={{ display: "block", margin: "0 auto 12px", width: "100%", maxWidth: "300px" }}
                     onChange={(e) => clone.onAudioFileChange(e.target.files?.[0] || null)}
                     required
                   />
-                  <span className="vsFieldHint" style={{ marginTop: "12px", color: "var(--brand-dark)" }}>
-                    {t("💡 建议：上传 5-30 秒清晰、无背景噪音的单人语音片段，效果最佳。", "💡 Tip: upload a clear 5-30 second single-speaker clip with minimal background noise for best results.")}
+                  <span className="vsFieldHint vsVoiceStudioUploadTip">
+                    {t(`💡 支持格式：${acceptedFormats}。建议 10-30 秒清晰、无背景噪音的单人语音。`, `💡 Supported: ${acceptedFormats}. Upload a clear 10-30 second single-speaker clip with minimal background noise.`)}
                   </span>
                 </div>
 
                 {clone.cloneAudioFile && (
-                  <div style={{ marginTop: "16px", padding: "12px", background: "#fff", borderRadius: "8px", border: "1px solid var(--line)", display: "flex", alignItems: "center", gap: "10px", textAlign: "left" }}>
-                    <span style={{ fontSize: "20px" }}>📄</span>
+                  <div className="vsVoiceStudioFileChip">
+                    <span className="vsVoiceStudioFileChipIcon">📄</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: "14px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div className="vsVoiceStudioFileChipName">
                         {clone.cloneAudioFile.name}
                       </div>
-                      <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                      <div className="vsVoiceStudioFileChipSize">
                         {(clone.cloneAudioFile.size / 1024 / 1024).toFixed(2)} MB
                       </div>
                     </div>
                   </div>
                 )}
               </div>
-              
-              <div style={{ padding: "16px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+
+              <div className="vsVoiceStudioReminder">
                 <p className="vsFieldHint" style={{ margin: 0 }}>
                   <strong>{t("温馨提示：", "Reminder:")}</strong> {t("克隆音色仅供个人研究与创作使用。请确保您拥有该声音样本的使用授权，尊重他人的声音版权与隐私。", "Voice cloning is for personal research and creative work only. Make sure you have permission to use the source voice sample and respect voice rights and privacy.")}
                 </p>
@@ -188,11 +188,11 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
   }
 
   return (
-    <section className="vsTranscribeLibrary">
+    <section className="vsVoiceStudioLibrary">
       {/* Toolbar */}
-      <div className="vsTranscribeToolbar">
-        <div className="vsTranscribeSearchBox">
-          <span className="vsTranscribeSearchIcon">🔍</span>
+      <div className="vsVoiceStudioToolbar">
+        <div className="vsVoiceStudioSearch">
+          <span className="vsVoiceStudioSearchIcon">🔍</span>
           <input
             type="text"
             value={searchQuery}
@@ -201,7 +201,7 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
           />
         </div>
 
-        <div className="vsTranscribeToolbarActions">
+        <div className="vsVoiceStudioActions">
           <button
             onClick={() => void clone.onRefresh()}
             className="vsBtnGhost"
@@ -228,32 +228,32 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
       </div>
 
       {/* Card Grid */}
-      <div className="vsTranscribeGridWrap custom-scrollbar">
+      <div className="vsVoiceStudioGridWrap custom-scrollbar">
         {clone.cloneListBusy && clone.cloneVoices.length === 0 ? (
-          <div className="vsTranscribeEmpty">
-            <div className="vsTranscribeEmptyIcon">
+          <div className="vsVoiceStudioEmpty">
+            <div className="vsVoiceStudioEmptyIcon">
               <div className="spinner" style={{ width: 32, height: 32, border: "3px solid var(--line)", borderTopColor: "var(--brand)", borderRadius: "50%" }} />
             </div>
-            <p className="vsTranscribeEmptyDesc">
+            <p className="vsVoiceStudioEmptyDesc">
               {t("加载音色库中…", "Loading voice library...")}
             </p>
           </div>
         ) : filteredVoices.length === 0 ? (
-          <div className="vsTranscribeEmpty">
-            <div className="vsTranscribeEmptyIcon">🧬</div>
-            <h3 className="vsTranscribeEmptyTitle">
+          <div className="vsVoiceStudioEmpty">
+            <div className="vsVoiceStudioEmptyIcon">🧬</div>
+            <h3 className="vsVoiceStudioEmptyTitle">
               {searchQuery
                 ? t("没有匹配的音色", "No matching voices")
                 : t("暂无克隆的音色", "No cloned voices yet")}
             </h3>
-            <p className="vsTranscribeEmptyDesc">
+            <p className="vsVoiceStudioEmptyDesc">
               {searchQuery
                 ? t("尝试调整搜索条件。", "Try adjusting your search criteria.")
                 : t("点击右上角的「克隆新音色」上传音频样板，复刻指定人声。", "Click 'Clone New Voice' in the top right to upload an audio sample and recreate a specific voice.")}
             </p>
           </div>
         ) : (
-          <div className="vsTranscribeGrid">
+          <div className="vsVoiceStudioGrid">
             {filteredVoices.map((item) => (
               <VoiceCard
                 key={item.voice}

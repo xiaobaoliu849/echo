@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import ErrorNotice from "../components/ErrorNotice";
+import useTtsHistory, { type TtsHistoryEntry } from "../hooks/useTtsHistory";
 import type { UseTtsResult } from "../hooks/useTts";
 import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
@@ -62,8 +64,47 @@ function getAudioExportMeta(blob: Blob): { filename: string; mimeType: string } 
   return { filename: `echo_tts.${extension}`, mimeType };
 }
 
+function formatHistoryTime(ts: number, t: (zh: string, en: string) => string): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return t("刚刚", "just now");
+  if (mins < 60) return t(`${mins} 分钟前`, `${mins}m ago`);
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return t(`${hours} 小时前`, `${hours}h ago`);
+  const days = Math.floor(hours / 24);
+  return t(`${days} 天前`, `${days}d ago`);
+}
+
+function truncate(text: string, max: number): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= max) return trimmed;
+  return trimmed.slice(0, max) + "…";
+}
+
 export default function TtsPage({ tts, errorRuntimeContext }: Props) {
   const { t } = useI18n();
+  const { history, addEntry, removeEntry, clearHistory, buildReplayUrl } = useTtsHistory();
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const prevAudioUrlRef = useRef(tts.audioUrl);
+
+  // Record a history entry when a new audio generation succeeds.
+  useEffect(() => {
+    if (tts.audioUrl && tts.audioUrl !== prevAudioUrlRef.current) {
+      addEntry({
+        text: tts.activeSourceText,
+        mode: tts.ttsMode,
+        engine: tts.ttsEngine,
+        engineB: tts.ttsMode === "dialogue" ? tts.ttsEngineB : undefined,
+        model: tts.ttsModel || undefined,
+        modelB: tts.ttsMode === "dialogue" ? tts.ttsModelB : undefined,
+        voice: tts.voice,
+        voiceB: tts.ttsMode === "dialogue" ? tts.voiceB : undefined,
+        rate: tts.rate,
+      });
+    }
+    prevAudioUrlRef.current = tts.audioUrl;
+  }, [tts.audioUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleDownload() {
     if (!tts.audioUrl) return;
     try {
@@ -148,6 +189,9 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
 
   const isMac = typeof navigator !== "undefined" && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent || navigator.platform);
   const shortcutText = isMac ? "⌘ + ↵" : "Ctrl + ↵";
+
+  const historyCount = history.length;
+  const showHistoryBar = historyCount > 0 || tts.audioUrl;
 
   return (
     <section className="vsTtsWorkspace vsTtsSingleColumn">
@@ -445,6 +489,79 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
           </div>
         </div>
 
+        {/* ── TTS Generation History ── */}
+        {showHistoryBar && (
+          <div className={`vsTtsHistory ${historyExpanded ? "expanded" : ""}`}>
+            <div className="vsTtsHistoryBar">
+              <button
+                type="button"
+                className="vsTtsHistoryToggle"
+                onClick={() => setHistoryExpanded((prev) => !prev)}
+                aria-expanded={historyExpanded}
+              >
+                <span className="vsTtsHistoryToggleIcon">{historyExpanded ? "▾" : "▸"}</span>
+                <span>{t("生成历史", "History")}</span>
+                {historyCount > 0 && <span className="vsTtsHistoryCount">{historyCount}</span>}
+              </button>
+              {historyCount > 0 && (
+                <button
+                  type="button"
+                  className="vsTtsHistoryClear"
+                  onClick={() => {
+                    if (confirm(t("确定清空所有生成历史？", "Clear all generation history?"))) {
+                      clearHistory();
+                    }
+                  }}
+                >
+                  {t("清空", "Clear")}
+                </button>
+              )}
+            </div>
+            {historyExpanded && (
+              <div className="vsTtsHistoryList custom-scrollbar">
+                {history.length === 0 ? (
+                  <p className="vsTtsHistoryEmpty">{t("还没有生成记录。", "No generations yet.")}</p>
+                ) : (
+                  history.map((entry: TtsHistoryEntry) => (
+                    <div key={entry.id} className="vsTtsHistoryItem">
+                      <div className="vsTtsHistoryItemText" title={entry.text}>
+                        {truncate(entry.text, 80)}
+                      </div>
+                      <div className="vsTtsHistoryItemMeta">
+                        <span>{formatHistoryTime(entry.createdAt, t)}</span>
+                        <span className="vsTtsHistoryItemSep">·</span>
+                        <span>{entry.engine}</span>
+                        {entry.voice && (
+                          <>
+                            <span className="vsTtsHistoryItemSep">·</span>
+                            <span className="vsTtsHistoryItemVoice">{entry.voice}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="vsTtsHistoryItemActions">
+                        <audio
+                          controls
+                          src={buildReplayUrl(entry)}
+                          className="vsTtsHistoryAudio"
+                          preload="none"
+                        />
+                        <button
+                          type="button"
+                          className="vsTtsHistoryRemove"
+                          onClick={() => removeEntry(entry.id)}
+                          title={t("删除", "Delete")}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Bottom Pane: Playback & Action Footer ── */}
         <footer className="vsTtsEditorFooter">
           <div className="vsTtsFooterLeft">
@@ -474,7 +591,7 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
             {!tts.audioUrl && !tts.ttsInfo && (
               <div className="vsTtsEmptyHint">
                 <span className="vsTtsHintIcon">🎧</span>
-                <span>{t("完成输入后，点击右下角“生成音频”开始试听", "Enter text and click Generate Audio to listen")}</span>
+                <span>{t("完成输入后，点击右下角\u201c生成音频\u201d开始试听", "Enter text and click Generate Audio to listen")}</span>
               </div>
             )}
           </div>

@@ -7355,6 +7355,176 @@ button.vsRTWarningBtn:hover {
   transform: none;
 }
 
+/* ── TTS Generation History ── */
+.vsTtsHistory {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+}
+
+.vsTtsHistoryBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px;
+}
+
+.vsTtsHistoryToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.vsTtsHistoryToggle:hover {
+  background: color-mix(in srgb, var(--brand) 6%, transparent);
+  color: var(--text);
+}
+
+.vsTtsHistoryToggleIcon {
+  font-size: 10px;
+  width: 12px;
+}
+
+.vsTtsHistoryCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.vsTtsHistoryClear {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.vsTtsHistoryClear:hover {
+  color: #b4483f;
+  background: color-mix(in srgb, #b4483f 8%, transparent);
+}
+
+.vsTtsHistoryList {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0 24px 12px;
+}
+
+.vsTtsHistoryEmpty {
+  margin: 0;
+  padding: 16px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vsTtsHistoryItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-card);
+  margin-bottom: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.vsTtsHistoryItem:hover {
+  border-color: color-mix(in srgb, var(--brand) 25%, transparent);
+}
+
+.vsTtsHistoryItemText {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsTtsHistoryItemMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.vsTtsHistoryItemSep {
+  opacity: 0.4;
+}
+
+.vsTtsHistoryItemVoice {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vsTtsHistoryItemActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.vsTtsHistoryAudio {
+  height: 28px;
+  width: 180px;
+  border-radius: 6px;
+}
+
+.vsTtsHistoryRemove {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.vsTtsHistoryRemove:hover {
+  color: #b4483f;
+  background: color-mix(in srgb, #b4483f 8%, transparent);
+}
+
+@media (max-width: 700px) {
+  .vsTtsHistoryItem {
+    flex-wrap: wrap;
+  }
+  .vsTtsHistoryItemText {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+  .vsTtsHistoryAudio {
+    width: 140px;
+  }
+}
+
 .vsIconSmall {
   width: 14px;
   height: 14px;
@@ -8894,6 +9064,32 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsTranscribeCardDeleteBtn:hover {
   background: #fff1f2;
+}
+
+/* Voice card preview/audition button (VoiceCard) */
+.vsVoiceCardPreviewBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--brand) 25%, transparent);
+  background: color-mix(in srgb, var(--brand) 7%, transparent);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.vsVoiceCardPreviewBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  border-color: var(--brand);
+}
+
+.vsVoiceCardPreviewBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .vsTranscribeCardActions {

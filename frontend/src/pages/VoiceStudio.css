@@ -1,0 +1,376 @@
+/*
+ * VoiceStudio.css — dedicated styles for the Voice Design and Voice Clone pages.
+ * Decoupled from the shared vsTranscribe* classes so the voice-studio pages
+ * have their own themeable surface, mirroring the PodcastLibrary.css pattern.
+ */
+
+/* ── Library view ── */
+.vsVoiceStudioLibrary {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+/* Toolbar */
+.vsVoiceStudioToolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+}
+
+.vsVoiceStudioSearch {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: 360px;
+}
+
+.vsVoiceStudioSearch input {
+  width: 100%;
+  height: 38px;
+  padding: 0 14px 0 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.vsVoiceStudioSearch input:focus {
+  border-color: var(--brand);
+  background: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.vsVoiceStudioSearch input::placeholder {
+  color: var(--muted);
+}
+
+.vsVoiceStudioSearchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.vsVoiceStudioActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Grid */
+.vsVoiceStudioGridWrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 24px 32px;
+}
+
+.vsVoiceStudioGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+/* Empty state */
+.vsVoiceStudioEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  gap: 16px;
+}
+
+.vsVoiceStudioEmptyIcon {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+}
+
+.vsVoiceStudioEmptyTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.vsVoiceStudioEmptyDesc {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+/* ── Workspace (detail/form) view ── */
+.vsVoiceStudioWorkspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+}
+
+/* Header / action bar */
+.vsVoiceStudioHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding: 16px 24px;
+  flex-shrink: 0;
+}
+
+.vsVoiceStudioHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.vsVoiceStudioBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsVoiceStudioBack:hover {
+  background: color-mix(in srgb, var(--brand) 6%, transparent);
+  border-color: var(--brand);
+}
+
+.vsVoiceStudioBack svg {
+  flex-shrink: 0;
+}
+
+.vsVoiceStudioTitle {
+  font-size: 16px;
+  font-weight: 650;
+  margin: 0;
+  color: var(--text);
+}
+
+.vsVoiceStudioSubmit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 120px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  background: var(--brand);
+  color: #fff;
+  transition: background 0.15s ease;
+}
+
+.vsVoiceStudioSubmit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 88%, #000);
+}
+
+.vsVoiceStudioSubmit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Scrollable body */
+.vsVoiceStudioBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.vsVoiceStudioFormInner {
+  max-width: 800px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Preview audio box (design success) */
+.vsVoiceStudioPreview {
+  padding: 16px;
+  background: color-mix(in srgb, var(--brand) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 20%, transparent);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vsVoiceStudioPreviewTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  margin: 0;
+}
+
+/* Busy / training status box (clone) */
+.vsVoiceStudioBusy {
+  padding: 16px;
+  background: color-mix(in srgb, var(--brand) 5%, transparent);
+  border: 1px dashed var(--brand);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vsVoiceStudioBusyTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+}
+
+.vsVoiceStudioBusyDesc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Main form card */
+.vsVoiceStudioFormCard {
+  background: var(--panel-strong);
+  padding: 32px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.vsVoiceStudioFormCard > .vsVoiceStudioIntro {
+  margin: 0 0 8px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Audio upload section (clone) */
+.vsVoiceStudioUpload {
+  background: var(--surface);
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px dashed var(--brand);
+  text-align: center;
+}
+
+.vsVoiceStudioUpload .vsField {
+  text-align: center;
+}
+
+.vsVoiceStudioUpload .vsFieldLabel {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.vsVoiceStudioUpload input[type="file"] {
+  display: block;
+  margin: 0 auto 12px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.vsVoiceStudioUploadTip {
+  margin-top: 12px;
+  color: var(--brand-dark, var(--brand));
+}
+
+/* Uploaded file chip */
+.vsVoiceStudioFileChip {
+  margin-top: 16px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.vsVoiceStudioFileChipIcon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.vsVoiceStudioFileChipName {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsVoiceStudioFileChipSize {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Reminder box (clone) */
+.vsVoiceStudioReminder {
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+/* Responsive */
+@media (max-width: 700px) {
+  .vsVoiceStudioToolbar {
+    padding: 12px 16px;
+  }
+  .vsVoiceStudioGridWrap {
+    padding: 16px 16px 24px;
+  }
+  .vsVoiceStudioHeader {
+    padding: 12px 16px;
+  }
+  .vsVoiceStudioBody {
+    padding: 16px 16px 32px;
+  }
+  .vsVoiceStudioFormCard {
+    padding: 20px;
+  }
+  .vsVoiceStudioGrid {
+    grid-template-columns: 1fr;
+  }
+}

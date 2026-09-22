@@ -7,6 +7,7 @@ describe('TtsPage', () => {
     afterEach(() => {
         vi.restoreAllMocks();
         delete (window as any).pywebview;
+        window.localStorage.removeItem('vs_tts_history');
     });
 
     it('renders workstation layout', () => {
