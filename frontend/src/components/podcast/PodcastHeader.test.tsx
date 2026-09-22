@@ -4,16 +4,16 @@ import { createAudioOverviewController } from "../../test/factories";
 import PodcastHeader from "./PodcastHeader";
 
 describe("PodcastHeader", () => {
-  it("renders title and status", () => {
+  it("renders Echo branding without technical status badges", () => {
     render(<PodcastHeader audioOverview={createAudioOverviewController()} />);
 
-    expect(screen.getByText("播客工作台")).toBeInTheDocument();
-    expect(screen.getByText("播客 #12")).toBeInTheDocument();
-    expect(screen.getByText("长期记忆未接入")).toBeInTheDocument();
+    expect(screen.getByText("Echo 播客")).toBeInTheDocument();
+    expect(screen.queryByText("播客 #12")).not.toBeInTheDocument();
+    expect(screen.queryByText("长期记忆未接入")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建草稿" })).toBeInTheDocument();
   });
 
-  it("renders agent run status when available", () => {
+  it("keeps internal run status out of the header", () => {
     render(
       <PodcastHeader
         audioOverview={createAudioOverviewController({
@@ -23,7 +23,7 @@ describe("PodcastHeader", () => {
       />
     );
 
-    expect(screen.getByText("Agent Run #7 · draft_ready")).toBeInTheDocument();
+    expect(screen.queryByText("Agent Run #7 · draft_ready")).not.toBeInTheDocument();
   });
 
   it("renders delete action when menu is open", () => {

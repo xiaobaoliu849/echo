@@ -721,9 +721,10 @@ describe("App interactions", () => {
     render(<App />);
     const podcastBtn4 = screen.getByTestId("nav-audio_overview");
     fireEvent.click(podcastBtn4);
-    
+
     fireEvent.click(screen.getByRole("button", { name: /新建播客/ }));
-    expect(screen.getByText("长期记忆已接入")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "设置与参考资料" }));
+    expect(screen.getByLabelText(/使用 EverMem 长期记忆辅助脚本生成/)).toBeChecked();
 
     const topicInput = screen.getByPlaceholderText("输入你想讨论的话题，例如：AI 如何改变个人学习习惯？");
     fireEvent.change(topicInput, { target: { value: "新主题" } });

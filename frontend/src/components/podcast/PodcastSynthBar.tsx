@@ -14,11 +14,13 @@ export default function PodcastSynthBar({ audioOverview }: Props) {
 
   return (
     <div className="vsSynthBar">
+      <h3 className="vsPodcastAudioHeading">{t("制作音频", "Create audio")}</h3>
       <div className="vsSynthBarMain">
         <div className="vsSynthVoices">
           <label className="vsSynthVoiceSelect">
             <span className="roleIndicator roleA">A</span>
             <select
+              aria-label={t("主播 A 的声音", "Host A voice")}
               value={audioOverview.audioOverviewVoiceA}
               onChange={(e) => audioOverview.onVoiceAChange(e.target.value)}
               disabled={!audioOverview.audioOverviewVoiceOptions.length}
@@ -33,6 +35,7 @@ export default function PodcastSynthBar({ audioOverview }: Props) {
           <label className="vsSynthVoiceSelect">
             <span className="roleIndicator roleB">B</span>
             <select
+              aria-label={t("主播 B 的声音", "Host B voice")}
               value={audioOverview.audioOverviewVoiceB}
               onChange={(e) => audioOverview.onVoiceBChange(e.target.value)}
               disabled={!audioOverview.audioOverviewVoiceOptions.length}
@@ -49,9 +52,11 @@ export default function PodcastSynthBar({ audioOverview }: Props) {
           <button
             type="button"
             className="vsPodcastAdvancedToggle"
+            aria-expanded={audioOverview.synthBarAdvancedOpen}
+            aria-controls="podcast-audio-options"
             onClick={audioOverview.onToggleSynthAdvanced}
           >
-            {audioOverview.synthBarAdvancedOpen ? t("收起参数", "Hide parameters") : t("⚙️ 更多参数", "⚙️ More parameters")}
+            {audioOverview.synthBarAdvancedOpen ? t("收起参数", "Hide parameters") : t("音频设置", "Audio settings")}
           </button>
           <button
             type="button"
@@ -64,12 +69,12 @@ export default function PodcastSynthBar({ audioOverview }: Props) {
               audioOverview.audioOverviewScriptLines.length < 2
             }
           >
-            {audioOverview.audioOverviewSynthBusy ? t("合成中...", "Synthesizing...") : t("🎙️ 合成", "🎙️ Synthesize")}
+            {audioOverview.audioOverviewSynthBusy ? t("合成中...", "Synthesizing...") : t("合成播客", "Generate audio")}
           </button>
         </div>
       </div>
       {audioOverview.synthBarAdvancedOpen ? (
-        <div className="vsSynthBarAdvanced">
+        <div id="podcast-audio-options" className="vsSynthBarAdvanced">
           <div className="rowOverview">
             <label>
               {t("语速", "Rate")}

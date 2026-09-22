@@ -15,13 +15,12 @@ export default function PodcastScriptEditor({ audioOverview }: Props) {
     <div className="vsPodcastStepCard">
       <div className="vsPodcastStepHeader">
         <div className="vsPodcastStepTitle">
-          <span className="vsStepNum">2</span>
           <h3>{t("编辑播客脚本", "Edit podcast script")}</h3>
         </div>
         <div className="vsPodcastToolbar">
           <button
             type="button"
-            className="ghost vsPodcastIconAction"
+            className="vsBtnGhost vsBtnSmall"
             title={t("保存脚本", "Save script")}
             aria-label={t("保存脚本", "Save script")}
             onClick={() => void audioOverview.onSaveScript()}
@@ -31,25 +30,25 @@ export default function PodcastScriptEditor({ audioOverview }: Props) {
               audioOverview.audioOverviewSynthBusy
             }
           >
-            💾
+            {t("保存", "Save")}
           </button>
           <button
             type="button"
-            className="ghost vsPodcastIconAction"
+            className="vsBtnGhost vsBtnSmall"
             title={t("复制脚本", "Copy script")}
             aria-label={t("复制脚本", "Copy script")}
             onClick={() => void audioOverview.onCopyScript()}
           >
-            ⧉
+            {t("复制", "Copy")}
           </button>
           <button
             type="button"
-            className="ghost vsPodcastIconAction"
+            className="vsBtnGhost vsBtnSmall"
             title={t("导出脚本", "Export script")}
             aria-label={t("导出脚本", "Export script")}
             onClick={audioOverview.onExportScript}
           >
-            ⤓
+            {t("导出 TXT", "Export TXT")}
           </button>
         </div>
       </div>
@@ -62,6 +61,7 @@ export default function PodcastScriptEditor({ audioOverview }: Props) {
             >
               <div className="vsScriptBubbleMeta">
                 <select
+                  aria-label={t(`第 ${index + 1} 句的主播`, `Speaker for line ${index + 1}`)}
                   className="vsRoleSelect"
                   value={line.role}
                   onChange={(e) => audioOverview.onLineRoleChange(index, e.target.value)}
@@ -79,6 +79,7 @@ export default function PodcastScriptEditor({ audioOverview }: Props) {
                 </button>
               </div>
               <textarea
+                aria-label={t(`第 ${index + 1} 句台词`, `Script line ${index + 1}`)}
                 className="vsScriptBubbleInput"
                 rows={3}
                 value={line.text}

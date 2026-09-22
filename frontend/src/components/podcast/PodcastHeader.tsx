@@ -5,17 +5,11 @@ import { useI18n } from "../../i18n";
 type Props = {
   audioOverview: UseAudioOverviewResult;
   onBackToLibrary?: () => void;
-  onSaveScript?: () => void;
-  onExportScript?: () => void;
-  hasScript?: boolean;
 };
 
 export default function PodcastHeader({
   audioOverview,
-  onBackToLibrary,
-  onSaveScript,
-  onExportScript,
-  hasScript = false
+  onBackToLibrary
 }: Props) {
   const { t } = useI18n();
   const isWorkspaceView = Boolean(onBackToLibrary);
@@ -27,10 +21,10 @@ export default function PodcastHeader({
           `Podcast #${audioOverview.audioOverviewPodcastId}: ${audioOverview.audioOverviewTopic || "Unnamed"}`
         )
       : t("新建播客草稿", "New Podcast Draft")
-    : t("播客工作台", "Podcast Studio");
+    : t("Echo 播客", "Echo Podcasts");
 
   const subtitleText = isWorkspaceView
-    ? t("播客工作台 · 从主题到剧本与合成", "Podcast Studio · Topic to script and voice synthesis")
+    ? t("Echo 播客 · 主题、脚本、音频", "Echo Podcasts · Topic, script, audio")
     : t("从一个主题开始，逐步生成脚本并合成双人播客。", "Start from one topic, generate a script, then synthesize a two-host podcast.");
 
   return (
@@ -54,42 +48,6 @@ export default function PodcastHeader({
       </div>
 
       <div className="vsPodcastHeaderActions">
-        {onSaveScript && (
-          <button
-            type="button"
-            onClick={onSaveScript}
-            disabled={audioOverview.audioOverviewSaving || audioOverview.audioOverviewBusy}
-            className="vsBtnSecondary vsBtnSmall"
-          >
-            {audioOverview.audioOverviewSaving ? t("保存中...", "Saving...") : t("保存草稿", "Save Draft")}
-          </button>
-        )}
-        {onExportScript && (
-          <button
-            type="button"
-            onClick={onExportScript}
-            disabled={!hasScript}
-            className="vsBtnSecondary vsBtnSmall"
-          >
-            {t("导出 TXT", "Export TXT")}
-          </button>
-        )}
-        <span className="vsPodcastStatusChip">{audioOverview.currentAudioOverviewLabel}</span>
-        {audioOverview.audioAgentRunId !== null ? (
-          <span className="vsPodcastStatusChip">
-            {t(
-              `Agent Run #${audioOverview.audioAgentRunId} · ${audioOverview.audioAgentStatus || "queued"}`,
-              `Agent Run #${audioOverview.audioAgentRunId} · ${audioOverview.audioAgentStatus || "queued"}`
-            )}
-          </span>
-        ) : null}
-        <span
-          className={`vsPodcastStatusChip ${audioOverview.audioOverviewMemoryConfigured ? "is-memory" : "is-muted"}`}
-        >
-          {audioOverview.audioOverviewMemoryConfigured
-            ? t("长期记忆已接入", "Long-term memory connected")
-            : t("长期记忆未接入", "Long-term memory not connected")}
-        </span>
         <button
           type="button"
           className="ghost vsPodcastMiniBtn"

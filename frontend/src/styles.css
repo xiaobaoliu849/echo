@@ -12334,6 +12334,138 @@ button.vsPasswordToggleBtn:focus-visible {
 
 
 
+/* Podcast workspace: one focused step at a time. */
+.vsPodcastWorkspace .vsPodcastContentInner {
+  max-width: 880px;
+}
+
+.vsPodcastLibraryHeading {
+  padding: 24px 24px 0;
+}
+
+.vsPodcastLibraryHeading h2,
+.vsPodcastAudioHeading {
+  margin: 0;
+  font-size: 18px;
+}
+
+.vsPodcastLibraryHeading p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.vsPodcastWorkspace .vsPodcastPromptCard {
+  background: var(--surface);
+  box-shadow: none;
+  margin-bottom: 0;
+}
+
+.vsPodcastWorkspace .vsPodcastMergedScriptArea {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.vsPodcastWorkspace .vsSynthBar {
+  position: static;
+}
+
+.vsPodcastWorkspace .vsPodcastMiniBtn {
+  width: auto;
+}
+
+.vsPodcastWorkspace .vsPodcastHeaderCopy h2,
+.vsPodcastWorkspace .vsPodcastHeaderCopy p {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.vsPodcastWorkspace .vsTopicInput,
+.vsPodcastWorkspace .vsInputSelect,
+.vsPodcastWorkspace .vsInputText,
+.vsPodcastWorkspace .vsTextareaField {
+  background: var(--surface);
+}
+
+.vsPodcastDetails {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vsPodcastDetails summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.vsPodcastDetails[open] summary {
+  margin-bottom: 12px;
+}
+
+.vsPodcastWorkspace .vsPodcastStepperTabs {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.vsPodcastWorkspace .vsPodcastStatusArea {
+  max-width: 928px;
+  display: grid;
+  gap: 12px;
+}
+
+.vsPodcastWorkspace .vsPodcastAudioHeading {
+  font-size: 16px;
+}
+
+.vsPodcastWorkspace [hidden],
+.vsPodcastStudioToolbar [hidden] {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .vsPodcastWorkspace .vsPodcastHeader {
+    flex-wrap: wrap;
+    padding: 16px;
+  }
+
+  .vsPodcastWorkspace .vsPodcastContentArea {
+    padding: 0 16px 24px;
+  }
+
+  .vsPodcastWorkspace .vsPodcastPromptCard {
+    padding: 16px;
+  }
+
+  .vsPodcastWorkspace .vsStepperBtn {
+    flex: 1;
+    height: auto;
+    min-height: 40px;
+    padding: 8px;
+  }
+
+  .vsPodcastWorkspace .vsSynthVoices,
+  .vsPodcastWorkspace .vsSynthVoiceSelect {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .vsPodcastWorkspace .vsSynthVoiceSelect select {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .vsPodcastWorkspace .vsAdvancedGridTwo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .vsPodcastWorkspace .vsTopicActionBar {
+    flex-wrap: wrap;
+  }
+}
+
 /* ===== PAL (Tavus video) workspace ===== */
 .vsWorkspaceViewportInner.is-pal {
   height: 100% !important;

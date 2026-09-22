@@ -1,7 +1,6 @@
 import { PROVIDERS } from "../../appConfig";
 import type { UseAudioOverviewResult } from "../../hooks/useAudioOverview";
 import { useI18n } from "../../i18n";
-import type { MouseEvent } from "react";
 
 type Props = {
   audioOverview: UseAudioOverviewResult;
@@ -10,20 +9,13 @@ type Props = {
 export default function PodcastTopicStep({ audioOverview }: Props) {
   const { t } = useI18n();
 
-  const handleGenerateClick = (event: MouseEvent<HTMLButtonElement>) => {
-    void audioOverview.onGenerateScript(
-      event as unknown as Parameters<typeof audioOverview.onGenerateScript>[0]
-    );
-  };
-
   return (
     <form className="vsPodcastPromptCard" onSubmit={audioOverview.onGenerateScript}>
       <div className="vsPodcastPromptHeader">
-        <div className="vsPodcastPromptBadge">Step 1</div>
         <div>
-          <h3 className="vsPodcastPromptTitle">{t("确定播客主题", "Choose the podcast topic")}</h3>
+          <h3 id="podcast-topic-label" className="vsPodcastPromptTitle">{t("确定播客主题", "Choose the podcast topic")}</h3>
           <p className="vsPodcastPromptDesc">
-            {t("输入你想讨论的话题，AI 将为你自动生成对话剧本并匹配双人语音。", "Enter a topic and AI will draft a dual-host dialogue script and assign natural voices.")}
+            {t("输入一个话题，生成双人对话脚本。下一步可编辑内容并选择声音。", "Start with a topic. Then review the script and choose voices for your two hosts.")}
           </p>
         </div>
       </div>
@@ -31,6 +23,7 @@ export default function PodcastTopicStep({ audioOverview }: Props) {
       <div className="vsPodcastPromptBody">
         <div className="vsTopicInputWrap">
           <textarea
+            aria-labelledby="podcast-topic-label"
             className="vsTopicInput"
             rows={4}
             value={audioOverview.audioOverviewTopic}
@@ -45,17 +38,18 @@ export default function PodcastTopicStep({ audioOverview }: Props) {
             <button
               type="button"
               className={`vsBtnGhost vsBtnSmall vsAdvancedBtn ${audioOverview.audioOverviewAdvancedOpen ? "is-open" : ""}`}
+              aria-expanded={audioOverview.audioOverviewAdvancedOpen}
+              aria-controls="podcast-options"
               onClick={audioOverview.onToggleAdvanced}
             >
               {audioOverview.audioOverviewAdvancedOpen
-                ? t("收起高级设置 ▴", "Hide advanced ▴")
-                : t("⚙️ 高级设置 ▾", "⚙️ Advanced settings ▾")}
+                ? t("收起设置与资料", "Hide settings & sources")
+                : t("设置与参考资料", "Settings & sources")}
             </button>
 
             <button
-              type="button"
+              type="submit"
               className="vsBtnPrimary vsGenerateBtn"
-              onClick={handleGenerateClick}
               disabled={audioOverview.audioOverviewBusy || !audioOverview.audioOverviewTopic.trim()}
             >
               {audioOverview.audioOverviewBusy ? (
@@ -71,9 +65,9 @@ export default function PodcastTopicStep({ audioOverview }: Props) {
         </div>
 
         {audioOverview.audioOverviewAdvancedOpen && (
-          <div className="vsPodcastAdvancedDrawer">
-            <div className="vsAdvancedSectionTitle">{t("⚙️ 模型与参数配置", "⚙️ Model & Parameter Settings")}</div>
-            
+          <div id="podcast-options" className="vsPodcastAdvancedDrawer">
+            <div className="vsAdvancedSectionTitle">{t("生成设置", "Generation settings")}</div>
+
             <div className="vsAdvancedGrid">
               <label className="vsPodcastField">
                 <span className="vsPodcastFieldLabel">{t("语言", "Language")}</span>
@@ -126,8 +120,8 @@ export default function PodcastTopicStep({ audioOverview }: Props) {
               </label>
             </div>
 
-            <div className="vsAdvancedSectionTitle">{t("🧠 长期记忆联动 (EverMem)", "🧠 Long-term Memory (EverMem)")}</div>
-            
+            <div className="vsAdvancedSectionTitle">{t("长期记忆（可选）", "Memory (optional)")}</div>
+
             <label className="vsPodcastMemoryCard">
               <input
                 type="checkbox"
@@ -156,7 +150,7 @@ export default function PodcastTopicStep({ audioOverview }: Props) {
               </div>
             ) : null}
 
-            <div className="vsAdvancedSectionTitle">{t("📚 参考资料与约束", "📚 Reference Materials & Constraints")}</div>
+            <div className="vsAdvancedSectionTitle">{t("参考资料（可选）", "Sources (optional)")}</div>
 
             <div className="vsAdvancedGridTwo">
               <label className="vsPodcastField">
