@@ -1118,14 +1118,14 @@ button:focus-visible {
   min-height: 100%;
   height: 100%;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background:
     radial-gradient(circle at top center, color-mix(in oklab, var(--accent-soft) 34%, transparent) 0%, transparent 30%),
     linear-gradient(180deg, var(--bg-primary) 0, color-mix(in oklab, var(--bg-secondary) 84%, var(--accent-soft)) 100%);
 }
 
 .vsChatWorkspace:has(.vsChatBody.liveActive) {
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .vsTopbar {
@@ -12797,6 +12797,8 @@ button.vsPasswordToggleBtn:focus-visible {
 
 /* Canvas Styles */
 .vsCanvasToolbar {
+  flex-wrap: wrap;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -12846,7 +12848,7 @@ button.vsPasswordToggleBtn:focus-visible {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 140px;
 }
 
 .vsCanvasTitle {
@@ -12861,9 +12863,12 @@ button.vsPasswordToggleBtn:focus-visible {
 
 .vsCanvasControlsWrap {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .vsCanvasDivider {
@@ -13013,29 +13018,46 @@ button.vsCanvasIconActionBtn.danger:hover:not(:disabled) {
   width: 100%;
   height: 100%;
   min-height: 100%;
-  display: flex;
-  flex-direction: row;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
 .vsChatOuterLayout > .vsChatWorkspace {
-  flex: 1;
   min-width: 0;
+  min-height: 0;
   width: 100%;
   height: 100%;
   position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  container-type: inline-size;
+  container-name: chat-pane;
 }
 
 .vsChatCanvasToggleWrap {
-  position: absolute;
-  top: 14px;
-  right: 20px;
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 20px 6px;
   z-index: 35;
   pointer-events: auto;
 }
 
-.vsChatOuterLayout.hasCanvasSidePanel .vsChatCanvasToggleWrap {
-  right: calc(48% + 14px);
+.hasCanvasSidePanel .vsChatBody {
+  padding: 16px clamp(16px, 4cqw, 40px) 24px;
+}
+
+.vsChatBody,
+.vsComposerWrap,
+.vsMessageList,
+.vsComposer {
+  min-width: 0;
+}
+
+.vsVoiceReadOnlyChip {
+  max-width: min(320px, 100%);
+  min-width: 0;
 }
 
 .vsChatCanvasToggleBtn {
@@ -13080,9 +13102,9 @@ button.vsCanvasIconActionBtn.danger:hover:not(:disabled) {
 }
 
 .vsChatCanvasSidePanel {
-  width: 48%;
-  min-width: 360px;
-  max-width: 720px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -13092,19 +13114,99 @@ button.vsCanvasIconActionBtn.danger:hover:not(:disabled) {
   z-index: 20;
 }
 
-@media (max-width: 860px) {
-  .vsChatOuterLayout.hasCanvasSidePanel {
-    flex-direction: column !important;
+/* The splitter owns its track, so neither pane can cover the other. */
+.vsCanvasResizeHandle {
+  cursor: col-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  z-index: 21;
+}
+
+.vsCanvasResizeHandle::after {
+  content: "";
+  width: 3px;
+  height: 40px;
+  border-radius: 3px;
+  background: var(--border-color);
+  transition: background 0.15s, height 0.15s;
+}
+
+.vsCanvasResizeHandle:hover::after,
+.vsCanvasResizeHandle:focus-visible::after,
+.canvasResizing .vsCanvasResizeHandle::after {
+  height: 64px;
+  background: var(--brand);
+}
+
+.vsCanvasResizeHandle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.canvasResizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.canvasResizing iframe {
+  pointer-events: none;
+}
+
+.vsCanvasContent {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.vsCanvasPreviewFrame {
+  display: block;
+}
+
+.vsChatOuterLayout.hasCanvasSidePanel.canvasCompact {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.canvasCompact .vsChatCanvasSidePanel {
+  border-left: none;
+  border-top: 1px solid var(--border-color);
+}
+
+@container chat-pane (max-width: 680px) {
+  .vsLiveVoiceStatusBanner {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
   }
-  .vsChatOuterLayout.hasCanvasSidePanel .vsChatCanvasToggleWrap {
-    right: 20px;
+  .vsVoiceStatusSection {
+    flex: 1 1 100%;
+    overflow: visible;
+    flex-wrap: wrap;
   }
-  .vsChatCanvasSidePanel {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 50% !important;
-    border-left: none !important;
-    border-top: 1px solid var(--border-color);
+  .vsVoiceStatusText {
+    white-space: normal;
+  }
+  .vsVoiceVisualizerContainer {
+    min-width: 48px;
+    max-width: none;
+    flex: 1 1 48px;
+  }
+  .vsComposerWrap,
+  .vsComposerWrap.liveActive {
+    width: calc(100% - 24px);
+  }
+  .vsComposer {
+    padding: 12px;
+  }
+  .vsVoiceControlsGroup {
+    margin-left: auto;
   }
 }
 

@@ -4,6 +4,32 @@ import ChatPage from './ChatPage';
 import { createChatController, createVoiceChatController } from '../test/factories';
 
 describe('ChatPage', () => {
+    it('keeps a live canvas mounted while resizing and preserves it when reopened', () => {
+        const toggleMute = vi.fn();
+        render(<ChatPage
+            chat={createChatController()}
+            voiceChat={createVoiceChatController({
+                voiceChatProvider: 'AgentPlatform',
+                voiceChatModel: 'gemini-live-2.5-flash-native-audio',
+                voiceChatConnected: true,
+                voiceChatRecording: true,
+                onToggleMute: toggleMute,
+                voiceChatCanvas: { mode: 'html', title: 'Cat', code: '<h1>Cat</h1>' },
+            })}
+            errorRuntimeContext={{}}
+        />);
+        const preview = screen.getByTitle('画布预览');
+        fireEvent.keyDown(screen.getByRole('separator', { name: '调整画布宽度' }), { key: 'ArrowLeft' });
+        expect(screen.getByTitle('画布预览')).toBe(preview);
+        fireEvent.click(screen.getByRole('button', { name: '静音麦克风' }));
+        expect(toggleMute).toHaveBeenCalledOnce();
+        expect(screen.getByRole('button', { name: '挂断实时通话' })).toBeEnabled();
+        fireEvent.click(screen.getByRole('button', { name: '关闭侧边画布' }));
+        expect(screen.queryByTitle('画布预览')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '画布' }));
+        expect(screen.getByTitle('画布预览')).toHaveAttribute('srcdoc', expect.stringContaining('<h1>Cat</h1>'));
+    });
+
     it('allows selecting messages and copying an individual bubble', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(globalThis.navigator, 'clipboard', {
@@ -489,4 +515,3 @@ describe('ChatPage', () => {
         expect(screen.queryByText('词汇量，词汇')).not.toBeInTheDocument();
     });
 });
-

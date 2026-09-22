@@ -8,6 +8,7 @@ import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import CanvasPreview from "../components/canvas/CanvasPreview";
 import CanvasCodeView from "../components/canvas/CanvasCodeView";
+import { useCanvasLayout } from "../hooks/useCanvasLayout";
 import { PanelRight, Code2, Monitor, X, Trash2 } from "lucide-react";
 import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
@@ -429,6 +430,7 @@ export default function ChatPage({
 
   // ── Visual Canvas Side Panel State ──
   const [showCanvas, setShowCanvas] = useState(false);
+  const canvasLayout = useCanvasLayout(showCanvas);
   const [canvasMode, setCanvasMode] = useState<"react" | "html">("react");
   const [canvasView, setCanvasView] = useState<"preview" | "code">("preview");
   const [canvasCode, setCanvasCode] = useState("");
@@ -847,13 +849,21 @@ export default function ChatPage({
   }, [chat, voiceChat, isVoiceActive, onOpenPal]);
 
   return (
-    <div className={`vsChatOuterLayout ${showCanvas ? "hasCanvasSidePanel" : ""}`}>
+    <div
+      ref={canvasLayout.layoutRef}
+      className={`vsChatOuterLayout ${showCanvas ? "hasCanvasSidePanel" : ""} ${canvasLayout.compact ? "canvasCompact" : ""} ${canvasLayout.resizing ? "canvasResizing" : ""}`}
+      style={showCanvas && !canvasLayout.compact ? { gridTemplateColumns: `minmax(0, ${100 - canvasLayout.width}fr) 10px minmax(0, ${canvasLayout.width}fr)` } : undefined}
+    >
+      {/* ── Main Chat Workspace ── */}
+      <section className="vsChatWorkspace">
       {/* ── Top Bar Controls (Canvas Toggle) ── */}
       <div className="vsChatCanvasToggleWrap">
         <button
           type="button"
           className={`vsChatCanvasToggleBtn ${showCanvas ? "active" : ""}`}
           onClick={() => setShowCanvas((prev) => !prev)}
+          aria-expanded={showCanvas}
+          aria-controls={showCanvas ? "chat-canvas-panel" : undefined}
           title={showCanvas ? t("关闭侧边画布", "Close Canvas") : t("打开侧边画布", "Open Canvas")}
         >
           <PanelRight size={15} />
@@ -862,8 +872,6 @@ export default function ChatPage({
         </button>
       </div>
 
-      {/* ── Main Chat Workspace ── */}
-      <section className="vsChatWorkspace" style={{ position: "relative" }}>
         {/* ── Body ── */}
         <div
           ref={bodyRef}
@@ -1150,7 +1158,22 @@ export default function ChatPage({
 
       {/* ── Right Column: Visual Canvas Side Panel ── */}
       {showCanvas && (
-        <aside className="vsChatCanvasSidePanel">
+        <>
+        {!canvasLayout.compact && <div
+          className="vsCanvasResizeHandle"
+          role="separator"
+          tabIndex={0}
+          aria-label={t("调整画布宽度", "Resize canvas")}
+          aria-orientation="vertical"
+          aria-controls="chat-canvas-panel"
+          aria-valuemin={Math.round(canvasLayout.min)}
+          aria-valuemax={Math.round(canvasLayout.max)}
+          aria-valuenow={Math.round(canvasLayout.width)}
+          aria-valuetext={t(`画布宽度 ${Math.round(canvasLayout.width)}%`, `Canvas width ${Math.round(canvasLayout.width)}%`)}
+          title={t("拖动调整宽度；左右方向键微调，双击重置", "Drag to resize; arrow keys to adjust, double-click to reset")}
+          {...canvasLayout.separatorProps}
+        />}
+        <aside id="chat-canvas-panel" className="vsChatCanvasSidePanel" aria-label={t("画布", "Canvas")}>
           <div className="vsCanvasToolbar">
             <div className="vsCanvasTitleWrap">
               <span className="vsCanvasTitle" title={canvasTitle || t("实时画布", "Realtime Canvas")}>
@@ -1237,7 +1260,7 @@ export default function ChatPage({
             </div>
           </div>
 
-          <div style={{ flex: 1, overflow: "hidden", position: "relative", display: "flex", flexDirection: "column" }}>
+          <div className="vsCanvasContent">
             {!canvasCode ? (
               <div
                 className="vsCanvasEmptyState"
@@ -1304,6 +1327,7 @@ export default function ChatPage({
             )}
           </div>
         </aside>
+        </>
       )}
     </div>
   );
