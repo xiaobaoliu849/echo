@@ -1,6 +1,5 @@
 export type ActiveTab =
   | "chat"
-  | "translate"
   | "tts"
   | "voice_design"
   | "voice_clone"
@@ -8,7 +7,6 @@ export type ActiveTab =
   | "voice_center"
   | "audio_overview"
   | "pal"
-  | "canvas"
   | "settings";
 
 export type SidebarItem = {

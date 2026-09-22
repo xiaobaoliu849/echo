@@ -3,7 +3,6 @@ import type { UseAudioOverviewResult } from "../hooks/useAudioOverview";
 import { vi } from "vitest";
 import type { UseChatResult } from "../hooks/useChat";
 import type { UseSettingsResult } from "../hooks/useSettings";
-import type { UseTranslateResult } from "../hooks/useTranslate";
 import type { UseTtsResult } from "../hooks/useTts";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import type { UiLanguage } from "../i18n";
@@ -201,39 +200,6 @@ export function createVoiceChatController(
     assistantAnalyser: null,
     voiceChatCanvas: overrides.voiceChatCanvas ?? null,
     setVoiceChatCanvas: overrides.setVoiceChatCanvas ?? vi.fn(),
-    ...overrides
-  };
-}
-
-export function createTranslateController(
-  overrides: Partial<UseTranslateResult> = {}
-): UseTranslateResult {
-  return {
-    translateProvider: "TestProvider",
-    translateModel: "",
-    translateInput: "",
-    sourceLanguage: "auto",
-    targetLanguage: "en",
-    translateBusy: false,
-    translateError: "",
-    translateInfo: "",
-    translateResult: "Mock translation",
-    speakingTarget: null,
-    onSubmit: vi.fn(),
-    onProviderChange: vi.fn(),
-    onModelChange: vi.fn(),
-    onInputChange: vi.fn(),
-    onSourceLanguageChange: vi.fn(),
-    onTargetLanguageChange: vi.fn(),
-    onSwapLanguages: vi.fn(),
-    onCopySource: vi.fn(),
-    onCopyResult: vi.fn(),
-    onSpeakSource: vi.fn(),
-    onSpeakResult: vi.fn(),
-    onPasteInput: vi.fn(),
-    onClearSource: vi.fn(),
-    onClearResult: vi.fn(),
-    onClearAll: vi.fn(),
     ...overrides
   };
 }
@@ -625,5 +591,3 @@ export function createVoiceCloneController(
     ...overrides
   };
 }
-
-export function createCanvasController(overrides: Partial<any> = {}) { return { messages: [], currentCode: '', codeHistory: [], isGenerating: false, thinkingContent: '', mode: 'react', activeView: 'preview', error: '', generateFromPrompt: vi.fn(), reviseCode: vi.fn(), undo: vi.fn(), clearCanvas: vi.fn(), setMode: vi.fn(), setActiveView: vi.fn(), ...overrides }; }

@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from routers import agent_runs, audio_agent, audio_overview, auth, canvas, chat, documents, evermem, realtime_local, settings, tavus, transcription, translate, tts, voice_chat, voices
+from routers import agent_runs, audio_agent, audio_overview, auth, chat, documents, evermem, realtime_local, settings, tavus, transcription, translate, tts, voice_chat, voices
 from services.api_auth_guard import (
     is_auth_enabled,
     should_enforce_auth,
@@ -323,7 +323,6 @@ def create_app() -> FastAPI:
     app.include_router(transcription.router, prefix="/api/transcription", tags=["transcription"])
     app.include_router(voice_chat.router, prefix="/api/voice-chat", tags=["voice-chat"])
     app.include_router(realtime_local.router, prefix="/api/realtime-local", tags=["realtime-local"])
-    app.include_router(canvas.router, prefix="/api/canvas", tags=["canvas"])
 
     frontend_dist_env = os.environ.get("VOICESPIRIT_FRONTEND_DIST", "").strip()
     frontend_dist = (

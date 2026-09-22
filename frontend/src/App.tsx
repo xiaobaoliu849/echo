@@ -23,14 +23,11 @@ import useChat from "./hooks/useChat";
 import useAudioOverview from "./hooks/useAudioOverview";
 import useSettings from "./hooks/useSettings";
 import useTts from "./hooks/useTts";
-import useTranslate from "./hooks/useTranslate";
 import useVoiceChat from "./hooks/useVoiceChat";
 import useVoiceManagement from "./hooks/useVoiceManagement";
 const AudioOverviewPage = lazyWithRetry(() => import("./pages/AudioOverviewPage"));
 const ChatPage = lazyWithRetry(() => import("./pages/ChatPage"));
 const PalPage = lazyWithRetry(() => import("./pages/PalPage"));
-const CanvasPage = lazyWithRetry(() => import("./pages/CanvasPage"));
-const TranslatePage = lazyWithRetry(() => import("./pages/TranslatePage"));
 const VoiceCenterPage = lazyWithRetry(() => import("./pages/VoiceCenterPage"));
 import { I18nProvider, createInlineTranslator, localizeText, type UiLanguage } from "./i18n";
 import { formatErrorMessage } from "./utils/errorFormatting";
@@ -237,8 +234,6 @@ export default function App() {
   });
   const { errorRuntimeContext } = settings;
 
-  const translate = useTranslate({ formatErrorMessage, language: uiLanguage });
-
   useEffect(() => {
     const handleOpenSettings = (e: Event) => {
       const customEvent = e as CustomEvent<{ category?: string; provider?: string }>;
@@ -261,8 +256,7 @@ export default function App() {
   const selfScrollingTab =
     activeTab === "transcription" ||
     activeTab === "voice_center" ||
-    activeTab === "pal" ||
-    activeTab === "canvas";
+    activeTab === "pal";
   const normalizedConversationHistory = useMemo(
     () => normalizeConversationHistory(conversationHistory),
     [conversationHistory],
@@ -512,10 +506,6 @@ export default function App() {
                   />
                 ) : null}
 
-                {activeTab === "translate" ? (
-                  <TranslatePage translate={translate} errorRuntimeContext={errorRuntimeContext} />
-                ) : null}
-
                 {activeTab === "audio_overview" ? (
                   <AudioOverviewPage audioOverview={audioOverview} errorRuntimeContext={errorRuntimeContext} />
                 ) : null}
@@ -527,11 +517,6 @@ export default function App() {
                   />
                 ) : null}
 
-                {activeTab === "canvas" ? (
-                  <CanvasPage
-                    errorRuntimeContext={errorRuntimeContext}
-                  />
-                ) : null}
                 </Suspense>
               </div>
             </div>

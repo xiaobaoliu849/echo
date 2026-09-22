@@ -22,7 +22,6 @@ vi.mock("./api", async () => {
     saveAudioOverviewScript: vi.fn(),
     synthesizeAudioOverviewPodcast: vi.fn(),
     updateSettings: vi.fn(),
-    translateText: vi.fn(),
     streamChatCompletion: vi.fn(),
     transcribeAudio: vi.fn(),
     createTranscriptionJob: vi.fn(),
@@ -46,7 +45,6 @@ const mockedListCustomVoices = vi.mocked(api.listCustomVoices);
 const mockedListAudioOverviewPodcasts = vi.mocked(api.listAudioOverviewPodcasts);
 const mockedGetAudioOverviewPodcast = vi.mocked(api.getAudioOverviewPodcast);
 const mockedFetchAudioOverviewPodcastAudio = vi.mocked(api.fetchAudioOverviewPodcastAudio);
-const mockedTranslateText = vi.mocked(api.translateText);
 const mockedStreamChatCompletion = vi.mocked(api.streamChatCompletion);
 const mockedTranscribeAudio = vi.mocked(api.transcribeAudio);
 const mockedCreateTranscriptionJob = vi.mocked(api.createTranscriptionJob);
@@ -156,11 +154,6 @@ describe("App interactions", () => {
     mockedFetchSpeakAudio.mockResolvedValue({
       blob: new Blob(["tts"], { type: "audio/mpeg" }),
       memorySaved: true
-    });
-    mockedTranslateText.mockResolvedValue({
-      provider: "DashScope",
-      model: "qwen-plus",
-      translated_text: "This is the translated result."
     });
     mockedTranscribeAudio.mockResolvedValue({
       transcript: "同步转写结果",
