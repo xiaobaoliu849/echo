@@ -99,7 +99,9 @@
 .podcastLibrary .podcastEpisodeOpen { display: flex; flex-direction: column; align-items: stretch; gap: 20px; flex: 1; padding: 20px; border: 0; border-radius: 0; background: transparent; box-shadow: none; transform: none; text-align: left; font: inherit; color: var(--text); cursor: pointer; }
 .podcastEpisodeTop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .podcastEpisodeState { color: var(--muted); font-size: 11px; }
-.podcastEpisodeOpen h3 { margin: 0; font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; }
+/* Topics can be a full paragraph; clamp so one long episode cannot stretch its
+   card far past its neighbours. The full text stays in the DOM for tests/AT. */
+.podcastEpisodeOpen h3 { margin: 0; font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 .podcastEpisodeLink { display: flex; align-items: center; gap: 5px; color: var(--brand); font-size: 12px; margin-top: auto; }
 .podcastEpisodeFooter { display: flex; align-items: center; justify-content: space-between; margin: 0 20px; padding: 10px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .podcastLibrary .podcastEpisodeFooter button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; background: transparent; box-shadow: none; transform: none; color: var(--muted); cursor: pointer; }
