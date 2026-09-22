@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Dna, FileText, RefreshCw, Search } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import { VoiceCard } from "../components/VoiceCard";
 import type { VoiceCloneController, VoiceProviderId } from "../hooks/useVoiceManagement";
@@ -162,7 +162,9 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
 
                 {clone.cloneAudioFile && (
                   <div className="vsVoiceStudioFileChip">
-                    <span className="vsVoiceStudioFileChipIcon">📄</span>
+                    <span className="vsVoiceStudioFileChipIcon">
+                      <FileText size={18} aria-hidden="true" />
+                    </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="vsVoiceStudioFileChipName">
                         {clone.cloneAudioFile.name}
@@ -192,7 +194,7 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
       {/* Toolbar */}
       <div className="vsVoiceStudioToolbar">
         <div className="vsVoiceStudioSearch">
-          <span className="vsVoiceStudioSearchIcon">🔍</span>
+          <Search className="vsVoiceStudioSearchIcon" size={15} aria-hidden="true" />
           <input
             type="text"
             value={searchQuery}
@@ -204,12 +206,13 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
         <div className="vsVoiceStudioActions">
           <button
             onClick={() => void clone.onRefresh()}
-            className="vsBtnGhost"
+            className="vsBtnGhost vsVoiceStudioRefreshBtn"
             style={{ fontSize: 12, padding: "6px 12px" }}
             title={t("刷新", "Refresh")}
             disabled={clone.cloneListBusy}
           >
-            ↻ {clone.cloneListBusy ? t("刷新中...", "Refreshing...") : t("刷新", "Refresh")}
+            <RefreshCw size={13} aria-hidden="true" />
+            {clone.cloneListBusy ? t("刷新中...", "Refreshing...") : t("刷新", "Refresh")}
           </button>
           <button
             onClick={handleNewClone}
@@ -220,9 +223,13 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
               padding: "0 18px",
               borderRadius: 10,
               fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            ✨ {t("克隆新音色", "Clone New Voice")}
+            <Dna size={15} aria-hidden="true" />
+            {t("克隆新音色", "Clone New Voice")}
           </button>
         </div>
       </div>
@@ -240,7 +247,9 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
           </div>
         ) : filteredVoices.length === 0 ? (
           <div className="vsVoiceStudioEmpty">
-            <div className="vsVoiceStudioEmptyIcon">🧬</div>
+            <div className="vsVoiceStudioEmptyIcon">
+              <Dna size={34} strokeWidth={1.6} aria-hidden="true" />
+            </div>
             <h3 className="vsVoiceStudioEmptyTitle">
               {searchQuery
                 ? t("没有匹配的音色", "No matching voices")

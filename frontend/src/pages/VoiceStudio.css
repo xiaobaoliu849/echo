@@ -65,6 +65,13 @@
   pointer-events: none;
 }
 
+/* Keeps the refresh glyph optically aligned with its label. */
+.vsVoiceStudioRefreshBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .vsVoiceStudioActions {
   display: flex;
   align-items: center;
@@ -330,6 +337,9 @@
 .vsVoiceStudioFileChipIcon {
   font-size: 20px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
 }
 
 .vsVoiceStudioFileChipName {

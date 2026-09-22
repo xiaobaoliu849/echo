@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { AlignLeft, Dna, FileText, PenLine, Sparkles, Users } from "lucide-react";
 import { useI18n } from "../i18n";
 const TtsPage = lazy(() => import("./TtsPage"));
 const VoiceDesignPage = lazy(() => import("./VoiceDesignPage"));
@@ -81,19 +82,19 @@ export default function VoiceCenterPage({
   const ttsModes = [
     {
       id: "text" as const,
-      icon: "📄",
+      icon: <AlignLeft />,
       label: t("文本转语音", "Text to speech"),
       desc: t("单人自然朗读 · 适合正文与旁白", "Single natural speaker for narration & prose"),
     },
     {
       id: "dialogue" as const,
-      icon: "👥",
+      icon: <Users />,
       label: t("对话转语音", "Dialogue to speech"),
       desc: t("双人角色对谈 · 适合播客与情景剧", "Two-speaker dialogue for podcasts & role-play"),
     },
     {
       id: "pdf" as const,
-      icon: "📑",
+      icon: <FileText />,
       label: t("PDF 转语音", "PDF to speech"),
       desc: t("PDF 文档提炼 · 支持 AI 口语化润色", "Extract from PDF with AI oralization polishing"),
     },
@@ -102,9 +103,9 @@ export default function VoiceCenterPage({
   const currentTtsMode = ttsModes.find((m) => m.id === tts.ttsMode) || ttsModes[0];
 
   const otherTabs = [
-    { id: "design" as const, label: t("设计音色", "Voice Design"), icon: "✨" },
-    { id: "clone" as const, label: t("音色克隆", "Voice Clone"), icon: "🧬" },
-    { id: "transcribe" as const, label: t("一键转写", "Transcribe"), icon: "📝" },
+    { id: "design" as const, label: t("设计音色", "Voice Design"), icon: <Sparkles /> },
+    { id: "clone" as const, label: t("音色克隆", "Voice Clone"), icon: <Dna /> },
+    { id: "transcribe" as const, label: t("一键转写", "Transcribe"), icon: <PenLine /> },
   ];
 
   return (

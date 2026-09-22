@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, RefreshCw, Search, Sparkles } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import { VoiceCard } from "../components/VoiceCard";
 import type { VoiceDesignController, VoiceProviderId } from "../hooks/useVoiceManagement";
@@ -188,7 +188,7 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
       {/* Toolbar */}
       <div className="vsVoiceStudioToolbar">
         <div className="vsVoiceStudioSearch">
-          <span className="vsVoiceStudioSearchIcon">🔍</span>
+          <Search className="vsVoiceStudioSearchIcon" size={15} aria-hidden="true" />
           <input
             type="text"
             value={searchQuery}
@@ -200,12 +200,13 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
         <div className="vsVoiceStudioActions">
           <button
             onClick={() => void design.onRefresh()}
-            className="vsBtnGhost"
+            className="vsBtnGhost vsVoiceStudioRefreshBtn"
             style={{ fontSize: 12, padding: "6px 12px" }}
             title={t("刷新", "Refresh")}
             disabled={design.designListBusy}
           >
-            ↻ {design.designListBusy ? t("刷新中...", "Refreshing...") : t("刷新", "Refresh")}
+            <RefreshCw size={13} aria-hidden="true" />
+            {design.designListBusy ? t("刷新中...", "Refreshing...") : t("刷新", "Refresh")}
           </button>
           <button
             onClick={handleNewDesign}
@@ -216,9 +217,13 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
               padding: "0 18px",
               borderRadius: 10,
               fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            ✨ {t("设计新音色", "Design New Voice")}
+            <Sparkles size={15} aria-hidden="true" />
+            {t("设计新音色", "Design New Voice")}
           </button>
         </div>
       </div>
@@ -236,7 +241,9 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
           </div>
         ) : filteredVoices.length === 0 ? (
           <div className="vsVoiceStudioEmpty">
-            <div className="vsVoiceStudioEmptyIcon">✨</div>
+            <div className="vsVoiceStudioEmptyIcon">
+              <Sparkles size={34} strokeWidth={1.6} aria-hidden="true" />
+            </div>
             <h3 className="vsVoiceStudioEmptyTitle">
               {searchQuery
                 ? t("没有匹配的音色", "No matching voices")

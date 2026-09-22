@@ -6041,6 +6041,16 @@ button.danger:focus-visible {
 .vsVoiceSubTabIcon {
   font-size: 14px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Tab icons are lucide SVGs: let them track the label's font-size so the
+   unified tab (14px) and its dropdown menu (16px) both stay balanced. */
+.vsVoiceSubTabIcon svg,
+.vsVoiceSubTabMenuIcon svg {
+  width: 1em;
+  height: 1em;
 }
 
 .vsVoiceSubTabLabel {
@@ -6292,6 +6302,8 @@ button.danger:focus-visible {
   font-size: 16px;
   line-height: 1;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
 }
 
 .vsVoiceSubTabMenuText {
