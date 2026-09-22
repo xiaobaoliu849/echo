@@ -25,8 +25,10 @@ the build. Nothing is automatically published to GitHub Releases.
 
 For the in-app update flow, signing requirements and release validation, see
 [Application Updates](Application_Updates.md). Before publishing, run
-`node scripts/verify_update_release.cjs`; an unsigned local test build is not a
-production release candidate.
+`node scripts/verify_update_release.cjs` for signed releases. An explicitly
+approved unsigned release uses `--allow-unsigned` and must disclose the Windows
+unknown-publisher warning. Both modes verify release metadata, size and checksum;
+the unsigned option never permits an invalid signature or a publisher mismatch.
 
 Do not freeze the backend from a global Conda/ML environment. Do not manually
 delete DLLs or package directories to reduce installer size. The tracked spec

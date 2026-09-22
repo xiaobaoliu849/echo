@@ -44,7 +44,7 @@ Electron development builds explain that installed Windows builds are required.
 
 1. Update `electron/package.json` and both root version entries in its lockfile.
    This implementation prepares **1.0.2**; published **1.0.1** predates it.
-2. Configure a real Windows signing identity in the secure build environment
+2. For a signed release, configure a real Windows signing identity in the secure build environment
    using electron-builder's supported signing configuration. Do not commit
    certificates, passwords or GitHub tokens. The generated `app-update.yml` must
    contain the matching `publisherName`. Use `forceCodeSigning: true` for release
@@ -53,13 +53,19 @@ Electron development builds explain that installed Windows builds are required.
    backend, builds the desktop frontend and NSIS installer and smoke-tests it.
    New installers use `Echo-Setup-<version>.exe` on disk and in the feed, so
    manually uploaded assets do not need renaming.
-4. Run `node scripts/verify_update_release.cjs`. This deliberately refuses
-   unsigned releases, stale metadata, mismatched checksum/size or publisher.
+4. Run `node scripts/verify_update_release.cjs`. This defaults to requiring a
+   signature. For an explicitly approved unsigned release, use
+   `node scripts/verify_update_release.cjs --allow-unsigned` and disclose the
+   Windows unknown-publisher warning. Both modes reject stale metadata and
+   mismatched checksum/size; the option only allows an actually unsigned installer
+   with no configured publisher, never an invalid signature or publisher mismatch.
 5. In an isolated Windows test account/VM, install the previous version, create
    disposable settings/history, and update through its existing Settings →
    System controls. Verify the new installed version, preserved data, backend
    shutdown/restart, cancel/Later behavior and uninstall behavior. Never use a
    developer's real profile or installed copy for destructive release testing.
+   If this environment is unavailable, disclose that installed-version upgrade
+   and data-preservation behavior have not been verified end to end.
 6. Once approved for publication, publish a stable GitHub release tagged with
    the same version and release notes. Upload the installer, its `.blockmap`,
    and **latest.yml from the same build** as one complete release. A draft can
@@ -89,9 +95,15 @@ unsigned data when a signing publisher is configured. They do not execute a real
 installer. The desktop smoke test checks packaged preload/state/version and opens
 Settings → System, saving `output/electron-update-settings.png`.
 
-Remaining release gates: a real signing identity, a signed candidate, publication
-approval, and a real installed-version upgrade with data preservation. No release
-is automatically published by this work.
+The v1.0.2 release follows the existing v1.0.1 unsigned distribution model, with
+the owner's instruction to proceed. Its source includes the latest main-branch
+fixes through PR #26. Verification passed: 19 Electron tests, 584 frontend tests,
+984 backend tests (plus 99 subtests), the desktop production build, frozen-backend
+smoke test, Electron UI/IPC/shutdown smoke test and extracted installer payload
+verification. Windows signing is not configured. A real installed-version upgrade
+with existing user data has not been verified in an isolated Windows account/VM;
+the extraction smoke test does not establish that result. Build and validation
+scripts do not automatically publish releases.
 
 Reference: [electron-builder v26 update documentation](https://www.electron.build/v26/docs/features/auto-update/).
 Implementation behavior is checked against the locally installed electron-updater
