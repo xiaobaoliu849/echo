@@ -25,6 +25,15 @@ import {
   PanelRight
 } from "lucide-react";
 
+/** Below this viewport width the expanded rail would crowd out the content. */
+const NARROW_SIDEBAR_BREAKPOINT = 700;
+
+/** null = the user has never toggled the rail, so the viewport is free to decide. */
+function readStoredCollapsePref(): boolean | null {
+  const saved = localStorage.getItem("vs_sidebar_collapsed");
+  return saved === null ? null : saved === "true";
+}
+
 const IconMap: Record<string, React.ElementType> = {
   Bot,
   Languages,
@@ -78,10 +87,51 @@ function AppSidebar({
   isSettingsOpen = false,
 }: Props) {
   const { t } = useI18n();
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    const saved = localStorage.getItem("vs_sidebar_collapsed");
-    return saved === "true";
-  });
+  // A stored value means the user already chose a state: honour it and never
+  // second-guess it. Without one the viewport decides, and it decides before
+  // first paint so a narrow window never shows a 216px rail collapsing 340ms
+  // later (216px is 45% of a 480px viewport).
+  const [storedCollapsed] = useState(readStoredCollapsePref);
+  const startsNarrow =
+    storedCollapsed === null && window.innerWidth < NARROW_SIDEBAR_BREAKPOINT;
+  const [isCollapsed, setIsCollapsed] = useState(() => storedCollapsed ?? startsNarrow);
+  // Set by a deliberate toggle (button or Ctrl+B) — or by any stored preference.
+  const userPinnedSidebarRef = useRef(storedCollapsed !== null);
+  // True only while the viewport rule — not the user — is what collapsed the rail,
+  // so widening the window can undo it while a saved preference stays untouched.
+  const autoCollapsedRef = useRef(startsNarrow);
+  const collapsedRef = useRef(isCollapsed);
+
+  const toggleCollapsed = useCallback(() => {
+    userPinnedSidebarRef.current = true;
+    setIsCollapsed((prev) => !prev);
+  }, []);
+
+  // The expanded rail is 216px, which is 45% of a 480px viewport, so follow the
+  // viewport unless the user has chosen a state of their own.
+  useEffect(() => {
+    collapsedRef.current = isCollapsed;
+  }, [isCollapsed]);
+
+  useEffect(() => {
+    const syncSidebarWithViewport = () => {
+      if (userPinnedSidebarRef.current) return;
+      const narrow = window.innerWidth < NARROW_SIDEBAR_BREAKPOINT;
+      if (narrow) {
+        if (collapsedRef.current) return;
+        autoCollapsedRef.current = true;
+        collapsedRef.current = true;
+        setIsCollapsed(true);
+      } else if (autoCollapsedRef.current) {
+        autoCollapsedRef.current = false;
+        collapsedRef.current = false;
+        setIsCollapsed(false);
+      }
+    };
+    syncSidebarWithViewport();
+    window.addEventListener("resize", syncSidebarWithViewport);
+    return () => window.removeEventListener("resize", syncSidebarWithViewport);
+  }, []);
   const navigationItems = getSidebarItems(t).filter((item) => item.tab !== "chat");
   const hasHistoryItems = chatHistoryItems.length > 0;
   const isVoiceCenterActive =
@@ -108,7 +158,11 @@ function AppSidebar({
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("vs_sidebar_collapsed", String(isCollapsed));
+    // Only an explicit toggle becomes a persistent preference: an automatic
+    // narrow-viewport collapse describes this window, not the next launch.
+    if (userPinnedSidebarRef.current) {
+      localStorage.setItem("vs_sidebar_collapsed", String(isCollapsed));
+    }
     if (isCollapsed) closeMenu();
   }, [isCollapsed, closeMenu]);
 
@@ -163,7 +217,7 @@ function AppSidebar({
         const target = e.target as HTMLElement | null;
         if (target && target.isContentEditable) return;
         e.preventDefault();
-        setIsCollapsed((prev) => !prev);
+        toggleCollapsed();
       }
     }
 
@@ -255,7 +309,7 @@ function AppSidebar({
             <button
               type="button"
               className="vsSidebarToggleBtn"
-              onClick={() => setIsCollapsed((prev) => !prev)}
+              onClick={toggleCollapsed}
               aria-label={toggleLabel}
               aria-expanded={!isCollapsed}
               title={toggleLabel}
@@ -410,11 +464,16 @@ function AppSidebar({
 
         <div className="vsSidebarFooter">
           <div className="vsSidebarFooterActions">
+            {/* Test-only duplicates of the Voice Center tabs: kept out of the
+                tab order and the accessibility tree so keyboard and screen
+                reader users do not hit four invisible stops. */}
             <button
               type="button"
               className="vsVisuallyHidden"
               data-testid="nav-tts"
               aria-label={t("文本到音频", "Text to Audio")}
+              aria-hidden="true"
+              tabIndex={-1}
               onClick={() => onTabChange("tts")}
             />
             <button
@@ -422,6 +481,8 @@ function AppSidebar({
               className="vsVisuallyHidden"
               data-testid="nav-voice_design"
               aria-label={t("设计音色", "Voice Design")}
+              aria-hidden="true"
+              tabIndex={-1}
               onClick={() => onTabChange("voice_design")}
             />
             <button
@@ -429,6 +490,8 @@ function AppSidebar({
               className="vsVisuallyHidden"
               data-testid="nav-voice_clone"
               aria-label={t("音色克隆", "Voice Clone")}
+              aria-hidden="true"
+              tabIndex={-1}
               onClick={() => onTabChange("voice_clone")}
             />
             <button
@@ -436,6 +499,8 @@ function AppSidebar({
               className="vsVisuallyHidden"
               data-testid="nav-transcription"
               aria-label={t("一键转写", "Transcribe")}
+              aria-hidden="true"
+              tabIndex={-1}
               onClick={() => onTabChange("transcription")}
             />
             <button

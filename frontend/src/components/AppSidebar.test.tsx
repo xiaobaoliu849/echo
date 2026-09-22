@@ -223,4 +223,70 @@ describe('AppSidebar', () => {
         expect(screen.getByRole('button', { name: /收起侧边栏/ })).toHaveAttribute('aria-expanded', 'true');
         expect(localStorage.getItem('vs_sidebar_collapsed')).toBe('false');
     });
+
+    it('starts collapsed on a narrow viewport, then honours an explicit expand', () => {
+        const originalWidth = window.innerWidth;
+        try {
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: 480 });
+
+            const { container } = render(
+                <AppSidebar
+                    {...baseProps}
+                    chatHistoryItems={[]}
+                />
+            );
+
+            expect(container.querySelector('.vsSidebar')).toHaveClass('collapsed');
+
+            fireEvent.click(screen.getByRole('button', { name: /展开侧边栏/ }));
+            expect(container.querySelector('.vsSidebar')).not.toHaveClass('collapsed');
+
+            // A later resize must not undo the user's choice.
+            fireEvent(window, new Event('resize'));
+            expect(container.querySelector('.vsSidebar')).not.toHaveClass('collapsed');
+        } finally {
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+        }
+    });
+
+    it('restores the rail when the viewport widens, without persisting an automatic collapse', () => {
+        const originalWidth = window.innerWidth;
+        const setWidth = (value: number) =>
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value });
+        try {
+            setWidth(480);
+            const { container } = render(
+                <AppSidebar
+                    {...baseProps}
+                    chatHistoryItems={[]}
+                />
+            );
+            expect(container.querySelector('.vsSidebar')).toHaveClass('collapsed');
+
+            setWidth(1280);
+            fireEvent(window, new Event('resize'));
+            expect(container.querySelector('.vsSidebar')).not.toHaveClass('collapsed');
+
+            // An automatic collapse must not become the saved preference.
+            expect(localStorage.getItem('vs_sidebar_collapsed')).not.toBe('true');
+        } finally {
+            setWidth(originalWidth);
+        }
+    });
+
+    it('keeps the test-only navigation anchors out of the tab order and accessibility tree', () => {
+        render(
+            <AppSidebar
+                {...baseProps}
+                chatHistoryItems={[]}
+            />
+        );
+
+        for (const testId of ['nav-tts', 'nav-voice_design', 'nav-voice_clone', 'nav-transcription']) {
+            const anchor = screen.getByTestId(testId);
+            expect(anchor).toHaveAttribute('tabindex', '-1');
+            expect(anchor).toHaveAttribute('aria-hidden', 'true');
+        }
+        expect(screen.queryByRole('button', { name: '文本到音频' })).not.toBeInTheDocument();
+    });
 });
