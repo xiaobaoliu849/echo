@@ -1,3 +1,5 @@
+import { Headphones, Plus, RefreshCw, Search, ArrowRight } from "lucide-react";
+import "./PodcastLibrary.css";
 import { useState, useEffect, useMemo } from "react";
 import type { UseAudioOverviewResult } from "../hooks/useAudioOverview";
 import PodcastScriptEditor from "../components/podcast/PodcastScriptEditor";
@@ -78,6 +80,13 @@ export default function AudioOverviewPage({
       (p) => p.topic.toLowerCase().includes(q) || String(p.id).includes(q)
     );
   }, [audioOverview.audioOverviewPodcasts, searchQuery]);
+
+  const filteredRuns = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return audioOverview.agentRunHistory.filter((run) =>
+      !query || run.topic.toLowerCase().includes(query) || String(run.id).includes(query)
+    );
+  }, [audioOverview.agentRunHistory, searchQuery]);
 
   // ═══════════════════════════════════════════════════
   // RENDER: Workspace View (Detail Editor)
@@ -188,74 +197,67 @@ export default function AudioOverviewPage({
   // RENDER: Library / Grid View
   // ═══════════════════════════════════════════════════
   return (
-    <section className="vsTranscribeLibrary">
-      <div className="vsPodcastLibraryHeading">
-        <h2>{t("Echo 播客", "Echo Podcasts")}</h2>
-        <p>{t("从一个想法开始，制作双人播客。", "Turn an idea into a two-host podcast.")}</p>
-      </div>
-      {/* Studio Header & Toolbar */}
-      <div className="vsPodcastStudioToolbar">
-        <div className="vsStudioSegmentGroup">
-          <button
-            type="button"
-            className={`vsStudioSegmentBtn ${libraryTab === "podcasts" ? "is-active" : ""}`}
-            onClick={() => setLibraryTab("podcasts")}
-          >
-            {t("我的播客", "My podcasts")}
-          </button>
-          <button
-            type="button"
-            className={`vsStudioSegmentBtn ${libraryTab === "agent_runs" ? "is-active" : ""}`}
-            onClick={() => setLibraryTab("agent_runs")}
-          >
-            {t("生成记录", "Generation history")}
-          </button>
+    <section className="podcastLibrary custom-scrollbar">
+      <div className="podcastLibraryInner">
+      <header className="podcastLibraryHeader">
+        <div className="podcastLibraryIdentity">
+          <span className="podcastLibraryMark"><Headphones size={24} strokeWidth={1.6} aria-hidden="true" /></span>
+          <div>
+            <h2>{t("Echo 播客", "Echo Podcasts")}</h2>
+            <p>{t("让想法成为值得聆听的对话。", "Ideas worth listening to.")}</p>
+          </div>
         </div>
-
-        <div className="vsTranscribeSearchBox" hidden={libraryTab !== "podcasts"}>
-          <span className="vsTranscribeSearchIcon">🔍</span>
-          <input
-            type="search"
-            aria-label={t("搜索播客", "Search podcasts")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("搜索播客记录…", "Search podcasts...")}
-          />
-        </div>
-
-        <div className="vsTranscribeToolbarActions">
+        <div className="podcastLibraryActions">
           {(audioOverview.audioOverviewTopic.trim() || hasScript || audioOverview.audioAgentRunId !== null) && (
-            <button type="button" className="vsBtnSecondary vsBtnSmall" onClick={() => setViewMode("workspace")}>
-              {t("继续编辑", "Continue editing")}
+            <button type="button" className="podcastLibraryButton" onClick={() => setViewMode("workspace")}>
+              {t("继续编辑", "Continue editing")} <ArrowRight size={15} aria-hidden="true" />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => void (libraryTab === "podcasts" ? audioOverview.onRefreshList() : audioOverview.onLoadAgentRunHistory())}
-            className="vsBtnGhost vsBtnSmall"
-            title={t("刷新列表", "Refresh list")}
-            disabled={libraryBusy}
-          >
-            ↻ {libraryBusy ? t("刷新中...", "Refreshing...") : t("刷新", "Refresh")}
+          <button type="button" className="podcastLibraryButton is-primary" onClick={handleNewPodcast}
+            disabled={audioOverview.audioOverviewBusy || audioOverview.audioOverviewSaving || audioOverview.audioOverviewSynthBusy}>
+            <Plus size={17} aria-hidden="true" /> {t("新建播客", "New Podcast")}
           </button>
-          <button
-            type="button"
-            onClick={handleNewPodcast}
-            disabled={audioOverview.audioOverviewBusy || audioOverview.audioOverviewSaving || audioOverview.audioOverviewSynthBusy}
-            className="vsBtnPrimary vsBtnNewPodcast"
-          >
-            + {t("新建播客", "New Podcast")}
+        </div>
+      </header>
+
+      <div className="podcastLibraryToolbar">
+        <div className="podcastLibraryTabs" role="group" aria-label={t("播客视图", "Podcast views")}>
+          <button type="button" aria-pressed={libraryTab === "podcasts"}
+            onClick={() => { setLibraryTab("podcasts"); setSearchQuery(""); }}>
+            {t("我的播客", "My podcasts")} <span>{audioOverview.audioOverviewPodcasts.length}</span>
+          </button>
+          <button type="button" aria-pressed={libraryTab === "agent_runs"}
+            onClick={() => { setLibraryTab("agent_runs"); setSearchQuery(""); }}>
+            {t("生成记录", "Generation history")} <span>{audioOverview.agentRunHistory.length}</span>
+          </button>
+        </div>
+        <div className="podcastLibraryTools">
+          <label className="podcastLibrarySearch">
+            <Search size={16} aria-hidden="true" />
+            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)}
+              aria-label={libraryTab === "podcasts" ? t("搜索播客", "Search podcasts") : t("搜索生成记录", "Search generation history")}
+              placeholder={t("搜索主题…", "Search topics…")} />
+          </label>
+          <button type="button" className="podcastLibraryButton is-icon"
+            aria-label={t("刷新列表", "Refresh list")} title={t("刷新列表", "Refresh list")} disabled={libraryBusy}
+            onClick={() => void (libraryTab === "podcasts" ? audioOverview.onRefreshList() : audioOverview.onLoadAgentRunHistory())}>
+            <RefreshCw size={17} aria-hidden="true" />
           </button>
         </div>
       </div>
+      <p className="podcastLibraryCaption">
+        {libraryTab === "podcasts"
+          ? t("你的播客与草稿，随时继续创作。", "Your episodes and drafts, ready when you are.")
+          : t("查看创作进度，打开记录继续编辑。", "Follow your progress. Open a session to keep creating.")}
+      </p>
 
       {/* Card Grid / Agent History */}
       {libraryTab === "agent_runs" ? (
-        <div className="vsTranscribeGridWrap custom-scrollbar">
+        <div className="podcastLibraryContent">
           <AgentRunHistory
-            runs={audioOverview.agentRunHistory}
+            runs={filteredRuns}
+            searching={Boolean(searchQuery.trim())}
             busy={audioOverview.agentRunHistoryBusy}
-            onRefresh={() => { void audioOverview.onLoadAgentRunHistory(); }}
             onOpenRun={(run) => {
               void audioOverview.onOpenAgentRun(run);
               setViewMode("workspace");
@@ -263,9 +265,9 @@ export default function AudioOverviewPage({
           />
         </div>
       ) : (
-      <div className="vsTranscribeGridWrap custom-scrollbar">
+      <div className="podcastLibraryContent">
         {audioOverview.audioOverviewListBusy && audioOverview.audioOverviewPodcasts.length === 0 ? (
-          <div className="vsTranscribeEmpty">
+          <div className="podcastLibraryEmpty">
             <div className="vsTranscribeEmptyIcon">
               <div className="spinner vsLoadingSpinner" />
             </div>
@@ -274,8 +276,8 @@ export default function AudioOverviewPage({
             </p>
           </div>
         ) : filteredPodcasts.length === 0 ? (
-          <div className="vsTranscribeEmptyCard">
-            <div className="vsTranscribeEmptyIcon">🎙️</div>
+          <div className="podcastLibraryEmpty">
+            <span className="podcastLibraryEmptyIcon"><Headphones size={30} strokeWidth={1.4} aria-hidden="true" /></span>
             <h3 className="vsTranscribeEmptyTitle">
               {searchQuery
                 ? t("没有匹配的记录", "No matching records")
@@ -284,11 +286,11 @@ export default function AudioOverviewPage({
             <p className="vsTranscribeEmptyDesc">
               {searchQuery
                 ? t("尝试调整搜索关键词或重置筛选条件。", "Try adjusting your search query.")
-                : t("点击右上角「新建播客」开启你的第一个 AI 播客创作体验。", "Click 'New Podcast' at top right to start creating.")}
+                : t("从一个主题开始，创作你的第一期播客。", "Start with a topic and create your first episode.")}
             </p>
           </div>
         ) : (
-          <div className="vsTranscribeGrid">
+          <div className="vsTranscribeGrid podcastEpisodeGrid">
             {filteredPodcasts.map((item) => (
               <PodcastCard
                 key={item.id}
@@ -314,6 +316,7 @@ export default function AudioOverviewPage({
           <ErrorNotice message={audioOverview.audioOverviewError} scope="audio_overview" />
         </div>
       )}
+      </div>
     </section>
   );
 }

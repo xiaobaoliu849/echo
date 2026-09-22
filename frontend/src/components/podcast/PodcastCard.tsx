@@ -1,4 +1,5 @@
-import React from "react";
+import type { MouseEvent } from "react";
+import { Headphones, FileText, ArrowUpRight, Trash2 } from "lucide-react";
 import type { AudioOverviewPodcast } from "../../api";
 import { useI18n } from "../../i18n";
 
@@ -6,18 +7,8 @@ type Props = {
   item: AudioOverviewPodcast;
   isActive?: boolean;
   onClick: () => void;
-  onDelete: (e: React.MouseEvent) => void;
+  onDelete: (event: MouseEvent) => void;
 };
-
-/* Deterministic gradient palette based on podcast ID */
-const COVER_GRADIENTS = [
-  ["#f43f5e", "#fb7185", "#fda4af"], // rose
-  ["#8b5cf6", "#a78bfa", "#c4b5fd"], // violet
-  ["#3b82f6", "#60a5fa", "#93c5fd"], // blue
-  ["#10b981", "#34d399", "#6ee7b7"], // emerald
-  ["#f59e0b", "#fbbf24", "#fcd34d"], // amber
-  ["#0ea5e9", "#38bdf8", "#7dd3fc"], // sky
-];
 
 function formatRelativeTime(dateStr: string | null | undefined, t: (zh: string, en: string) => string): string {
   if (!dateStr) return t("未知时间", "Unknown");
@@ -36,96 +27,29 @@ function formatRelativeTime(dateStr: string | null | undefined, t: (zh: string, 
   return t(`${Math.floor(diffMon / 12)} 年前`, `${Math.floor(diffMon / 12)}y ago`);
 }
 
-/* SVG circle pattern for the card cover */
-function CirclePattern({ color }: { color: string }) {
+export function PodcastCard({ item, isActive, onClick, onDelete }: Props) {
+  const { t } = useI18n();
+  const topic = item.topic || t("未命名播客", "Untitled podcast");
+  const completed = Boolean(item.audio_path);
+  const hasScript = Boolean(item.script_lines?.length);
   return (
-    <svg className="vsTranscribeCardWave" viewBox="0 0 100 100" preserveAspectRatio="none">
-      <circle cx="20" cy="80" r="40" fill={color} opacity="0.3" />
-      <circle cx="80" cy="20" r="60" fill={color} opacity="0.2" />
-    </svg>
+    <article className={`podcastEpisodeCard${isActive ? " is-active" : ""}`}>
+      <button type="button" className="podcastEpisodeOpen" onClick={onClick}>
+        <span className="podcastEpisodeTop">
+          <span className="podcastLibraryMark">
+            {completed ? <Headphones size={22} aria-hidden="true" /> : <FileText size={22} aria-hidden="true" />}
+          </span>
+          <span className="podcastEpisodeState">{completed ? t("可收听", "Ready to play") : hasScript ? t("脚本就绪", "Script ready") : t("草稿", "Draft")}</span>
+        </span>
+        <h3>{topic}</h3>
+        <span className="podcastEpisodeLink">{t("打开播客", "Open podcast")} <ArrowUpRight size={14} aria-hidden="true" /></span>
+      </button>
+      <div className="podcastEpisodeFooter">
+        <span>{formatRelativeTime(item.updated_at, t)}</span>
+        <button type="button" onClick={onDelete} aria-label={t(`删除播客：${topic}`, `Delete podcast: ${topic}`)} title={t("删除播客", "Delete podcast")}>
+          <Trash2 size={15} aria-hidden="true" />
+        </button>
+      </div>
+    </article>
   );
 }
-
-export const PodcastCard: React.FC<Props> = ({
-  item,
-  isActive,
-  onClick,
-  onDelete,
-}) => {
-  const { t } = useI18n();
-  const topic = item.topic || t("未命名播客", "Unnamed Podcast");
-  const palette = COVER_GRADIENTS[item.id % COVER_GRADIENTS.length];
-
-  const isCompleted = Boolean(item.audio_path);
-  const hasScript = item.script_lines && item.script_lines.length > 0;
-  
-  const statusClass = isCompleted ? "completed" : hasScript ? "running" : "submitted";
-
-  return (
-    <div
-      className={`vsTranscribeCard ${statusClass} ${isActive ? "active" : ""}`}
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-    >
-      {/* Cover */}
-      <div className="vsTranscribeCardCover">
-        <div
-          className="vsTranscribeCardCoverBg"
-          style={{
-            background: `linear-gradient(135deg, ${palette[0]}, ${palette[1]} 60%, ${palette[2]})`,
-          }}
-        />
-        <CirclePattern color="rgba(255,255,255,0.6)" />
-        <button
-          className="vsTranscribeCardPlayBtn"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick();
-          }}
-          aria-label={t("查看详情", "View details")}
-        >
-          {isCompleted ? "▶" : "✎"}
-        </button>
-        <span className="vsTranscribeCardFormatBadge">#{item.id}</span>
-      </div>
-
-      {/* Meta */}
-      <div className="vsTranscribeCardMeta">
-        <div className="vsTranscribeCardMetaTop">
-          <span className="vsTranscribeCardTime">
-            {formatRelativeTime(item.updated_at, t)}
-          </span>
-        </div>
-        <h4 className="vsTranscribeCardTitle" title={topic}>
-          {topic}
-        </h4>
-        <p className="vsTranscribeCardPreview">
-          {isCompleted
-            ? t("合成完成", "Synthesis Completed")
-            : hasScript
-            ? t("脚本已就绪", "Script Ready")
-            : t("草稿状态", "Draft")}
-        </p>
-      </div>
-
-      {/* Footer */}
-      <div className="vsTranscribeCardFooter">
-        <span className="vsTranscribeCardMemoryBadge" style={{ background: "transparent" }} />
-        <button
-          className="vsTranscribeCardDeleteBtn"
-          onClick={onDelete}
-          title={t("删除播客", "Delete podcast")}
-        >
-          {t("删除", "Delete")}
-        </button>
-      </div>
-    </div>
-  );
-};

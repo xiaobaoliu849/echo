@@ -1,10 +1,11 @@
+import { ChevronRight, FileAudio, History } from "lucide-react";
 import type { AudioAgentRun } from "../../api";
 import { useI18n } from "../../i18n";
 
 type Props = {
   runs: AudioAgentRun[];
   busy: boolean;
-  onRefresh: () => void;
+  searching?: boolean;
   onOpenRun: (run: AudioAgentRun) => void;
 };
 
@@ -30,84 +31,58 @@ const STATUS_EN: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-function formatTime(isoString: string): string {
-  if (!isoString) return "";
-  try {
-    const d = new Date(isoString);
-    return d.toLocaleString();
-  } catch {
-    return isoString;
-  }
+function formatTime(value: string, language: string): string {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString(language, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export default function AgentRunHistory({ runs, busy, onRefresh, onOpenRun }: Props) {
+export default function AgentRunHistory({ runs, busy, searching = false, onOpenRun }: Props) {
   const { t, language } = useI18n();
   const statusLabels = language === "zh-CN" ? STATUS_ZH : STATUS_EN;
 
-  if (busy && runs.length === 0) {
+  if (!runs.length) {
     return (
-      <div className="vsTranscribeEmpty">
-        <div className="vsTranscribeEmptyIcon">
-          <div className="spinner vsLoadingSpinner" />
-        </div>
-        <p className="vsTranscribeEmptyDesc">
-          {t("加载 Agent 运行记录中…", "Loading agent runs...")}
-        </p>
-      </div>
-    );
-  }
-
-  if (runs.length === 0) {
-    return (
-      <div className="vsTranscribeEmpty">
-        <div className="vsTranscribeEmptyIcon">🤖</div>
-        <h3 className="vsTranscribeEmptyTitle">
-          {t("暂无 Agent 运行记录", "No agent runs yet")}
-        </h3>
-        <p className="vsTranscribeEmptyDesc">
-          {t("生成播客脚本后，Agent 运行记录会显示在这里。", "Agent run history will appear here after you generate a podcast script.")}
-        </p>
+      <div className="podcastLibraryEmpty" role="status">
+        <span className="podcastLibraryEmptyIcon"><History size={30} strokeWidth={1.4} aria-hidden="true" /></span>
+        <h3>{busy ? t("正在加载…", "Loading…") : searching ? t("没有匹配的记录", "No matching sessions") : t("暂无生成记录", "No sessions yet")}</h3>
+        <p>{searching ? t("尝试换一个主题关键词。", "Try another topic keyword.") : t("生成脚本后，可以在这里查看进度并继续创作。", "Once you generate a script, follow its progress here.")}</p>
       </div>
     );
   }
 
   return (
-    <div className="vsAgentHistoryList">
-      <div className="vsAgentHistoryToolbar">
-        <button
-          className="vsBtnGhost vsBtnSmall"
-          onClick={() => void onRefresh()}
-          disabled={busy}
-        >
-          ↻ {busy ? t("刷新中...", "Refreshing...") : t("刷新", "Refresh")}
-        </button>
+    <div className="podcastHistory" aria-busy={busy}>
+      <div className="podcastHistoryLabels" aria-hidden="true">
+        <span>{t("主题", "Topic")}</span>
+        <span>{t("创建时间", "Created")}</span>
+        <span>{t("状态", "Status")}</span>
+        <span />
       </div>
-      {runs.map((run) => {
-        const statusLabel = statusLabels[run.status] || run.status;
-        return (
-          <button
-            key={run.id}
-            className="vsAgentHistoryItem"
-            onClick={() => onOpenRun(run)}
-          >
-            <div className="vsAgentHistoryItemHeader">
-              <span className="vsAgentHistoryTopic">{run.topic}</span>
-              <span className={`vsAgentStatusBadge vsAgentStatus-${run.status}`}>
-                {statusLabel}
+      <ul className="podcastHistoryList">
+        {runs.map((run) => (
+          <li key={run.id}>
+            <button type="button" className="podcastHistoryRow" onClick={() => onOpenRun(run)}>
+              <span className="podcastHistorySubject">
+                <span className="podcastHistoryIcon"><FileAudio size={20} strokeWidth={1.5} aria-hidden="true" /></span>
+                <span className="podcastHistoryCopy">
+                  <span className="podcastHistoryTitle">{run.topic || t("未命名播客", "Untitled podcast")}</span>
+                  <span className="podcastHistoryMeta">
+                    <span>#{run.id}</span><span>{run.provider}</span>
+                    <span>{run.language.startsWith("zh") ? t("中文", "Chinese") : run.language.startsWith("en") ? t("英文", "English") : run.language}</span>
+                  </span>
+                  {run.error_message && <span className="podcastHistoryError">{run.error_message}</span>}
+                </span>
               </span>
-            </div>
-            <div className="vsAgentHistoryMeta">
-              <span>#{run.id}</span>
-              <span>{run.provider}{run.model ? ` / ${run.model}` : ""}</span>
-              <span>{run.language.toUpperCase()}</span>
-              <span>{formatTime(run.created_at)}</span>
-            </div>
-            {run.error_message ? (
-              <p className="vsAgentHistoryError">{run.error_message}</p>
-            ) : null}
-          </button>
-        );
-      })}
+              <time className="podcastHistoryTime" dateTime={run.created_at}>{formatTime(run.created_at, language)}</time>
+              <span className="podcastHistoryStatus" data-status={run.status}>
+                <span aria-hidden="true" />{statusLabels[run.status] || run.status}
+              </span>
+              <ChevronRight className="podcastHistoryChevron" size={16} aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

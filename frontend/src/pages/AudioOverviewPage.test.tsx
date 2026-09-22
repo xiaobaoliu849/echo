@@ -59,6 +59,21 @@ describe('AudioOverviewPage', () => {
         expect(screen.getByRole('button', { name: '重试' })).toBeVisible();
     });
 
+    it('searches history, refreshes once, and opens the selected run', () => {
+        const run = { id: 3, podcast_id: null, topic: 'Neural Interfaces', language: 'en', status: 'queued', current_step: '', provider: 'DashScope', model: '', use_memory: false, input_payload: {}, result_payload: {}, error_code: '', error_message: '', created_at: '2026-09-22T04:08:51Z', updated_at: '', completed_at: '' };
+        const controller = createAudioOverviewController({ audioOverviewPodcastId: null, agentRunHistory: [run] });
+        render(<AudioOverviewPage audioOverview={controller} errorRuntimeContext={{}} />);
+        fireEvent.click(screen.getByRole('button', { name: /生成记录/ }));
+        expect(screen.getAllByRole('button', { name: '刷新列表' })).toHaveLength(1);
+        fireEvent.click(screen.getByRole('button', { name: '刷新列表' }));
+        expect(controller.onLoadAgentRunHistory).toHaveBeenCalledOnce();
+        fireEvent.change(screen.getByRole('searchbox', { name: '搜索生成记录' }), { target: { value: 'missing' } });
+        expect(screen.getByText('没有匹配的记录')).toBeVisible();
+        fireEvent.change(screen.getByRole('searchbox', { name: '搜索生成记录' }), { target: { value: 'Neural' } });
+        fireEvent.click(screen.getByRole('button', { name: /Neural Interfaces/ }));
+        expect(controller.onOpenAgentRun).toHaveBeenCalledWith(run);
+    });
+
     it('displays error and info messages globally', async () => {
         render(
             <AudioOverviewPage

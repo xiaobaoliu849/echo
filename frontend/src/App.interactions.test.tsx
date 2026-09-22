@@ -539,7 +539,7 @@ describe("App interactions", () => {
 
     const podcastBtn1 = screen.getByTestId("nav-audio_overview");
     fireEvent.click(podcastBtn1);
-    expect(await screen.findByPlaceholderText("搜索播客记录…")).toBeInTheDocument();
+    expect(await screen.findByRole("searchbox", { name: "搜索播客" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "编辑播客脚本" })).not.toBeInTheDocument();
 
     fireEvent.click(await screen.findByText("AI 与未来交通"));

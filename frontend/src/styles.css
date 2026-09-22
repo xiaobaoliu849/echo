@@ -11090,70 +11090,6 @@ button.vsPasswordToggleBtn:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 
-.vsAgentHistoryList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 0;
-}
-
-.vsAgentHistoryToolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.vsAgentHistoryItem {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.vsAgentHistoryItem:hover {
-  border-color: var(--brand);
-  box-shadow: var(--shadow-sm);
-}
-
-.vsAgentHistoryItemHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.vsAgentHistoryTopic {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.vsAgentHistoryMeta {
-  display: flex;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--text-soft);
-}
-
-.vsAgentHistoryError {
-  font-size: 12px;
-  color: var(--accent-strong);
-  margin: 4px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .vsPodcastStepperTabs {
   display: flex;
   gap: 8px;
@@ -12098,48 +12034,6 @@ button.vsPasswordToggleBtn:focus-visible {
    Podcast Studio Redesign Styles
    ========================================================= */
 
-.vsPodcastStudioToolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 24px;
-  background: rgba(255, 251, 245, 0.7);
-  border-bottom: 1px solid rgba(98, 76, 54, 0.08);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.vsStudioSegmentGroup {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(98, 76, 54, 0.06);
-  padding: 3px;
-  border-radius: 10px;
-}
-
-.vsStudioSegmentBtn {
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.vsStudioSegmentBtn:hover {
-  color: var(--text);
-}
-
-.vsStudioSegmentBtn.is-active {
-  background: #fff;
-  color: var(--brand-dark, #4f46e5);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-}
-
 .vsTranscribeEmptyCard {
   display: flex;
   flex-direction: column;
@@ -12339,19 +12233,9 @@ button.vsPasswordToggleBtn:focus-visible {
   max-width: 880px;
 }
 
-.vsPodcastLibraryHeading {
-  padding: 24px 24px 0;
-}
-
-.vsPodcastLibraryHeading h2,
 .vsPodcastAudioHeading {
   margin: 0;
   font-size: 18px;
-}
-
-.vsPodcastLibraryHeading p {
-  margin: 6px 0 0;
-  color: var(--muted);
 }
 
 .vsPodcastWorkspace .vsPodcastPromptCard {
@@ -12419,8 +12303,7 @@ button.vsPasswordToggleBtn:focus-visible {
   font-size: 16px;
 }
 
-.vsPodcastWorkspace [hidden],
-.vsPodcastStudioToolbar [hidden] {
+.vsPodcastWorkspace [hidden] {
   display: none;
 }
 
