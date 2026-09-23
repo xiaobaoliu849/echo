@@ -308,6 +308,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                 handleStart();
               }}
             >
+              <div className="vsPalConfigBody" data-testid="pal-config-body">
               <div className="vsPalConfigHead">
                 <span className="vsPalConfigIcon" aria-hidden="true">
                   <Video size={22} />
@@ -491,19 +492,10 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                   />
                 </label>
               ) : null}
+              </div>
 
               <div className="vsPalConfigFooter">
-                <div className="vsPalField" data-testid="pal-effective-face" role="status">
-                  <span>{t("本次使用", "This conversation uses")}</span>
-                  <div className="vsPalEffectiveRow">
-                    {effectiveFace?.thumbnail_image_url ? <img className="vsPalEffectiveThumb" src={effectiveFace.thumbnail_image_url} alt="" /> : null}
-                    <small>{effectiveFace
-                      ? `${effectiveFace.face_name} · ${effectiveFace.model_name ? formatPhoenixModel(effectiveFace.model_name) : t("模型未知", "Unknown model")}`
-                      : t("模型尚未确认，请选择有模型标签的形象。默认或手动 ID 不保证使用 Phoenix 4.5。", "Model not confirmed. Choose a face with a model label. Default or manual IDs do not guarantee Phoenix 4.5.")}</small>
-                  </div>
-                  {faceUnavailable ? <small>{t("该形象尚未就绪，请选择其他形象。", "This face is not ready. Choose another face.")}</small> : null}
-                </div>
-
+                {faceUnavailable ? <small role="status">{t("该形象尚未就绪，请选择其他形象。", "This face is not ready. Choose another face.")}</small> : null}
                 <button
                   type="submit"
                   className="vsPalStartBtn"

@@ -140,7 +140,8 @@ describe("PalPage", () => {
     vi.mocked(createTavusConversation).mockResolvedValue({ conversation_id: "default", conversation_url: "https://tavus.daily.co/room" });
     dailyMocks.createFrame.mockReturnValue(createCallMock());
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("pal-effective-face")).toHaveTextContent("Gloria - Studio · Phoenix 4"));
+    await waitFor(() => expect(screen.getByTestId("pal-face-default").querySelector("img"))
+      .toHaveAttribute("src", "https://cdn.tavus.io/thumbs/gloria.jpg"));
     expect(screen.getByRole("radio", { name: /Brooke/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Classic/ })).toBeInTheDocument();
     expect(screen.getAllByTestId("pal-face-option")).toHaveLength(3);
@@ -160,16 +161,16 @@ describe("PalPage", () => {
     dailyMocks.createFrame.mockReturnValue(createCallMock());
     renderPage();
     fireEvent.click(await screen.findByRole("radio", { name: new RegExp(`Selected.*${model.replace("phoenix-", "Phoenix ")}`) }));
-    expect(screen.getByTestId("pal-effective-face")).toHaveTextContent(model.replace("phoenix-", "Phoenix "));
+    expect(screen.getByRole("radio", { name: /Selected/ })).toHaveAttribute("aria-checked", "true");
     fireEvent.click(screen.getByTestId("pal-start-button"));
     await waitFor(() => expect(createTavusConversation).toHaveBeenCalledWith({
       palId: undefined, faceId: "selected-face", conversationName: undefined,
     }));
   });
 
-  it("does not label an unknown default as Phoenix 4.5", async () => {
+  it("does not label an unknown default as Phoenix 4.5", () => {
     renderPage();
-    expect(screen.getByTestId("pal-effective-face")).toHaveTextContent("模型尚未确认");
+    expect(screen.getByTestId("pal-face-default")).not.toHaveTextContent("Phoenix 4.5");
   });
 
   it("sorts newer Phoenix versions first while keeping earlier ones searchable", async () => {
@@ -195,8 +196,10 @@ describe("PalPage", () => {
     ] });
     renderPage();
     await waitFor(() => expect(screen.getByTestId("pal-start-button")).toBeDisabled());
+    expect(screen.getByText("该形象尚未就绪，请选择其他形象。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: /Ready/ }));
     expect(screen.getByTestId("pal-start-button")).toBeEnabled();
+    expect(screen.queryByText("该形象尚未就绪，请选择其他形象。")).not.toBeInTheDocument();
   });
 
   it("starts a conversation with the entered API key and PAL id", async () => {
@@ -234,7 +237,7 @@ describe("PalPage", () => {
     expect(screen.getByTestId("pal-video-host").parentElement).toHaveClass("vsPalStage");
   });
 
-  it("keeps the chosen face and start action together with a long face catalog", async () => {
+  it("keeps Start outside the scrolling catalog while preserving the selected face", async () => {
     vi.mocked(listTavusFaces).mockResolvedValue({ faces: Array.from({ length: 142 }, (_, index) => ({
       face_id: `face-${index}`,
       face_name: `Face ${index}`,
@@ -246,8 +249,10 @@ describe("PalPage", () => {
     fireEvent.click(firstFace);
     const footer = screen.getByTestId("pal-start-button").parentElement;
     expect(footer).toHaveClass("vsPalConfigFooter");
-    expect(footer).toContainElement(screen.getByTestId("pal-effective-face"));
-    expect(screen.getByTestId("pal-effective-face")).toHaveTextContent("Face 0 · Phoenix 4.5");
+    expect(footer?.previousElementSibling).toBe(screen.getByTestId("pal-config-body"));
+    expect(screen.getByTestId("pal-config-body")).toContainElement(screen.getByTestId("pal-face-picker"));
+    expect(firstFace).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByText("本次使用")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("pal-face-option")).toHaveLength(142);
   });
 
