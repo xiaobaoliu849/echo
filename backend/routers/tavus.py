@@ -41,6 +41,7 @@ class TavusFaceSummary(BaseModel):
     face_name: str
     model_name: str | None = None
     status: str | None = None
+    thumbnail_video_url: str | None = None
 
 
 class TavusFaceListResponse(BaseModel):
@@ -156,6 +157,7 @@ async def list_tavus_faces(request: Request) -> TavusFaceListResponse:
                 face_name=str(item.get("face_name") or item.get("replica_name") or "").strip() or face_id,
                 model_name=str(item.get("model_name") or "").strip() or None,
                 status=str(item.get("status") or "").strip() or None,
+                thumbnail_video_url=str(item.get("thumbnail_video_url") or "").strip() or None,
             )
         )
     return TavusFaceListResponse(faces=summaries)

@@ -74,10 +74,11 @@ describe("PalPage", () => {
     expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();
   });
 
-  it("passes the selected Phoenix 4.5 face into the conversation", async () => {
+  it("passes the selected Phoenix 4.5 face into the conversation and hides older models", async () => {
     vi.mocked(listTavusFaces).mockResolvedValue({ faces: [
       { face_id: "old", face_name: "Old", model_name: "phoenix-3", status: "completed" },
-      { face_id: "face45", face_name: "Brooke", model_name: "phoenix-4.5", status: "completed" },
+      { face_id: "face45", face_name: "Brooke", model_name: "phoenix-4.5", status: "completed",
+        thumbnail_video_url: "https://cdn.tavus.io/thumbs/brooke.mp4" },
       { face_id: "training", face_name: "Training", model_name: "phoenix-4.5", status: "started" },
     ] });
     vi.mocked(createTavusConversation).mockResolvedValue({
@@ -85,12 +86,15 @@ describe("PalPage", () => {
     });
     dailyMocks.createFrame.mockReturnValue(createCallMock());
     renderPage();
-    await screen.findByRole("option", { name: "Brooke · Phoenix 4.5" });
-    const select = screen.getByTestId("pal-face-select") as HTMLSelectElement;
-    expect(select.options[1].value).toBe("face45");
-    expect(screen.getByRole("option", { name: "Training · Phoenix 4.5 (started)" })).toBeDisabled();
+    const brooke = await screen.findByRole("radio", { name: /Brooke/ });
+    // Older Phoenix generations are removed from the picker entirely.
+    expect(screen.queryByRole("radio", { name: /Old/ })).not.toBeInTheDocument();
+    // The picker shows a visual preview of the face.
+    const preview = brooke.querySelector("video");
+    expect(preview).toHaveAttribute("src", "https://cdn.tavus.io/thumbs/brooke.mp4");
+    expect(screen.getByRole("radio", { name: /Training/ })).toBeDisabled();
     fireEvent.change(screen.getByTestId("pal-id-input"), { target: { value: "pal" } });
-    fireEvent.change(select, { target: { value: "face45" } });
+    fireEvent.click(brooke);
     fireEvent.click(screen.getByTestId("pal-start-button"));
     await waitFor(() => expect(createTavusConversation).toHaveBeenCalledWith({
       palId: "pal", faceId: "face45", conversationName: undefined,
@@ -105,7 +109,7 @@ describe("PalPage", () => {
     dailyMocks.createFrame.mockReturnValue(createCallMock());
     renderPage();
     await screen.findByRole("alert");
-    fireEvent.change(screen.getByTestId("pal-face-select"), { target: { value: "__manual_face__" } });
+    fireEvent.click(screen.getByTestId("pal-face-manual"));
     fireEvent.change(screen.getByTestId("pal-face-id-input"), { target: { value: " face45 " } });
     fireEvent.click(screen.getByTestId("pal-start-button"));
     await waitFor(() => expect(createTavusConversation).toHaveBeenCalledWith({
@@ -122,7 +126,7 @@ describe("PalPage", () => {
     await waitFor(() => expect(screen.getByTestId("pal-select")).toHaveValue("saved"));
   });
 
-  it("shows all Phoenix versions and resolves the PAL default without upgrading it", async () => {
+  it("only offers the latest Phoenix version and resolves the PAL default without upgrading it", async () => {
     vi.mocked(listTavusPals).mockResolvedValue({ pals: [
       { pal_id: "gloria", pal_name: "Gloria", default_face_id: "face4" },
     ] });
@@ -135,10 +139,11 @@ describe("PalPage", () => {
     dailyMocks.createFrame.mockReturnValue(createCallMock());
     renderPage();
     await waitFor(() => expect(screen.getByTestId("pal-effective-face")).toHaveTextContent("Gloria - Studio · Phoenix 4"));
-    for (const version of ["3", "4", "4.5"]) {
-      expect(screen.getByRole("group", { name: `Phoenix ${version} · 1` })).toBeInTheDocument();
-    }
-    expect(screen.getByTestId("pal-face-select")).toHaveValue("");
+    // The picker lists only the newest generation; Phoenix 3/4 faces are hidden.
+    expect(screen.getByRole("radio", { name: /Brooke/ })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Classic/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Gloria - Studio/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId("pal-face-default")).toHaveAttribute("aria-checked", "true");
     fireEvent.click(screen.getByTestId("pal-start-button"));
     await waitFor(() => expect(createTavusConversation).toHaveBeenCalledWith({
       palId: "gloria", faceId: undefined, conversationName: undefined,
@@ -152,8 +157,7 @@ describe("PalPage", () => {
     vi.mocked(createTavusConversation).mockResolvedValue({ conversation_id: "id", conversation_url: "https://tavus.daily.co/room" });
     dailyMocks.createFrame.mockReturnValue(createCallMock());
     renderPage();
-    await screen.findByRole("option", { name: `Selected · ${model.replace("phoenix-", "Phoenix ")}` });
-    fireEvent.change(screen.getByTestId("pal-face-select"), { target: { value: "selected-face" } });
+    fireEvent.click(await screen.findByRole("radio", { name: new RegExp(`Selected.*${model.replace("phoenix-", "Phoenix ")}`) }));
     expect(screen.getByTestId("pal-effective-face")).toHaveTextContent(model.replace("phoenix-", "Phoenix "));
     fireEvent.click(screen.getByTestId("pal-start-button"));
     await waitFor(() => expect(createTavusConversation).toHaveBeenCalledWith({
@@ -166,17 +170,27 @@ describe("PalPage", () => {
     expect(screen.getByTestId("pal-effective-face")).toHaveTextContent("模型尚未确认");
   });
 
+  it("treats phoenix-4.10 as newer than phoenix-4.5", async () => {
+    vi.mocked(listTavusFaces).mockResolvedValue({ faces: [
+      { face_id: "face45", face_name: "Brooke", model_name: "phoenix-4.5", status: "completed" },
+      { face_id: "face410", face_name: "Future", model_name: "phoenix-4.10", status: "completed" },
+    ] });
+    renderPage();
+    expect(await screen.findByRole("radio", { name: /Future/ })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Brooke/ })).not.toBeInTheDocument();
+  });
+
   it("blocks an unready default face and allows a ready override", async () => {
     vi.mocked(listTavusPals).mockResolvedValue({ pals: [
       { pal_id: "pal", pal_name: "Role", default_face_id: "training" },
     ] });
     vi.mocked(listTavusFaces).mockResolvedValue({ faces: [
       { face_id: "training", face_name: "Training", model_name: "phoenix-4.5", status: "started" },
-      { face_id: "ready", face_name: "Ready", model_name: "phoenix-4", status: "completed" },
+      { face_id: "ready", face_name: "Ready", model_name: "phoenix-4.5", status: "completed" },
     ] });
     renderPage();
     await waitFor(() => expect(screen.getByTestId("pal-start-button")).toBeDisabled());
-    fireEvent.change(screen.getByTestId("pal-face-select"), { target: { value: "ready" } });
+    fireEvent.click(screen.getByRole("radio", { name: /Ready/ }));
     expect(screen.getByTestId("pal-start-button")).toBeEnabled();
   });
 

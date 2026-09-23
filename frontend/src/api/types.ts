@@ -871,6 +871,8 @@ export type TavusFaceSummary = {
   // Phoenix model the face was trained on, e.g. "phoenix-4.5".
   model_name?: string | null;
   status?: string | null;
+  // Short looping preview clip hosted by Tavus, shown in the face picker.
+  thumbnail_video_url?: string | null;
 };
 
 export type TavusFaceListResponse = {

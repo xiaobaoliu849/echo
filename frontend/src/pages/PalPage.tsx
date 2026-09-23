@@ -41,6 +41,19 @@ const MANUAL_PAL_VALUE = "__manual__";
 const MANUAL_FACE_VALUE = "__manual_face__";
 const formatPhoenixModel = (model: string) => model.replace(/^phoenix-/i, "Phoenix ");
 
+// Phoenix releases look like "phoenix-3", "phoenix-4", "phoenix-4.5".
+// Compare as (major, minor) tuples: parseFloat would rank a future
+// "phoenix-4.10" below "phoenix-4.5".
+type PhoenixVersion = [number, number];
+const phoenixVersion = (model?: string | null): PhoenixVersion | null => {
+  const match = /^phoenix-(\d+)(?:\.(\d+))?$/i.exec((model || "").trim());
+  return match
+    ? [Number.parseInt(match[1], 10), Number.parseInt(match[2] ?? "0", 10)]
+    : null;
+};
+const comparePhoenixVersions = (a: PhoenixVersion, b: PhoenixVersion): number =>
+  a[0] - b[0] || a[1] - b[1];
+
 export function getRollingSubtitleText(text: string, latinMax = 120, cjkMax = 60): string {
   if (!text) return "";
   const hasCjk = /[\u4e00-\u9fff\u3040-\u30ff]/.test(text);
@@ -104,7 +117,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
           return;
         }
         setFaces([...(payload.faces || [])].sort((a, b) =>
-          Number(b.model_name === "phoenix-4.5") - Number(a.model_name === "phoenix-4.5")));
+          comparePhoenixVersions(phoenixVersion(b.model_name) ?? [-1, -1], phoenixVersion(a.model_name) ?? [-1, -1])));
       })
       .catch((error) => {
         if (!facesDisposed) setCatalogError(error instanceof Error ? error.message : String(error));
@@ -129,13 +142,23 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
     return selectedFaceId;
   }, [faceIdInput, selectedFaceId]);
 
-  const faceGroups = useMemo(() => {
-    const groups = new Map<string, TavusFaceSummary[]>();
+  // The picker only offers faces trained on the newest Phoenix model present
+  // in the account (currently Phoenix 4.5); older generations stay hidden.
+  const pickerFaces = useMemo(() => {
+    let latest: PhoenixVersion | null = null;
     for (const face of faces) {
-      const model = face.model_name || "";
-      groups.set(model, [...(groups.get(model) || []), face]);
+      const version = phoenixVersion(face.model_name);
+      if (version && (!latest || comparePhoenixVersions(version, latest) > 0)) {
+        latest = version;
+      }
     }
-    return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a, undefined, { numeric: true }));
+    if (!latest) {
+      return faces;
+    }
+    return faces.filter((face) => {
+      const version = phoenixVersion(face.model_name);
+      return version !== null && comparePhoenixVersions(version, latest) === 0;
+    });
   }, [faces]);
   const selectedPal = pals.find((pal) => pal.pal_id === resolvedPalId);
   const effectiveFaceId = resolvedFaceId || selectedPal?.default_face_id;
@@ -290,44 +313,110 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
 
               {catalogError ? <p role="alert">{t("无法加载分身或形象列表：", "Could not load PALs or faces: ")}{catalogError}</p> : null}
 
-              <label className="vsPalField">
-                <span>
+              <div className="vsPalField">
+                <span id="pal-face-picker-label">
                   {t("选择视频形象（Face）与模型", "Choose a video face and model")}
                 </span>
-                <select
-                  value={selectedFaceId}
-                  onChange={(event) => setSelectedFaceId(event.target.value)}
-                  data-testid="pal-face-select"
+                <div
+                  className="vsPalFaceGrid"
+                  role="radiogroup"
+                  aria-labelledby="pal-face-picker-label"
+                  data-testid="pal-face-picker"
                 >
-                  <option value="">{t("使用分身默认形象", "Use the PAL's default face")}</option>
-                  {faceGroups.map(([model, group]) => (
-                    <optgroup key={model} label={`${model ? formatPhoenixModel(model) : t("模型未知", "Unknown model")} · ${group.length}`}>
-                    {group.map((face) => (
-                    <option key={face.face_id} value={face.face_id} disabled={Boolean(face.status && face.status !== "completed")}>
-                      {face.face_name}
-                      {face.model_name
-                        ? ` · ${formatPhoenixModel(face.model_name)}`
-                        : ""}
-                      {face.status && face.status !== "completed" ? ` (${face.status})` : ""}
-                    </option>
-                    ))}
-                    </optgroup>
-                  ))}
-                  <option value={MANUAL_FACE_VALUE}>{t("手动输入 Face ID...", "Enter a Face ID...")}</option>
-                </select>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={selectedFaceId === ""}
+                    className={`vsPalFaceCard ${selectedFaceId === "" ? "isSelected" : ""}`}
+                    onClick={() => setSelectedFaceId("")}
+                    data-testid="pal-face-default"
+                  >
+                    <span className="vsPalFaceThumb vsPalFaceThumbPlaceholder" aria-hidden="true">
+                      <Video size={20} />
+                    </span>
+                    <span className="vsPalFaceName">{t("使用分身默认形象", "Use the PAL's default face")}</span>
+                  </button>
+                  {pickerFaces.map((face) => {
+                    const unavailable = Boolean(face.status && face.status !== "completed");
+                    return (
+                      <button
+                        key={face.face_id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selectedFaceId === face.face_id}
+                        className={`vsPalFaceCard ${selectedFaceId === face.face_id ? "isSelected" : ""}`}
+                        onClick={() => setSelectedFaceId(face.face_id)}
+                        disabled={unavailable}
+                        data-testid="pal-face-option"
+                      >
+                        {face.thumbnail_video_url ? (
+                          <video
+                            className="vsPalFaceThumb"
+                            src={face.thumbnail_video_url}
+                            muted
+                            loop
+                            playsInline
+                            preload="metadata"
+                            onMouseEnter={(event) => {
+                              void event.currentTarget.play().catch(() => {});
+                            }}
+                            onMouseLeave={(event) => {
+                              event.currentTarget.pause();
+                              event.currentTarget.currentTime = 0;
+                            }}
+                          />
+                        ) : (
+                          <span className="vsPalFaceThumb vsPalFaceThumbPlaceholder" aria-hidden="true">
+                            <Video size={20} />
+                          </span>
+                        )}
+                        <span className="vsPalFaceName">{face.face_name}</span>
+                        <span className="vsPalFaceMeta">
+                          {face.model_name ? formatPhoenixModel(face.model_name) : t("模型未知", "Unknown model")}
+                          {unavailable ? ` (${face.status})` : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={selectedFaceId === MANUAL_FACE_VALUE}
+                    className={`vsPalFaceCard ${selectedFaceId === MANUAL_FACE_VALUE ? "isSelected" : ""}`}
+                    onClick={() => setSelectedFaceId(MANUAL_FACE_VALUE)}
+                    data-testid="pal-face-manual"
+                  >
+                    <span className="vsPalFaceThumb vsPalFaceThumbPlaceholder" aria-hidden="true">
+                      <KeyRound size={18} />
+                    </span>
+                    <span className="vsPalFaceName">{t("手动输入 Face ID...", "Enter a Face ID...")}</span>
+                  </button>
+                </div>
                 <small>
                   {t(
-                    "分身自带默认绑定的形象与版本。仅在想临时覆盖使用其他形象（如体验 Phoenix 4.5 高清效果）时切换。",
-                    "The PAL uses its assigned default face by default. Change this only if you want to override it (e.g. to try a Phoenix 4.5 face)."
+                    "仅列出最新 Phoenix 版本的形象（悬停可预览）。旧版本形象已隐藏；分身默认绑定保持不变。",
+                    "Only faces on the latest Phoenix version are listed (hover to preview). Older faces are hidden; the PAL's default binding is unchanged."
                   )}
                 </small>
-              </label>
+              </div>
 
               <div className="vsPalField" data-testid="pal-effective-face" role="status">
                 <span>{t("本次使用", "This conversation uses")}</span>
-                <small>{effectiveFace
-                  ? `${effectiveFace.face_name} · ${effectiveFace.model_name ? formatPhoenixModel(effectiveFace.model_name) : t("模型未知", "Unknown model")}`
-                  : t("模型尚未确认，请选择有模型标签的形象。默认或手动 ID 不保证使用 Phoenix 4.5。", "Model not confirmed. Choose a face with a model label. Default or manual IDs do not guarantee Phoenix 4.5.")}</small>
+                <div className="vsPalEffectiveRow">
+                  {effectiveFace?.thumbnail_video_url ? (
+                    <video
+                      className="vsPalEffectiveThumb"
+                      src={effectiveFace.thumbnail_video_url}
+                      muted
+                      loop
+                      playsInline
+                      autoPlay
+                    />
+                  ) : null}
+                  <small>{effectiveFace
+                    ? `${effectiveFace.face_name} · ${effectiveFace.model_name ? formatPhoenixModel(effectiveFace.model_name) : t("模型未知", "Unknown model")}`
+                    : t("模型尚未确认，请选择有模型标签的形象。默认或手动 ID 不保证使用 Phoenix 4.5。", "Model not confirmed. Choose a face with a model label. Default or manual IDs do not guarantee Phoenix 4.5.")}</small>
+                </div>
                 {faceUnavailable ? <small>{t("该形象尚未就绪，请选择其他形象。", "This face is not ready. Choose another face.")}</small> : null}
               </div>
 
