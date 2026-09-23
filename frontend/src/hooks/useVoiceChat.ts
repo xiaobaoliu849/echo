@@ -130,6 +130,7 @@ export default function useVoiceChat({
   );
   const [voiceChatError, setVoiceChatError] = useState("");
   const [voiceChatTranscript, setVoiceChatTranscript] = useState("");
+  const [voiceChatTranscriptIsInterim, setVoiceChatTranscriptIsInterim] = useState(false);
   const [voiceChatReply, setVoiceChatReply] = useState("");
   const [voiceChatMessages, setVoiceChatMessages] = useState<ChatMessage[]>([]);
   const [voiceChatConnected, setVoiceChatConnected] = useState(false);
@@ -180,7 +181,10 @@ export default function useVoiceChat({
   const audioInputReadyRef = useRef(false);
   const voiceChatConnectedRef = useRef(false);
   const currentUserTurnRef = useRef("");
-  const currentUserTurnIsInterimRef = useRef(false);  // streaming ASR preview — replaced in place by the final transcript
+  // Captions may arrive before the previous assistant turn ends. Keep them out
+  // of the canonical turn so interruption/terminal events cannot save them
+  // alongside the previous answer.
+  const userTranscriptPreviewRef = useRef<string | null>(null);
   const currentAssistantTurnRef = useRef("");
   const liveTranslateSourceStreamRef = useRef("");
   const liveTranslateTargetStreamRef = useRef("");
@@ -428,6 +432,7 @@ export default function useVoiceChat({
   }
 
   function stopSessionResources() {
+    clearUserTranscriptPreview();
     if (liveTranslateFinishTimerRef.current !== null) {
       clearTimeout(liveTranslateFinishTimerRef.current);
       liveTranslateFinishTimerRef.current = null;
@@ -674,7 +679,6 @@ export default function useVoiceChat({
       lastCommittedTurnIdRef.current = turnId || "";
     }
     currentUserTurnRef.current = "";
-    currentUserTurnIsInterimRef.current = false;
     currentAssistantTurnRef.current = "";
     currentTurnIdRef.current = "";
     currentAssistantInterruptedRef.current = false;
@@ -684,8 +688,16 @@ export default function useVoiceChat({
     currentLocalPendingCountRef.current = 0;
     currentCloudCountRef.current = 0;
     currentMemoryExplicitRef.current = false;
-    setVoiceChatTranscript("");
+    setVoiceChatTranscript(userTranscriptPreviewRef.current ?? "");
     setVoiceChatReply("");
+  }
+
+  function clearUserTranscriptPreview() {
+    if (userTranscriptPreviewRef.current !== null) {
+      userTranscriptPreviewRef.current = null;
+      setVoiceChatTranscriptIsInterim(false);
+      setVoiceChatTranscript(currentUserTurnRef.current);
+    }
   }
 
   function describeMemoryWriteResult(event: Extract<VoiceChatServerEvent, { type: "memory_write" }>): string {
@@ -958,34 +970,36 @@ export default function useVoiceChat({
           return;
         }
         if (event.interim) {
-          // Streaming interim ASR (qwen-audio): show words as they are
-          // recognized, updating the in-progress user turn in place. Never
-          // commits a turn or resets tool/memory state — the final
-          // transcript replaces this preview via the branch below.
-          currentUserTurnIsInterimRef.current = true;
-          currentUserTurnRef.current = event.text;
+          if (!event.text) {
+            clearUserTranscriptPreview();
+            return;
+          }
+          userTranscriptPreviewRef.current = event.text;
+          setVoiceChatTranscriptIsInterim(true);
           setVoiceChatTranscript(event.text);
           setVoiceChatStatus(t("正在听你说话…", "Listening…"));
           return;
         }
-        // A final transcript that replaces our interim preview must update
-        // the same turn in place — ASR corrections mean it is NOT always a
-        // prefix extension, so skip the continuation/commit checks that
-        // would otherwise split one utterance into two bubbles.
-        const replacingInterimPreview = currentUserTurnIsInterimRef.current;
-        currentUserTurnIsInterimRef.current = false;
+        // Final text is authoritative, including corrections to the preview.
+        // Continuation checks apply only to the previous confirmed utterance.
+        const hadInterimPreview = userTranscriptPreviewRef.current !== null;
+        clearUserTranscriptPreview();
         const trimmedIncoming = (event.text || "").trim();
+        if (!trimmedIncoming) return;
         if (
-          !replacingInterimPreview &&
-          trimmedIncoming &&
-          (trimmedIncoming === lastCommittedUserTextRef.current.trim() ||
-            (event.turn_id && event.turn_id === lastCommittedTurnIdRef.current)) &&
+          (event.turn_id
+            ? event.turn_id === lastCommittedTurnIdRef.current
+            : !hadInterimPreview && trimmedIncoming === lastCommittedUserTextRef.current.trim()) &&
           !currentUserTurnRef.current.trim()
         ) {
           return;
         }
+        const startsNewUserTurn = Boolean(
+          (event.turn_id && currentTurnIdRef.current && event.turn_id !== currentTurnIdRef.current) ||
+          (hadInterimPreview && (currentUserTurnRef.current.trim() || currentAssistantTurnRef.current.trim()))
+        );
         if (
-          !replacingInterimPreview &&
+          !startsNewUserTurn &&
           event.turn_id &&
           currentUserTurnRef.current.trim() &&
           (currentUserTurnRef.current.trim().endsWith(trimmedIncoming) ||
@@ -995,9 +1009,8 @@ export default function useVoiceChat({
           return;
         }
         if (
-          !replacingInterimPreview &&
           currentUserTurnRef.current.trim() &&
-          !isTranscriptContinuation(currentUserTurnRef.current, event.text)
+          (startsNewUserTurn || !isTranscriptContinuation(currentUserTurnRef.current, event.text))
         ) {
           if (
             voiceChatLiveTranslate &&
@@ -1211,6 +1224,7 @@ export default function useVoiceChat({
           setVoiceChatAssistantInterrupted(true);
           return;
         }
+        clearUserTranscriptPreview();
         setAssistantPlaybackGain(1);
         setVoiceChatStatus(
           event.classification === "BACKCHANNEL"
@@ -1979,7 +1993,7 @@ export default function useVoiceChat({
 
   const sessionSummary = useMemo(() => voiceChatMessages, [voiceChatMessages]);
   const voiceChatArchiveMessages = useMemo(() => {
-    const currentUser = voiceChatTranscript.trim();
+    const currentUser = currentUserTurnRef.current.trim();
     const currentAssistant = voiceChatReply.trim();
     if (!currentUser && !currentAssistant) {
       return voiceChatMessages;
@@ -2011,7 +2025,7 @@ export default function useVoiceChat({
       });
     }
     return next;
-  }, [voiceChatMessages, voiceChatTranscript, voiceChatReply]);
+  }, [voiceChatMessages, voiceChatTranscript, voiceChatTranscriptIsInterim, voiceChatReply]);
 
   const sendTextMessage = useCallback((text: string, attachments: ChatAttachment[] = []): boolean => {
     const ws = websocketRef.current;
@@ -2156,6 +2170,7 @@ export default function useVoiceChat({
     voiceChatStatus,
     voiceChatError,
     voiceChatTranscript,
+    voiceChatTranscriptIsInterim,
     voiceChatReply,
     voiceChatMemoriesRetrieved,
     voiceChatMessages,

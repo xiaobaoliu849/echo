@@ -347,9 +347,19 @@ class DashScopeRealtimeMixin:
         streamed_text_response_ids: set[str] = set()
         cannot_create_response_retries = 0
         gated_tool_turn_id = ""
+        previewed_item_ids: dict[str, None] = {}
         while True:
             event = await queue.get()
             event_type = str(event.get("type", "")).strip()
+            if event_type == "user_transcript_preview":
+                previewed_item_ids[str(event.get("item_id", ""))] = None
+                if len(previewed_item_ids) > 16:
+                    previewed_item_ids.pop(next(iter(previewed_item_ids)))
+                await self._send_event(
+                    websocket, "user_transcript", text=str(event.get("text", "")),
+                    interim=True, item_id=str(event.get("item_id", "")),
+                )
+                continue
             if event_type == "closed":
                 close_code = event.get("code")
                 close_message = str(event.get("message", "")).strip()
@@ -528,6 +538,9 @@ class DashScopeRealtimeMixin:
                     interruption.active_response_id = ""
                 continue
             if event_type == "user_transcript":
+                item_id = str(event.get("item_id", ""))
+                had_preview = item_id in previewed_item_ids
+                previewed_item_ids.pop(item_id, None)
                 cannot_create_response_retries = 0
                 user_text = str(event.get("text", ""))
                 if interruption.pending is None and (
@@ -568,6 +581,11 @@ class DashScopeRealtimeMixin:
                 ) and interrupted_response_id and not had_deferred_terminal:
                     suppressed_response_ids.add(interrupted_response_id)
                 if not should_process_user:
+                    if had_preview:
+                        await self._send_event(
+                            websocket, "user_transcript", text="", interim=True,
+                            item_id=item_id,
+                        )
                     if had_deferred_terminal and interruption.take_deferred_terminal() is not None:
                         await self._finalize_realtime_turn(
                             websocket,
@@ -582,6 +600,11 @@ class DashScopeRealtimeMixin:
                         )
                     continue
                 if InterruptionClassifier.classify_interruption(user_text) == InterruptionIntent.NOISE_OR_SILENCE:
+                    if had_preview:
+                        await self._send_event(
+                            websocket, "user_transcript", text="", interim=True,
+                            item_id=item_id,
+                        )
                     continue
                 memory_session.note_user_transcript(user_text)
                 voice_turn_id = ""

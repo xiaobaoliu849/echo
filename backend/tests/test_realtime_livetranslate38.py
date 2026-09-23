@@ -72,7 +72,7 @@ class _RecordingStub:
         return "turn-1"
 
 
-@pytest.mark.parametrize("incremental_asr,expected", [(False, []), (True, ["你好", "世界"])])
+@pytest.mark.parametrize("incremental_asr,expected", [(False, ["你好世界"]), (True, ["你好", "世界"])])
 def test_incremental_asr_mapping_is_scoped_to_the_translation_protocol(incremental_asr, expected):
     """Qwen-Omni reuses the delta event name with a {text, stash} payload.
 
@@ -100,6 +100,8 @@ def test_incremental_asr_mapping_is_scoped_to_the_translation_protocol(increment
         while not queue.empty():
             pushed.append(queue.get_nowait())
         assert [event["text"] for event in pushed] == expected
+        expected_type = "user_transcript" if incremental_asr else "user_transcript_preview"
+        assert all(event["type"] == expected_type for event in pushed)
 
     asyncio.run(run())
 

@@ -974,7 +974,11 @@ export default function ChatPage({
               <div className="bubble user live isSpeaking">
                 <div className="vsBubbleMeta">
                   <span className="vsStreamingIndicator speaking">
-                    {voiceChat.voiceChatLiveTranslate ? t("原文实时转写", "Live source transcript") : t("🎙️ 正在说话中...", "🎙️ Speaking...")}
+                    {voiceChat.voiceChatLiveTranslate
+                      ? t("原文实时转写", "Live source transcript")
+                      : voiceChat.voiceChatTranscriptIsInterim
+                        ? t("🎙️ 实时转写 · 文字可能调整", "🎙️ Live transcript · words may change")
+                        : t("🎙️ 语音转写", "🎙️ Voice transcript")}
                   </span>
                 </div>
                 <p>{renderInteractiveText(voiceChat.voiceChatTranscript)}</p>

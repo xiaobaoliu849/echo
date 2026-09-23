@@ -153,6 +153,143 @@ class FakeWebSocket {
 }
 
 describe("useVoiceChat", () => {
+  async function startTranscriptTestSession() {
+    const hook = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["Google"],
+      preferredProvider: "Google",
+      preferredModel: "gemini-3.1-flash-live-preview",
+    }));
+    await act(async () => { await hook.result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({ type: "session_open", provider: "Google", model: "gemini-3.1-flash-live-preview" });
+    });
+    return { ...hook, socket };
+  }
+
+  it("shows provisional corrections without archiving them and saves only final words", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Book a flight to Austin", interim: true });
+      socket.emitMessage({ type: "user_transcript", text: "Book a flight to Boston", interim: true });
+    });
+    expect(result.current.voiceChatTranscript).toBe("Book a flight to Boston");
+    expect(result.current.voiceChatTranscriptIsInterim).toBe(true);
+    expect(result.current.voiceChatArchiveMessages).toEqual([]);
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Please book a flight to Boston.", turn_id: "new" });
+      socket.emitMessage({ type: "assistant_text", text: "When?" });
+      socket.emitMessage({ type: "turn_complete", turn_id: "new" });
+    });
+    expect(result.current.voiceChatTranscriptIsInterim).toBe(false);
+    expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Please book a flight to Boston.", "When?"]);
+  });
+
+  it.each(["interrupted", "turn_complete"])("preserves the previous utterance and pending caption across %s", async (terminal) => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Tell me a story", turn_id: "old" });
+      socket.emitMessage({ type: "assistant_text", text: "Once upon a time" });
+      socket.emitMessage({ type: "user_transcript", text: "Actually cats", interim: true });
+    });
+    expect(result.current.voiceChatArchiveMessages.map(m => m.content)).toEqual(["Tell me a story", "Once upon a time"]);
+    act(() => { socket.emitMessage({ type: terminal, turn_id: "old" }); });
+    expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Tell me a story", "Once upon a time"]);
+    expect(result.current.voiceChatTranscript).toBe("Actually cats");
+    expect(result.current.voiceChatTranscriptIsInterim).toBe(true);
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Actually, tell me about cats.", turn_id: "new" });
+      socket.emitMessage({ type: "assistant_text", text: "Cats are curious." });
+      socket.emitMessage({ type: "turn_complete", turn_id: "new" });
+    });
+    expect(result.current.voiceChatMessages.map(m => m.content)).toEqual([
+      "Tell me a story", "Once upon a time", "Actually, tell me about cats.", "Cats are curious.",
+    ]);
+  });
+
+  it("does not save an unfinished preview on hangup or retain it in a replacement session", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => { socket.emitMessage({ type: "user_transcript", text: "Unconfirmed", interim: true }); });
+    await act(async () => { await result.current.onToggleRecording(); });
+    expect(result.current.voiceChatMessages).toEqual([]);
+    expect(result.current.voiceChatTranscriptIsInterim).toBe(false);
+    expect(result.current.voiceChatTranscript).toBe("");
+    act(() => { result.current.replaceSession([]); });
+    expect(result.current.voiceChatArchiveMessages).toEqual([]);
+  });
+
+  it.each(["BACKCHANNEL", "NOISE_OR_SILENCE"])("discards a preview classified as %s without changing the ongoing answer", async (classification) => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Tell me a story", turn_id: "old" });
+      socket.emitMessage({ type: "assistant_text", text: "Once upon a time" });
+      socket.emitMessage({ type: "user_transcript", text: "Uh huh", interim: true });
+      socket.emitMessage({ type: "interruption_decision", candidate_id: "candidate", classification });
+    });
+    expect(result.current.voiceChatTranscript).toBe("Tell me a story");
+    expect(result.current.voiceChatTranscriptIsInterim).toBe(false);
+    act(() => { socket.emitMessage({ type: "turn_complete", turn_id: "old" }); });
+    expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Tell me a story", "Once upon a time"]);
+  });
+
+  it("removes a withdrawn preview without erasing confirmed conversation text", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Tell me a story", turn_id: "old" });
+      socket.emitMessage({ type: "user_transcript", text: "Uncertain", interim: true });
+      socket.emitMessage({ type: "user_transcript", text: "" });
+    });
+    expect(result.current.voiceChatTranscript).toBe("Tell me a story");
+    expect(result.current.voiceChatTranscriptIsInterim).toBe(false);
+    expect(result.current.voiceChatArchiveMessages.map(m => m.content)).toEqual(["Tell me a story"]);
+  });
+
+  it("removes a withdrawn interim preview without saving it", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Maybe", interim: true });
+      socket.emitMessage({ type: "user_transcript", text: "", interim: true });
+    });
+    expect(result.current.voiceChatTranscript).toBe("");
+    expect(result.current.voiceChatTranscriptIsInterim).toBe(false);
+    expect(result.current.voiceChatArchiveMessages).toEqual([]);
+  });
+
+  it("archives a final transcript even when its text is identical to the preview", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => { socket.emitMessage({ type: "user_transcript", text: "Hello", interim: true }); });
+    expect(result.current.voiceChatArchiveMessages).toEqual([]);
+    act(() => { socket.emitMessage({ type: "user_transcript", text: "Hello", turn_id: "final" }); });
+    expect(result.current.voiceChatArchiveMessages.map(m => m.content)).toEqual(["Hello"]);
+    expect(result.current.voiceChatTranscriptIsInterim).toBe(false);
+  });
+
+  it.each([true, false])("keeps repeated words as a new utterance (previous turn complete: %s)", async (complete) => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Hello", turn_id: "first" });
+      socket.emitMessage({ type: "assistant_text", text: "Hi!" });
+      if (complete) socket.emitMessage({ type: "turn_complete", turn_id: "first" });
+      socket.emitMessage({ type: "user_transcript", text: "Hello", interim: true });
+      socket.emitMessage({ type: "user_transcript", text: "Hello", turn_id: "second" });
+      socket.emitMessage({ type: "assistant_text", text: "Hello again!" });
+      socket.emitMessage({ type: "turn_complete", turn_id: "second" });
+    });
+    expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Hello", "Hi!", "Hello", "Hello again!"]);
+  });
+
+  it("separates a new preview from an unanswered question when the provider omits turn IDs", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Hello" });
+      socket.emitMessage({ type: "user_transcript", text: "Hello again", interim: true });
+      socket.emitMessage({ type: "user_transcript", text: "Hello again" });
+    });
+    expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Hello"]);
+    expect(result.current.voiceChatArchiveMessages.map(m => m.content)).toEqual(["Hello", "Hello again"]);
+  });
   beforeEach(() => {
     FakeWebSocket.instances = [];
     FakeAudioContext.instances = [];

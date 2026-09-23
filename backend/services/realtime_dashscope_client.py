@@ -117,13 +117,15 @@ class DashScopeRealtimeCallback:
             return
         if event_type == "conversation.item.input_audio_transcription.delta":
             if not self.incremental_asr:
-                # Omni / Qwen-Audio carry the interim transcript as
-                # {text, stash} (confirmed prefix + tentative prediction) on
-                # this same event and have no `delta` field.  Those frames
-                # belong to the family-specific loops (which merge text+stash);
-                # pushing them here would emit an empty, non-final
-                # user_transcript that the turn owner treats as a completed
-                # utterance, running the interruption pipeline per ASR frame.
+                # This is a replacement snapshot, never a completed utterance.
+                # Use a separate internal event so previews cannot run tools,
+                # write memories, or trigger interruption classification.
+                if "text" in response or "stash" in response:
+                    self._push({
+                        "type": "user_transcript_preview",
+                        "text": str(response.get("text") or "") + str(response.get("stash") or ""),
+                        "item_id": str(response.get("item_id", "")),
+                    })
                 return
             delta = str(response.get("delta", ""))
             if not delta:

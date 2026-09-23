@@ -146,6 +146,7 @@ export function createVoiceChatController(
     voiceChatStatus: "点击开始实时语音聊天",
     voiceChatError: "",
     voiceChatTranscript: "",
+    voiceChatTranscriptIsInterim: false,
     voiceChatReply: "",
     voiceChatMemoriesRetrieved: 0,
     voiceChatMemoryWriteStatus: "",

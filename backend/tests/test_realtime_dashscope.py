@@ -560,25 +560,48 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
                 "item_id": "item-1",
             }
         )
+        callback.on_event({
+            "type": "conversation.item.input_audio_transcription.delta",
+            "text": "你好", "stash": "朋友", "item_id": "item-1",
+        })
+        callback.on_event({
+            "type": "conversation.item.input_audio_transcription.delta",
+            "text": "", "stash": "", "item_id": "item-1",
+        })
+        callback.on_event({
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "", "item_id": "item-1",
+        })
         callback.on_close(1000, "")
 
         websocket = _FakeWebSocket()
         conversation = MagicMock()
+        memory = _MemorySession()
+        memory.note_user_transcript = MagicMock()
+        memory.retrieve_memory_context = AsyncMock()
+        tool_session = VoiceAgentToolSession(default_provider="DashScope")
+        tool_session.handle_user_transcript = AsyncMock()
         await self.service._dashscope_to_client_loop(
             websocket,
             queue,
-            _MemorySession(),
+            memory,
             conversation,
             "Tina",
-            VoiceAgentToolSession(default_provider="DashScope"),
+            tool_session,
             recorder=None,
             interruption=InterruptionDecisionCoordinator(),
         )
 
         sent_types = [event["type"] for event in websocket.sent_events]
-        self.assertNotIn("user_transcript", sent_types)
-        self.assertNotIn("interruption_pending", sent_types)
-        self.assertNotIn("interruption_decision", sent_types)
+        previews = [event for event in websocket.sent_events if event["type"] == "user_transcript"]
+        self.assertEqual([event["text"] for event in previews], ["你好世界", "你好朋友", "", ""])
+        self.assertTrue(all(event["interim"] and event["item_id"] == "item-1" for event in previews))
+        memory.note_user_transcript.assert_not_called()
+        memory.retrieve_memory_context.assert_not_awaited()
+        tool_session.handle_user_transcript.assert_not_awaited()
+        # Only the completed utterance enters interruption classification.
+        self.assertEqual(sent_types.count("interruption_pending"), 1)
+        self.assertEqual(sent_types.count("interruption_decision"), 1)
 
     async def test_unexpected_server_close_is_reported_to_the_client(self) -> None:
         """A server-initiated close must say so instead of ending silently.
