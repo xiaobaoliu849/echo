@@ -3,6 +3,7 @@ import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
   DASHSCOPE_PROVIDER,
+  DEFAULT_DASHSCOPE_MODEL,
   DEFAULT_TAVUS_MODEL,
   GLM4VOICE_PROVIDER,
   PERSONAPLEX_PROVIDER,
@@ -124,15 +125,31 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     }
 
     return Array.from(map.entries())
-      .map(([provider, modelMap]) => ({
-        provider,
-        models: provider === TAVUS_PROVIDER
+      .map(([provider, modelMap]) => {
+        let models = provider === TAVUS_PROVIDER
           ? [{ model: DEFAULT_TAVUS_MODEL, value: buildModelChoiceValue(provider, DEFAULT_TAVUS_MODEL), isRealtime: true }]
-          : Array.from(modelMap.values()),
-      }))
+          : Array.from(modelMap.values());
+        // Deduplicate dated snapshot models when the unversioned alias exists (e.g. qwen3.5-omni-plus-realtime vs qwen3.5-omni-plus-realtime-2026-03-15)
+        if (provider === DASHSCOPE_PROVIDER) {
+          const hasBaseOmni = models.some((m) => m.model === DEFAULT_DASHSCOPE_MODEL);
+          const datedOmniIndex = models.findIndex((m) => m.model === `${DEFAULT_DASHSCOPE_MODEL}-2026-03-15`);
+          if (hasBaseOmni && datedOmniIndex !== -1) {
+            const currentSelected = voiceChat.voiceChatModel || chat?.chatModel;
+            if (currentSelected === `${DEFAULT_DASHSCOPE_MODEL}-2026-03-15`) {
+              models = models.filter((m) => m.model !== DEFAULT_DASHSCOPE_MODEL);
+            } else {
+              models = models.filter((m) => m.model !== `${DEFAULT_DASHSCOPE_MODEL}-2026-03-15`);
+            }
+          }
+        }
+        return {
+          provider,
+          models,
+        };
+      })
       .filter((group) => group.models.length > 0)
       .sort((a, b) => getProviderSortOrder(a.provider) - getProviderSortOrder(b.provider));
-  }, [chat?.chatModelChoices, voiceChat.voiceChatRealtimeChoicesByProvider]);
+  }, [chat?.chatModelChoices, voiceChat.voiceChatRealtimeChoicesByProvider, voiceChat.voiceChatModel, chat?.chatModel]);
 
   const committedProvider = voiceChat.voiceChatProvider || chat?.chatProvider || providerGroups[0]?.provider || "";
   const committedModel = voiceChat.voiceChatModel || chat?.chatModel || "";
@@ -150,7 +167,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   // The Level-2 flyout aligns with the row of the browsed provider (falling back
   // to the current provider when nothing is hovered).
-  const { panelRef, onRowRef, flyoutTop } = useProviderFlyoutTop(open, activeProvider || currentProviderName);
+  const { panelRef, onRowRef, flyoutTop, scrollToRow } = useProviderFlyoutTop(open, activeProvider || currentProviderName);
 
   // Model being browsed for the browsed provider: when popover is closed, strictly
   // reflect the committed model so the summary button cannot show a false selection.
@@ -269,9 +286,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       const spaceBelow = window.innerHeight - rect.bottom - margin;
       const upward = spaceAbove >= spaceBelow;
       setOpenUpward(upward);
-      // Panel (184) + gap (6) + Level-2 (260) + gap (6) + Level-3 (260) = 716px
+      // Panel (216) + gap (6) + Level-2 (280) + gap (6) + Level-3 (260) = 768px
       // of cascade to the right of the trigger before it needs to flip.
-      setFlyoutToLeft(rect.left + 716 > window.innerWidth);
+      setFlyoutToLeft(rect.left + 768 > window.innerWidth);
       setPanelMaxHeight(Math.max(200, Math.min(520, upward ? spaceAbove : spaceBelow)));
 
       // Clear active states on open so user starts cleanly at Level 1 / Level 2
@@ -306,6 +323,31 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    // When opened, ensure Level 1 scroll container has the active provider visible
+    // and Level 2 flyout scrollTop is reset to 0 so no items are clipped.
+    scrollToRow(activeProvider || currentProviderName);
+    const panel = panelRef.current;
+    if (panel) {
+      const flyout = panel.querySelector(".vsModelFlyout") as HTMLElement | null;
+      if (flyout) {
+        flyout.scrollTop = 0;
+      }
+    }
+  }, [open, scrollToRow, activeProvider, currentProviderName, panelRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (panel) {
+      const flyout = panel.querySelector(".vsModelFlyout") as HTMLElement | null;
+      if (flyout) {
+        flyout.scrollTop = 0;
+      }
+    }
+  }, [open, activeProvider, panelRef]);
 
   const currentLiveTranslate =
     isLiveTranslateModelHelper(currentProviderName, currentModelName) ||
@@ -447,7 +489,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           {currentProviderGroup ? (
             <div
               className={`vsModelFlyout${flyoutToLeft ? " flyLeft" : ""}`}
-              style={{ top: flyoutTop, maxHeight: `${panelMaxHeight}px` }}
+              style={{ top: flyoutTop, maxHeight: `${Math.max(160, panelMaxHeight - flyoutTop)}px` }}
             >
               {/* List of Specific Models under Active Provider */}
               <div className="vsVoiceSettingsList">
@@ -462,6 +504,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       type="button"
                       className={`vsVoiceSettingsRow${isSelectedModel ? " selected" : ""}`}
                       aria-current={isSelectedModel ? "true" : undefined}
+                      title={item.model}
                       onMouseEnter={() => {
                         setHoveredModel(item.model);
                         if (currentProviderGroup.provider === TAVUS_PROVIDER) {
@@ -475,9 +518,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       onClick={() => handleModelSelect(currentProviderGroup.provider, item.model)}
                     >
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                        <span className="vsVoiceSettingsRowLabel">{currentProviderGroup.provider === TAVUS_PROVIDER
-                          ? t("打开视频分身", "Open Video PAL")
-                          : item.model}</span>
+                        <span className="vsVoiceSettingsRowLabel" title={item.model}>
+                          {currentProviderGroup.provider === TAVUS_PROVIDER
+                            ? t("打开视频分身", "Open Video PAL")
+                            : item.model}
+                        </span>
                         {item.isRealtime ? (
                           <span className="vsVoiceSettingsProviderChevron" aria-hidden="true" style={{ fontSize: 12, opacity: 0.6 }}>
                             ›
@@ -500,7 +545,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
               className={`vsVoiceLevel3Flyout${flyoutToLeft ? " flyLeft" : ""}`}
               // Share the Level-2 offset so the voice list stays on the row of the
               // browsed provider instead of snapping back to the top of the panel.
-              style={{ top: flyoutTop, maxHeight: `${panelMaxHeight}px` }}
+              style={{ top: flyoutTop, maxHeight: `${Math.max(160, panelMaxHeight - flyoutTop)}px` }}
             >
               {/* Category Tab Bar: only useful when there is more than one category */}
               {canShowVoiceCategory && canShowTranslationCategory ? (

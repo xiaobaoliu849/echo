@@ -502,4 +502,77 @@ describe("VoiceCallSettingsPopover", () => {
     expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-3.5-live-translate-preview");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("deduplicates DashScope omni dated snapshot when unversioned alias is also present", () => {
+    renderPopover({
+      voiceChatProvider: "DashScope",
+      voiceChatModel: "qwen3.5-omni-plus-realtime",
+      voiceChatRealtimeChoicesByProvider: [
+        {
+          provider: "DashScope",
+          models: [
+            "qwen3.5-omni-plus-realtime",
+            "qwen3.5-omni-plus-realtime-2026-03-15",
+            "qwen3.8-livetranslate-flash-realtime",
+          ],
+        },
+      ],
+    });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("DashScope"));
+
+    // Base alias should be present, dated duplicate should be omitted
+    expect(screen.getByText("qwen3.5-omni-plus-realtime")).toBeInTheDocument();
+    expect(screen.queryByText("qwen3.5-omni-plus-realtime-2026-03-15")).not.toBeInTheDocument();
+    expect(screen.getByText("qwen3.8-livetranslate-flash-realtime")).toBeInTheDocument();
+  });
+
+  it("preserves DashScope dated snapshot when it is the currently selected model", () => {
+    renderPopover({
+      voiceChatProvider: "DashScope",
+      voiceChatModel: "qwen3.5-omni-plus-realtime-2026-03-15",
+      voiceChatRealtimeChoicesByProvider: [
+        {
+          provider: "DashScope",
+          models: [
+            "qwen3.5-omni-plus-realtime",
+            "qwen3.5-omni-plus-realtime-2026-03-15",
+            "qwen3.8-livetranslate-flash-realtime",
+          ],
+        },
+      ],
+    });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("DashScope"));
+
+    // Dated snapshot is preserved because it's selected; duplicate base alias is omitted
+    expect(screen.getByText("qwen3.5-omni-plus-realtime-2026-03-15")).toBeInTheDocument();
+    expect(screen.queryByText("qwen3.5-omni-plus-realtime")).not.toBeInTheDocument();
+  });
+
+  it("constrains Level-2 flyout maxHeight to available space below flyoutTop", () => {
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      const text = this.textContent || "";
+      if (text.includes("DashScope")) return 50;
+      return 0;
+    });
+    renderPopover();
+    openPanel();
+
+    const flyout = screen.getByText("qwen3.5-omni-plus-realtime").closest(".vsModelFlyout");
+    expect(flyout).toBeInTheDocument();
+    // Default panelMaxHeight is capped at 520, with flyoutTop=50, maxHeight should be 470px
+    expect(flyout).toHaveStyle("top: 50px");
+    expect(flyout).toHaveStyle("max-height: 470px");
+  });
+
+  it("calls scrollIntoView on the active provider row when popover opens", () => {
+    const scrollSpy = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollSpy;
+    renderPopover({
+      voiceChatProvider: "DashScope",
+    });
+    openPanel();
+    expect(scrollSpy).toHaveBeenCalled();
+  });
 });

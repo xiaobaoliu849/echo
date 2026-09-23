@@ -27,6 +27,17 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const { panelRef, onRowRef, flyoutTop } = useProviderFlyoutTop(open, activeProvider);
 
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (panel) {
+      const flyout = panel.querySelector(".vsModelFlyout") as HTMLElement | null;
+      if (flyout) {
+        flyout.scrollTop = 0;
+      }
+    }
+  }, [open, activeProvider, panelRef]);
+
   const groups = useMemo<ModelGroup[]>(() => {
     const byProvider = new Map<string, ModelGroup>();
     for (const choice of chat.chatModelChoices) {
@@ -181,7 +192,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
           {activeGroup ? (
             <div
               className={`vsModelFlyout${flyoutToLeft ? " flyLeft" : ""}`}
-              style={{ top: flyoutTop, maxHeight: `${panelMaxHeight}px` }}
+              style={{ top: flyoutTop, maxHeight: `${Math.max(160, panelMaxHeight - flyoutTop)}px` }}
             >
               {activeGroup.choices.map((choice) => {
                 const isCurrentModel =
@@ -193,12 +204,13 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
                     type="button"
                     className={`vsVoiceSettingsRow${isCurrentModel ? " selected" : ""}`}
                     aria-current={isCurrentModel ? "true" : undefined}
+                    title={choice.model}
                     onClick={() => {
                       chat.onModelChoiceChange(choice.value);
                       setOpen(false);
                     }}
                   >
-                    <span className="vsVoiceSettingsRowLabel">{choice.model}</span>
+                    <span className="vsVoiceSettingsRowLabel" title={choice.model}>{choice.model}</span>
                     {hint ? <span className="vsVoiceSettingsRowHint">{hint}</span> : null}
                   </button>
                 );

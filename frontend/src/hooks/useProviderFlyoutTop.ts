@@ -22,7 +22,7 @@ export function useProviderFlyoutTop(open: boolean, activeProvider: string) {
     }
   }, []);
 
-  useEffect(() => {
+  const updateFlyoutTop = useCallback(() => {
     if (!open || !activeProvider) {
       setFlyoutTop(0);
       return;
@@ -42,5 +42,29 @@ export function useProviderFlyoutTop(open: boolean, activeProvider: string) {
     }
   }, [open, activeProvider]);
 
-  return { panelRef, onRowRef, flyoutTop };
+  useEffect(() => {
+    updateFlyoutTop();
+  }, [updateFlyoutTop]);
+
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const scrollContainer = panel.querySelector(".vsVoiceLevel1Scroll") || panel;
+    scrollContainer.addEventListener("scroll", updateFlyoutTop, { passive: true });
+    window.addEventListener("resize", updateFlyoutTop);
+    return () => {
+      scrollContainer.removeEventListener("scroll", updateFlyoutTop);
+      window.removeEventListener("resize", updateFlyoutTop);
+    };
+  }, [open, updateFlyoutTop]);
+
+  const scrollToRow = useCallback((provider: string) => {
+    const row = rowsRef.current.get(provider);
+    if (row && typeof row.scrollIntoView === "function") {
+      row.scrollIntoView({ block: "nearest" });
+    }
+  }, []);
+
+  return { panelRef, onRowRef, flyoutTop, scrollToRow };
 }
