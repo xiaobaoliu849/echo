@@ -410,8 +410,10 @@ describe("VoiceCallSettingsPopover", () => {
   it("closes on Escape and on outside click", () => {
     renderPopover();
     openPanel();
+    expect(screen.getByText("DashScope").closest("button")).toHaveFocus();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTitle("通话设置")).toHaveFocus();
 
     openPanel();
     fireEvent.mouseDown(document.body);
@@ -426,7 +428,8 @@ describe("VoiceCallSettingsPopover", () => {
     renderPopover();
     const dialog = openPanel();
     expect(dialog.className).not.toContain("below");
-    expect(dialog.style.maxHeight).toBe("364px");
+    expect(dialog.style.maxHeight).toBe("356px");
+    expect(dialog.style.bottom).toBe("128px");
   });
 
   it("opens downward when there is more space below the button", () => {
@@ -437,7 +440,38 @@ describe("VoiceCallSettingsPopover", () => {
     renderPopover();
     const dialog = openPanel();
     expect(dialog.className).toContain("below");
-    expect(dialog.style.maxHeight).toBe("390px");
+    expect(dialog.style.maxHeight).toBe("382px");
+    expect(dialog.style.top).toBe("102px");
+  });
+
+  it("keeps the first provider above the chat body's clipping edge", () => {
+    Object.defineProperty(window, "innerHeight", { writable: true, configurable: true, value: 750 });
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const top = this.classList.contains("vsChatBody") ? 80 : 600;
+      return { top, bottom: top + 34, left: 120, right: 440, width: 320, height: 34, x: 120, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    const voiceChat = createVoiceChatController({
+      voiceChatProvider: "DashScope",
+      voiceChatModel: "qwen3.5-omni-plus-realtime",
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "DashScope", models: ["qwen3.5-omni-plus-realtime"] },
+        { provider: "Google", models: ["gemini-3.1-flash-live-preview"] },
+      ],
+    });
+    const { container } = render(
+      <div className="vsChatBody" style={{ overflow: "hidden" }}>
+        <VoiceCallSettingsPopover voiceChat={voiceChat} t={t} />
+      </div>
+    );
+    const dialog = openPanel();
+    expect(dialog.parentElement).toBe(document.body);
+    expect(container.contains(dialog)).toBe(false);
+    expect(dialog.style.maxHeight).toBe("496px");
+    // Viewport bottom (750) - bottom offset (158) - panel height (496) = 96.
+    expect(750 - Number.parseFloat(dialog.style.bottom) - Number.parseFloat(dialog.style.maxHeight)).toBe(96);
+    expect(screen.getByText("DashScope")).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByText("DashScope"));
+    expect(dialog).toBeInTheDocument();
   });
 
   it("replaces legacy Tavus model aliases with a Video PAL entry", () => {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
@@ -45,6 +46,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const [openUpward, setOpenUpward] = useState(true);
   const [flyoutToLeft, setFlyoutToLeft] = useState(false);
   const [panelMaxHeight, setPanelMaxHeight] = useState(480);
+  const [panelPosition, setPanelPosition] = useState({ left: 0, top: 0, bottom: 0 });
 
   // Level 1: Selected / Hovered Provider ("" = fallback to active provider)
   const [activeProvider, setActiveProvider] = useState<string>("");
@@ -280,16 +282,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   function handleToggle() {
     if (!open && rootRef.current) {
-      const rect = rootRef.current.getBoundingClientRect();
-      const margin = 16;
-      const spaceAbove = rect.top - margin;
-      const spaceBelow = window.innerHeight - rect.bottom - margin;
-      const upward = spaceAbove >= spaceBelow;
-      setOpenUpward(upward);
-      // Panel (216) + gap (6) + Level-2 (280) + gap (6) + Level-3 (260) = 768px
-      // of cascade to the right of the trigger before it needs to flip.
-      setFlyoutToLeft(rect.left + 768 > window.innerWidth);
-      setPanelMaxHeight(Math.max(200, Math.min(520, upward ? spaceAbove : spaceBelow)));
+      updatePanelPosition();
 
       // Clear active states on open so user starts cleanly at Level 1 / Level 2
       setActiveProvider("");
@@ -301,11 +294,46 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     }
   }
 
+  function updatePanelPosition() {
+    const root = rootRef.current;
+    if (!root) return;
+    const rect = root.getBoundingClientRect();
+    // The empty chat composer lives inside a scrolling chat body. Its top edge
+    // clips the old in-tree menu, even when the menu fits in the viewport.
+    const chatArea = root.closest(".vsChatBody, .vsChatOuterLayout");
+    const visibleTop = Math.max(0, chatArea?.getBoundingClientRect().top ?? 0);
+    const gap = 8;
+    const margin = 16;
+    const spaceAbove = Math.max(0, rect.top - gap - visibleTop - margin);
+    const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - margin);
+    const upward = spaceAbove >= spaceBelow;
+    const panelWidth = Math.min(216, window.innerWidth - margin * 2);
+    setOpenUpward(upward);
+    // Include both cascading flyouts when choosing their horizontal direction.
+    setFlyoutToLeft(rect.left + 768 > window.innerWidth);
+    setPanelMaxHeight(Math.min(520, upward ? spaceAbove : spaceBelow));
+    setPanelPosition({
+      left: Math.max(margin, Math.min(rect.left, window.innerWidth - panelWidth - margin)),
+      top: rect.bottom + gap,
+      bottom: window.innerHeight - rect.top + gap,
+    });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
 
     function handlePointerDown(event: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node) && !panelRef.current?.contains(event.target as Node)) {
         closePopover();
       }
     }
@@ -313,6 +341,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         closePopover();
+        rootRef.current?.querySelector<HTMLButtonElement>(".vsVoiceSettingsSummary")?.focus({ preventScroll: true });
       }
     }
 
@@ -337,6 +366,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       }
     }
   }, [open, scrollToRow, activeProvider, currentProviderName, panelRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.querySelector<HTMLButtonElement>(".vsVoiceSettingsProviderRow.selected, .vsVoiceSettingsProviderRow")?.focus({ preventScroll: true });
+  }, [open, panelRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -402,10 +436,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
         </svg>
       </button>
 
-      {open ? (
+      {open ? createPortal((
         <div
           className={`vsVoiceSettingsPanel${openUpward ? "" : " below"}`}
-          style={{ maxHeight: `${panelMaxHeight}px` }}
+          style={{ position: "fixed", left: panelPosition.left, top: openUpward ? "auto" : panelPosition.top, bottom: openUpward ? panelPosition.bottom : "auto", maxHeight: `${panelMaxHeight}px` }}
           ref={panelRef}
           role="dialog"
           aria-label={t("通话设置", "Call settings")}
@@ -850,7 +884,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
             </div>
           ) : null}
         </div>
-      ) : null}
+      ), document.body) : null}
     </div>
   );
 }

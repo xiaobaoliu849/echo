@@ -1982,7 +1982,7 @@ button:focus-visible {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  width: 216px;
+  width: min(216px, calc(100vw - 32px));
   background: var(--bg-card);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
