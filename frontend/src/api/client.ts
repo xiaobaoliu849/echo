@@ -515,6 +515,8 @@ export async function listTavusFaces(): Promise<TavusFaceListResponse> {
         face_name: item.face_name || item.face_id,
         model_name: item.model_name || null,
         status: item.status || null,
+        thumbnail_image_url: item.thumbnail_image_url || null,
+        thumbnail_video_url: item.thumbnail_video_url || null,
       })),
   };
 }
