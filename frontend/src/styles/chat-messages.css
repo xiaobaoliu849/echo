@@ -1,0 +1,740 @@
+/* ── Markdown content inside assistant bubbles ── */
+.vsMarkdownContent {
+  color: var(--text);
+  line-height: 1.7;
+  font-size: 15px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.vsMarkdownContent > *:first-child {
+  margin-top: 0;
+}
+
+.vsMarkdownContent > *:last-child {
+  margin-bottom: 0;
+}
+
+.vsMarkdownContent p {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+
+.vsMarkdownContent p:last-child {
+  margin-bottom: 0;
+}
+
+.vsMarkdownContent strong {
+  display: inline;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: inherit;
+  margin: 0;
+}
+
+.vsMarkdownContent em {
+  font-style: italic;
+}
+
+.vsMarkdownContent h1,
+.vsMarkdownContent h2,
+.vsMarkdownContent h3,
+.vsMarkdownContent h4,
+.vsMarkdownContent h5,
+.vsMarkdownContent h6 {
+  margin: 18px 0 8px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.vsMarkdownContent h1 { font-size: 1.4em; }
+.vsMarkdownContent h2 { font-size: 1.25em; }
+.vsMarkdownContent h3 { font-size: 1.12em; }
+.vsMarkdownContent h4 { font-size: 1em; }
+.vsMarkdownContent h5,
+.vsMarkdownContent h6 { font-size: 0.9em; color: var(--muted); }
+
+.vsMarkdownContent ul,
+.vsMarkdownContent ol {
+  margin: 0 0 10px;
+  padding-left: 1.4em;
+}
+
+.vsMarkdownContent li {
+  margin: 3px 0;
+}
+
+.vsMarkdownContent li > p {
+  margin: 0;
+}
+
+.vsMarkdownContent a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.vsMarkdownContent a:hover {
+  text-decoration-color: var(--accent-strong);
+}
+
+.vsMarkdownContent blockquote {
+  margin: 8px 0;
+  padding: 6px 14px;
+  border-left: 3px solid color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: color-mix(in oklab, var(--accent-soft) 25%, transparent);
+  border-radius: 0 8px 8px 0;
+  color: var(--text-secondary);
+}
+
+.vsMarkdownContent blockquote p {
+  margin: 0;
+}
+
+.vsMarkdownContent hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 14px 0;
+}
+
+.vsMarkdownContent code {
+  font-family: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+  font-size: 0.88em;
+  padding: 1.5px 5px;
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--accent-soft) 28%, var(--surface));
+  color: var(--text-primary);
+  border: 1px solid color-mix(in oklab, var(--accent) 8%, var(--line));
+}
+
+.vsMarkdownContent pre {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 0 10px 10px 10px;
+  background: oklch(0.26 0.015 270);
+  color: oklch(0.92 0.01 270);
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.vsMarkdownContent pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.vsMdPreWrap {
+  position: relative;
+  margin: 8px 0 10px;
+}
+
+.vsMdCopyBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in oklab, white 12%, transparent);
+  color: oklch(0.75 0.01 270);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.vsMdPreWrap:hover .vsMdCopyBtn,
+.vsMdCopyBtn:focus-visible {
+  opacity: 1;
+}
+
+.vsMdCopyBtn:hover {
+  background: color-mix(in oklab, white 22%, transparent);
+  color: oklch(0.92 0.01 270);
+}
+
+.vsMdCopyBtn.copied {
+  opacity: 1;
+  color: oklch(0.75 0.14 145);
+}
+
+.vsMarkdownContent table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 10px;
+  font-size: 0.92em;
+  display: block;
+  overflow-x: auto;
+}
+
+.vsMarkdownContent th,
+.vsMarkdownContent td {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.vsMarkdownContent th {
+  background: color-mix(in oklab, var(--accent-soft) 35%, var(--bg-card));
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.vsMarkdownContent tbody tr:nth-child(even) {
+  background: color-mix(in oklab, var(--surface) 40%, transparent);
+}
+
+/* ── Streaming typing cursor ── */
+.vsStreamingCursor {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: vsCursorBlink 1s steps(2, start) infinite;
+}
+
+@keyframes vsCursorBlink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+/* ── Thinking dots indicator ── */
+.vsThinkingDots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0 8px;
+  min-height: 24px;
+}
+
+.vsThinkingDots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.5;
+  animation: vsThinkingPulse 1.3s ease-in-out infinite;
+}
+
+.vsThinkingDots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.vsThinkingDots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes vsThinkingPulse {
+  0%, 60%, 100% { opacity: 0.35; transform: scale(1); }
+  30% { opacity: 1; transform: scale(1.25); }
+}
+
+.vsBubbleActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-end;
+  margin-top: 6px;
+  margin-bottom: -2px;
+  opacity: 0.3;
+  transition: opacity 0.16s ease;
+}
+
+.bubble:hover .vsBubbleActions,
+.vsBubbleActions:focus-within,
+.vsBubbleActions:has(.active),
+.vsBubbleActions:has(.copied) {
+  opacity: 1;
+}
+
+.vsBubbleActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--accent) 14%, var(--line));
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--bg-card) 95%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+
+.vsBubbleActionBtn:hover:not(:disabled),
+.vsBubbleActionBtn:focus-visible:not(:disabled) {
+  color: var(--accent-strong);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: var(--bg-card);
+  transform: scale(1.06);
+  outline: none;
+}
+
+.vsBubbleActionBtn.active,
+.vsBubbleActionBtn.copied {
+  color: var(--brand-dark);
+  border-color: color-mix(in oklab, var(--brand) 40%, var(--line));
+  background: color-mix(in oklab, var(--brand-soft) 80%, var(--bg-card));
+}
+
+.vsBubbleActionBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.vsBubbleCopyBtn {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in oklab, var(--accent) 14%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-card) 90%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  opacity: 0.22;
+  transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.bubble:hover .vsBubbleCopyBtn,
+.vsBubbleCopyBtn:focus-visible,
+.vsBubbleCopyBtn.copied {
+  opacity: 1;
+}
+
+.vsBubbleCopyBtn:hover,
+.vsBubbleCopyBtn:focus-visible {
+  color: var(--accent-strong);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: var(--bg-card);
+  outline: none;
+}
+
+.vsBubbleCopyBtn.copied {
+  color: var(--brand-dark);
+  border-color: color-mix(in oklab, var(--brand) 40%, var(--line));
+  background: color-mix(in oklab, var(--brand-soft) 65%, var(--bg-card));
+}
+
+.audioWrap {
+  margin-top: 16px;
+}
+
+.audioWrap audio {
+  width: 100%;
+}
+
+.resultBox {
+  margin-top: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.resultBox>p {
+  margin: 0 0 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.resultBox pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Consolas", "Menlo", monospace;
+  font-size: 13px;
+  color: #475569;
+}
+
+.ok {
+  color: #157347;
+  font-weight: 600;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.vsInlineEmptyState {
+  padding: 14px 16px;
+  border: 1px dashed #d7deeb;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+}
+
+.inlineActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.runtimeActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 auto 12px;
+  max-width: 860px;
+}
+
+.runtimeCopyStatus {
+  margin: 0 auto 10px;
+  max-width: 860px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff5f5;
+  font-size: 12px;
+  color: #9a2c2c;
+}
+
+.runtimeDetails {
+  margin: 0 auto 16px;
+  max-width: 860px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  padding: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  color: #f8fafc;
+  font-family: "Consolas", "Menlo", monospace;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.voiceList {
+  display: grid;
+  gap: 12px;
+}
+
+.voiceItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px 16px;
+  transition: all 0.2s ease;
+}
+
+.voiceItem:hover {
+  background: #fff;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.voiceItem:focus-within {
+  background: var(--bg-card);
+  border-color: color-mix(in oklab, var(--brand) 16%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand-soft) 84%, transparent);
+}
+
+.voiceItem strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.voiceItem p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.scriptLineList {
+  display: grid;
+  gap: 10px;
+}
+
+.scriptLineItem {
+  display: grid;
+  grid-template-columns: 70px 1fr 100px;
+  gap: 8px;
+  align-items: start;
+}
+
+.scriptLineItem textarea {
+  min-height: 66px;
+}
+
+.error {
+  color: #cc2b2b;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.errorMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 10px;
+  min-width: 0;
+}
+
+.errorMetaTag {
+  font-size: 12px;
+  border: 1px solid #e9c9c9;
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: #842525;
+  background: #fff1f1;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.errorMetaTagLink {
+  text-decoration: none;
+}
+
+.errorMetaTagLink:hover {
+  background: #ffe9e9;
+  border-color: #deb6b6;
+}
+
+.errorCopyBtn {
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.errorSettingsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--accent, #4f46e5);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.errorSettingsBtn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.errorSettingsBtn:active {
+  transform: translateY(0);
+}
+
+.errorToast {
+  margin: 0 0 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 6px 10px;
+  font-size: 12px;
+  width: fit-content;
+}
+
+.errorToast.ok {
+  color: #0b6b3c;
+  border-color: #b8e4cb;
+  background: #ecfaf3;
+}
+
+.errorToast.fail {
+  color: #9a2c2c;
+  border-color: #f2c7c7;
+  background: #fff3f3;
+}
+
+.errorDetails {
+  margin: 0 0 10px;
+  border: 1px solid #e6decd;
+  border-radius: 10px;
+  background: #fffdf7;
+  padding: 10px 12px;
+}
+
+.errorDetails p {
+  margin: 0 0 8px;
+  color: #7e5d1d;
+  font-weight: 700;
+}
+
+.errorDetails pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  color: #6c5422;
+  font-family: "Consolas", "Menlo", monospace;
+}
+
+.errorHints {
+  border: 1px solid #f0c0c0;
+  background: #fff7f7;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.errorHints p {
+  margin: 0 0 8px;
+  color: #962727;
+  font-weight: 700;
+}
+
+.errorHints ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #7f2525;
+}
+
+.errorHints li+li {
+  margin-top: 6px;
+}
+
+@media (max-width: 900px) {
+  .vsApp {
+    width: min(100%, 1940px);
+    min-height: calc(100vh - 24px);
+    margin: 12px auto;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--panel);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  .vsSidebar {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--sidebar-line);
+    color: var(--sidebar-text);
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 220px;
+    overflow: hidden;
+  }
+
+  .vsChatWorkspace,
+  .legacyPanel {
+    min-height: 0;
+  }
+
+  .vsTopbar {
+    height: auto;
+    padding: 10px 12px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .vsTopbarLeft {
+    flex-wrap: wrap;
+  }
+
+  .vsTopbarModelField {
+    width: 100%;
+  }
+
+  .vsTopbarField,
+  .vsSelectShell,
+  .vsInputShell,
+  .vsTopbarModelField input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .vsTopbarDivider {
+    display: none;
+  }
+
+  .vsChatBody {
+    padding: 20px 14px;
+  }
+
+  .vsChatEmptyState {
+    margin-top: 40px;
+  }
+
+  .vsToolWorkspace {
+    padding: 18px 14px;
+  }
+
+  .vsTtsShell {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+
+  .vsQuickActions {
+    grid-template-columns: 1fr;
+  }
+
+  .vsComposerWrap {
+    width: calc(100% - 16px);
+    margin-bottom: 10px;
+  }
+
+  .row,
+  .row3,
+  .rowWide,
+  .scriptLineItem {
+    grid-template-columns: 1fr;
+  }
+
+  .voiceItem {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .vsMemoryHero {
+    grid-template-columns: 1fr;
+  }
+
+  .vsEvermindBadgeCopy p {
+    max-width: none;
+  }
+}

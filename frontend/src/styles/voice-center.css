@@ -1,0 +1,1742 @@
+/* =========================================================
+   TTS Voice Workspace (Desktop UI)
+   ========================================================= */
+
+.vsTtsWorkspace {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.vsTtsLayout {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  margin: 0;
+}
+
+
+.vsEmptyIcon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.vsEmptyTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.vsEmptyDesc {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+/* Simplified UI Layout & Component Styles */
+.vsMainScrollArea {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  position: relative;
+  min-height: 0;
+  height: 100%;
+}
+
+.vsContentMaxContainer {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  flex: 1;
+}
+
+/* When a voice-center / transcription page is active, the page manages its
+   own scrolling internally. Letting the outer scroll area scroll breaks the
+   fixed-height split layouts (transcription player, TTS editor, etc.).
+
+   The flag is set on the ancestors by App.tsx rather than matched with
+   `:has(.is-transcription)`. A `:has()` on the app-wide scroll container has
+   to be re-evaluated against its whole subtree on every DOM mutation, so once
+   the transcription cue list held thousands of rows, each playback tick
+   (~4/s) triggered a full re-match plus an !important height/overflow
+   reflow — enough to lock up the main thread. */
+.vsMainScrollArea.is-self-scrolling {
+  overflow: hidden !important;
+  height: 100% !important;
+}
+
+.vsContentMaxContainer.is-self-scrolling {
+  max-width: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 !important;
+}
+
+/* Ensure child viewport containers resolve percentage height */
+.vsContentMaxContainer.is-self-scrolling > .vsWorkspaceViewport,
+.vsWorkspaceViewportInner.is-transcription,
+.vsWorkspaceViewportInner.is-voice-center {
+  height: 100% !important;
+  flex: 1 !important;
+}
+
+.vsWorkspaceHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 40px 24px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.vsWorkspaceEyebrow {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(53, 89, 74, 0.08);
+  color: var(--brand-dark);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vsWorkspaceTitle {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: clamp(28px, 3.2vw, 40px);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  color: #241d18;
+}
+
+.vsWorkspaceSummary {
+  margin: 8px 0 0;
+  max-width: 760px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #64584c;
+}
+
+.vsVoiceCenter {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fbf9f5;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.03);
+  transition: all 0.25s ease;
+}
+
+.vsVoiceCenter--immersive {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.02);
+}
+
+/* NOTE: keep this bar free of backdrop-filter/transform/filter —
+   they create a stacking context that would clip the TTS mode dropdown
+   (absolutely positioned inside) behind the content card below. */
+.vsVoiceCenterNav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 18px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  position: relative;
+  z-index: 30;
+}
+
+.vsVoiceCenterSegmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.vsVoiceSubTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #57534e;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vsVoiceSubTab:hover {
+  background: rgba(255, 255, 255, 0.7);
+  color: #1c1917;
+}
+
+.vsVoiceSubTab.active {
+  background: #ffffff;
+  color: #1c1917;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.vsVoiceSubTabIcon {
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Tab icons are lucide SVGs: let them track the label's font-size so the
+   unified tab (14px) and its dropdown menu (16px) both stay balanced. */
+.vsVoiceSubTabIcon svg,
+.vsVoiceSubTabMenuIcon svg {
+  width: 1em;
+  height: 1em;
+}
+
+.vsVoiceSubTabLabel {
+  letter-spacing: 0.01em;
+}
+
+.vsVoiceCenterContent {
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+  background: #fbf9f5;
+}
+
+.vsVoiceCenterContent--immersive {
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.vsVoiceCenterContent--immersive .vsVoiceSubContent {
+  border-radius: 0 !important;
+}
+
+.vsVoiceCenterScroll {
+  height: 100%;
+  overflow: auto;
+}
+
+.vsVoiceSubContent {
+  min-height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.vsVoiceSubContent > .vsTtsWorkspace {
+  border: 0;
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.vsVoiceSubContent > .vsTtsWorkspace,
+.vsVoiceSubContent > .vsTtsWorkspace .vsTtsLayout {
+  background: transparent;
+}
+
+.vsVoiceSubContent > .vsTtsWorkspace .vsTtsPrimaryHeader {
+  background: #ffffff;
+}
+
+.vsVoiceSubContent > .vsTtsWorkspace .vsTtsSecondary {
+  background: rgba(239, 230, 217, 0.72);
+}
+
+@media (max-width: 900px) {
+  .vsVoiceCenterNav {
+    padding: 8px 12px;
+  }
+
+  .vsVoiceCenterSegmented {
+    width: 100%;
+  }
+
+  .vsVoiceSubTab {
+    flex: 1 1 calc(50% - 4px);
+    justify-content: center;
+  }
+
+  .vsVoiceSubTabDropdownWrapper {
+    flex: 1 1 100%;
+  }
+
+  .vsVoiceSubTabDropdownGroup {
+    width: 100%;
+  }
+
+  .vsVoiceSubTabDropdownGroup .vsVoiceSubTab {
+    flex: 1 1 auto;
+  }
+
+  .vsVoiceSubTabDropdownGroup .vsVoiceSubTabLabel {
+    flex: 1;
+    text-align: left;
+  }
+
+  .vsVoiceCenterContent {
+    padding: 8px;
+  }
+}
+
+/* Custom styles for swapped Transcribe workspace */
+.vsTranscribeSidebar {
+  border-right: 1px solid var(--line) !important;
+  border-left: none !important;
+}
+
+/* History item surface is owned by .vsHistoryRow — keep overrides out of here */
+
+/* Collapsible Side Drawers */
+.vsCollapsibleSidebar {
+  transition: all 0.3s ease-in-out;
+  width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  opacity: 0;
+}
+
+/* Modern Studio Primary Header & Unified Bar */
+.vsTtsPrimaryHeader,
+.vsTtsStudioBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 22px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+.vsTtsBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vsTtsBarRight {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Voice Center SubTab Dropdown (TTS Mode integrated) */
+.vsVoiceSubTabDropdownWrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.vsVoiceSubTabDropdownGroup {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border-radius: 7px;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vsVoiceSubTabDropdownGroup.active {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.vsVoiceSubTab--dropdownMain {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-right: 4px;
+}
+
+.vsVoiceSubTabDropdownGroup.active .vsVoiceSubTab--dropdownMain {
+  box-shadow: none;
+}
+
+.vsVoiceSubTabChevronBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-height: 32px;
+  padding: 0 4px 0 0;
+  border: none;
+  background: transparent;
+  color: #78716c;
+  cursor: pointer;
+  border-top-right-radius: 7px;
+  border-bottom-right-radius: 7px;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vsVoiceSubTabChevronBtn:hover {
+  color: #1c1917;
+}
+
+.vsVoiceSubTabChevron {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vsVoiceSubTabChevron.open {
+  transform: rotate(180deg);
+}
+
+.vsVoiceSubTabMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 264px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.05);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 120;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.16s;
+  pointer-events: none;
+}
+
+.vsVoiceSubTabMenu.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.vsVoiceSubTabMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.14s ease;
+  width: 100%;
+}
+
+.vsVoiceSubTabMenuItem:hover {
+  background: #f5f5f4;
+}
+
+.vsVoiceSubTabMenuItem.active {
+  background: #fef3c7;
+}
+
+.vsVoiceSubTabMenuItem:focus-visible {
+  outline: 2px solid #d97706;
+  outline-offset: -2px;
+}
+
+.vsVoiceSubTabMenuIcon {
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.vsVoiceSubTabMenuText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.vsVoiceSubTabMenuTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c1917;
+}
+
+.vsVoiceSubTabMenuItem.active .vsVoiceSubTabMenuTitle {
+  color: #92400e;
+}
+
+.vsVoiceSubTabMenuDesc {
+  font-size: 11px;
+  color: #78716c;
+  line-height: 1.3;
+}
+
+.vsVoiceSubTabMenuItem.active .vsVoiceSubTabMenuDesc {
+  color: #b45309;
+}
+
+.vsVoiceSubTabMenuCheckmark {
+  font-size: 13px;
+  font-weight: 700;
+  color: #d97706;
+  margin-left: 4px;
+}
+
+/* Unified TTS tab: inline chevron sits right of the label */
+.vsVoiceSubTab--unified {
+  padding-right: 10px;
+  gap: 5px;
+}
+
+.vsVoiceSubTabChevron--inline {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.vsVoiceSubTab--unified:hover .vsVoiceSubTabChevron--inline,
+.vsVoiceSubTab--unified.active .vsVoiceSubTabChevron--inline {
+  opacity: 0.8;
+}
+
+/* Transcription — secondary: light text + 2px underline (level-2 lightweight) */
+.vsTranscriptionTabBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  min-height: 36px;
+  padding: 0 2px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.vsTranscriptionTabBar .vsVoiceCenterSegmented {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+.vsTranscriptionTabBar .vsVoiceSubTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #78716c;
+}
+.vsTranscriptionTabBar .vsVoiceSubTab:hover {
+  background: rgba(0,0,0,0.03);
+  color: #44403c;
+}
+.vsTranscriptionTabBar .vsVoiceSubTab.active {
+  background: transparent;
+  color: #1c1917;
+  font-weight: 600;
+  border-bottom-color: #1c1917;
+  box-shadow: none;
+}
+.vsTranscriptionTabInfo {
+  font-size: 12px;
+  color: var(--primary, #6366f1);
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+  background: rgba(99,102,241,0.08);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(99,102,241,0.12);
+}
+
+/* ── Realtime Transcription — layered toolbar system ── */
+.vsRTPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+.vsRTToolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.vsRTConfigRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 8px 14px;
+}
+.vsRTConfigGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.vsRTConfigSelect {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  min-width: 180px;
+  max-width: 340px;
+  flex: 0 1 auto;
+}
+.vsRTConfigMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.vsRTWarning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  padding: 4px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.vsRTConfigBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #78716c;
+  background: rgba(0,0,0,0.04);
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.vsRTConfigBadge.dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a8a29e;
+  display: inline-block;
+}
+button.vsRTWarningBtn {
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+button.vsRTWarningBtn:hover {
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+.vsRTViewRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 14px;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  background: rgba(251,249,245,0.55);
+}
+.vsRTViewSwitcher {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0,0,0,0.04);
+  padding: 3px;
+  border-radius: 9px;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.vsRTViewBtn {
+  padding: 4px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.vsRTViewBtn:hover { background: rgba(255,255,255,0.7); color: var(--text); }
+.vsRTViewBtn.active { background: #fff; color: #1c1917; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.vsRTViewControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.vsRTFontGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  padding: 3px 4px;
+  border-radius: 8px;
+}
+.vsRTFontLabel { font-size: 11px; color: var(--muted); font-weight: 600; padding: 0 4px; }
+.vsRTFontBtn {
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.14s;
+}
+.vsRTFontBtn.active { background: rgba(99,102,241,0.12); color: #6366f1; font-weight: 700; }
+.vsRTAudioBars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 2px;
+}
+.vsRTAudioBar {
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f43f5e, #e11d48);
+  box-shadow: 0 0 4px rgba(244,63,94,0.35);
+  transition: height 0.06s ease;
+}
+.vsRTStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(0,0,0,0.04);
+  color: var(--muted);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.vsRTStatusBadge.live {
+  background: rgba(229,72,77,0.10);
+  color: #e5484d;
+  border-color: rgba(229,72,77,0.20);
+  box-shadow: 0 2px 8px rgba(229,72,77,0.12);
+}
+.vsRTStatusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e5484d;
+  box-shadow: 0 0 6px #e5484d;
+  animation: pulse 1.2s infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.vsRTWorkspace {
+  flex: 1 1 auto;
+  min-height: 260px;
+  max-height: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.vsRTWorkspaceScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.vsRTFooterStats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.02);
+  border-top: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.vsRTActionBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 2px 0;
+}
+.vsRTActionBar--done {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.vsRTActionPrimary {
+  flex: 1.6;
+  height: 46px;
+  font-size: 15px;
+  border-radius: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.vsRTDropdownWrap { position: relative; flex: 1; }
+.vsRTDropdownWrap--export { flex: 1.1; }
+.vsRTDropdownMenu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  min-width: 180px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.14);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+.vsRTDropdownItem {
+  padding: 10px 12px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.vsRTDropdownItem:hover { background: rgba(0,0,0,0.04); }
+@media (max-width: 960px) {
+  .vsRTConfigRow { gap: 8px 10px; padding: 8px 12px; }
+  .vsRTConfigSelect { max-width: none; flex: 1 1 200px; min-width: 0; }
+  .vsRTViewRow { gap: 8px; }
+  .vsRTViewControls { justify-content: flex-start; width: auto; flex: 1; }
+}
+@media (max-width: 780px) {
+  .vsRTConfigRow { flex-direction: column; align-items: stretch; }
+  .vsRTConfigGroup { width: 100%; }
+  .vsRTConfigSelect { flex: 1 1 auto; max-width: none; }
+  .vsRTViewRow { flex-direction: column; align-items: stretch; }
+  .vsRTViewControls { justify-content: space-between; width: 100%; }
+}
+@media (max-width: 640px) {
+  .vsRTViewSwitcher { width: 100%; justify-content: space-between; }
+  .vsRTViewBtn { flex: 1; text-align: center; justify-content: center; }
+  .vsRTActionBar--done { flex-wrap: wrap; }
+  .vsRTActionPrimary, .vsRTDropdownWrap { flex: 1 1 100%; }
+}
+
+.vsTtsPrimaryStats {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 3px 9px;
+  border-radius: 16px;
+  background: #f5f5f4;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.vsStatsNumber {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1917;
+}
+
+.vsStatsUnit {
+  font-size: 11px;
+  color: #78716c;
+}
+
+/* Horizontal Toolbar for TTS */
+.vsTtsToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 22px;
+  background: #fafaf9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.vsTtsToolbarField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vsTtsToolbarField .vsFieldLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #78716c;
+  white-space: nowrap;
+}
+
+.vsSelectModern {
+  height: 32px;
+  padding: 4px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  color: #1c1917;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.vsSelectModern:focus {
+  border-color: #d97706;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.12);
+}
+
+.vsVoiceCapsuleWrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-width: 200px;
+  max-width: 360px;
+  flex: 1;
+}
+
+.vsVoiceCapsuleAvatar {
+  position: absolute;
+  left: 8px;
+  font-size: 13px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.vsSelectVoice {
+  width: 100%;
+  padding-left: 28px !important;
+}
+
+.vsRateCapsule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  padding: 2px 6px 2px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.vsRateLabel {
+  font-size: 11px;
+  color: #a8a29e;
+  font-weight: 500;
+}
+
+.vsInputRate {
+  width: 50px;
+  height: 26px;
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  border: none !important;
+  background: transparent !important;
+  outline: none;
+  color: #1c1917;
+}
+
+.vsRateQuickPresets {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.vsRatePresetTag {
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: none;
+  background: #f5f5f4;
+  color: #57534e;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.vsRatePresetTag:hover {
+  background: #e7e5e4;
+  color: #1c1917;
+}
+
+.vsRatePresetTag.active {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.vsRateResetBtn {
+  padding: 2px 6px;
+  font-size: 11px;
+  color: #a8a29e;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.vsRateResetBtn:hover {
+  color: #44403c;
+}
+
+/* Dialogue Mode Styling */
+.vsTtsDialogueToolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px 22px;
+  background: #fafaf9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* ── Compact Dialogue Bar ── */
+.vsTtsDialogueBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 0 22px;
+  background: #fafaf9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  min-height: 48px;
+}
+
+/* Each speaker row: badge + engine wrapper + voice wrapper */
+.vsDialogueSpeakerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 8px 0;
+}
+
+/* Engine select wrapper — fixed width so the select fills it via width:100% */
+.vsDialogueEngineWrap {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+/* Voice select wrapper — grows to fill remaining space in the row */
+.vsDialogueVoiceWrap {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Override default select height/font inside the dialogue bar */
+.vsTtsDialogueBar .vsSelect {
+  height: 30px;
+  padding: 0 28px 0 8px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+.vsDialogueDivider {
+  width: 1px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+  margin: 0 12px;
+}
+
+.vsDialogueRateRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 8px 0;
+}
+
+@media (max-width: 800px) {
+  .vsTtsDialogueBar {
+    padding: 0 12px;
+  }
+  .vsDialogueSpeakerRow {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+  .vsDialogueVoiceWrap {
+    flex: 1 1 160px;
+  }
+  .vsDialogueDivider {
+    width: 100%;
+    height: 1px;
+    margin: 4px 0;
+  }
+}
+
+/* Legacy classes kept for other code that may reference them */
+.vsSelectCompact {
+  height: 30px;
+  padding: 0 28px 0 8px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+.vsSelectVoice {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Legacy dialogue card classes kept for graceful fallback */
+.vsDialogueSpeakersGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 800px) {
+  .vsDialogueSpeakersGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vsSpeakerCard {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vsSpeakerHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vsSpeakerBadge {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.vsSpeakerBadgeA {
+  background: #d97706;
+}
+
+.vsSpeakerBadgeB {
+  background: #0284c7;
+}
+
+.vsSpeakerTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #292524;
+}
+
+.vsSpeakerFields {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vsSpeakerField {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.vsFieldLabelSub {
+  font-size: 11px;
+  font-weight: 600;
+  color: #78716c;
+  white-space: nowrap;
+}
+
+.vsDialogueGlobalRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.06);
+  width: 100%;
+}
+
+.vsTtsErrorNotice {
+  margin: 12px 20px 0;
+  padding: 10px 14px;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #9f1239;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.vsTtsErrorNotice .errorMeta {
+  display: block;
+}
+
+.vsTtsErrorNotice .errorHints,
+.vsTtsErrorNotice .errorDetails {
+  margin-top: 8px;
+}
+
+.vsTranscribeEmptySpeech {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  border-radius: 12px;
+  min-height: 240px;
+}
+
+/* Immersive Studio Canvas Editor */
+.vsTtsEditorWrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  padding: 0;
+}
+
+.vsTtsEditorCard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.vsTtsEditor {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  padding: 24px 28px 48px;
+  font-size: 16px !important;
+  line-height: 1.8;
+  color: #1c1917;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+}
+
+.vsTtsEditor::placeholder {
+  color: #a8a29e;
+}
+
+/* Floating Corner Utilities inside Editor */
+.vsTtsEditorCornerTools {
+  position: absolute;
+  bottom: 14px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #a8a29e;
+  pointer-events: auto;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(6px);
+  padding: 3px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.vsTtsCornerClearBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #78716c;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.vsTtsCornerClearBtn:hover:not(:disabled) {
+  color: #e11d48;
+  background: #fff1f2;
+}
+
+.vsTtsCornerClearBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.vsTtsCornerDivider {
+  color: #d6d3d1;
+  user-select: none;
+}
+
+.vsTtsCornerStats {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #57534e;
+}
+
+/* PDF Editor in TTS */
+.vsPdfEditorContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px 20px;
+  gap: 12px;
+}
+
+.vsPdfUploadRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: #f5f5f4;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.vsPdfUploadLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #44403c;
+  white-space: nowrap;
+}
+
+.vsPdfFileInput {
+  font-size: 12px;
+  color: #44403c;
+  flex: 1;
+  min-width: 0;
+}
+
+.vsPolishBtn {
+  height: 28px;
+  font-size: 12px;
+  padding: 0 10px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+/* Studio Action Dock (Bottom Playback & CTA Footer) */
+.vsTtsEditorFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 22px;
+  background: #fafaf9;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+.vsTtsFooterLeft {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.vsAudioPlayerDock {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  padding: 5px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  width: 100%;
+  max-width: 480px;
+}
+
+.vsAudioPlayerDock audio {
+  flex: 1;
+  height: 32px;
+  min-width: 0;
+}
+
+.vsExportAudioBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #292524;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.vsExportAudioBtn:hover {
+  background: #fafaf9;
+  border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vsTtsEmptyHint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #a8a29e;
+}
+
+.vsTtsHintIcon {
+  font-size: 15px;
+}
+
+.vsTtsFooterRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.vsTtsShortcutHint {
+  display: inline-flex;
+  align-items: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #78716c;
+  background: #f5f5f4;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+  user-select: none;
+  letter-spacing: 0.02em;
+}
+
+.vsTtsGenerateBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  min-width: 114px;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #d97706, #b45309);
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(180, 83, 9, 0.25);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vsTtsGenerateBtn:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(180, 83, 9, 0.35);
+  transform: translateY(-1px);
+}
+
+.vsTtsGenerateBtn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(180, 83, 9, 0.2);
+}
+
+.vsTtsGenerateBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* ── TTS Generation History ── */
+.vsTtsHistory {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+}
+
+.vsTtsHistoryBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px;
+}
+
+.vsTtsHistoryToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.vsTtsHistoryToggle:hover {
+  background: color-mix(in srgb, var(--brand) 6%, transparent);
+  color: var(--text);
+}
+
+.vsTtsHistoryToggleIcon {
+  font-size: 10px;
+  width: 12px;
+}
+
+.vsTtsHistoryCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.vsTtsHistoryClear {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.vsTtsHistoryClear:hover {
+  color: #b4483f;
+  background: color-mix(in srgb, #b4483f 8%, transparent);
+}
+
+.vsTtsHistoryList {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0 24px 12px;
+}
+
+.vsTtsHistoryEmpty {
+  margin: 0;
+  padding: 16px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vsTtsHistoryItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-card);
+  margin-bottom: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.vsTtsHistoryItem:hover {
+  border-color: color-mix(in srgb, var(--brand) 25%, transparent);
+}
+
+.vsTtsHistoryItemText {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsTtsHistoryItemMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.vsTtsHistoryItemSep {
+  opacity: 0.4;
+}
+
+.vsTtsHistoryItemVoice {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vsTtsHistoryItemActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.vsTtsHistoryAudio {
+  height: 28px;
+  width: 180px;
+  border-radius: 6px;
+}
+
+.vsTtsHistoryRemove {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.vsTtsHistoryRemove:hover {
+  color: #b4483f;
+  background: color-mix(in srgb, #b4483f 8%, transparent);
+}
+
+@media (max-width: 700px) {
+  .vsTtsHistoryItem {
+    flex-wrap: wrap;
+  }
+  .vsTtsHistoryItemText {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+  .vsTtsHistoryAudio {
+    width: 140px;
+  }
+}
+
+.vsIconSmall {
+  width: 14px;
+  height: 14px;
+}
+
+.vsVoiceCenterScroll {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
+}
+
+.vsVoiceSubContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.vsVoiceSubContent > .vsTtsWorkspace {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}

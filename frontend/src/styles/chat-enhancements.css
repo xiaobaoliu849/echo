@@ -1,0 +1,852 @@
+/* Attachment Styles */
+.vsComposerAttachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -8px;
+  padding: 0 4px;
+}
+
+.vsAttachmentPill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in oklab, var(--bg-card) 90%, var(--accent-soft));
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--text);
+  max-width: 250px;
+}
+
+.vsAttachmentPill.loading {
+  opacity: 0.8;
+}
+
+.vsAttachmentPillIcon {
+  font-size: 14px;
+}
+
+.vsAttachmentPillName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsAttachmentPillDelete {
+  border: none;
+  background: none;
+  font-size: 16px;
+  color: var(--text-soft);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vsAttachmentPillDelete:hover {
+  color: var(--brand-dark);
+}
+
+.vsMessageAttachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vsMessageAttachmentPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: inherit;
+}
+
+.vsAttachmentIcon {
+  font-size: 11px;
+}
+
+.vsAttachmentName {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsAttachmentPill .spinner-mini {
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: vsSpin 0.8s linear infinite;
+}
+.vsVoiceToolStatus {
+  align-items: center;
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--accent, #6d5dfc) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #6d5dfc) 24%, transparent);
+  border-radius: 12px;
+  display: flex;
+  gap: 10px;
+  max-width: min(680px, 92%);
+  padding: 10px 14px;
+}
+
+.vsVoiceToolStatus > div {
+  display: grid;
+  gap: 2px;
+}
+
+.vsVoiceToolStatus small {
+  opacity: 0.68;
+}
+
+.vsVoiceToolSources {
+  align-self: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: min(680px, 92%);
+}
+
+.vsVoiceToolSources a {
+  background: var(--surface-raised, rgba(255, 255, 255, 0.72));
+  border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.22));
+  border-radius: 999px;
+  color: inherit;
+  font-size: 12px;
+  max-width: 240px;
+  overflow: hidden;
+  padding: 5px 10px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsComposer.liveActive {
+  border-radius: 20px;
+  background: color-mix(in oklab, var(--bg-card) 96%, var(--accent-soft));
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--line));
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 0 16px color-mix(in oklab, var(--accent) 15%, transparent);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vsLiveVoiceStatusBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  background: color-mix(in oklab, var(--surface) 65%, var(--bg-card));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 14px;
+  border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--line));
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  animation: vs-capsule-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top center;
+}
+
+@keyframes vs-capsule-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.vsVoiceStatusSection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.vsVoiceStatusText {
+  color: var(--text);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  font-size: 13px;
+  letter-spacing: -0.1px;
+}
+
+.vsVoiceStatusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vsVoiceStatusDot.connecting {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+  animation: breathe-opacity 1.5s ease-in-out infinite;
+}
+
+.vsVoiceStatusDot.connected {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+  animation: breathe-opacity 2.2s ease-in-out infinite;
+}
+
+.vsVoiceStatusDot.listening {
+  background-color: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.85);
+  animation: breathe-opacity 1.2s ease-in-out infinite;
+}
+
+.vsVoiceStatusDot.thinking {
+  background-color: #8b5cf6;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.85);
+  animation: breathe-opacity 1.4s ease-in-out infinite;
+}
+
+.vsVoiceStatusDot.replying {
+  background-color: #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.85);
+  animation: breathe-opacity 1.2s ease-in-out infinite;
+}
+
+.vsVoiceStatusDot.muted {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+}
+
+.vsVoiceTimerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: color-mix(in oklab, var(--bg-card) 90%, var(--surface));
+  color: var(--text-muted);
+  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.vsVoiceTimerDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #10b981;
+  opacity: 0.8;
+}
+
+.vsVoiceModelBadge {
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-card));
+  color: var(--accent-strong);
+  padding: 3px 8px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid color-mix(in oklab, var(--accent) 15%, var(--line));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.vsVoiceVisualizerContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  max-width: 320px;
+  min-width: 160px;
+  height: 32px;
+  background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in oklab, var(--accent) 10%, var(--line));
+  transition: all 0.25s ease;
+}
+
+.vsVoiceReadOnlyChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-card));
+  border: 1px solid color-mix(in oklab, var(--accent) 20%, var(--line));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+  cursor: default;
+  user-select: none;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.18s ease;
+}
+
+.vsVoiceReadOnlyChip svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.vsVoiceReadOnlyChip span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vsVoiceVisualizerWave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  z-index: 2;
+  width: 100%;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.vsWaveBar {
+  flex: 1;
+  max-width: 5px;
+  min-width: 3px;
+  height: 18%;
+  min-height: 4px;
+  border-radius: 3px;
+  transition: background 0.3s ease;
+  background: linear-gradient(to top, #10b981, #34d399);
+}
+
+.vsVoiceVisualizerContainer.state-listening .vsWaveBar {
+  background: linear-gradient(to top, #10b981, #34d399);
+}
+
+.vsVoiceVisualizerContainer.state-replying .vsWaveBar {
+  background: linear-gradient(to top, #3b82f6, #6366f1);
+}
+
+.vsVoiceVisualizerContainer.state-thinking .vsWaveBar {
+  background: linear-gradient(to top, #8b5cf6, #ec4899);
+}
+
+.vsVoiceVisualizerContainer.state-muted .vsWaveBar {
+  background: #9ca3af;
+  height: 4px !important;
+  opacity: 0.5;
+}
+
+.vsWaveBar:not([style]) {
+  animation: wave-breathe 2s ease-in-out infinite;
+}
+.vsWaveBar.bar-1  { animation-delay: 0.00s; }
+.vsWaveBar.bar-2  { animation-delay: 0.08s; }
+.vsWaveBar.bar-3  { animation-delay: 0.16s; }
+.vsWaveBar.bar-4  { animation-delay: 0.24s; }
+.vsWaveBar.bar-5  { animation-delay: 0.32s; }
+.vsWaveBar.bar-6  { animation-delay: 0.40s; }
+.vsWaveBar.bar-7  { animation-delay: 0.48s; }
+.vsWaveBar.bar-8  { animation-delay: 0.56s; }
+.vsWaveBar.bar-9  { animation-delay: 0.64s; }
+.vsWaveBar.bar-10 { animation-delay: 0.72s; }
+.vsWaveBar.bar-11 { animation-delay: 0.72s; }
+.vsWaveBar.bar-12 { animation-delay: 0.64s; }
+.vsWaveBar.bar-13 { animation-delay: 0.56s; }
+.vsWaveBar.bar-14 { animation-delay: 0.48s; }
+.vsWaveBar.bar-15 { animation-delay: 0.40s; }
+.vsWaveBar.bar-16 { animation-delay: 0.32s; }
+.vsWaveBar.bar-17 { animation-delay: 0.24s; }
+.vsWaveBar.bar-18 { animation-delay: 0.16s; }
+.vsWaveBar.bar-19 { animation-delay: 0.08s; }
+.vsWaveBar.bar-20 { animation-delay: 0.00s; }
+
+@keyframes wave-breathe {
+  0%, 100% { height: 18%; }
+  50% { height: 65%; }
+}
+
+.vsVoiceGlow {
+  position: absolute;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
+  border-radius: 50%;
+  z-index: 1;
+  filter: blur(14px);
+  pointer-events: none;
+  transition: transform 0.12s ease, opacity 0.15s ease, background 0.3s ease;
+}
+
+.vsVoiceVisualizerContainer.state-replying .vsVoiceGlow {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%);
+}
+
+.vsVoiceVisualizerContainer.state-thinking .vsVoiceGlow {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
+}
+
+.vsVoiceControlsGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vsVoiceCallMuteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: color-mix(in oklab, var(--surface) 75%, var(--bg-card));
+  color: var(--text);
+  border: 1px solid color-mix(in oklab, var(--line) 90%, transparent);
+  padding: 6px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.vsVoiceCallMuteBtn:hover {
+  background: color-mix(in oklab, var(--accent) 15%, var(--surface));
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--line));
+  transform: translateY(-0.5px);
+}
+
+.vsVoiceCallMuteBtn.muted {
+  background: color-mix(in oklab, #ef4444 14%, var(--bg-card));
+  color: #ef4444;
+  border-color: color-mix(in oklab, #ef4444 40%, var(--line));
+}
+
+.vsVoiceCallMuteBtn.muted:hover {
+  background: color-mix(in oklab, #ef4444 22%, var(--bg-card));
+  border-color: #ef4444;
+}
+
+.vsVoiceCallHangupMiniBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 13px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+  transition: all 0.18s ease;
+}
+
+.vsVoiceCallHangupMiniBtn:hover {
+  background: #dc2626;
+  transform: translateY(-0.5px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+}
+
+.vsVoiceCallHangupMiniBtn:active {
+  transform: scale(0.97);
+}
+
+/* ── Inline Bubble Translation & Vocabulary Coach ── */
+.vsBubbleTranslation {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in oklab, var(--line) 60%, transparent);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  animation: fadeUp 0.2s ease forwards;
+}
+
+.vsBubbleTransHeader {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  letter-spacing: -0.1px;
+}
+
+.vsBubbleTranslation p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* ── Interactive English Word Token for Lookup ── */
+.vsWordInteractive {
+  display: inline-block;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+  transition: all 0.12s ease;
+}
+
+.vsWordInteractive:hover {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Lightweight Word Lookup Popover ── */
+.vsWordLookupPopover {
+  position: fixed;
+  z-index: 1000;
+  background: color-mix(in oklab, var(--bg-card) 96%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--line));
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  min-width: 170px;
+  max-width: 280px;
+  animation: vs-fade-in 0.15s ease forwards;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.vsWordLookupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+  padding-bottom: 4px;
+}
+
+.vsWordLookupTerm {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent-strong);
+}
+
+.vsWordLookupClose {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.vsWordLookupClose:hover {
+  color: var(--text);
+}
+
+.vsWordLookupBody {
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.vsWordLookupLoading {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.vsWordLookupError {
+  font-size: 11.5px;
+  color: #ef4444;
+}
+
+.vsWordLookupDef {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ── Streaming Speaking & Replying Breathing Pulse ── */
+.bubble.user.live {
+  border: 1.5px dashed color-mix(in oklab, #10b981 55%, var(--line)) !important;
+  background: color-mix(in oklab, #10b981 8%, var(--bg-card)) !important;
+  box-shadow: 0 2px 14px color-mix(in oklab, #10b981 12%, transparent);
+  animation: vs-live-user-breathe 2s ease-in-out infinite;
+  opacity: 0.94;
+}
+
+.bubble.assistant.live {
+  border: 1.5px dashed color-mix(in oklab, var(--accent) 55%, var(--line)) !important;
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-card)) !important;
+  box-shadow: 0 2px 14px color-mix(in oklab, var(--accent) 15%, transparent);
+  animation: vs-live-assistant-breathe 2s ease-in-out infinite;
+}
+
+@keyframes vs-live-user-breathe {
+  0%, 100% {
+    border-color: color-mix(in oklab, #10b981 40%, var(--line));
+    box-shadow: 0 2px 10px color-mix(in oklab, #10b981 8%, transparent);
+  }
+  50% {
+    border-color: color-mix(in oklab, #10b981 75%, var(--line));
+    box-shadow: 0 2px 18px color-mix(in oklab, #10b981 22%, transparent);
+  }
+}
+
+@keyframes vs-live-assistant-breathe {
+  0%, 100% {
+    border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+    box-shadow: 0 2px 10px color-mix(in oklab, var(--accent) 8%, transparent);
+  }
+  50% {
+    border-color: color-mix(in oklab, var(--accent) 75%, var(--line));
+    box-shadow: 0 2px 18px color-mix(in oklab, var(--accent) 22%, transparent);
+  }
+}
+
+/* ── Attachment Image Preview Pills in Composer ── */
+.vsAttachmentImagePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  background: color-mix(in oklab, var(--surface) 60%, var(--bg-card));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12px;
+  max-width: 220px;
+}
+
+.vsAttachmentThumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Multimodal Message Attachments in Bubbles ── */
+.vsMessageAttachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vsMessageImageWrapper {
+  max-width: 280px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  background: color-mix(in oklab, var(--surface) 20%, transparent);
+}
+
+.vsMessageImage {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  display: block;
+  border-radius: 10px 10px 0 0;
+}
+
+.vsMessageImageCaption {
+  display: block;
+  font-size: 11px;
+  color: var(--text-soft);
+  padding: 4px 8px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.vsMessageFilePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: color-mix(in oklab, var(--surface) 40%, var(--bg-card));
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.vsMessageFileIcon {
+  font-size: 14px;
+}
+
+.vsMessageFileName {
+  max-width: 180px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ── Interactive Search Sources Card & Deep Thinking Accordion ── */
+.vsBubbleMemoryTag.tool.clickable {
+  cursor: pointer;
+  border: 1px solid color-mix(in oklab, oklch(0.78 0.12 55) 40%, transparent);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.vsBubbleMemoryTag.tool.clickable:hover,
+.vsBubbleMemoryTag.tool.active {
+  background: color-mix(in oklab, oklch(0.78 0.12 55) 35%, var(--bg-card));
+}
+
+.vsSearchSourcesCard {
+  margin: 6px 0 12px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--bg-card) 90%, var(--accent-soft));
+  border: 1px solid var(--line-subtle);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vsSearchQueryText {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.vsSearchSourcesList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vsSearchSourceItem {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--bg-main) 60%, transparent);
+}
+
+.vsSearchSourceHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.vsSearchSourceDomain {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+
+.vsSearchSourceLink {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsSearchSourceLink:hover {
+  text-decoration: underline;
+}
+
+.vsSearchSourceSnippet {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vsDeepThinkingBlock {
+  margin-bottom: 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--brand) 25%, var(--line-subtle));
+  background: color-mix(in oklab, var(--brand-soft) 12%, var(--bg-card));
+  overflow: hidden;
+}
+
+.vsDeepThinkingHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.vsDeepThinkingHeader:hover {
+  background: color-mix(in oklab, var(--brand-soft) 25%, transparent);
+}
+
+.vsDeepThinkingTitle {
+  flex: 1;
+}
+
+.vsDeepThinkingChevron {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.vsDeepThinkingContent {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  border-top: 1px solid color-mix(in oklab, var(--brand) 15%, var(--line-subtle));
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  background: color-mix(in oklab, var(--bg-main) 40%, transparent);
+}
