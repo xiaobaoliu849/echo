@@ -13,6 +13,22 @@
   padding: 16px 20px 20px;
 }
 
+.vsPalCallStatus {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
 .vsPalStage {
   position: relative;
   flex: 1;
@@ -360,28 +376,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.vsPalHeaderBadge {
-  position: absolute;
-  top: 16px;
-  left: 20px;
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
-  color: #f8fafc;
-  font-size: 13px;
-  font-weight: 500;
-  user-select: none;
-  pointer-events: none;
 }
 
 .vsPalDuration {
