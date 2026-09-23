@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -54,6 +54,82 @@ const phoenixVersion = (model?: string | null): PhoenixVersion | null => {
 const comparePhoenixVersions = (a: PhoenixVersion, b: PhoenixVersion): number =>
   a[0] - b[0] || a[1] - b[1];
 
+function FacePreview({ imageUrl, videoUrl, active = false }: {
+  imageUrl?: string | null;
+  videoUrl?: string | null;
+  active?: boolean;
+}) {
+  const { t } = useI18n();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasImage = Boolean(imageUrl && !imageFailed);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoUrl || hasImage) return;
+    if (!("IntersectionObserver" in window)) {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    });
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [videoUrl, hasImage]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !ready) return;
+    if (active) {
+      void video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [active, ready]);
+
+  return (
+    <span className="vsPalFacePreview" aria-hidden="true">
+      {imageUrl && !imageFailed ? (
+        <img
+          className="vsPalFaceThumb"
+          src={imageUrl}
+          loading="lazy"
+          alt=""
+          onError={() => setImageFailed(true)}
+        />
+      ) : null}
+      {videoUrl ? (
+        <video
+          ref={videoRef}
+          className={`vsPalFaceThumb vsPalFaceVideo ${ready && (active || !hasImage) ? "isReady" : ""}`}
+          src={!failed && (active || (visible && !hasImage)) ? videoUrl : undefined}
+          muted
+          loop
+          playsInline
+          preload="auto"
+          onLoadedData={() => setReady(true)}
+          onError={() => setFailed(true)}
+        />
+      ) : null}
+      {!hasImage && !ready ? (
+        <span className="vsPalFaceThumb vsPalFaceThumbPlaceholder">
+          <Video size={20} />
+          <span>{failed || !videoUrl
+            ? t("暂无预览", "Preview unavailable")
+            : t("加载预览中", "Loading preview")}</span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function getRollingSubtitleText(text: string, latinMax = 120, cjkMax = 60): string {
   if (!text) return "";
   const hasCjk = /[\u4e00-\u9fff\u3040-\u30ff]/.test(text);
@@ -83,6 +159,8 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   const [faces, setFaces] = useState<TavusFaceSummary[]>([]);
   const [selectedFaceId, setSelectedFaceId] = useState("");
   const [faceIdInput, setFaceIdInput] = useState("");
+  const [faceSearch, setFaceSearch] = useState("");
+  const [previewFaceId, setPreviewFaceId] = useState("");
   const [catalogError, setCatalogError] = useState("");
   const [showDrawer, setShowDrawer] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -142,25 +220,14 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
     return selectedFaceId;
   }, [faceIdInput, selectedFaceId]);
 
-  // The picker only offers faces trained on the newest Phoenix model present
-  // in the account (currently Phoenix 4.5); older generations stay hidden.
   const pickerFaces = useMemo(() => {
-    let latest: PhoenixVersion | null = null;
-    for (const face of faces) {
-      const version = phoenixVersion(face.model_name);
-      if (version && (!latest || comparePhoenixVersions(version, latest) > 0)) {
-        latest = version;
-      }
-    }
-    if (!latest) {
-      return faces;
-    }
-    return faces.filter((face) => {
-      const version = phoenixVersion(face.model_name);
-      return version !== null && comparePhoenixVersions(version, latest) === 0;
-    });
-  }, [faces]);
+    const query = faceSearch.trim().toLowerCase();
+    return query
+      ? faces.filter((face) => `${face.face_name} ${face.model_name || ""}`.toLowerCase().includes(query))
+      : faces;
+  }, [faces, faceSearch]);
   const selectedPal = pals.find((pal) => pal.pal_id === resolvedPalId);
+  const defaultFace = faces.find((face) => face.face_id === selectedPal?.default_face_id);
   const effectiveFaceId = resolvedFaceId || selectedPal?.default_face_id;
   const effectiveFace = faces.find((face) => face.face_id === effectiveFaceId);
   const faceUnavailable = Boolean(effectiveFace?.status && effectiveFace.status !== "completed");
@@ -317,6 +384,14 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                 <span id="pal-face-picker-label">
                   {t("选择视频形象（Face）与模型", "Choose a video face and model")}
                 </span>
+                <input
+                  type="search"
+                  value={faceSearch}
+                  onChange={(event) => setFaceSearch(event.target.value)}
+                  placeholder={t("搜索形象名称或 Phoenix 版本", "Search faces or Phoenix versions")}
+                  aria-label={t("搜索视频形象", "Search video faces")}
+                />
+                <small>{t(`显示 ${pickerFaces.length} 个形象，共 ${faces.length} 个`, `Showing ${pickerFaces.length} of ${faces.length} faces`)}</small>
                 <div
                   className="vsPalFaceGrid"
                   role="radiogroup"
@@ -329,12 +404,20 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                     aria-checked={selectedFaceId === ""}
                     className={`vsPalFaceCard ${selectedFaceId === "" ? "isSelected" : ""}`}
                     onClick={() => setSelectedFaceId("")}
+                    onMouseEnter={() => setPreviewFaceId("default")}
+                    onMouseLeave={() => setPreviewFaceId("")}
+                    onFocus={() => setPreviewFaceId("default")}
+                    onBlur={() => setPreviewFaceId("")}
                     data-testid="pal-face-default"
                   >
-                    <span className="vsPalFaceThumb vsPalFaceThumbPlaceholder" aria-hidden="true">
-                      <Video size={20} />
-                    </span>
+                    <FacePreview
+                      key={defaultFace?.face_id || "default"}
+                      imageUrl={defaultFace?.thumbnail_image_url}
+                      videoUrl={defaultFace?.thumbnail_video_url}
+                      active={previewFaceId === "default"}
+                    />
                     <span className="vsPalFaceName">{t("使用分身默认形象", "Use the PAL's default face")}</span>
+                    {selectedPal?.default_face_id ? <span className="vsPalFaceMeta">{defaultFace?.face_name || selectedPal.default_face_id}</span> : null}
                   </button>
                   {pickerFaces.map((face) => {
                     const unavailable = Boolean(face.status && face.status !== "completed");
@@ -346,30 +429,18 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                         aria-checked={selectedFaceId === face.face_id}
                         className={`vsPalFaceCard ${selectedFaceId === face.face_id ? "isSelected" : ""}`}
                         onClick={() => setSelectedFaceId(face.face_id)}
+                        onMouseEnter={() => setPreviewFaceId(face.face_id)}
+                        onMouseLeave={() => setPreviewFaceId("")}
+                        onFocus={() => setPreviewFaceId(face.face_id)}
+                        onBlur={() => setPreviewFaceId("")}
                         disabled={unavailable}
                         data-testid="pal-face-option"
                       >
-                        {face.thumbnail_video_url ? (
-                          <video
-                            className="vsPalFaceThumb"
-                            src={face.thumbnail_video_url}
-                            muted
-                            loop
-                            playsInline
-                            preload="metadata"
-                            onMouseEnter={(event) => {
-                              void event.currentTarget.play().catch(() => {});
-                            }}
-                            onMouseLeave={(event) => {
-                              event.currentTarget.pause();
-                              event.currentTarget.currentTime = 0;
-                            }}
-                          />
-                        ) : (
-                          <span className="vsPalFaceThumb vsPalFaceThumbPlaceholder" aria-hidden="true">
-                            <Video size={20} />
-                          </span>
-                        )}
+                        <FacePreview
+                          imageUrl={face.thumbnail_image_url}
+                          videoUrl={face.thumbnail_video_url}
+                          active={previewFaceId === face.face_id}
+                        />
                         <span className="vsPalFaceName">{face.face_name}</span>
                         <span className="vsPalFaceMeta">
                           {face.model_name ? formatPhoenixModel(face.model_name) : t("模型未知", "Unknown model")}
@@ -378,6 +449,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                       </button>
                     );
                   })}
+                  {pickerFaces.length === 0 && faces.length > 0 ? <p className="vsPalFaceEmpty">{t("没有匹配的形象", "No matching faces")}</p> : null}
                   <button
                     type="button"
                     role="radio"
@@ -394,8 +466,8 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
                 </div>
                 <small>
                   {t(
-                    "仅列出最新 Phoenix 版本的形象（悬停可预览）。旧版本形象已隐藏；分身默认绑定保持不变。",
-                    "Only faces on the latest Phoenix version are listed (hover to preview). Older faces are hidden; the PAL's default binding is unchanged."
+                    "列出此账户的所有形象。缩略图显示静态画面；悬停或键盘聚焦可播放预览。",
+                    "All faces in this account are listed. Preview clips show a still frame; hover or focus to play."
                   )}
                 </small>
               </div>
@@ -403,16 +475,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
               <div className="vsPalField" data-testid="pal-effective-face" role="status">
                 <span>{t("本次使用", "This conversation uses")}</span>
                 <div className="vsPalEffectiveRow">
-                  {effectiveFace?.thumbnail_video_url ? (
-                    <video
-                      className="vsPalEffectiveThumb"
-                      src={effectiveFace.thumbnail_video_url}
-                      muted
-                      loop
-                      playsInline
-                      autoPlay
-                    />
-                  ) : null}
+                  {effectiveFace?.thumbnail_image_url ? <img className="vsPalEffectiveThumb" src={effectiveFace.thumbnail_image_url} alt="" /> : null}
                   <small>{effectiveFace
                     ? `${effectiveFace.face_name} · ${effectiveFace.model_name ? formatPhoenixModel(effectiveFace.model_name) : t("模型未知", "Unknown model")}`
                     : t("模型尚未确认，请选择有模型标签的形象。默认或手动 ID 不保证使用 Phoenix 4.5。", "Model not confirmed. Choose a face with a model label. Default or manual IDs do not guarantee Phoenix 4.5.")}</small>

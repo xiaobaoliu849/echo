@@ -74,10 +74,11 @@ describe("PalPage", () => {
     expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();
   });
 
-  it("passes the selected Phoenix 4.5 face into the conversation and hides older models", async () => {
+  it("shows all models with Tavus portraits and passes the selected face into the conversation", async () => {
     vi.mocked(listTavusFaces).mockResolvedValue({ faces: [
       { face_id: "old", face_name: "Old", model_name: "phoenix-3", status: "completed" },
       { face_id: "face45", face_name: "Brooke", model_name: "phoenix-4.5", status: "completed",
+        thumbnail_image_url: "https://cdn.tavus.io/thumbs/brooke.jpg",
         thumbnail_video_url: "https://cdn.tavus.io/thumbs/brooke.mp4" },
       { face_id: "training", face_name: "Training", model_name: "phoenix-4.5", status: "started" },
     ] });
@@ -87,11 +88,11 @@ describe("PalPage", () => {
     dailyMocks.createFrame.mockReturnValue(createCallMock());
     renderPage();
     const brooke = await screen.findByRole("radio", { name: /Brooke/ });
-    // Older Phoenix generations are removed from the picker entirely.
-    expect(screen.queryByRole("radio", { name: /Old/ })).not.toBeInTheDocument();
-    // The picker shows a visual preview of the face.
-    const preview = brooke.querySelector("video");
-    expect(preview).toHaveAttribute("src", "https://cdn.tavus.io/thumbs/brooke.mp4");
+    expect(screen.getByRole("radio", { name: /Old/ })).toBeInTheDocument();
+    expect(brooke.querySelector("img")).toHaveAttribute("src", "https://cdn.tavus.io/thumbs/brooke.jpg");
+    expect(brooke.querySelector("video")).not.toHaveAttribute("src");
+    fireEvent.mouseEnter(brooke);
+    expect(brooke.querySelector("video")).toHaveAttribute("src", "https://cdn.tavus.io/thumbs/brooke.mp4");
     expect(screen.getByRole("radio", { name: /Training/ })).toBeDisabled();
     fireEvent.change(screen.getByTestId("pal-id-input"), { target: { value: "pal" } });
     fireEvent.click(brooke);
@@ -126,23 +127,24 @@ describe("PalPage", () => {
     await waitFor(() => expect(screen.getByTestId("pal-select")).toHaveValue("saved"));
   });
 
-  it("only offers the latest Phoenix version and resolves the PAL default without upgrading it", async () => {
+  it("shows the PAL default portrait and every Phoenix version without changing the default", async () => {
     vi.mocked(listTavusPals).mockResolvedValue({ pals: [
       { pal_id: "gloria", pal_name: "Gloria", default_face_id: "face4" },
     ] });
     vi.mocked(listTavusFaces).mockResolvedValue({ faces: [
       { face_id: "face3", face_name: "Classic", model_name: "phoenix-3", status: "completed" },
-      { face_id: "face4", face_name: "Gloria - Studio", model_name: "phoenix-4", status: "completed" },
+      { face_id: "face4", face_name: "Gloria - Studio", model_name: "phoenix-4", status: "completed",
+        thumbnail_image_url: "https://cdn.tavus.io/thumbs/gloria.jpg" },
       { face_id: "face45", face_name: "Brooke", model_name: "phoenix-4.5", status: "completed" },
     ] });
     vi.mocked(createTavusConversation).mockResolvedValue({ conversation_id: "default", conversation_url: "https://tavus.daily.co/room" });
     dailyMocks.createFrame.mockReturnValue(createCallMock());
     renderPage();
     await waitFor(() => expect(screen.getByTestId("pal-effective-face")).toHaveTextContent("Gloria - Studio · Phoenix 4"));
-    // The picker lists only the newest generation; Phoenix 3/4 faces are hidden.
     expect(screen.getByRole("radio", { name: /Brooke/ })).toBeInTheDocument();
-    expect(screen.queryByRole("radio", { name: /Classic/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("radio", { name: /Gloria - Studio/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Classic/ })).toBeInTheDocument();
+    expect(screen.getAllByTestId("pal-face-option")).toHaveLength(3);
+    expect(screen.getByTestId("pal-face-default").querySelector("img")).toHaveAttribute("src", "https://cdn.tavus.io/thumbs/gloria.jpg");
     expect(screen.getByTestId("pal-face-default")).toHaveAttribute("aria-checked", "true");
     fireEvent.click(screen.getByTestId("pal-start-button"));
     await waitFor(() => expect(createTavusConversation).toHaveBeenCalledWith({
@@ -170,14 +172,17 @@ describe("PalPage", () => {
     expect(screen.getByTestId("pal-effective-face")).toHaveTextContent("模型尚未确认");
   });
 
-  it("treats phoenix-4.10 as newer than phoenix-4.5", async () => {
+  it("sorts newer Phoenix versions first while keeping earlier ones searchable", async () => {
     vi.mocked(listTavusFaces).mockResolvedValue({ faces: [
       { face_id: "face45", face_name: "Brooke", model_name: "phoenix-4.5", status: "completed" },
       { face_id: "face410", face_name: "Future", model_name: "phoenix-4.10", status: "completed" },
     ] });
     renderPage();
     expect(await screen.findByRole("radio", { name: /Future/ })).toBeInTheDocument();
-    expect(screen.queryByRole("radio", { name: /Brooke/ })).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("pal-face-option")[0]).toHaveTextContent("Future");
+    fireEvent.change(screen.getByRole("searchbox", { name: "搜索视频形象" }), { target: { value: "Brooke" } });
+    expect(screen.getByRole("radio", { name: /Brooke/ })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Future/ })).not.toBeInTheDocument();
   });
 
   it("blocks an unready default face and allows a ready override", async () => {

@@ -177,6 +177,7 @@ class TavusRouterTests(unittest.TestCase):
     def test_faces_preserve_phoenix_model_and_nullable_metadata(self) -> None:
         self._patch_service(list_faces=AsyncMock(return_value=[
             {"face_id": "face45", "face_name": "Brooke", "model_name": "phoenix-4.5", "status": "completed",
+             "thumbnail_image_url": "https://cdn.tavus.io/thumbs/brooke.jpg",
              "thumbnail_video_url": "https://cdn.tavus.io/thumbs/brooke.mp4"},
             {"face_id": "unknown", "face_name": None, "model_name": None, "status": None},
             {"face_id": None},
@@ -186,8 +187,10 @@ class TavusRouterTests(unittest.TestCase):
         faces = response.json()["faces"]
         self.assertEqual(len(faces), 2)
         self.assertEqual(faces[0]["model_name"], "phoenix-4.5")
+        self.assertEqual(faces[0]["thumbnail_image_url"], "https://cdn.tavus.io/thumbs/brooke.jpg")
         self.assertEqual(faces[0]["thumbnail_video_url"], "https://cdn.tavus.io/thumbs/brooke.mp4")
         self.assertIsNone(faces[1]["model_name"])
+        self.assertIsNone(faces[1]["thumbnail_image_url"])
         self.assertIsNone(faces[1]["thumbnail_video_url"])
         self.assertEqual(faces[1]["face_name"], "unknown")
 
