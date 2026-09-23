@@ -1,0 +1,860 @@
+/* ===== PAL (Tavus video) workspace ===== */
+.vsWorkspaceViewportInner.is-pal {
+  height: 100% !important;
+  flex: 1 !important;
+}
+
+.vsPalPage {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.vsPalStage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background:
+    radial-gradient(circle at top center, color-mix(in oklab, var(--accent-soft) 30%, transparent) 0%, transparent 46%),
+    linear-gradient(180deg, var(--bg-secondary) 0%, var(--surface) 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+.vsPalVideoHost {
+  position: absolute;
+  inset: 0;
+}
+
+.vsPalVideoHost iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.vsPalOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in oklab, var(--bg-primary) 78%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.vsPalConfigCard {
+  width: min(460px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+}
+
+.vsPalConfigHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.vsPalConfigIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  flex-shrink: 0;
+}
+
+.vsPalConfigHead h2 {
+  margin: 0;
+  font-size: var(--step-1);
+  color: var(--text-primary);
+}
+
+.vsPalConfigHead p {
+  margin: 4px 0 0;
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+
+.vsPalEndedHint {
+  margin: 0;
+  font-size: var(--step--1);
+  color: var(--accent-strong);
+}
+
+.vsPalField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--step--1);
+}
+
+.vsPalField > span {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.vsPalField input,
+.vsPalField select {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--step-0);
+}
+
+.vsPalField input:focus,
+.vsPalField select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 18%, transparent);
+}
+
+.vsPalField small {
+  color: var(--text-soft);
+}
+
+.vsPalKeyRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-card);
+}
+
+.vsPalKeyRow:focus-within {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 18%, transparent);
+}
+
+.vsPalKeyIcon {
+  display: grid;
+  place-items: center;
+  color: var(--text-soft);
+}
+
+.vsPalKeyRow input {
+  flex: 1;
+  min-height: unset;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.vsPalKeyRow input:focus {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+
+.vsPalFaceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.vsPalFaceCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--step--1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.vsPalFaceCard:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+
+.vsPalFaceCard:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 18%, transparent);
+}
+
+.vsPalFaceCard.isSelected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 35%, transparent);
+}
+
+.vsPalFaceCard:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vsPalFaceThumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
+.vsPalFaceThumbPlaceholder {
+  display: grid;
+  place-items: center;
+  color: var(--text-soft);
+}
+
+.vsPalFaceName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsPalFaceMeta {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.vsPalEffectiveRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vsPalEffectiveThumb {
+  width: 56px;
+  height: 74px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  flex-shrink: 0;
+}
+
+.vsPalStartBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: var(--step-0);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.vsPalStartBtn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.vsPalStartBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.vsPalPendingCard {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: var(--step-0);
+}
+
+.vsPalPendingPill {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--panel) 90%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: var(--step--1);
+  font-weight: 500;
+}
+
+.vsPalSpinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.5px solid color-mix(in oklab, var(--brand) 25%, transparent);
+  border-top-color: var(--brand);
+  animation: vsPalSpin 0.9s linear infinite;
+}
+
+@keyframes vsPalSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.vsPalHeaderBadge {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+  pointer-events: none;
+}
+
+.vsPalDuration {
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+}
+
+.vsPalBadgeDivider {
+  opacity: 0.4;
+}
+
+.vsPalStatusText {
+  opacity: 0.9;
+}
+
+.vsPalLiveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35);
+  animation: vsPalPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes vsPalPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+}
+
+.vsPalControlDock {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+.vsPalDockBtn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vsPalDockBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.vsPalDockBtn:active {
+  transform: scale(0.95);
+}
+
+.vsPalDockBtn.isMuted {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.vsPalDockBtn.isActive {
+  background: rgba(99, 102, 241, 0.35);
+  border-color: rgba(99, 102, 241, 0.7);
+  color: #c7d2fe;
+}
+
+.vsPalDockAudioHalo {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  pointer-events: none;
+  transition: transform 0.08s ease-out, opacity 0.08s ease-out;
+}
+
+.vsPalDockDivider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.18);
+  margin: 0 2px;
+}
+
+.vsPalHangupBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: none;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vsPalHangupBtn:hover {
+  background: #b91c1c;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(220, 38, 38, 0.5);
+}
+
+.vsPalHangupBtn:active {
+  transform: scale(0.95);
+}
+
+.vsPalDockCountBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #6366f1;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #0f172a;
+}
+
+/* ── Live Floating Subtitle Banner (Standard Video CC Style) ── */
+.vsPalFloatingSubtitle {
+  position: absolute;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(84%, 620px);
+  z-index: 9;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  user-select: none;
+}
+
+.vsPalSubSpeaker {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.vsPalFloatingSubtitle.user .vsPalSubSpeaker {
+  color: #93c5fd;
+}
+
+.vsPalFloatingSubtitle.pal .vsPalSubSpeaker {
+  color: #6ee7b7;
+}
+
+.vsPalSubText {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #ffffff;
+  font-weight: 400;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  word-break: break-word;
+}
+
+/* ── Side Transcript Drawer ── */
+.vsPalTranscriptDrawer {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 86px;
+  width: 320px;
+  max-width: calc(100% - 32px);
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: -8px 12px 36px rgba(0, 0, 0, 0.5);
+  animation: vsPalDrawerSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vsPalDrawerSlide {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.vsPalDrawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.vsPalDrawerHead h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.vsPalDrawerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vsPalDrawerIconBtn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsPalDrawerIconBtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.vsPalDrawerBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vsPalDrawerEmpty {
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 40px;
+}
+
+.vsPalTranscriptRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vsPalTranscriptMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.vsPalTranscriptRow.user .vsPalTranscriptName {
+  color: #a5b4fc;
+  font-weight: 600;
+}
+
+.vsPalTranscriptRow.pal .vsPalTranscriptName {
+  color: #6ee7b7;
+  font-weight: 600;
+}
+
+.vsPalTranscriptBubble {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  word-break: break-word;
+}
+
+.vsPalTranscriptRow.user .vsPalTranscriptBubble {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+.vsPalTranscriptRow.pal .vsPalTranscriptBubble {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+/* ── Post-Call Summary Card ── */
+.vsPalSummaryCard {
+  width: 100%;
+  max-width: 620px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg, 0 20px 40px rgba(0, 0, 0, 0.15));
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: vsPalSummaryPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vsPalSummaryPop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vsPalSummaryHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  padding-bottom: 14px;
+}
+
+.vsPalSummaryHead h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: var(--text-primary, #0f172a);
+}
+
+.vsPalSummaryHead p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+}
+
+.vsPalSummaryActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vsPalGhostBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background: transparent;
+  color: var(--text-primary, #0f172a);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsPalGhostBtn:hover {
+  background: var(--bg-secondary, #f1f5f9);
+}
+
+.vsPalRestartBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  background: #6366f1;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsPalRestartBtn:hover {
+  background: #4f46e5;
+}
+
+.vsPalCloseBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #0f172a);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.vsPalCloseBtn:hover {
+  background: var(--bg-secondary, #f1f5f9);
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.vsPalCloseBtn:active {
+  transform: scale(0.95);
+}
+
+.vsPalCloseBtn svg {
+  flex-shrink: 0;
+  display: block;
+}
+
+.vsPalTranscriptScrollArea {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 4px;
+}
+
+/* ── High-Contrast Styles for Post-Call Summary Modal ── */
+.vsPalSummaryCard .vsPalTranscriptRow {
+  gap: 6px;
+}
+
+.vsPalSummaryCard .vsPalTranscriptMeta {
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  font-weight: 500;
+}
+
+.vsPalSummaryCard .vsPalTranscriptRow.user .vsPalTranscriptName {
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.vsPalSummaryCard .vsPalTranscriptRow.pal .vsPalTranscriptName {
+  color: #047857;
+  font-weight: 600;
+}
+
+.vsPalSummaryCard .vsPalTranscriptBubble {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary, #0f172a);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.vsPalSummaryCard .vsPalTranscriptRow.user .vsPalTranscriptBubble {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #1e1b4b;
+}
+
+.vsPalSummaryCard .vsPalTranscriptRow.pal .vsPalTranscriptBubble {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #064e3b;
+}

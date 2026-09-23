@@ -1,0 +1,998 @@
+.vsApp {
+  width: min(100%, 1940px);
+  height: calc(100vh - 24px);
+  min-height: calc(100vh - 24px);
+  margin: 12px auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+}
+
+.vsApp.desktopEmbedded {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  margin: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.vsSidebarShell {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  overflow: visible;
+  z-index: 2;
+}
+
+.vsSidebar {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-line);
+  color: var(--sidebar-text);
+  min-height: 0;
+  transition: width var(--sidebar-transition);
+  width: 216px;
+  overflow: hidden;
+  position: relative;
+  height: 100%;
+  max-height: 100%;
+  /* With the hidden native title bar (Windows), the sidebar is the drag
+     surface; interactive children stay clickable via no-drag. Inert in
+     browsers, where -webkit-app-region has no effect. */
+  -webkit-app-region: drag;
+}
+
+.vsSidebar :is(button, a, input, select, textarea, [role="menu"], [role="menuitem"], .vsHistoryItem) {
+  -webkit-app-region: no-drag;
+}
+
+.vsSidebar.collapsed {
+  width: 80px;
+}
+
+.vsSidebarHeader {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 19px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-card) 85%, var(--accent-soft)) 0%, var(--bg-secondary) 100%);
+  border-bottom: 1px solid var(--border-color);
+  transition: padding var(--sidebar-transition);
+}
+
+.vsSidebar.collapsed .vsSidebarHeader {
+  height: 76px;
+  /* Center via padding (animatable) instead of justify-content (snaps).
+     19px keeps the 40px toggle inside 80px - 1px border with zero clipping. */
+  padding: 0 19px;
+}
+
+.vsBrand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  transition: gap var(--sidebar-transition);
+}
+
+.vsSidebar.collapsed .vsBrand {
+  /* Keep flex: 1 from the base rule; gap animates via --sidebar-transition. */
+  gap: 0;
+}
+
+.vsSidebarToggleBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  outline: none;
+  transition: transform 0.15s ease;
+}
+
+.vsSidebarToggleBtn:hover {
+  transform: translateY(-1px);
+}
+
+.vsSidebarToggleBtn:active {
+  transform: scale(0.95);
+}
+
+.vsBrandIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  /* Mirrors the packaged app icon (resources/icons/logo.png) gradient and
+     glyph color so the in-app brand mark matches the desktop icon. */
+  background:
+    linear-gradient(160deg, oklch(0.611 0.028 161), oklch(0.52 0.027 161));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 10px 22px color-mix(in oklab, var(--brand-dark) 22%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 65%, transparent);
+  transition:
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+.vsSidebarToggleBtn:hover .vsBrandIcon {
+  box-shadow:
+    0 14px 28px color-mix(in oklab, var(--brand-dark) 32%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 70%, transparent);
+  filter: brightness(1.04);
+}
+
+.vsBrandIconMark,
+.vsBrandIconHoverAction {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.vsBrandIconMark {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.vsBrandIconHoverAction {
+  opacity: 0;
+  transform: scale(0.85);
+  pointer-events: none;
+}
+
+.vsSidebarToggleBtn:hover .vsBrandIconMark {
+  opacity: 0;
+  transform: scale(0.85);
+}
+
+.vsSidebarToggleBtn:hover .vsBrandIconHoverAction {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.vsBrandCopy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  transition:
+    opacity var(--sidebar-transition),
+    max-width var(--sidebar-transition),
+    transform var(--sidebar-transition);
+  max-width: 160px;
+}
+
+.vsBrand h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--sidebar-text-strong);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.vsSidebar.collapsed .vsBrandCopy {
+  opacity: 0;
+  max-width: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
+}
+
+.vsSidebarAction {
+  padding: 8px 14px 6px;
+  transition: padding var(--sidebar-transition);
+}
+
+.vsSidebar.collapsed .vsSidebarAction {
+  padding: 12px 14px 6px;
+}
+
+.vsNewChatBtn {
+  width: 100%;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in oklab, var(--brand) 18%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-card) 82%, var(--accent-soft)), color-mix(in oklab, var(--bg-card) 92%, var(--brand-soft)));
+  color: var(--brand-dark);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 0 16px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    padding var(--sidebar-transition),
+    gap var(--sidebar-transition),
+    border-radius var(--sidebar-transition);
+}
+
+.vsNewChatBtn:hover {
+  background: var(--vs-sidebar-hover-bg);
+  border-color: color-mix(in oklab, var(--brand) 28%, var(--line));
+  box-shadow: var(--vs-sidebar-hover-shadow);
+  filter: none;
+  transform: none;
+}
+
+.vsSidebar.collapsed .vsNewChatBtn {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 16px;
+  border-radius: 18px;
+  gap: 0;
+}
+
+.vsNewChatIcon {
+  width: 20px;
+  min-width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.vsNewChatText {
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 120px;
+  transition:
+    opacity var(--sidebar-transition),
+    max-width var(--sidebar-transition),
+    transform var(--sidebar-transition);
+}
+
+.vsSidebar.collapsed .vsNewChatText {
+  opacity: 0;
+  max-width: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
+}
+
+.vsSidebarNavScroll {
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 0;
+}
+
+.vsSidebarTop {
+  min-height: 0;
+}
+
+.vsSidebarBody {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.vsSidebarSection {
+  padding: 0 10px;
+}
+
+.vsSectionLabel {
+  display: none;
+}
+
+.vsNav {
+  display: grid;
+  gap: 6px;
+  padding: 0 14px;
+  transition: padding var(--sidebar-transition), gap var(--sidebar-transition);
+}
+
+.vsNavItem {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 10px 16px;
+  text-align: left;
+  background: transparent;
+  color: var(--sidebar-text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    padding var(--sidebar-transition),
+    border-radius var(--sidebar-transition),
+    gap var(--sidebar-transition);
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  min-height: 40px;
+}
+
+.vsNavItem:hover {
+  background: var(--vs-sidebar-hover-bg);
+  color: var(--sidebar-text-strong);
+  border-color: var(--vs-sidebar-hover-border);
+  box-shadow: var(--vs-sidebar-hover-shadow);
+  filter: none;
+  transform: none;
+}
+
+.vsNavItem.active {
+  color: var(--brand-dark);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--brand-soft) 84%, var(--bg-card)), color-mix(in oklab, var(--accent-soft) 32%, var(--bg-card)));
+  border-color: color-mix(in oklab, var(--brand) 18%, var(--line));
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 48%, transparent);
+}
+
+.vsNavIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+  color: var(--sidebar-text);
+  opacity: 0.8;
+}
+
+.vsNavItem.active .vsNavIcon {
+  color: var(--brand);
+  opacity: 1;
+}
+
+.vsNavItem:hover .vsNavIcon {
+  color: var(--sidebar-text-strong);
+  opacity: 1;
+  transform: translateX(1px);
+}
+
+.vsNavItemText {
+  overflow: hidden;
+  max-width: 140px;
+  transition:
+    opacity var(--sidebar-transition),
+    max-width var(--sidebar-transition),
+    transform var(--sidebar-transition);
+  opacity: 1;
+}
+
+.vsSidebar.collapsed .vsNavItem {
+  border-radius: 18px;
+  justify-content: flex-start;
+  padding: 10px 16px;
+  gap: 0;
+}
+
+.vsSidebar.collapsed .vsNavItemText {
+  opacity: 0;
+  max-width: 0;
+  margin-left: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
+}
+
+.vsSidebar.collapsed .vsNav {
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.vsNavActiveIndicator {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 28px;
+  background: linear-gradient(180deg, var(--accent), var(--brand));
+  border-radius: 999px;
+  transition: left var(--sidebar-transition);
+}
+
+.vsSidebar.collapsed .vsNavActiveIndicator {
+  left: 6px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.vsHistorySection {
+  margin-top: 4px;
+  padding: 6px 10px 10px;
+  border-top: 1px solid color-mix(in oklab, var(--accent) 8%, var(--line));
+  transition:
+    opacity var(--sidebar-transition),
+    max-height var(--sidebar-transition),
+    padding var(--sidebar-transition),
+    border-top-color var(--sidebar-transition),
+    margin-top var(--sidebar-transition);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  opacity: 1;
+  overflow: hidden;
+  /* Definite clamp so collapsed max-height: 0 animates instead of snapping. */
+  max-height: 100%;
+}
+
+.vsSidebar.collapsed .vsHistorySection {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+  pointer-events: none;
+  margin-top: 0;
+}
+
+.vsHistoryHead {
+  display: none;
+}
+
+
+
+.vsHistoryList {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Reserve the scrollbar gutter so rows never shift when the list
+     starts/stops overflowing (e.g. mid collapse animation). */
+  scrollbar-gutter: stable;
+  max-height: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.vsHistoryRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  background: transparent;
+  box-shadow: none;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.vsHistoryRow:hover,
+.vsHistoryRow.menu-open {
+  /* Identical soft-white pill as .vsNavItem:hover */
+  background: var(--vs-sidebar-hover-bg);
+  border-color: var(--vs-sidebar-hover-border);
+  box-shadow: var(--vs-sidebar-hover-shadow);
+}
+
+.vsHistoryRow.menu-open {
+  z-index: 50;
+}
+
+.vsHistoryItem {
+  border: none;
+  border-radius: 14px;
+  padding: 8px 10px;
+  text-align: left;
+  background: transparent;
+  color: var(--sidebar-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  /* Keep the title width stable when the action button fades in. */
+  padding-right: 42px;
+}
+
+/* Row owns the surface — never a second gray paint / global brightness */
+.vsHistoryItem:hover,
+.vsHistoryItem:focus,
+.vsHistoryItem:active {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: inherit;
+  filter: none !important;
+  transform: none !important;
+}
+
+.vsHistoryRow:hover .vsHistoryItem,
+.vsHistoryRow.menu-open .vsHistoryItem {
+  color: var(--sidebar-text-strong);
+}
+
+.vsSidebar.collapsed .vsHistoryItem {
+  padding: 8px 18px;
+  justify-content: flex-start;
+}
+
+.vsHistoryIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+
+
+.vsHistoryText {
+  display: block;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  transition: opacity 0.25s ease, max-width 0.3s ease;
+  opacity: 1;
+}
+
+.vsSidebar.collapsed .vsHistoryText {
+  opacity: 0;
+  max-width: 0;
+}
+
+/* --- ChatGPT-style context menu --- */
+/* Title stays full width; ⋯ floats over the right edge on hover only. */
+
+.vsHistoryMoreWrapper {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 2;
+}
+
+/* Fade into the same soft-white hover pill — no second gray tint */
+.vsHistoryMoreWrapper::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 100%;
+  min-height: 32px;
+  background: linear-gradient(
+    to right,
+    color-mix(in oklab, var(--vs-sidebar-hover-bg) 0%, transparent) 0%,
+    var(--vs-sidebar-hover-bg) 70%
+  );
+  border-radius: 0 12px 12px 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.vsHistoryRow:hover .vsHistoryMoreWrapper,
+.vsHistoryRow.menu-open .vsHistoryMoreWrapper,
+.vsHistoryRow:focus-within .vsHistoryMoreWrapper {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.vsHistoryMoreBtn {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--sidebar-text-strong);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  filter: none;
+  transform: none;
+}
+
+/*
+ * Light chip on the same white surface — still card/accent family, never gray.
+ * (hover-strong is slightly warmer white, still lighter than sidebar-bg)
+ */
+.vsHistoryMoreBtn:hover,
+.vsHistoryMoreBtn:focus-visible,
+.vsHistoryRow.menu-open .vsHistoryMoreBtn {
+  background: var(--vs-sidebar-hover-strong) !important;
+  border-color: var(--vs-sidebar-hover-border);
+  color: var(--sidebar-text-strong);
+  filter: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Kill global button:hover brightness/lift inside sidebar so nothing drifts gray */
+.vsSidebar button:hover:not(:disabled),
+.vsSidebar button:active:not(:disabled) {
+  filter: none;
+}
+
+.vsSidebar .vsNavItem:hover,
+.vsSidebar .vsFooterAction:hover,
+.vsSidebar .vsHistoryItem:hover,
+.vsSidebar .vsHistoryMoreBtn:hover,
+.vsSidebar .vsNewChatBtn:hover {
+  transform: none;
+}
+
+/* Portal menu: fixed to viewport, never clipped by sidebar overflow */
+.vsHistoryDropdown {
+  position: fixed;
+  min-width: 168px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow:
+    0 10px 28px color-mix(in oklab, var(--brand-dark) 14%, transparent),
+    0 2px 8px color-mix(in oklab, black 8%, transparent);
+  padding: 4px;
+  z-index: 10000;
+  animation: vsDropdownIn 0.12s ease-out;
+}
+
+@keyframes vsDropdownIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vsHistoryDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sidebar-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.vsHistoryDropdownItem:hover {
+  background: var(--vs-sidebar-hover-bg);
+  color: var(--sidebar-text-strong);
+  filter: none !important;
+  transform: none !important;
+}
+
+.vsHistoryDropdownItem.danger:hover {
+  background: color-mix(in oklab, oklch(0.65 0.25 25) 12%, var(--bg-card));
+  color: oklch(0.55 0.22 25);
+}
+
+.vsSidebar.collapsed .vsHistoryMoreWrapper {
+  display: none;
+}
+
+/* --- Inline rename input --- */
+
+.vsHistoryItemEditing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  width: 100%;
+}
+
+.vsHistoryEditInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid color-mix(in oklab, var(--brand) 30%, var(--line));
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--bg-card);
+  color: var(--sidebar-text-strong);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 15%, transparent);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.vsHistoryEditInput:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 20%, transparent);
+}
+
+
+
+.vsSidebarFooter {
+  background: var(--sidebar-bg);
+  border-top: 1px solid var(--sidebar-line);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: padding var(--sidebar-transition);
+}
+
+.vsSidebar.collapsed .vsSidebarFooter {
+  padding: 12px 14px 16px;
+}
+
+.vsSidebarFooterActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vsFooterAction > span {
+  overflow: hidden;
+  max-width: 120px;
+  transition:
+    opacity var(--sidebar-transition),
+    max-width var(--sidebar-transition),
+    transform var(--sidebar-transition);
+}
+
+.vsFooterAction {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  min-height: 48px;
+  padding: 0 16px;
+  text-align: left;
+  background: transparent;
+  color: var(--sidebar-text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    padding var(--sidebar-transition),
+    border-radius var(--sidebar-transition),
+    gap var(--sidebar-transition);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.vsFooterAction:hover {
+  background: var(--vs-sidebar-hover-bg);
+  color: var(--sidebar-text-strong);
+  border-color: var(--vs-sidebar-hover-border);
+  box-shadow: var(--vs-sidebar-hover-shadow);
+  filter: none;
+  transform: none;
+}
+
+.vsFooterAction.active {
+  background: color-mix(in oklab, var(--brand-soft) 80%, var(--bg-card));
+  color: var(--brand-dark);
+  font-weight: 700;
+  border-color: color-mix(in oklab, var(--brand) 18%, var(--line));
+}
+
+.vsSidebar.collapsed .vsFooterAction {
+  border-radius: 18px;
+  justify-content: flex-start;
+  padding: 0 16px;
+  gap: 0;
+}
+
+.vsSidebar.collapsed .vsFooterAction > span {
+  opacity: 0;
+  max-width: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
+}
+
+.vsProfileCard {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vsSidebar.collapsed .vsProfileCard {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vsProfileAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  flex-shrink: 0;
+}
+
+.vsProfileInfo {
+  min-width: 0;
+}
+
+.vsSidebar.collapsed .vsProfileInfo {
+  opacity: 0;
+  width: 0;
+}
+
+.vsProfileName {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vsProfilePlan {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.vsEvermindBadge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.vsEvermindBadgeMark {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+
+.vsEvermindBadgeCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vsEvermindBadgeEyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.vsEvermindBadgeCopy strong {
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.vsEvermindBadgeCopy p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.vsEvermindBadge.compact {
+  gap: 10px;
+}
+
+.vsEvermindBadge.compact .vsEvermindBadgeMark {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+
+.vsEvermindBadge.compact .vsEvermindBadgeCopy strong {
+  font-size: 13px;
+}
+
+.vsNavItem:focus-visible,
+.vsHistoryItem:focus-visible,
+.vsNewChatBtn:focus-visible,
+.vsSidebarToggleBtn:focus-visible,
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-soft) 92%, transparent);
+}
+
+.legacyMain {
+  min-width: 0;
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--bg-card) 92%, var(--accent-soft));
+  box-shadow: var(--shadow-sm);
+}

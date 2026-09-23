@@ -1,0 +1,100 @@
+:root {
+  --sidebar-transition: 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  --display-font: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --body-font: "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+  --step--1: clamp(0.76rem, 0.73rem + 0.1vw, 0.82rem);
+  --step-0: clamp(0.88rem, 0.84rem + 0.16vw, 0.96rem);
+  --step-1: clamp(1rem, 0.96rem + 0.24vw, 1.12rem);
+  --step-2: clamp(1.2rem, 1.08rem + 0.46vw, 1.42rem);
+  --step-3: clamp(1.52rem, 1.3rem + 0.84vw, 1.96rem);
+  --step-4: clamp(2.06rem, 1.66rem + 1.26vw, 2.72rem);
+
+  --bg-primary: oklch(0.985 0.01 95);
+  --bg-secondary: oklch(0.968 0.012 95);
+  --bg-card: oklch(0.992 0.008 92);
+  --canvas: oklch(0.952 0.013 92);
+  --surface: oklch(0.947 0.017 92);
+  --surface-strong: oklch(0.915 0.022 92);
+  --panel: var(--bg-primary);
+  --panel-strong: var(--bg-secondary);
+
+  --text-primary: oklch(0.27 0.03 78);
+  --text-secondary: oklch(0.52 0.02 78);
+  --text-soft: oklch(0.63 0.016 78);
+  --border-color: oklch(0.89 0.018 88);
+  --line: var(--border-color);
+  --line-strong: oklch(0.82 0.024 88);
+
+  --brand: oklch(0.57 0.034 162);
+  --brand-dark: oklch(0.43 0.026 162);
+  --brand-soft: oklch(0.95 0.024 160);
+  --accent: oklch(0.69 0.072 52);
+  --accent-soft: oklch(0.94 0.026 52);
+  --accent-strong: oklch(0.58 0.06 52);
+  --danger: #ef4444;
+  --danger-soft: #fef2f2;
+
+  --shadow-sm: 0 2px 6px color-mix(in oklab, var(--brand-dark) 10%, transparent);
+  --shadow-md:
+    0 12px 28px color-mix(in oklab, var(--brand-dark) 10%, transparent),
+    0 2px 8px color-mix(in oklab, var(--brand-dark) 5%, transparent);
+  --shadow-lg:
+    0 28px 64px color-mix(in oklab, var(--brand-dark) 12%, transparent),
+    0 8px 24px color-mix(in oklab, var(--accent) 10%, transparent);
+
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+
+  --user-bg: oklch(0.94 0.02 58);
+  --assistant-bg: oklch(0.968 0.014 88);
+  --sidebar-bg: oklch(0.958 0.015 95);
+  --sidebar-line: var(--border-color);
+  --sidebar-text: var(--text-secondary);
+  --sidebar-text-strong: var(--text-primary);
+
+  /*
+   * Shared sidebar hover surface — reads as soft white on --sidebar-bg
+   * (same language for 新建对话 / 语音中心 / 播客 / 历史记录 / 三点).
+   */
+  --vs-sidebar-hover-bg: var(--bg-card);
+  --vs-sidebar-hover-border: color-mix(in oklab, var(--accent) 12%, var(--line));
+  --vs-sidebar-hover-strong: color-mix(in oklab, var(--bg-card) 86%, var(--accent-soft));
+  --vs-sidebar-hover-shadow: 0 1px 2px color-mix(in oklab, var(--brand-dark) 7%, transparent);
+
+  /* Legacy variable aliases used by older inline-styled components. */
+  --surface-color: var(--surface);
+  --text-color: var(--text);
+  --text-color-muted: var(--muted);
+  --primary-color: var(--accent-strong);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: var(--body-font);
+  background:
+    radial-gradient(circle at top left, color-mix(in oklab, var(--accent-soft) 65%, transparent) 0%, transparent 34%),
+    linear-gradient(180deg, var(--canvas), oklch(0.94 0.014 92));
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+#root {
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
