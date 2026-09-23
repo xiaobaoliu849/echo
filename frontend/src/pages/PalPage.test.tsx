@@ -234,6 +234,23 @@ describe("PalPage", () => {
     expect(screen.getByTestId("pal-video-host").parentElement).toHaveClass("vsPalStage");
   });
 
+  it("keeps the chosen face and start action together with a long face catalog", async () => {
+    vi.mocked(listTavusFaces).mockResolvedValue({ faces: Array.from({ length: 142 }, (_, index) => ({
+      face_id: `face-${index}`,
+      face_name: `Face ${index}`,
+      model_name: "phoenix-4.5",
+      status: "completed",
+    })) });
+    renderPage();
+    const firstFace = await screen.findByRole("radio", { name: /Face 0/ });
+    fireEvent.click(firstFace);
+    const footer = screen.getByTestId("pal-start-button").parentElement;
+    expect(footer).toHaveClass("vsPalConfigFooter");
+    expect(footer).toContainElement(screen.getByTestId("pal-effective-face"));
+    expect(screen.getByTestId("pal-effective-face")).toHaveTextContent("Face 0 · Phoenix 4.5");
+    expect(screen.getAllByTestId("pal-face-option")).toHaveLength(142);
+  });
+
   it("offers PALs from the account and starts with the selected one", async () => {
     vi.mocked(listTavusPals).mockResolvedValue({
       pals: [
