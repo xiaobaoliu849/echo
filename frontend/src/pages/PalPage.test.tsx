@@ -233,7 +233,7 @@ describe("PalPage", () => {
       conversationName: undefined
     });
     expect(screen.getByText("通话中")).toBeInTheDocument();
-    expect(screen.getByTestId("pal-call-status").parentElement).toHaveClass("vsPalPage");
+    expect(screen.getByTestId("pal-call-status").parentElement).toHaveClass("vsPalStage");
     expect(screen.getByTestId("pal-video-host").parentElement).toHaveClass("vsPalStage");
   });
 

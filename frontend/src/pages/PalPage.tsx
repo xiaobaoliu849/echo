@@ -288,14 +288,6 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
 
   return (
     <section className="vsPalPage">
-      {conversation.status === "connected" ? (
-        <div className="vsPalCallStatus" role="status" data-testid="pal-call-status">
-          <span className="vsPalLiveDot" aria-hidden="true" />
-          <span className="vsPalDuration">{conversation.formattedDuration}</span>
-          <span className="vsPalBadgeDivider">·</span>
-          <span className="vsPalStatusText">{t("通话中", "Live")}</span>
-        </div>
-      ) : null}
       <div className="vsPalStage">
         <div ref={conversation.attachVideoContainer} className="vsPalVideoHost" data-testid="pal-video-host" />
 
@@ -598,6 +590,14 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
 
         {conversation.status === "connected" ? (
           <>
+            {/* Live Floating Status Pill (top-center of stage) */}
+            <div className="vsPalCallStatus" role="status" data-testid="pal-call-status">
+              <span className="vsPalLiveDot" aria-hidden="true" />
+              <span className="vsPalDuration">{conversation.formattedDuration}</span>
+              <span className="vsPalBadgeDivider">·</span>
+              <span className="vsPalStatusText">{t("通话中", "Live")}</span>
+            </div>
+
             {/* Live Floating Subtitle Banner */}
             {conversation.showSubtitles && conversation.activeSubtitle ? (
               <div className={`vsPalFloatingSubtitle ${conversation.activeSubtitle.speaker}`} role="status">
