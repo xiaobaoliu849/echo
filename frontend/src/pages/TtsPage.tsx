@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { History, RotateCcw, Trash2, X } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import useTtsHistory, { type TtsHistoryEntry } from "../hooks/useTtsHistory";
 import type { UseTtsResult } from "../hooks/useTts";
@@ -84,7 +85,7 @@ function truncate(text: string, max: number): string {
 export default function TtsPage({ tts, errorRuntimeContext }: Props) {
   const { t } = useI18n();
   const { history, addEntry, removeEntry, clearHistory, buildReplayUrl } = useTtsHistory();
-  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const prevAudioUrlRef = useRef(tts.audioUrl);
 
   // Record a history entry when a new audio generation succeeds.
@@ -187,11 +188,64 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
     }
   };
 
+  const handleRestoreText = (entry: TtsHistoryEntry) => {
+    const currentText =
+      tts.ttsMode === "dialogue"
+        ? tts.dialogueText
+        : tts.ttsMode === "pdf"
+          ? tts.pdfText
+          : tts.text;
+
+    if (currentText.trim() && currentText.trim() !== entry.text.trim()) {
+      if (
+        !window.confirm(
+          t(
+            "当前输入框已有内容，确认替换为该历史记录的内容吗？",
+            "The editor already has content. Replace it with this history record?"
+          )
+        )
+      ) {
+        return;
+      }
+    }
+
+    if (entry.mode === "dialogue") {
+      if (tts.ttsMode !== "dialogue") {
+        tts.onTtsModeChange("dialogue");
+      }
+      tts.onDialogueTextChange?.(entry.text);
+      if (entry.engine) tts.onEngineChange(entry.engine);
+      if (entry.engineB && tts.onEngineBChange) tts.onEngineBChange(entry.engineB);
+      if (entry.voice) tts.onVoiceChange(entry.voice);
+      if (entry.voiceB && tts.onVoiceBChange) tts.onVoiceBChange(entry.voiceB);
+      if (entry.rate) tts.onRateChange(entry.rate);
+    } else {
+      if (tts.ttsMode !== "text" && entry.mode === "text") {
+        tts.onTtsModeChange("text");
+      }
+      tts.onTextChange(entry.text);
+      if (entry.engine) tts.onEngineChange(entry.engine);
+      if (entry.voice) tts.onVoiceChange(entry.voice);
+      if (entry.rate) tts.onRateChange(entry.rate);
+    }
+    setHistoryDrawerOpen(false);
+  };
+
+  useEffect(() => {
+    if (!historyDrawerOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setHistoryDrawerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [historyDrawerOpen]);
+
   const isMac = typeof navigator !== "undefined" && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent || navigator.platform);
   const shortcutText = isMac ? "⌘ + ↵" : "Ctrl + ↵";
 
   const historyCount = history.length;
-  const showHistoryBar = historyCount > 0 || tts.audioUrl;
 
   return (
     <section className="vsTtsWorkspace vsTtsSingleColumn">
@@ -305,6 +359,18 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                   </button>
                 </div>
               </div>
+
+              <button
+                type="button"
+                className={`vsTtsHistoryTriggerBtn ${historyDrawerOpen ? "active" : ""}`}
+                onClick={() => setHistoryDrawerOpen((prev) => !prev)}
+                title={t("生成历史", "History")}
+                aria-expanded={historyDrawerOpen}
+              >
+                <History size={14} aria-hidden="true" />
+                <span>{t("历史", "History")}</span>
+                {historyCount > 0 && <span className="vsTtsHistoryCountBadge">{historyCount}</span>}
+              </button>
             </div>
           </header>
         )}
@@ -395,6 +461,17 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                 title={t("重置语速", "Reset rate")}
               >
                 {t("重置", "Reset")}
+              </button>
+              <button
+                type="button"
+                className={`vsTtsHistoryTriggerBtn ${historyDrawerOpen ? "active" : ""}`}
+                onClick={() => setHistoryDrawerOpen((prev) => !prev)}
+                title={t("生成历史", "History")}
+                aria-expanded={historyDrawerOpen}
+              >
+                <History size={14} aria-hidden="true" />
+                <span>{t("历史", "History")}</span>
+                {historyCount > 0 && <span className="vsTtsHistoryCountBadge">{historyCount}</span>}
               </button>
             </div>
           </div>
@@ -489,79 +566,6 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
           </div>
         </div>
 
-        {/* ── TTS Generation History ── */}
-        {showHistoryBar && (
-          <div className={`vsTtsHistory ${historyExpanded ? "expanded" : ""}`}>
-            <div className="vsTtsHistoryBar">
-              <button
-                type="button"
-                className="vsTtsHistoryToggle"
-                onClick={() => setHistoryExpanded((prev) => !prev)}
-                aria-expanded={historyExpanded}
-              >
-                <span className="vsTtsHistoryToggleIcon">{historyExpanded ? "▾" : "▸"}</span>
-                <span>{t("生成历史", "History")}</span>
-                {historyCount > 0 && <span className="vsTtsHistoryCount">{historyCount}</span>}
-              </button>
-              {historyCount > 0 && (
-                <button
-                  type="button"
-                  className="vsTtsHistoryClear"
-                  onClick={() => {
-                    if (confirm(t("确定清空所有生成历史？", "Clear all generation history?"))) {
-                      clearHistory();
-                    }
-                  }}
-                >
-                  {t("清空", "Clear")}
-                </button>
-              )}
-            </div>
-            {historyExpanded && (
-              <div className="vsTtsHistoryList custom-scrollbar">
-                {history.length === 0 ? (
-                  <p className="vsTtsHistoryEmpty">{t("还没有生成记录。", "No generations yet.")}</p>
-                ) : (
-                  history.map((entry: TtsHistoryEntry) => (
-                    <div key={entry.id} className="vsTtsHistoryItem">
-                      <div className="vsTtsHistoryItemText" title={entry.text}>
-                        {truncate(entry.text, 80)}
-                      </div>
-                      <div className="vsTtsHistoryItemMeta">
-                        <span>{formatHistoryTime(entry.createdAt, t)}</span>
-                        <span className="vsTtsHistoryItemSep">·</span>
-                        <span>{entry.engine}</span>
-                        {entry.voice && (
-                          <>
-                            <span className="vsTtsHistoryItemSep">·</span>
-                            <span className="vsTtsHistoryItemVoice">{entry.voice}</span>
-                          </>
-                        )}
-                      </div>
-                      <div className="vsTtsHistoryItemActions">
-                        <audio
-                          controls
-                          src={buildReplayUrl(entry)}
-                          className="vsTtsHistoryAudio"
-                          preload="none"
-                        />
-                        <button
-                          type="button"
-                          className="vsTtsHistoryRemove"
-                          onClick={() => removeEntry(entry.id)}
-                          title={t("删除", "Delete")}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ── Bottom Pane: Playback & Action Footer ── */}
         <footer className="vsTtsEditorFooter">
           <div className="vsTtsFooterLeft">
@@ -591,7 +595,7 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
             {!tts.audioUrl && !tts.ttsInfo && (
               <div className="vsTtsEmptyHint">
                 <span className="vsTtsHintIcon">🎧</span>
-                <span>{t("完成输入后，点击右下角\u201c生成音频\u201d开始试听", "Enter text and click Generate Audio to listen")}</span>
+                <span>{t("完成输入后，点击右下角“生成音频”开始试听", "Enter text and click Generate Audio to listen")}</span>
               </div>
             )}
           </div>
@@ -620,6 +624,128 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
             </button>
           </div>
         </footer>
+
+        {/* ── Slide-Over History Drawer ── */}
+        {historyDrawerOpen && (
+          <div
+            className="vsTtsDrawerBackdrop"
+            onClick={() => setHistoryDrawerOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+        <aside
+          className={`vsTtsHistoryDrawer ${historyDrawerOpen ? "open" : ""}`}
+          aria-label={t("生成历史", "Generation History")}
+          aria-hidden={!historyDrawerOpen}
+        >
+          <div className="vsTtsDrawerHeader">
+            <div className="vsTtsDrawerTitle">
+              <History size={16} aria-hidden="true" />
+              <span>{t("生成历史", "History")}</span>
+              {historyCount > 0 && <span className="vsTtsHistoryCountBadge">{historyCount}</span>}
+            </div>
+            <div className="vsTtsDrawerHeaderActions">
+              {historyCount > 0 && (
+                <button
+                  type="button"
+                  className="vsTtsDrawerClearBtn"
+                  onClick={() => {
+                    if (window.confirm(t("确定清空所有生成历史？", "Clear all generation history?"))) {
+                      clearHistory();
+                    }
+                  }}
+                  title={t("清空所有历史", "Clear all history")}
+                >
+                  <Trash2 size={13} aria-hidden="true" />
+                  <span>{t("清空", "Clear")}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="vsTtsDrawerCloseBtn"
+                onClick={() => setHistoryDrawerOpen(false)}
+                title={t("关闭", "Close")}
+                aria-label={t("关闭", "Close")}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          <div className="vsTtsHistoryDrawerList custom-scrollbar">
+            {history.length === 0 ? (
+              <div className="vsTtsHistoryEmptyState">
+                <span className="vsTtsHistoryEmptyIcon" aria-hidden="true">📜</span>
+                <p className="vsTtsHistoryEmptyTitle">{t("暂无生成历史", "No generations yet")}</p>
+                <p className="vsTtsHistoryEmptyDesc">
+                  {t(
+                    "每次成功生成音频后，都会保留在此处以便试听对比与恢复。",
+                    "Synthesized audio will be kept here for A/B preview and reference."
+                  )}
+                </p>
+              </div>
+            ) : (
+              history.map((entry: TtsHistoryEntry) => (
+                <div key={entry.id} className="vsTtsHistoryCard">
+                  <div className="vsTtsHistoryCardMeta">
+                    <span className="vsTtsHistoryCardTime">{formatHistoryTime(entry.createdAt, t)}</span>
+                    <span className="vsTtsHistoryCardSep">·</span>
+                    <span className="vsTtsHistoryCardEngine">{entry.engine}</span>
+                    {entry.voice && (
+                      <>
+                        <span className="vsTtsHistoryCardSep">·</span>
+                        <span className="vsTtsHistoryCardVoice" title={entry.voice}>
+                          {entry.voice.split(/[-_]/).pop() || entry.voice}
+                        </span>
+                      </>
+                    )}
+                    {entry.rate && entry.rate !== "+0%" && (
+                      <span className="vsTtsHistoryCardRate">{entry.rate}</span>
+                    )}
+                  </div>
+                  <div className="vsTtsHistoryCardText" title={entry.text}>
+                    {truncate(entry.text, 120)}
+                  </div>
+                  <div className="vsTtsHistoryCardFooter">
+                    <audio
+                      controls
+                      src={buildReplayUrl(entry)}
+                      className="vsTtsHistoryAudio"
+                      preload="none"
+                      onPlay={(e) => {
+                        document.querySelectorAll("audio").forEach((el) => {
+                          if (el !== e.currentTarget && !el.paused) {
+                            el.pause();
+                          }
+                        });
+                      }}
+                    />
+                    <div className="vsTtsHistoryCardBtns">
+                      <button
+                        type="button"
+                        className="vsTtsHistoryRestoreBtn"
+                        onClick={() => handleRestoreText(entry)}
+                        title={t("恢复此文本与配置到输入框", "Restore text and voice to editor")}
+                      >
+                        <RotateCcw size={12} aria-hidden="true" />
+                        <span>{t("恢复", "Restore")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="vsTtsHistoryRemove"
+                        onClick={() => removeEntry(entry.id)}
+                        title={t("删除", "Delete")}
+                        aria-label={t("删除", "Delete")}
+                      >
+                        <X size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
       </form>
     </section>
   );

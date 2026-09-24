@@ -173,4 +173,57 @@ describe('TtsPage', () => {
         );
         expect(clickSpy).not.toHaveBeenCalled();
     });
+
+    it('opens and closes the history drawer, and restores text to editor', async () => {
+        window.localStorage.setItem('vs_tts_history', JSON.stringify([
+            {
+                id: 'hist-1',
+                text: 'Historical speech draft',
+                mode: 'text',
+                engine: 'edge',
+                voice: 'zh-CN-YunxiNeural',
+                rate: '+0%',
+                createdAt: Date.now() - 5000,
+            }
+        ]));
+
+        const tts = createTtsController({ text: '' });
+        render(
+            <TtsPage
+                tts={tts}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const historyButton = screen.getByRole('button', { name: /历史/i });
+        expect(historyButton).toBeInTheDocument();
+
+        fireEvent.click(historyButton);
+        expect(screen.getByText('Historical speech draft')).toBeInTheDocument();
+
+        const restoreButton = screen.getByRole('button', { name: /恢复/ });
+        fireEvent.click(restoreButton);
+
+        expect(tts.onTextChange).toHaveBeenCalledWith('Historical speech draft');
+        expect(tts.onEngineChange).toHaveBeenCalledWith('edge');
+        expect(tts.onVoiceChange).toHaveBeenCalledWith('zh-CN-YunxiNeural');
+    });
+
+    it('closes history drawer with escape key', () => {
+        const tts = createTtsController();
+        render(
+            <TtsPage
+                tts={tts}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const historyButton = screen.getByRole('button', { name: /历史/i });
+        fireEvent.click(historyButton);
+        const drawer = screen.getByLabelText('生成历史');
+        expect(drawer).toHaveClass('open');
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(drawer).not.toHaveClass('open');
+    });
 });
