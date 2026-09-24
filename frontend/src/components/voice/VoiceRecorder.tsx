@@ -429,6 +429,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
           <AudioPreviewPlayer
             file={currentFile}
+            initialDuration={elapsedSeconds}
             title={consentPrompt ? t("录制的授权声明", "Recorded Consent") : t("录制的声纹样本", "Recorded Voice Sample")}
             onReplace={handleRetake}
             onRemove={handleRetake}
