@@ -301,6 +301,22 @@ QWEN_AUDIO_31_TTS_VOICES = [
 
 DEFAULT_QWEN_AUDIO_31_TTS_VOICE = "longanhuan_v3.1"
 
+# Presets / virtual styles for Qwen-Audio-3.1-TTS-Next AudioGen engine
+QWEN_AUDIO_TTS_NEXT_VOICES = [
+    {"name": "tts-next-auto", "short_name": "智能声景合成 (Prompt-Guided AudioGen)", "locale": "zh-CN", "gender": "Neutral"},
+    {"name": "tts-next-narrator", "short_name": "叙事旁白 (Cinematic Narrator)", "locale": "zh-CN", "gender": "Neutral"},
+    {"name": "tts-next-story", "short_name": "故事剧场 (Story & Soundscape)", "locale": "zh-CN", "gender": "Neutral"},
+    {"name": "tts-next-podcast", "short_name": "双人/多人播客 (Multi-Speaker Podcast)", "locale": "zh-CN", "gender": "Neutral"},
+]
+
+DEFAULT_QWEN_AUDIO_TTS_NEXT_VOICE = "tts-next-auto"
+
+
+def is_qwen_audio_tts_next_model(model: str | None) -> bool:
+    """True for Qwen-Audio-3.1-TTS-Next unified audio generation model."""
+    normalized = str(model or "").strip().lower()
+    return "qwen-audio-3.1-tts-next" in normalized
+
 
 def is_qwen_audio_tts_model(model: str | None) -> bool:
     """True for the Qwen-Audio-TTS family (qwen-audio-3.0-tts-* / qwen-audio-3.1-tts-*).
@@ -309,13 +325,17 @@ def is_qwen_audio_tts_model(model: str | None) -> bool:
     use the Cherry/Ono Anna voice family.
     """
     normalized = str(model or "").strip().lower()
-    return normalized.startswith("qwen-audio-") and "-tts-" in normalized
+    return (
+        normalized.startswith("qwen-audio-")
+        and "-tts-" in normalized
+        and not is_qwen_audio_tts_next_model(model)
+    )
 
 
 def is_qwen_audio_31_tts_model(model: str | None) -> bool:
-    """True for Qwen-Audio-3.1-TTS models (e.g. qwen-audio-3.1-tts-flash)."""
+    """True for Qwen-Audio-3.1-TTS interactive models (e.g. qwen-audio-3.1-tts-flash)."""
     normalized = str(model or "").strip().lower()
-    return "qwen-audio-3.1-tts" in normalized
+    return "qwen-audio-3.1-tts" in normalized and not is_qwen_audio_tts_next_model(model)
 
 
 MINIMAX_VOICES = [
@@ -1146,6 +1166,13 @@ class TTSService:
         fail fast with an actionable message. Unknown (custom/cloned) voices are
         passed through untouched.
         """
+        if is_qwen_audio_tts_next_model(model_name):
+            if any(v["name"] == voice for v in QWEN_FLASH_VOICES):
+                raise ValueError(
+                    f"音色 {voice} 属于 qwen3-tts 系列，与统一音频模型 {model_name} 不兼容。"
+                    f"请使用声景预设（如 {DEFAULT_QWEN_AUDIO_TTS_NEXT_VOICE}）或直接在文本中编写提示词与音效指令。"
+                )
+            return voice or DEFAULT_QWEN_AUDIO_TTS_NEXT_VOICE
         if is_qwen_audio_tts_model(model_name):
             if any(v["name"] == voice for v in QWEN_FLASH_VOICES):
                 target_default = (
@@ -1161,7 +1188,7 @@ class TTSService:
             if is_qwen_audio_31_tts_model(model_name) and voice == "longanhuan_v3.6":
                 return DEFAULT_QWEN_AUDIO_31_TTS_VOICE
             return voice
-        if any(v["name"] == voice for v in QWEN_AUDIO_TTS_VOICES) or any(v["name"] == voice for v in QWEN_AUDIO_31_TTS_VOICES):
+        if any(v["name"] == voice for v in QWEN_AUDIO_TTS_VOICES) or any(v["name"] == voice for v in QWEN_AUDIO_31_TTS_VOICES) or any(v["name"] == voice for v in QWEN_AUDIO_TTS_NEXT_VOICES):
             raise ValueError(
                 f"音色 {voice} 属于 qwen-audio-tts 系列，与模型 {model_name} 不兼容。"
                 "qwen3-tts 系列请使用 Cherry/Ono Anna 等音色，"
@@ -1200,6 +1227,75 @@ class TTSService:
                 "并检查 DashScope 配额与网络。"
             )
         self._atomic_write_bytes(path, audio)
+
+    async def _generate_qwen_tts_next_audio(
+        self,
+        text: str,
+        voice: str | None,
+        path: Path,
+        model: str | None = None,
+        references: list[dict[str, Any]] | None = None,
+    ) -> None:
+        api_key = self._dashscope_key()
+        if not api_key:
+            raise RuntimeError("DashScope API Key is not configured.")
+
+        # Construct prompt according to selected preset if not already formatted
+        prompt = text.strip()
+        if voice == "tts-next-narrator" and not prompt.startswith("[") and not prompt.lower().startswith("narrator"):
+            prompt = f"[旁白/叙事风格] {prompt}"
+        elif voice == "tts-next-story" and not prompt.startswith("[") and not prompt.lower().startswith("story"):
+            prompt = f"[生动故事场景，带环境音效] {prompt}"
+        elif voice == "tts-next-podcast" and not prompt.startswith("[") and "@voice" not in prompt:
+            prompt = f"[播客自然对谈风格] {prompt}"
+
+        payload: dict[str, Any] = {
+            "model": model or "qwen-audio-3.1-tts-next",
+            "input": {
+                "text_prompt": prompt,
+                "format": "wav",
+                "sample_rate": 48000,
+                "channels": 2,
+            },
+        }
+        if references:
+            payload["input"]["references"] = references
+
+        endpoint = "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(endpoint, json=payload, headers=headers)
+
+        if resp.status_code != 200:
+            err_detail = resp.text.strip()
+            raise RuntimeError(f"Qwen TTS-Next 合成失败 ({resp.status_code}): {err_detail}")
+
+        try:
+            res_data = resp.json()
+        except Exception as exc:
+            raise RuntimeError(f"Qwen TTS-Next 返回无效响应: {exc}") from exc
+
+        output = res_data.get("output", {})
+        audio_info = output.get("audio", {}) if isinstance(output, dict) else {}
+        audio_url = audio_info.get("url") if isinstance(audio_info, dict) else None
+        audio_b64 = audio_info.get("data") if isinstance(audio_info, dict) else None
+
+        if audio_url:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                dl_resp = await client.get(audio_url)
+                if dl_resp.status_code != 200:
+                    raise RuntimeError(f"Qwen TTS-Next 下载音频失败 ({dl_resp.status_code})")
+                self._atomic_write_bytes(path, dl_resp.content)
+        elif audio_b64:
+            import base64
+            self._atomic_write_bytes(path, base64.b64decode(audio_b64))
+        else:
+            req_id = res_data.get("request_id", "")
+            raise RuntimeError(f"Qwen TTS-Next 未返回有效音频 URL (request_id: {req_id})")
 
     async def _generate_minimax_audio(self, text: str, voice: str, path: Path, model: str | None = None) -> None:
         api_key, base_url = self._minimax_settings()
@@ -1441,6 +1537,8 @@ class TTSService:
             return TTS_ENGINE_QWEN_FLASH
         if any(v["name"] == voice for v in QWEN_AUDIO_31_TTS_VOICES):
             return TTS_ENGINE_QWEN_FLASH
+        if any(v["name"] == voice for v in QWEN_AUDIO_TTS_NEXT_VOICES):
+            return TTS_ENGINE_QWEN_FLASH
         # Check Doubao voices
         if is_doubao_voice(voice):
             return TTS_ENGINE_DOUBAO
@@ -1495,6 +1593,8 @@ class TTSService:
         elif normalized_engine == TTS_ENGINE_QWEN_FLASH:
             if voice:
                 selected_voice = voice
+            elif is_qwen_audio_tts_next_model(model):
+                selected_voice = DEFAULT_QWEN_AUDIO_TTS_NEXT_VOICE
             elif is_qwen_audio_31_tts_model(model):
                 selected_voice = DEFAULT_QWEN_AUDIO_31_TTS_VOICE
             elif is_qwen_audio_tts_model(model):
@@ -1541,7 +1641,10 @@ class TTSService:
         if normalized_engine == TTS_ENGINE_EDGE:
             await self._generate_edge_audio(cleaned, selected_voice, rate, path)
         elif normalized_engine == TTS_ENGINE_QWEN_FLASH:
-            await self._generate_qwen_flash_audio(cleaned, selected_voice, path, model=model)
+            if is_qwen_audio_tts_next_model(model):
+                await self._generate_qwen_tts_next_audio(cleaned, selected_voice, path, model=model)
+            else:
+                await self._generate_qwen_flash_audio(cleaned, selected_voice, path, model=model)
         elif normalized_engine == TTS_ENGINE_MINIMAX:
             await self._generate_minimax_audio(cleaned, selected_voice, path, model=model)
         elif normalized_engine == TTS_ENGINE_OPENAI:
@@ -1695,6 +1798,8 @@ class TTSService:
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
             # The Qwen TTS families use incompatible voice sets; when the
             # caller tells us the model, return only voices that work with it.
+            if is_qwen_audio_tts_next_model(model):
+                return self._filter_by_locale(QWEN_AUDIO_TTS_NEXT_VOICES, locale)
             if is_qwen_audio_31_tts_model(model):
                 return self._filter_by_locale(QWEN_AUDIO_31_TTS_VOICES, locale)
             if is_qwen_audio_tts_model(model):

@@ -62,6 +62,7 @@ class SupplementClassificationTests(unittest.TestCase):
     def test_tts_supplements_are_classified_as_tts(self) -> None:
         tts_supplements = [
             "qwen-audio-3.1-tts-flash",
+            "qwen-audio-3.1-tts-next",
             "qwen-audio-3.0-tts-plus",
             "qwen-audio-3.0-tts-flash",
             "qwen3-tts-flash-2025-11-27",
