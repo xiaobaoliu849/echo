@@ -99,6 +99,7 @@ export default function useVoiceManagement({
 
   const [cloneName, setCloneName] = useState("voice_clone_demo");
   const [cloneAudioFile, setCloneAudioFile] = useState<File | null>(null);
+  const [cloneConsentFile, setCloneConsentFile] = useState<File | null>(null);
   const [cloneBusy, setCloneBusy] = useState(false);
   const [cloneListBusy, setCloneListBusy] = useState(false);
   const [cloneError, setCloneError] = useState("");
@@ -255,6 +256,7 @@ export default function useVoiceManagement({
       const result = await createVoiceClone({
         preferred_name: cloneName.trim(),
         audio_file: cloneAudioFile,
+        consent_file: cloneConsentFile,
         provider: cloneProvider,
       });
       setCloneInfo(t(`已创建音色：${result.voice ?? "未知"}`, `Created voice: ${result.voice ?? "unknown"}`));
@@ -377,8 +379,10 @@ export default function useVoiceManagement({
       onSubmit: onCloneSubmit,
       onRefresh: () => refreshCustomVoices("voice_clone"),
       onDeleteVoice: (voiceName: string) => onDeleteVoice(voiceName, "voice_clone"),
+      cloneConsentFile,
       onNameChange: setCloneName,
-      onAudioFileChange: onCloneAudioFileChange
+      onAudioFileChange: onCloneAudioFileChange,
+      onConsentFileChange: setCloneConsentFile
     }
   };
 }

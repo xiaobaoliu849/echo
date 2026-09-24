@@ -33,6 +33,11 @@ const SAMPLE_SCRIPTS = [
     categoryEn: "English Standard",
     text: "The quick brown fox jumps over the lazy dog. A wonderful journey of voice cloning brings digital characters to life with warmth and authenticity.",
   },
+  {
+    category: "Google 授权声明",
+    categoryEn: "Google Consent Phrase",
+    text: "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.",
+  },
 ];
 
 function formatTime(seconds: number): string {

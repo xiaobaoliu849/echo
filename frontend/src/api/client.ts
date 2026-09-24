@@ -1274,11 +1274,15 @@ export async function createVoiceDesign(
 export async function createVoiceClone(params: {
   preferred_name: string;
   audio_file: File;
+  consent_file?: File | null;
   provider?: string;
 }): Promise<VoiceCreateResponse> {
   const formData = new FormData();
   formData.append("preferred_name", params.preferred_name);
   formData.append("audio_file", params.audio_file);
+  if (params.consent_file) {
+    formData.append("consent_file", params.consent_file);
+  }
   if (params.provider) {
     formData.append("provider", params.provider);
   }

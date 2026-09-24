@@ -192,10 +192,32 @@ export default function VoiceClonePage({
                       fontSize: 12,
                       fontStyle: "italic",
                       userSelect: "all",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 8,
                     }}
                   >
-                    “I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.”
+                    <span>“I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.”</span>
+                    <button
+                      type="button"
+                      className="vsBtnGhost"
+                      style={{ fontSize: 11, padding: "3px 8px", height: "auto", whiteSpace: "nowrap" }}
+                      onClick={() => {
+                        navigator.clipboard?.writeText(
+                          "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model."
+                        );
+                      }}
+                    >
+                      {t("复制", "Copy")}
+                    </button>
                   </blockquote>
+                  <p className="vsFieldHint" style={{ margin: "8px 0 0 0", fontSize: 11, color: "var(--brand, #3b82f6)" }}>
+                    {t(
+                      "⚡ 系统已集成自动转码：无论麦克风录制 (WebM) 还是本地上传任何音频，后端均会自动规范化为 Google 必需的 24kHz 16-bit PCM WAV 标准流。",
+                      "⚡ Automatic Transcoding: Whether recording via microphone (WebM) or uploading any audio format, the backend automatically normalizes the stream to Google's required 24kHz 16-bit PCM WAV standard."
+                    )}
+                  </p>
                 </div>
               )}
 

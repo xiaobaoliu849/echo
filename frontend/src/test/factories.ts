@@ -576,6 +576,7 @@ export function createVoiceCloneController(
   return {
     cloneName: "",
     cloneAudioFile: null as any,
+    cloneConsentFile: null,
     cloneBusy: false,
     cloneError: "",
     cloneInfo: "",
@@ -587,6 +588,7 @@ export function createVoiceCloneController(
     cloneListBusy: false,
     onNameChange: vi.fn(),
     onAudioFileChange: vi.fn(),
+    onConsentFileChange: vi.fn(),
     onSubmit: vi.fn(),
     onRefresh: vi.fn(),
     onDeleteVoice: vi.fn(),
