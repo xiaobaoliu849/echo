@@ -124,3 +124,88 @@ async def test_missing_api_key_raises(tmp_path: Path):
     service = _service_with_config(tmp_path, api_key="")
     with pytest.raises(ValueError, match="Missing Google / Gemini API key"):
         await service.list_voices()
+
+
+@pytest.mark.asyncio
+async def test_base_url_v1beta_normalization(tmp_path: Path):
+    # Tests that /v1beta at end of base_url is stripped so url doesn't become /v1beta/v1beta/voices
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "api_keys": {"google_api_key": "test-key"},
+                "api_urls": {"Google": "https://generativelanguage.googleapis.com/v1beta"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = GeminiVoiceService(config=BackendConfig(config_path=config_file))
+
+    called_urls = []
+
+    async def mock_post(url, *args, **kwargs):
+        called_urls.append(url)
+        resp = MagicMock(spec=httpx.Response)
+        resp.status_code = 200
+        resp.json.return_value = {"id": "voice_123"}
+        return resp
+
+    with patch("httpx.AsyncClient.post", side_effect=mock_post):
+        await service.create_voice_clone(
+            audio_bytes=b"dummy-audio",
+            mime_type="audio/wav",
+            preferred_name="test_voice",
+        )
+        assert len(called_urls) == 1
+        assert called_urls[0] == "https://generativelanguage.googleapis.com/v1beta/voices"
+        assert "/v1beta/v1beta" not in called_urls[0]
+
+
+@pytest.mark.asyncio
+async def test_create_voice_clone_payload_structure(tmp_path: Path):
+    service = _service_with_config(tmp_path)
+    captured_payload = {}
+
+    async def mock_post(url, *args, **kwargs):
+        captured_payload.update(kwargs.get("json", {}))
+        resp = MagicMock(spec=httpx.Response)
+        resp.status_code = 200
+        resp.json.return_value = {"id": "voice_cloned_abc"}
+        return resp
+
+    with patch("httpx.AsyncClient.post", side_effect=mock_post):
+        res = await service.create_voice_clone(
+            audio_bytes=b"hello-voice",
+            mime_type="audio/wav",
+            preferred_name="MyVoice",
+        )
+        assert res["voice"] == "voice_cloned_abc"
+        assert captured_payload.get("store") is True
+        voice_block = captured_payload.get("voice", {})
+        assert voice_block.get("type") == "replicated"
+        assert voice_block.get("display_name") == "MyVoice"
+        replicated = voice_block.get("replicated", {})
+        assert "source_audio" in replicated
+        assert "consent_audio" in replicated
+        assert replicated["source_audio"]["mime_type"] == "audio/wav"
+        assert isinstance(replicated["source_audio"]["data"], str)
+
+
+@pytest.mark.asyncio
+async def test_extract_error_consent_flow(tmp_path: Path):
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 500
+    resp.json.return_value = {
+        "error": {
+            "code": 500,
+            "message": "Error translating server response to JSON",
+            "details": [
+                {
+                    "detail": "Consent flow failed. The recorded phrase didn't match the text on screen."
+                }
+            ],
+        }
+    }
+    err = GeminiVoiceService._extract_error(resp)
+    assert "Consent flow failed" in err
+    assert "Please recite" in err

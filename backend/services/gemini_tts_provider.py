@@ -106,7 +106,13 @@ async def gemini_tts_synthesize(
         },
     }
 
-    url = f"{base_url.rstrip('/')}/v1beta/models/{target_model}:generateContent"
+    clean_base = base_url.rstrip("/")
+    if clean_base.endswith("/v1beta"):
+        clean_base = clean_base[:-7]
+    elif clean_base.endswith("/v1"):
+        clean_base = clean_base[:-3]
+    clean_base = clean_base.rstrip("/")
+    url = f"{clean_base}/v1beta/models/{target_model}:generateContent"
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(url, headers=gemini_headers(api_key), json=payload)
 

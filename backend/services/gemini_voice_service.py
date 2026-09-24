@@ -42,19 +42,47 @@ class GeminiVoiceService:
         base_url = str(settings.get("base_url", "")).strip().rstrip("/")
         if not base_url:
             base_url = DEFAULT_GEMINI_BASE_URL
+        if base_url.endswith("/v1beta"):
+            base_url = base_url[:-7]
+        elif base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+        base_url = base_url.rstrip("/")
         return api_key, base_url
 
     @staticmethod
     def _extract_error(response: httpx.Response) -> str:
         try:
             payload = response.json()
-            if isinstance(payload, dict) and "error" in payload:
-                err = payload["error"]
-                if isinstance(err, dict) and "message" in err:
-                    return str(err["message"])
-                return str(err)
-            if isinstance(payload, dict) and "detail" in payload:
-                return str(payload["detail"])
+            if isinstance(payload, dict):
+                details = (
+                    payload.get("error", {}).get("details", [])
+                    if isinstance(payload.get("error"), dict)
+                    else []
+                )
+                for d in details:
+                    if isinstance(d, dict):
+                        detail_text = str(d.get("detail", ""))
+                        if "Consent flow failed" in detail_text:
+                            return (
+                                "Consent flow failed: The audio did not match the required Google consent statement. "
+                                "Please recite: 'I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.'"
+                            )
+                        if detail_text and not detail_text.startswith("INTERNAL:"):
+                            return detail_text.strip().split("\n")[0]
+                if "error" in payload:
+                    err = payload["error"]
+                    if isinstance(err, dict) and "message" in err:
+                        msg = str(err["message"])
+                        if "Error translating server response" in msg:
+                            for d in details:
+                                if isinstance(d, dict):
+                                    txt = str(d.get("detail", ""))
+                                    if "Original error:" in txt:
+                                        return txt.split("Original error:")[1].strip().split("\n")[0]
+                        return msg
+                    return str(err)
+                if "detail" in payload:
+                    return str(payload["detail"])
         except Exception:
             pass
         return response.text[:500]
@@ -88,7 +116,9 @@ class GeminiVoiceService:
                 "model": DEFAULT_GEMINI_TTS_MODEL,
                 "type": "prompted",
                 "display_name": preferred,
-                "description": prompt,
+                "prompted": {
+                    "input": prompt,
+                },
             },
         }
 
@@ -107,7 +137,8 @@ class GeminiVoiceService:
             raise RuntimeError("Gemini voice design returned invalid non-JSON response.")
 
         voice_id = (
-            data.get("voice_id")
+            data.get("id")
+            or data.get("voice_id")
             or (data.get("voice", {}).get("name") if isinstance(data.get("voice"), dict) else None)
             or data.get("name")
         )
@@ -119,7 +150,9 @@ class GeminiVoiceService:
         sample_audio = data.get("sample_audio") or (
             data.get("voice", {}).get("sample_audio") if isinstance(data.get("voice"), dict) else None
         )
-        if isinstance(sample_audio, str) and sample_audio.strip():
+        if isinstance(sample_audio, dict) and sample_audio.get("data"):
+            preview_audio_data = str(sample_audio["data"]).strip()
+        elif isinstance(sample_audio, str) and sample_audio.strip():
             preview_audio_data = sample_audio.strip()
         else:
             # Generate preview audio on-the-fly using the created voice ID
@@ -162,16 +195,24 @@ class GeminiVoiceService:
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
         url = f"{base_url}/v1beta/voices"
 
+        media_mime = (mime_type or "audio/wav").split(";")[0].strip() or "audio/wav"
+
         payload = {
-            "type": "replicated",
             "store": True,
-            "replicated": {
-                "source_audio": audio_b64,
-                "consent_audio": audio_b64,
-            },
             "voice": {
+                "type": "replicated",
                 "display_name": preferred,
                 "model": DEFAULT_GEMINI_TTS_MODEL,
+                "replicated": {
+                    "source_audio": {
+                        "mime_type": media_mime,
+                        "data": audio_b64,
+                    },
+                    "consent_audio": {
+                        "mime_type": media_mime,
+                        "data": audio_b64,
+                    },
+                },
             },
         }
 
@@ -190,7 +231,8 @@ class GeminiVoiceService:
             raise RuntimeError("Gemini voice clone returned invalid non-JSON response.")
 
         voice_id = (
-            data.get("voice_id")
+            data.get("id")
+            or data.get("voice_id")
             or (data.get("voice", {}).get("name") if isinstance(data.get("voice"), dict) else None)
             or data.get("name")
             or data.get("voice_key")
@@ -234,7 +276,7 @@ class GeminiVoiceService:
         for v in voices_raw:
             if not isinstance(v, dict):
                 continue
-            v_id = str(v.get("voice_id") or v.get("name") or "").strip()
+            v_id = str(v.get("id") or v.get("voice_id") or v.get("name") or "").strip()
             if not v_id:
                 continue
             v_type = str(v.get("type", "")).strip().lower()
@@ -243,7 +285,8 @@ class GeminiVoiceService:
                 continue
 
             display_name = str(v.get("display_name", "") or v_id)
-            description = str(v.get("description", "") or "")
+            prompted_info = v.get("prompted", {}) if isinstance(v.get("prompted"), dict) else {}
+            description = str(v.get("description", "") or prompted_info.get("input", "") or "")
             target_model = str(v.get("model", "") or DEFAULT_GEMINI_TTS_MODEL)
 
             items.append(
