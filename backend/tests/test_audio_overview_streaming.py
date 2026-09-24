@@ -121,3 +121,50 @@ def test_podcast_audio_streaming_error_handling(streaming_client):
     assert resp_file_missing.status_code == 404
     assert resp_file_missing.json()["detail"]["code"] == "AUDIO_OVERVIEW_AUDIO_FILE_NOT_FOUND"
     assert resp_file_missing.json()["detail"]["meta"]["podcast_id"] == missing_file_podcast["id"]
+
+@pytest.mark.asyncio
+async def test_synthesize_podcast_with_gemini_voices(streaming_client):
+    _, out_dir = streaming_client
+
+    podcast = audio_overview_service.create_podcast(
+        topic="AI and Astronomy",
+        language="zh",
+        script_lines=[
+            {"role": "A", "text": "欢迎来到双人播客，我是主持人 Kore。"},
+            {"role": "B", "text": "大家好，我是嘉宾 Puck，很高兴在这里。"},
+        ],
+    )
+    podcast_id = podcast["id"]
+
+    fake_wav_a = out_dir / "gemini_a.wav"
+    fake_wav_a.write_bytes(
+        b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
+    )
+    fake_wav_b = out_dir / "gemini_b.wav"
+    fake_wav_b.write_bytes(
+        b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
+    )
+
+    async def fake_generate_audio(text, voice, rate="+0%", **kwargs):
+        path = fake_wav_a if voice == "Kore" else fake_wav_b
+        return str(path), voice, False
+
+    from unittest.mock import patch
+
+    with patch.object(
+        audio_overview_service.tts_service, "generate_audio", side_effect=fake_generate_audio
+    ):
+        result = await audio_overview_service.synthesize_podcast_audio(
+            podcast_id,
+            voice_a="Kore",
+            voice_b="Puck",
+            rate="+0%",
+            language="zh",
+            gap_ms=200,
+            merge_strategy="auto",
+        )
+        assert result["voice_a"] == "Kore"
+        assert result["voice_b"] == "Puck"
+        assert result["line_count"] == 2
+        assert Path(result["audio_path"]).exists()
+

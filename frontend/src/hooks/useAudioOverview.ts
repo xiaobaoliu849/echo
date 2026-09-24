@@ -128,15 +128,34 @@ export default function useAudioOverview(options: Options) {
     let disposed = false;
     async function loadAllVoices() {
       try {
-        const engines = ["edge", "qwen_flash", "minimax", "xiaomi", "doubao"] as const;
+        const engines = [
+          "edge",
+          "gemini",
+          "qwen_flash",
+          "minimax",
+          "xiaomi",
+          "doubao",
+          "elevenlabs",
+          "cartesia",
+          "soniox",
+        ] as const;
         // Fetch engine voice lists in parallel
         const engineResults = await Promise.all(
           engines.map(engine => fetchVoices(undefined, engine).catch(() => ({ voices: [] })))
         );
-        // Fetch custom designed and cloned voices
-        const [designRes, cloneRes] = await Promise.all([
-          listCustomVoices("voice_design").catch(() => ({ voices: [] })),
-          listCustomVoices("voice_clone").catch(() => ({ voices: [] }))
+        // Fetch custom designed and cloned voices across providers
+        const [
+          qwenDesign,
+          geminiDesign,
+          qwenClone,
+          geminiClone,
+          elevenClone,
+        ] = await Promise.all([
+          listCustomVoices("voice_design", "qwen").catch(() => ({ voices: [] })),
+          listCustomVoices("voice_design", "gemini").catch(() => ({ voices: [] })),
+          listCustomVoices("voice_clone", "qwen").catch(() => ({ voices: [] })),
+          listCustomVoices("voice_clone", "gemini").catch(() => ({ voices: [] })),
+          listCustomVoices("voice_clone", "elevenlabs").catch(() => ({ voices: [] })),
         ]);
 
         if (disposed) return;
@@ -144,21 +163,21 @@ export default function useAudioOverview(options: Options) {
         const combined: VoiceInfo[] = [];
 
         // Prepend custom designed voices
-        for (const item of designRes.voices) {
+        for (const item of [...geminiDesign.voices, ...qwenDesign.voices]) {
           combined.push({
             name: item.voice,
             short_name: `${item.name || item.voice} [${t("设计", "Designed")}]`,
-            locale: item.language || "zh-CN",
+            locale: item.language || "multi",
             gender: "custom"
           });
         }
 
         // Prepend custom cloned voices
-        for (const item of cloneRes.voices) {
+        for (const item of [...geminiClone.voices, ...qwenClone.voices, ...elevenClone.voices]) {
           combined.push({
             name: item.voice,
             short_name: `${item.name || item.voice} [${t("克隆", "Cloned")}]`,
-            locale: item.language || "zh-CN",
+            locale: item.language || "multi",
             gender: "custom"
           });
         }
@@ -192,9 +211,14 @@ export default function useAudioOverview(options: Options) {
 
   const audioOverviewVoiceOptions = useMemo(() => {
     const localePrefix = audioOverviewLanguage === "en" ? "en-US" : "zh-CN";
-    const preferred = allVoices.filter((item) =>
-      item.locale.toLowerCase().startsWith(localePrefix.toLowerCase())
-    );
+    const preferred = allVoices.filter((item) => {
+      const loc = (item.locale || "").toLowerCase();
+      return (
+        loc.startsWith(localePrefix.toLowerCase()) ||
+        loc === "multi" ||
+        item.gender === "custom"
+      );
+    });
     return preferred.length ? preferred : allVoices;
   }, [allVoices, audioOverviewLanguage]);
 

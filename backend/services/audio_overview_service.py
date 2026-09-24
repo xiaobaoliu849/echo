@@ -629,6 +629,29 @@ class AudioOverviewService:
                 text=True,
             )
             if result.returncode != 0:
+                # If stream copy failed (e.g. WAV segments from Gemini into MP3), retry with audio re-encoding
+                transcode_command = [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(list_file),
+                    "-c:a",
+                    "libmp3lame",
+                    "-b:a",
+                    "192k",
+                    str(output_path),
+                ]
+                result = subprocess.run(
+                    transcode_command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+            if result.returncode != 0:
                 detail = (result.stderr or result.stdout or "").strip()[-400:]
                 raise AudioOverviewServiceError(
                     code="AUDIO_MERGE_FFMPEG_FAILED",
