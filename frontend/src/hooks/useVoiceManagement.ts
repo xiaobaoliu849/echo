@@ -52,6 +52,7 @@ export default function useVoiceManagement({
   googleApiKeyConfigured = false,
 }: Options) {
   const [activeProvider, setActiveProvider] = useState<VoiceProviderId>("qwen");
+  const [designProvider, setDesignProvider] = useState<"qwen" | "gemini" | "xiaomi">("qwen");
   const t = createInlineTranslator(language);
   const designPromptPresets = [
     {
@@ -96,6 +97,7 @@ export default function useVoiceManagement({
   const [designInfo, setDesignInfo] = useState("");
   const [designPreviewAudio, setDesignPreviewAudio] = useState("");
   const [designVoices, setDesignVoices] = useState<CustomVoice[]>([]);
+  const designRequestRef = useRef(0);
 
   const [cloneName, setCloneName] = useState("voice_clone_demo");
   const [cloneAudioFile, setCloneAudioFile] = useState<File | null>(null);
@@ -107,15 +109,15 @@ export default function useVoiceManagement({
   const [cloneVoices, setCloneVoices] = useState<CustomVoice[]>([]);
   const cloneRequestRef = useRef(0);
 
-  // Design and Clone tabs share one provider selector. ElevenLabs only
-  // supports cloning, so a provider picked on the clone page must not leak
-  // into the design tab (its API would reject the request with a 400):
-  // the design tab keeps using the last design-capable provider.
-  const voiceProvider = activeProvider === "elevenlabs" ? "qwen" : activeProvider;
+  // Clone-only providers must not replace the last valid design provider.
+  const voiceProvider = designProvider;
   const cloneProvider = activeProvider;
 
   function setVoiceProvider(provider: VoiceProviderId) {
     setActiveProvider(provider);
+    if (provider === "qwen" || provider === "gemini" || provider === "xiaomi") {
+      setDesignProvider(provider);
+    }
   }
 
   function isProviderKeyConfigured(provider: VoiceProviderId): boolean {
@@ -159,22 +161,39 @@ export default function useVoiceManagement({
       await refreshCloneVoices();
       return;
     }
-    if (!isProviderKeyConfigured(voiceProvider)) {
+    const requestId = ++designRequestRef.current;
+    const providers: VoiceProviderId[] = [];
+    if (dashscopeApiKeyConfigured) providers.push("qwen");
+    if (googleApiKeyConfigured) providers.push("gemini");
+    setDesignVoices(previous => previous.filter(item => providers.includes(item.provider as VoiceProviderId)));
+    if (providers.length === 0) {
+      setDesignListBusy(false);
       if (!options.silentIfMissingKey) {
-        setMissingKeyError("voice_design");
+        setDesignError(t(
+          "音色库需要配置 DashScope 或 Google API Key。小米音色设计仅提供本次试听。",
+          "Configure a DashScope or Google API key to load saved voices. Xiaomi voice design only provides a preview for this session."
+        ));
       }
       return;
     }
-    try {
-      setDesignListBusy(true);
-      const result = await listCustomVoices("voice_design", voiceProvider, true);
-      setDesignVoices(result.voices.map(item => ({ ...item, provider: voiceProvider })));
-    } catch (err) {
-      const message = formatErrorMessage(err, t("加载音色列表失败。", "Failed to load the voice list."));
-      setDesignError(message);
-    } finally {
-      setDesignListBusy(false);
-    }
+    setDesignListBusy(true);
+    setDesignError("");
+    await Promise.all(providers.map(async provider => {
+      try {
+        const result = await listCustomVoices("voice_design", provider, true);
+        if (requestId !== designRequestRef.current) return;
+        setDesignVoices(previous => [
+          ...previous.filter(item => item.provider !== provider),
+          ...result.voices.map(item => ({ ...item, provider })),
+        ]);
+      } catch (err) {
+        if (requestId === designRequestRef.current) {
+          const message = formatErrorMessage(err, t("加载音色列表失败。", "Failed to load the voice list."));
+          setDesignError(previous => `${previous ? `${previous}\n` : ""}${provider}: ${message}`);
+        }
+      }
+    }));
+    if (requestId === designRequestRef.current) setDesignListBusy(false);
   }
 
   async function refreshCloneVoices() {
@@ -206,7 +225,7 @@ export default function useVoiceManagement({
 
   useEffect(() => {
     void refreshCustomVoices("voice_design", { silentIfMissingKey: true });
-  }, [dashscopeApiKeyConfigured, xiaomiApiKeyConfigured, elevenlabsApiKeyConfigured, googleApiKeyConfigured, voiceProvider]);
+  }, [dashscopeApiKeyConfigured, googleApiKeyConfigured]);
 
   useEffect(() => {
     void refreshCloneVoices();
@@ -242,12 +261,14 @@ export default function useVoiceManagement({
         provider: voiceProvider,
       });
       const displayName = result.preferred_name || designName.trim();
-      setDesignInfo(t(`已创建音色：${displayName}`, `Created voice: ${displayName}`));
+      setDesignInfo(result.voice
+        ? t(`已创建音色：${displayName}`, `Created voice: ${displayName}`)
+        : t("试听已生成。小米不会保存可复用的音色。", "Preview generated. Xiaomi does not save a reusable voice."));
       const previewAudioData = result.preview_audio_data || "";
       setDesignPreviewAudio(
         previewAudioData ? `data:audio/wav;base64,${previewAudioData}` : ""
       );
-      await refreshCustomVoices("voice_design");
+      if (result.voice) await refreshCustomVoices("voice_design");
     } catch (err) {
       setDesignError(formatErrorMessage(err, t("创建音色设计失败。", "Failed to create the designed voice.")));
     } finally {
@@ -312,6 +333,7 @@ export default function useVoiceManagement({
         setCloneVoices(previous => previous.filter(item => item.voice !== voiceName || item.provider !== targetProvider));
         void refreshCloneVoices();
       } else {
+        setDesignVoices(previous => previous.filter(item => item.voice !== voiceName || item.provider !== targetProvider));
         await refreshCustomVoices(voiceType);
       }
     } catch (err) {
@@ -414,7 +436,7 @@ export default function useVoiceManagement({
       ],
       onSubmit: onDesignSubmit,
       onRefresh: () => refreshCustomVoices("voice_design"),
-      onDeleteVoice: (voiceName: string) => onDeleteVoice(voiceName, "voice_design"),
+      onDeleteVoice: (voiceName: string, provider?: VoiceProviderId) => onDeleteVoice(voiceName, "voice_design", provider),
       onPromptChange: setDesignPrompt,
       onPreviewTextChange: setDesignPreviewText,
       onNameChange: setDesignName,
