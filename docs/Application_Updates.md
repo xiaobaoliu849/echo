@@ -92,8 +92,8 @@ scheduler cleanup, sender validation, multi-subscriber/remount state, stale
 snapshots, safe release-note rendering and IPC failure. Local HTTP integration
 tests use the real updater to reject corrupt payloads, same/older versions and
 unsigned data when a signing publisher is configured. They do not execute a real
-installer. The desktop smoke test checks packaged preload/state/version and opens
-Settings → System, saving `output/electron-update-settings.png`.
+installer. The desktop smoke test checks packaged preload/state/version,
+the native title bar, and Settings → System.
 
 The v1.0.2 release follows the existing v1.0.1 unsigned distribution model, with
 the owner's instruction to proceed. Its source includes the latest main-branch

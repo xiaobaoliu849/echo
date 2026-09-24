@@ -45,14 +45,6 @@
   position: relative;
   height: 100%;
   max-height: 100%;
-  /* With the hidden native title bar (Windows), the sidebar is the drag
-     surface; interactive children stay clickable via no-drag. Inert in
-     browsers, where -webkit-app-region has no effect. */
-  -webkit-app-region: drag;
-}
-
-.vsSidebar :is(button, a, input, select, textarea, [role="menu"], [role="menuitem"], .vsHistoryItem) {
-  -webkit-app-region: no-drag;
 }
 
 .vsSidebar.collapsed {
@@ -122,8 +114,8 @@
   width: 40px;
   height: 40px;
   border-radius: 14px;
-  /* The normal state displays the same PNG used to build the Windows icon. */
-  background: linear-gradient(160deg, rgb(117, 137, 126), rgb(92, 110, 100));
+  /* Let the PNG's transparent corners composite like the native icon. */
+  background: transparent;
   color: white;
   display: flex;
   align-items: center;
@@ -146,7 +138,6 @@
   box-shadow:
     0 14px 28px color-mix(in oklab, var(--brand-dark) 32%, transparent),
     inset 0 1px 0 color-mix(in oklab, white 70%, transparent);
-  filter: brightness(1.04);
 }
 
 .vsBrandIconMark,
@@ -176,6 +167,8 @@
   opacity: 0;
   transform: scale(0.85);
   pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(160deg, rgb(117, 137, 126), rgb(92, 110, 100));
 }
 
 .vsSidebarToggleBtn:hover .vsBrandIconMark {

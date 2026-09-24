@@ -199,9 +199,8 @@ export default function App() {
     () => normalizeConversationHistory(loadConversationHistory())
   );
   const currentArchiveBaselineRef = useRef<ConversationArchiveEntry | null>(null);
-  const isDesktopEmbedded =
-    typeof window !== "undefined" &&
-    Object.prototype.hasOwnProperty.call(window, "pywebview");
+  const isDesktopEmbedded = typeof window !== "undefined" &&
+    (window.isElectron === true || Object.prototype.hasOwnProperty.call(window, "pywebview"));
   const settings = useSettings({ formatErrorMessage });
   const uiLanguage = settings.displayLanguage;
   const tts = useTts({

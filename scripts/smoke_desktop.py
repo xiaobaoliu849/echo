@@ -6,7 +6,6 @@ Requires the packaging environment (httpx and websockets). No paid API calls.
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 from pathlib import Path
@@ -172,8 +171,10 @@ def main() -> None:
                               const version = await window.electronAPI.getAppVersion();
                               const update = await window.electronAPI.getUpdateState();
                               const root = document.getElementById('root');
+                              const sidebar = root.querySelector('.vsSidebar');
+                              if (!sidebar) return {pending: true};
                               return {health: health.status, version, update, electron: window.isElectron,
-                                sidebarHasUpdates: /更新|updates?/i.test(root.querySelector(".vsSidebar").innerText),
+                                sidebarHasUpdates: /更新|updates?/i.test(sidebar.innerText),
                                 updateNotice: !!root.querySelector(".vsUpdateNotice"),
                                 chatLoaded: !!root.querySelector('textarea'),
                                 buttons: root.querySelectorAll('button').length,
@@ -193,6 +194,25 @@ def main() -> None:
                             assert not result.get('updateNotice'), result
                             assert result['update']['appVersion'] == result['version'], result
                             assert result['update']['phase'] == 'idle', result
+                            for attempt in range(20):
+                                layout = cdp('Runtime.evaluate', {'expression': """(() => {
+                                  const app = document.querySelector('.vsApp');
+                                  const canvas = document.querySelector('.vsChatCanvasToggleBtn');
+                                  const sidebarIcon = document.querySelector('.vsBrandIconMark img');
+                                  const welcomeIcon = document.querySelector('.vsWelcomeHeroIcon img');
+                                  return {
+                                    desktop: app?.classList.contains('desktopEmbedded'),
+                                    canvasTop: canvas?.getBoundingClientRect().top,
+                                    iconsLoaded: !!sidebarIcon?.naturalWidth && !!welcomeIcon?.naturalWidth,
+                                    sameIcon: sidebarIcon?.src === welcomeIcon?.src
+                                  };
+                                })()""", 'returnByValue': True})['result']['value']
+                                if layout['iconsLoaded']:
+                                    break
+                                time.sleep(0.1)
+                            assert layout['desktop'], layout
+                            assert layout['canvasTop'] >= 0, layout
+                            assert layout['iconsLoaded'] and layout['sameIcon'], layout
                             cdp('Runtime.evaluate', {'expression': "document.querySelector('[data-testid=nav-settings]').click()"})
                             for attempt in range(60):
                                 opened = cdp('Runtime.evaluate', {'expression': """(() => {
@@ -209,20 +229,29 @@ def main() -> None:
                                   const card = document.querySelector('.vsUpdateCard');
                                   return card ? {text: card.innerText, check: !!card.querySelector('button')} : null;
                                 })()""", 'returnByValue': True})
-                                if card['result'].get('value'):
+                                if card['result'].get('value') and result['version'] in card['result']['value']['text']:
                                     break
                                 time.sleep(0.1)
                             assert card['result']['value']['check'], card
                             assert result['version'] in card['result']['value']['text'], card
-                            screenshot = cdp('Page.captureScreenshot', {'format': 'png'})
-                            (output / 'electron-update-settings.png').write_bytes(base64.b64decode(screenshot['data']))
-                            (output / 'electron-smoke.png').write_bytes(base64.b64decode(screenshot['data']))
                             print(json.dumps(result, ensure_ascii=True))
                         # app.quit() takes the normal Electron quit path; a
                         # force-kill would conceal broken backend cleanup.
                         targets = client.get(f'http://127.0.0.1:{main_port}/json').json()
                         with connect(targets[0]['webSocketDebuggerUrl']) as ws:
                             ws.send(json.dumps({'id': 1, 'method': 'Runtime.evaluate',
+                                'params': {'expression': """(() => {
+                                  const { BrowserWindow } = process.mainModule.require('electron');
+                                  const win = BrowserWindow.getAllWindows()[0];
+                                  return {
+                                    frameTop: win.getBounds().y,
+                                    contentTop: win.getContentBounds().y,
+                                    menuVisible: win.isMenuBarVisible()
+                                  };
+                                })()""", 'returnByValue': True}}))
+                            native = json.loads(ws.recv(timeout=5))['result']['result']['value']
+                            assert native['contentTop'] > native['frameTop'] and native['menuVisible'], native
+                            ws.send(json.dumps({'id': 2, 'method': 'Runtime.evaluate',
                                 'params': {'expression': "process.mainModule.require('electron').app.quit()"}}))
                             # Wait for evaluation, then disconnect so the Node
                             # inspector does not hold the quitting process open.
