@@ -402,7 +402,13 @@
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.vsCloneSourceTab:hover {
+.vsCloneSourceTab:disabled,
+.vsModernDropZone[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.vsCloneSourceTab:not(:disabled):hover {
   color: var(--text);
   background: color-mix(in srgb, var(--surface) 90%, transparent);
 }
