@@ -11,11 +11,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from services.tts_service import (
+    DEFAULT_QWEN_AUDIO_31_TTS_VOICE,
     DEFAULT_QWEN_AUDIO_TTS_VOICE,
+    QWEN_AUDIO_31_TTS_VOICES,
     QWEN_AUDIO_TTS_VOICES,
     QWEN_FLASH_VOICES,
     TTS_ENGINE_QWEN_FLASH,
     TTSService,
+    is_qwen_audio_31_tts_model,
     is_qwen_audio_tts_model,
 )
 
@@ -24,6 +27,9 @@ class QwenAudioTtsModelDetectionTests(unittest.TestCase):
     def test_is_qwen_audio_tts_model(self) -> None:
         self.assertTrue(is_qwen_audio_tts_model("qwen-audio-3.0-tts-flash"))
         self.assertTrue(is_qwen_audio_tts_model("qwen-audio-3.0-tts-plus"))
+        self.assertTrue(is_qwen_audio_tts_model("qwen-audio-3.1-tts-flash"))
+        self.assertTrue(is_qwen_audio_31_tts_model("qwen-audio-3.1-tts-flash"))
+        self.assertFalse(is_qwen_audio_31_tts_model("qwen-audio-3.0-tts-flash"))
         self.assertFalse(is_qwen_audio_tts_model("qwen3-tts-flash-2025-11-27"))
         self.assertFalse(is_qwen_audio_tts_model("qwen3-tts-flash"))
         self.assertFalse(is_qwen_audio_tts_model(None))
@@ -37,15 +43,31 @@ class QwenVoiceResolutionTests(unittest.TestCase):
     def test_rejects_flash_voice_on_audio_model(self) -> None:
         with self.assertRaisesRegex(ValueError, "不兼容"):
             self.service._resolve_qwen_voice_for_model("Ono Anna", "qwen-audio-3.0-tts-flash")
+        with self.assertRaisesRegex(ValueError, "不兼容"):
+            self.service._resolve_qwen_voice_for_model("Ono Anna", "qwen-audio-3.1-tts-flash")
 
     def test_rejects_longan_voice_on_flash_model(self) -> None:
         with self.assertRaisesRegex(ValueError, "不兼容"):
             self.service._resolve_qwen_voice_for_model("longanhuan_v3.6", "qwen3-tts-flash-2025-11-27")
+        with self.assertRaisesRegex(ValueError, "不兼容"):
+            self.service._resolve_qwen_voice_for_model("longanhuan_v3.1", "qwen3-tts-flash-2025-11-27")
 
     def test_passes_compatible_voices(self) -> None:
         self.assertEqual(
             self.service._resolve_qwen_voice_for_model("longanhuan_v3.6", "qwen-audio-3.0-tts-flash"),
             "longanhuan_v3.6",
+        )
+        self.assertEqual(
+            self.service._resolve_qwen_voice_for_model("longanhuan_v3.1", "qwen-audio-3.1-tts-flash"),
+            "longanhuan_v3.1",
+        )
+        self.assertEqual(
+            self.service._resolve_qwen_voice_for_model("yuxiaoyun_v3.1", "qwen-audio-3.1-tts-flash"),
+            "yuxiaoyun_v3.1",
+        )
+        self.assertEqual(
+            self.service._resolve_qwen_voice_for_model("longanhuan_v3.6", "qwen-audio-3.1-tts-flash"),
+            "longanhuan_v3.1",
         )
         self.assertEqual(
             self.service._resolve_qwen_voice_for_model("Ono Anna", "qwen3-tts-flash-2025-11-27"),
@@ -58,12 +80,18 @@ class QwenVoiceResolutionTests(unittest.TestCase):
             "qwen3-tts-vc-abc123",
         )
         self.assertEqual(
+            self.service._resolve_qwen_voice_for_model("qwen3-tts-vc-abc123", "qwen-audio-3.1-tts-flash"),
+            "qwen3-tts-vc-abc123",
+        )
+        self.assertEqual(
             self.service._resolve_qwen_voice_for_model("qwen3-tts-vd-xyz", "qwen3-tts-flash-2025-11-27"),
             "qwen3-tts-vd-xyz",
         )
 
     def test_detect_engine_by_voice_recognizes_longan_family(self) -> None:
         self.assertEqual(self.service.detect_engine_by_voice("longanhuan_v3.6"), TTS_ENGINE_QWEN_FLASH)
+        self.assertEqual(self.service.detect_engine_by_voice("longanhuan_v3.1"), TTS_ENGINE_QWEN_FLASH)
+        self.assertEqual(self.service.detect_engine_by_voice("yuxiaoyun_v3.1"), TTS_ENGINE_QWEN_FLASH)
         self.assertEqual(self.service.detect_engine_by_voice("loongjohn"), TTS_ENGINE_QWEN_FLASH)
 
 
@@ -76,10 +104,18 @@ class QwenVoiceListingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(audio_names, {v["name"] for v in QWEN_AUDIO_TTS_VOICES})
         self.assertNotIn("Ono Anna", audio_names)
 
+        audio_31_voices = await service.list_voices(engine=TTS_ENGINE_QWEN_FLASH, model="qwen-audio-3.1-tts-flash")
+        audio_31_names = {v["name"] for v in audio_31_voices}
+        self.assertEqual(audio_31_names, {v["name"] for v in QWEN_AUDIO_31_TTS_VOICES})
+        self.assertIn("longanhuan_v3.1", audio_31_names)
+        self.assertIn("yuxiaoyun_v3.1", audio_31_names)
+        self.assertNotIn("Ono Anna", audio_31_names)
+
         flash_voices = await service.list_voices(engine=TTS_ENGINE_QWEN_FLASH, model="qwen3-tts-flash-2025-11-27")
         flash_names = {v["name"] for v in flash_voices}
         self.assertEqual(flash_names, {v["name"] for v in QWEN_FLASH_VOICES})
         self.assertNotIn("longanhuan_v3.6", flash_names)
+        self.assertNotIn("longanhuan_v3.1", flash_names)
 
         # No model -> legacy behavior (qwen3-tts family)
         default_voices = await service.list_voices(engine=TTS_ENGINE_QWEN_FLASH)
