@@ -56,4 +56,11 @@ describe("VoiceRecorder", () => {
     expect(screen.getByText(/录制的声纹样本/i)).toBeInTheDocument();
     expect(screen.getByText("WEBM")).toBeInTheDocument();
   });
+
+  it("keeps consent recording focused on the statement displayed by its parent", () => {
+    render(<VoiceRecorder consentPrompt onRecordingComplete={vi.fn()} />);
+    expect(screen.queryByText(/朗读示例范本/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/I am the owner of this voice/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /开始录音/i })).toBeInTheDocument();
+  });
 });

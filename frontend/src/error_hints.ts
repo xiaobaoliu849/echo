@@ -318,9 +318,21 @@ export function buildErrorHints(message: string): string[] {
   // Dynamic context-aware hints for VOICE (Voice Design / Voice Clone)
   if (code.startsWith("VOICE_")) {
     if (/google|gemini/i.test(text)) {
+      if (/Gemini voice clone failed \(503\)/i.test(text)) {
+        return [
+          "Google's voice creation service returned 503 after retries. Keep your recordings and try again later.",
+          "If it persists, try the same clips in Google AI Studio Voice Replication and include this Echo request ID when reporting the issue."
+        ];
+      }
+      if (/Gemini voice clone failed \(500\)/i.test(text)) {
+        return [
+          "Google's Voice API returned an internal error. Keep your recordings and try again later.",
+          "If it persists, test the same clips in Google AI Studio Voice Replication to isolate the provider failure."
+        ];
+      }
       return [
-        "Check google_api_key in Settings → Google Gemini.",
-        "For Gemini Voice Replication, ensure your recording recites the required consent statement: 'I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.'"
+        "Record 10–30 seconds of natural speech for the sample, then record the exact Google consent statement separately with the same speaker.",
+        "Use the same microphone and acoustic setting for both recordings."
       ];
     }
     if (/elevenlabs/i.test(text)) {

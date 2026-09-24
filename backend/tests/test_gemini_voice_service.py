@@ -49,6 +49,7 @@ def _make_valid_wav_bytes() -> bytes:
 
 
 VALID_WAV = _make_valid_wav_bytes()
+CONSENT_WAV = VALID_WAV[:-2] + b"\x01\x00"
 
 
 @pytest.mark.asyncio
@@ -89,6 +90,7 @@ async def test_create_voice_clone_success(tmp_path: Path):
     with patch("httpx.AsyncClient.post", return_value=mock_response):
         res = await service.create_voice_clone(
             audio_bytes=VALID_WAV,
+            consent_bytes=CONSENT_WAV,
             mime_type="audio/wav",
             preferred_name="My Cloned Voice",
         )
@@ -180,6 +182,7 @@ async def test_base_url_v1beta_normalization(tmp_path: Path):
     with patch("httpx.AsyncClient.post", side_effect=mock_post):
         await service.create_voice_clone(
             audio_bytes=VALID_WAV,
+            consent_bytes=CONSENT_WAV,
             mime_type="audio/wav",
             preferred_name="test_voice",
         )
@@ -203,6 +206,7 @@ async def test_create_voice_clone_payload_structure(tmp_path: Path):
     with patch("httpx.AsyncClient.post", side_effect=mock_post):
         res = await service.create_voice_clone(
             audio_bytes=VALID_WAV,
+            consent_bytes=CONSENT_WAV,
             mime_type="audio/wav",
             preferred_name="MyVoice",
         )
@@ -216,6 +220,25 @@ async def test_create_voice_clone_payload_structure(tmp_path: Path):
         assert "consent_audio" in replicated
         assert replicated["source_audio"]["mime_type"] == "audio/wav"
         assert isinstance(replicated["source_audio"]["data"], str)
+        assert replicated["source_audio"]["data"] != replicated["consent_audio"]["data"]
+
+
+@pytest.mark.asyncio
+async def test_create_voice_clone_requires_separate_consent(tmp_path: Path):
+    service = _service_with_config(tmp_path)
+    with patch("httpx.AsyncClient.post") as post:
+        with pytest.raises(ValueError, match="separate consent recording"):
+            await service.create_voice_clone(
+                audio_bytes=VALID_WAV, mime_type="audio/wav", preferred_name="MyVoice"
+            )
+        with pytest.raises(ValueError, match="two different recordings"):
+            await service.create_voice_clone(
+                audio_bytes=VALID_WAV,
+                consent_bytes=VALID_WAV,
+                mime_type="audio/wav",
+                preferred_name="MyVoice",
+            )
+        post.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -270,6 +293,7 @@ async def test_create_voice_clone_normalizes_audio_to_wav(tmp_path: Path):
     with patch("httpx.AsyncClient.post", side_effect=mock_post):
         res = await service.create_voice_clone(
             audio_bytes=VALID_WAV,
+            consent_bytes=CONSENT_WAV,
             mime_type="audio/webm;codecs=opus",
             preferred_name="NormalizedVoice",
         )
@@ -323,6 +347,7 @@ async def test_create_voice_clone_retries_on_500(tmp_path: Path):
     ):
         res = await service.create_voice_clone(
             audio_bytes=VALID_WAV,
+            consent_bytes=CONSENT_WAV,
             mime_type="audio/wav",
             preferred_name="RetryVoice",
         )
@@ -354,6 +379,7 @@ async def test_create_voice_clone_no_retry_on_400(tmp_path: Path):
         with pytest.raises(RuntimeError, match="Bad request"):
             await service.create_voice_clone(
                 audio_bytes=VALID_WAV,
+                consent_bytes=CONSENT_WAV,
                 mime_type="audio/wav",
                 preferred_name="NoRetryVoice",
             )

@@ -9,6 +9,9 @@ import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
 import "./VoiceStudio.css";
 
+const GOOGLE_VOICE_CONSENT_STATEMENT =
+  "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.";
+
 type Props = {
   clone: VoiceCloneController;
   errorRuntimeContext: ErrorRuntimeContext;
@@ -27,6 +30,7 @@ export default function VoiceClonePage({
   const { t } = useI18n();
   const [viewMode, setViewMode] = useState<"library" | "workspace">("library");
   const [sourceMode, setSourceMode] = useState<"upload" | "record">("upload");
+  const [consentMode, setConsentMode] = useState<"upload" | "record">("record");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,6 +60,7 @@ export default function VoiceClonePage({
     clone.cloneAcceptedFormats.length > 0
       ? clone.cloneAcceptedFormats.join(", ")
       : "mp3, wav, flac, m4a, ogg, webm";
+  const sampleLocked = voiceProvider === "gemini" && !clone.cloneConsentFile;
 
   if (viewMode === "workspace") {
     return (
@@ -86,7 +91,7 @@ export default function VoiceClonePage({
           <button
             type="submit"
             className="vsVoiceStudioSubmit"
-            disabled={clone.cloneBusy || !clone.cloneAudioFile}
+            disabled={!clone.cloneCanSubmit}
           >
             {clone.cloneBusy ? (
               <>
@@ -139,10 +144,15 @@ export default function VoiceClonePage({
 
             <div className="vsVoiceStudioFormCard">
               <p className="vsVoiceStudioIntro">
-                {t(
-                  "通过上传音频样板复刻特定人声，或直接使用麦克风录制自己的声音进行克隆。",
-                  "Recreate a specific voice by uploading an audio sample or recording yourself directly with the microphone."
-                )}
+                {voiceProvider === "gemini"
+                  ? t(
+                      "按顺序完成两步：先录制授权声明，再录制自然语音样板。",
+                      "Complete these steps in order: record your consent statement first, then your natural speech sample."
+                    )
+                  : t(
+                      "通过上传音频样板复刻特定人声，或直接使用麦克风录制自己的声音进行克隆。",
+                      "Recreate a specific voice by uploading an audio sample or recording yourself directly with the microphone."
+                    )}
               </p>
 
               <label className="vsField">
@@ -161,66 +171,6 @@ export default function VoiceClonePage({
                 </select>
               </label>
 
-              {voiceProvider === "gemini" && (
-                <div
-                  className="vsVoiceStudioReminder"
-                  style={{
-                    backgroundColor: "rgba(59, 130, 246, 0.08)",
-                    borderColor: "rgba(59, 130, 246, 0.3)",
-                    borderWidth: 1,
-                    borderStyle: "solid",
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 16,
-                  }}
-                >
-                  <p style={{ margin: "0 0 6px 0", fontSize: 13, fontWeight: 600, color: "var(--brand, #3b82f6)" }}>
-                    {t("Google Gemini 声音复刻口述授权要求", "Google Gemini Voice Consent Requirement")}
-                  </p>
-                  <p className="vsFieldHint" style={{ margin: 0, fontSize: 12 }}>
-                    {t(
-                      "Google API 强制要求声音复刻音频中必须包含原说话人清楚朗读的授权声明，否则将返回校验失败：",
-                      "Google API strictly requires the voice sample to include the speaker reciting this verbal consent statement, otherwise verification will fail:"
-                    )}
-                  </p>
-                  <blockquote
-                    style={{
-                      margin: "8px 0 0 0",
-                      padding: "8px 10px",
-                      background: "rgba(0, 0, 0, 0.04)",
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontStyle: "italic",
-                      userSelect: "all",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <span>“I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.”</span>
-                    <button
-                      type="button"
-                      className="vsBtnGhost"
-                      style={{ fontSize: 11, padding: "3px 8px", height: "auto", whiteSpace: "nowrap" }}
-                      onClick={() => {
-                        navigator.clipboard?.writeText(
-                          "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model."
-                        );
-                      }}
-                    >
-                      {t("复制", "Copy")}
-                    </button>
-                  </blockquote>
-                  <p className="vsFieldHint" style={{ margin: "8px 0 0 0", fontSize: 11, color: "var(--brand, #3b82f6)" }}>
-                    {t(
-                      "⚡ 系统已集成自动转码：无论麦克风录制 (WebM) 还是本地上传任何音频，后端均会自动规范化为 Google 必需的 24kHz 16-bit PCM WAV 标准流。",
-                      "⚡ Automatic Transcoding: Whether recording via microphone (WebM) or uploading any audio format, the backend automatically normalizes the stream to Google's required 24kHz 16-bit PCM WAV standard."
-                    )}
-                  </p>
-                </div>
-              )}
-
               <label className="vsField">
                 <span className="vsFieldLabel">{t("新音色命名", "New voice name")}</span>
                 <input
@@ -238,16 +188,75 @@ export default function VoiceClonePage({
                 </span>
               </label>
 
+              {voiceProvider === "gemini" && (
+                <div className="vsField">
+                  <span className="vsFieldLabel">{t("第 1 步：授权声明录音（必填）", "Step 1: Consent recording (required)")}</span>
+                  <span className="vsFieldHint">
+                    {t(
+                      "先由本人完整朗读以下声明。完成后，再用相同麦克风录制自然语音样板。",
+                      "First, read the full statement below yourself. Then record a natural speech sample with the same microphone."
+                    )}
+                  </span>
+                  <blockquote className="vsVoiceStudioReminder vsVoiceConsentStatement">
+                    <span>{GOOGLE_VOICE_CONSENT_STATEMENT}</span>
+                    <button
+                      type="button"
+                      className="vsBtnGhost"
+                      onClick={() => navigator.clipboard?.writeText(GOOGLE_VOICE_CONSENT_STATEMENT)}
+                    >
+                      {t("复制", "Copy")}
+                    </button>
+                  </blockquote>
+                  <div className="vsCloneSourceSelector">
+                    <button type="button" className={`vsCloneSourceTab ${consentMode === "record" ? "active" : ""}`} onClick={() => setConsentMode("record")}>{t("录制授权", "Record consent")}</button>
+                    <button type="button" className={`vsCloneSourceTab ${consentMode === "upload" ? "active" : ""}`} onClick={() => setConsentMode("upload")}>{t("上传授权录音", "Upload consent audio")}</button>
+                  </div>
+                  {consentMode === "record" ? (
+                    <VoiceRecorder
+                      consentPrompt
+                      currentFile={clone.cloneConsentFile}
+                      onRecordingComplete={clone.onConsentFileChange}
+                      onDiscard={() => clone.onConsentFileChange(null)}
+                      disabled={clone.cloneBusy}
+                    />
+                  ) : (
+                    <div className="vsVoiceStudioUploadWrap">
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        aria-label={t("选择授权录音", "Choose consent audio")}
+                        onChange={(e) => clone.onConsentFileChange(e.target.files?.[0] || null)}
+                      />
+                      {clone.cloneConsentFile && (
+                        <AudioPreviewPlayer
+                          file={clone.cloneConsentFile}
+                          title={clone.cloneConsentFile.name}
+                          onRemove={() => clone.onConsentFileChange(null)}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Source Mode Switcher: Upload vs Record */}
               <div className="vsField">
                 <span className="vsFieldLabel">
-                  {t("🎙️ 声音样板录入方式", "🎙️ Voice Sample Input Method")}
+                  {voiceProvider === "gemini"
+                    ? t("第 2 步：录制或上传自然语音样板", "Step 2: Record or upload a natural speech sample")
+                    : t("🎙️ 声音样板录入方式", "🎙️ Voice Sample Input Method")}
                 </span>
+                {sampleLocked && (
+                  <span className="vsFieldHint">
+                    {t("请先完成第 1 步，再录制或上传语音样板。", "Complete Step 1 before recording or uploading the voice sample.")}
+                  </span>
+                )}
                 <div className="vsCloneSourceSelector">
                   <button
                     type="button"
                     className={`vsCloneSourceTab ${sourceMode === "upload" ? "active" : ""}`}
                     onClick={() => setSourceMode("upload")}
+                    disabled={sampleLocked}
                   >
                     <UploadCloud size={16} />
                     <span>{t("上传音频文件", "Upload Audio File")}</span>
@@ -256,6 +265,7 @@ export default function VoiceClonePage({
                     type="button"
                     className={`vsCloneSourceTab ${sourceMode === "record" ? "active" : ""}`}
                     onClick={() => setSourceMode("record")}
+                    disabled={sampleLocked}
                   >
                     <Mic size={16} />
                     <span>{t("麦克风现场录制", "Record From Microphone")}</span>
@@ -269,8 +279,10 @@ export default function VoiceClonePage({
                   {!clone.cloneAudioFile ? (
                     <div
                       className={`vsModernDropZone ${isDragging ? "dragging" : ""}`}
+                      aria-disabled={sampleLocked}
                       onDragOver={(e) => {
                         e.preventDefault();
+                        if (sampleLocked) return;
                         setIsDragging(true);
                       }}
                       onDragLeave={(e) => {
@@ -280,18 +292,22 @@ export default function VoiceClonePage({
                       onDrop={(e) => {
                         e.preventDefault();
                         setIsDragging(false);
+                        if (sampleLocked) return;
                         const file = e.dataTransfer.files?.[0];
                         if (file) {
                           clone.onAudioFileChange(file);
                         }
                       }}
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={() => {
+                        if (!sampleLocked) fileInputRef.current?.click();
+                      }}
                     >
                       <input
                         ref={fileInputRef}
                         type="file"
                         accept="audio/*"
                         aria-label={t("选择音频文件", "Choose an audio file")}
+                        disabled={sampleLocked}
                         onChange={(e) => clone.onAudioFileChange(e.target.files?.[0] || null)}
                       />
                       <div className="vsModernDropZoneIcon">
@@ -320,13 +336,17 @@ export default function VoiceClonePage({
                         ref={fileInputRef}
                         type="file"
                         accept="audio/*"
+                        aria-label={t("选择音频文件", "Choose an audio file")}
                         style={{ display: "none" }}
+                        disabled={sampleLocked}
                         onChange={(e) => clone.onAudioFileChange(e.target.files?.[0] || null)}
                       />
                       <AudioPreviewPlayer
                         file={clone.cloneAudioFile}
                         title={clone.cloneAudioFile.name}
-                        onReplace={() => fileInputRef.current?.click()}
+                        onReplace={() => {
+                          if (!sampleLocked) fileInputRef.current?.click();
+                        }}
                         onRemove={() => clone.onAudioFileChange(null)}
                       />
                     </div>
@@ -341,7 +361,7 @@ export default function VoiceClonePage({
                     onRecordingComplete={(file) => clone.onAudioFileChange(file)}
                     onDiscard={() => clone.onAudioFileChange(null)}
                     currentFile={clone.cloneAudioFile}
-                    disabled={clone.cloneBusy}
+                    disabled={clone.cloneBusy || sampleLocked}
                   />
                 </div>
               )}

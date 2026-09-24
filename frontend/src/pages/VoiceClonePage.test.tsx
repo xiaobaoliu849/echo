@@ -99,4 +99,44 @@ describe('VoiceClonePage', () => {
         fireEvent.change(select, { target: { value: 'qwen' } });
         expect(handleProviderChange).toHaveBeenCalledWith('qwen');
     });
+
+    it('requires a separate Gemini consent recording and exposes its upload', () => {
+        const sample = new File(['sample'], 'sample.wav', { type: 'audio/wav' });
+        const consent = new File(['consent'], 'consent.wav', { type: 'audio/wav' });
+        const onConsentFileChange = vi.fn();
+        const controller = createVoiceCloneController({
+            cloneAudioFile: sample,
+            onConsentFileChange,
+        });
+        const { rerender } = render(
+            <VoiceClonePage clone={controller} errorRuntimeContext={{}} voiceProvider="gemini" />
+        );
+        fireEvent.click(screen.getByRole('button', { name: /克隆新音色/ }));
+        expect(screen.getByRole('button', { name: /开始克隆/ })).toBeDisabled();
+        expect(screen.getByText(/按顺序完成两步：先录制授权声明/)).toBeInTheDocument();
+        const consentStep = screen.getByText(/第 1 步：授权声明录音/);
+        const sampleStep = screen.getByText(/第 2 步：录制或上传自然语音样板/);
+        expect(consentStep.compareDocumentPosition(sampleStep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByRole('button', { name: /上传音频文件/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /麦克风现场录制/ })).toBeDisabled();
+        expect(screen.getByLabelText(/选择音频文件/)).toBeDisabled();
+        expect(screen.getAllByText(/I am the owner of this voice and I consent to Google/)).toHaveLength(1);
+        expect(screen.queryByText(/Google Gemini 声音复刻口述授权要求/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /上传授权录音/ }));
+        expect(screen.getAllByText(/I am the owner of this voice and I consent to Google/)).toHaveLength(1);
+        fireEvent.change(screen.getByLabelText(/选择授权录音/), { target: { files: [consent] } });
+        expect(onConsentFileChange).toHaveBeenCalledWith(consent);
+
+        rerender(
+            <VoiceClonePage
+                clone={{ ...controller, cloneConsentFile: consent, cloneCanSubmit: true }}
+                errorRuntimeContext={{}}
+                voiceProvider="gemini"
+            />
+        );
+        expect(screen.getByRole('button', { name: /开始克隆/ })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /上传音频文件/ })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /麦克风现场录制/ })).toBeEnabled();
+        expect(screen.getByLabelText(/选择音频文件/)).toBeEnabled();
+    });
 });

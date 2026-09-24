@@ -45,8 +45,16 @@ describe("error_hints", () => {
     expect(
       buildErrorHints("VOICE_CLONE_PROVIDER_ERROR: Gemini voice clone failed (404)")
     ).toEqual([
-      "Check google_api_key in Settings → Google Gemini.",
-      "For Gemini Voice Replication, ensure your recording recites the required consent statement: 'I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.'"
+      "Record 10–30 seconds of natural speech for the sample, then record the exact Google consent statement separately with the same speaker.",
+      "Use the same microphone and acoustic setting for both recordings."
+    ]);
+    expect(buildErrorHints("VOICE_CLONE_PROVIDER_ERROR: Gemini voice clone failed (503): [UNAVAILABLE]")).toEqual([
+      "Google's voice creation service returned 503 after retries. Keep your recordings and try again later.",
+      "If it persists, try the same clips in Google AI Studio Voice Replication and include this Echo request ID when reporting the issue."
+    ]);
+    expect(buildErrorHints("VOICE_CLONE_PROVIDER_ERROR: Gemini voice clone failed (500): [INTERNAL]")).toEqual([
+      "Google's Voice API returned an internal error. Keep your recordings and try again later.",
+      "If it persists, test the same clips in Google AI Studio Voice Replication to isolate the provider failure."
     ]);
     expect(
       buildErrorHints("VOICE_DESIGN_PROVIDER_ERROR: Qwen voice design failed")

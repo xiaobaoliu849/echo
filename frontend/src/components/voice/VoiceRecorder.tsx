@@ -8,6 +8,7 @@ type VoiceRecorderProps = {
   onDiscard?: () => void;
   currentFile?: File | null;
   disabled?: boolean;
+  consentPrompt?: boolean;
 };
 
 type RecordingState = "idle" | "recording" | "paused" | "completed";
@@ -33,11 +34,6 @@ const SAMPLE_SCRIPTS = [
     categoryEn: "English Standard",
     text: "The quick brown fox jumps over the lazy dog. A wonderful journey of voice cloning brings digital characters to life with warmth and authenticity.",
   },
-  {
-    category: "Google 授权声明",
-    categoryEn: "Google Consent Phrase",
-    text: "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.",
-  },
 ];
 
 function formatTime(seconds: number): string {
@@ -51,6 +47,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   onDiscard,
   currentFile,
   disabled = false,
+  consentPrompt = false,
 }) => {
   const { t, language } = useI18n();
 
@@ -432,7 +429,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
           <AudioPreviewPlayer
             file={currentFile}
-            title={t("录制的声纹样本", "Recorded Voice Sample")}
+            title={consentPrompt ? t("录制的授权声明", "Recorded Consent") : t("录制的声纹样本", "Recorded Voice Sample")}
             onReplace={handleRetake}
             onRemove={handleRetake}
           />
@@ -469,7 +466,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             <div className="vsRecorderTimerRow">
               <span className="vsRecorderTimerVal">{formatTime(elapsedSeconds)}</span>
 
-              {recordingState !== "idle" && (
+              {recordingState !== "idle" && !consentPrompt && (
                 <div className="vsRecorderGuideline">
                   {isTooShort && (
                     <span className="vsRecorderZone warning">
@@ -555,7 +552,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           </div>
 
           {/* Reference Script Prompts Card */}
-          <div className="vsRecorderScriptCard">
+          {!consentPrompt && (
+            <div className="vsRecorderScriptCard">
             <div className="vsRecorderScriptHeader">
               <div className="vsRecorderScriptTitle">
                 <BookOpen size={15} />
@@ -595,7 +593,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 )}
               </span>
             </div>
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>

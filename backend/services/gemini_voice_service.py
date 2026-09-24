@@ -239,6 +239,11 @@ class GeminiVoiceService:
             raise ValueError("preferred_name is required.")
         if not audio_bytes:
             raise ValueError("audio file is empty.")
+        if not consent_bytes:
+            raise ValueError(
+                "Gemini voice replication requires a separate consent recording. "
+                "Record the same speaker reciting Google's exact consent statement."
+            )
 
         api_key, base_url = self._get_credentials()
 
@@ -248,15 +253,13 @@ class GeminiVoiceService:
         norm_source, _ = _normalize_to_gemini_wav(audio_bytes)
         source_b64 = base64.b64encode(norm_source).decode("ascii")
 
-        # Normalize consent audio if provided separately, otherwise reuse source audio.
-        # Note: Google requires the consent audio to clearly contain the verbal consent
-        # phrase.  When a single recording contains both sample speech and the consent
-        # statement, using the same audio for both fields is acceptable.
-        if consent_bytes:
-            norm_consent, _ = _normalize_to_gemini_wav(consent_bytes)
-            consent_b64 = base64.b64encode(norm_consent).decode("ascii")
-        else:
-            consent_b64 = source_b64
+        norm_consent, _ = _normalize_to_gemini_wav(consent_bytes)
+        if norm_source == norm_consent:
+            raise ValueError(
+                "Gemini requires two different recordings: natural speech for the "
+                "voice sample and the spoken consent statement for consent audio."
+            )
+        consent_b64 = base64.b64encode(norm_consent).decode("ascii")
 
         url = f"{base_url}/v1beta/voices"
 
