@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Download, History, MoreVertical, Pause, Play, RotateCcw, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { History, Pause, Play, RotateCcw, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import useTtsHistory, { type TtsHistoryEntry } from "../hooks/useTtsHistory";
 import type { UseTtsResult } from "../hooks/useTts";
@@ -208,19 +208,18 @@ function TtsHistoryMiniPlayer({ src }: { src: string }) {
 
 type TtsDockPlayerProps = {
   src: string;
-  onDownload: () => void;
   t: (zh: string, en: string) => string;
 };
 
-function TtsDockPlayer({ src, onDownload, t }: TtsDockPlayerProps) {
+function TtsDockPlayer({ src, t }: TtsDockPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const speedMenuRef = useRef<HTMLDivElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
 
   useEffect(() => {
     setIsPlaying(false);
@@ -233,14 +232,14 @@ function TtsDockPlayer({ src, onDownload, t }: TtsDockPlayerProps) {
   }, [src, playbackRate]);
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!speedMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
+      if (speedMenuRef.current && !speedMenuRef.current.contains(e.target as Node)) {
+        setSpeedMenuOpen(false);
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") setSpeedMenuOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
@@ -248,7 +247,7 @@ function TtsDockPlayer({ src, onDownload, t }: TtsDockPlayerProps) {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [menuOpen]);
+  }, [speedMenuOpen]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -321,7 +320,7 @@ function TtsDockPlayer({ src, onDownload, t }: TtsDockPlayerProps) {
       audioRef.current.playbackRate = rate;
     }
     setPlaybackRate(rate);
-    setMenuOpen(false);
+    setSpeedMenuOpen(false);
   };
 
   const formatSecs = (s: number) => {
@@ -396,35 +395,21 @@ function TtsDockPlayer({ src, onDownload, t }: TtsDockPlayerProps) {
         {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
       </button>
 
-      <div className="vsDockMenuContainer" ref={menuRef}>
+      <div className="vsDockSpeedContainer" ref={speedMenuRef}>
         <button
           type="button"
-          className={`vsDockIconButton ${menuOpen ? "active" : ""}`}
-          onClick={() => setMenuOpen(!menuOpen)}
-          title={t("更多选项", "More options")}
-          aria-label={t("更多选项", "More options")}
+          className={`vsDockSpeedPill ${speedMenuOpen ? "active" : ""}`}
+          onClick={() => setSpeedMenuOpen(!speedMenuOpen)}
+          title={t("播放速度", "Playback speed")}
+          aria-label={`${t("播放速度", "Playback speed")}: ${playbackRate % 1 === 0 ? `${playbackRate}.0x` : `${playbackRate}x`}`}
           aria-haspopup="true"
-          aria-expanded={menuOpen}
+          aria-expanded={speedMenuOpen}
         >
-          <MoreVertical size={15} />
+          {playbackRate % 1 === 0 ? `${playbackRate}.0x` : `${playbackRate}x`}
         </button>
 
-        {menuOpen && (
-          <div className="vsDockDropdownMenu" role="menu">
-            <button
-              type="button"
-              className="vsDockMenuItem"
-              onClick={() => {
-                setMenuOpen(false);
-                onDownload();
-              }}
-              role="menuitem"
-            >
-              <Download size={14} />
-              <span>{t("下载音频", "Download audio")}</span>
-            </button>
-
-            <div className="vsDockMenuDivider" />
+        {speedMenuOpen && (
+          <div className="vsDockSpeedMenu" role="menu">
             <div className="vsDockMenuLabel">{t("播放速度", "Playback speed")}</div>
             <div className="vsDockSpeedOptions">
               {[0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
@@ -433,8 +418,9 @@ function TtsDockPlayer({ src, onDownload, t }: TtsDockPlayerProps) {
                   type="button"
                   className={`vsDockSpeedBtn ${playbackRate === rate ? "active" : ""}`}
                   onClick={() => handleSpeedChange(rate)}
+                  role="menuitem"
                 >
-                  {rate === 1.0 ? "1x" : `${rate}x`}
+                  {rate % 1 === 0 ? `${rate}.0x` : `${rate}x`}
                 </button>
               ))}
             </div>
@@ -936,9 +922,9 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
               <div className="vsAudioPlayerDock">
                 <TtsDockPlayer
                   src={tts.audioUrl}
-                  onDownload={handleDownload}
                   t={t}
                 />
+                <span className="vsDockDivider" aria-hidden="true" />
                 <button
                   type="button"
                   className="vsBtnSecondary vsExportAudioBtn"

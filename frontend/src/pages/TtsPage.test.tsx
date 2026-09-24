@@ -248,9 +248,7 @@ describe('TtsPage', () => {
         expect(screen.getByRole('button', { name: '播放' })).toBeInTheDocument();
     });
 
-    it('opens 3-dot more options menu and triggers download from menuitem', async () => {
-        const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => { });
-
+    it('opens playback speed menu from the speed badge pill and changes speed', () => {
         render(
             <TtsPage
                 tts={createTtsController({
@@ -261,23 +259,21 @@ describe('TtsPage', () => {
             />
         );
 
-        const moreBtn = screen.getByRole('button', { name: '更多选项' });
-        expect(moreBtn).toBeInTheDocument();
+        const speedBtn = screen.getByRole('button', { name: /播放速度: 1.0x/ });
+        expect(speedBtn).toBeInTheDocument();
 
-        fireEvent.click(moreBtn);
+        fireEvent.click(speedBtn);
 
-        const downloadMenuItem = screen.getByRole('menuitem', { name: /下载音频/ });
-        expect(downloadMenuItem).toBeInTheDocument();
-        expect(screen.getByText('播放速度')).toBeInTheDocument();
+        const speedOption = screen.getByRole('menuitem', { name: '1.5x' });
+        expect(speedOption).toBeInTheDocument();
 
-        await act(async () => {
-            fireEvent.click(downloadMenuItem);
-        });
+        fireEvent.click(speedOption);
 
-        await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1));
+        expect(screen.getByRole('button', { name: /播放速度: 1.5x/ })).toBeInTheDocument();
+        expect(screen.queryByRole('menuitem', { name: '1.5x' })).not.toBeInTheDocument();
     });
 
-    it('closes 3-dot menu when pressing escape', () => {
+    it('closes playback speed menu when pressing escape', () => {
         render(
             <TtsPage
                 tts={createTtsController({
@@ -288,12 +284,12 @@ describe('TtsPage', () => {
             />
         );
 
-        const moreBtn = screen.getByRole('button', { name: '更多选项' });
-        fireEvent.click(moreBtn);
-        expect(screen.getByRole('menuitem', { name: /下载音频/ })).toBeInTheDocument();
+        const speedBtn = screen.getByRole('button', { name: /播放速度: 1.0x/ });
+        fireEvent.click(speedBtn);
+        expect(screen.getByRole('menuitem', { name: '2.0x' })).toBeInTheDocument();
 
         fireEvent.keyDown(document, { key: 'Escape' });
-        expect(screen.queryByRole('menuitem', { name: /下载音频/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitem', { name: '2.0x' })).not.toBeInTheDocument();
     });
 });
 
