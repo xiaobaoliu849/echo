@@ -296,7 +296,8 @@ export default function useVoiceManagement({
       setCloneError(t("音频文件过大，建议控制在 20MB 以内。", "The audio file is too large. Keep it within 20MB."));
       return;
     }
-    if (file.type && !CLONE_ACCEPTED_TYPES.includes(file.type)) {
+    const baseType = file.type ? file.type.split(";")[0].trim().toLowerCase() : "";
+    if (file.type && !CLONE_ACCEPTED_TYPES.includes(file.type) && !CLONE_ACCEPTED_TYPES.includes(baseType)) {
       setCloneError(
         t(
           "暂不支持该音频格式，请使用 mp3、wav、flac、m4a、ogg 或 webm。",
@@ -319,7 +320,9 @@ export default function useVoiceManagement({
     cloneName.trim().length > 0 &&
     cloneAudioFile !== null &&
     cloneAudioFile.size <= MAX_CLONE_FILE_BYTES &&
-    (!cloneAudioFile.type || CLONE_ACCEPTED_TYPES.includes(cloneAudioFile.type));
+    (!cloneAudioFile.type ||
+      CLONE_ACCEPTED_TYPES.includes(cloneAudioFile.type) ||
+      CLONE_ACCEPTED_TYPES.includes(cloneAudioFile.type.split(";")[0].trim().toLowerCase()));
 
   const cloneFileSummary = cloneAudioFile
     ? `${cloneAudioFile.name} · ${formatBytes(cloneAudioFile.size)}`

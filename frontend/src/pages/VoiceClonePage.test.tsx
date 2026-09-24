@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import VoiceClonePage from './VoiceClonePage';
 import { createVoiceCloneController } from '../test/factories';
 
@@ -47,5 +47,56 @@ describe('VoiceClonePage', () => {
         const form = screen.getByRole('button', { name: /开始克隆/ }).closest('form')!;
         fireEvent.submit(form);
         expect(screen.getByText('Test error message')).toBeInTheDocument();
+    });
+
+    it('switches between upload audio file and record microphone modes', () => {
+        render(
+            <VoiceClonePage
+                clone={createVoiceCloneController({
+                    cloneName: 'my-recorded-voice',
+                    cloneAudioFile: null
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /克隆新音色/ }));
+
+        // Default is upload tab, which shows dropzone
+        expect(screen.getByText(/点击或拖拽音频文件到此处上传/i)).toBeInTheDocument();
+
+        // Click record tab
+        const recordTabBtn = screen.getByRole('button', { name: /麦克风现场录制/i });
+        fireEvent.click(recordTabBtn);
+
+        // Record tab should reveal VoiceRecorder controls
+        expect(screen.getByRole('button', { name: /开始录音/i })).toBeInTheDocument();
+        expect(screen.getByText(/朗读示例范本/i)).toBeInTheDocument();
+
+        // Switch back to upload tab
+        const uploadTabBtn = screen.getByRole('button', { name: /上传音频文件/i });
+        fireEvent.click(uploadTabBtn);
+        expect(screen.getByText(/点击或拖拽音频文件到此处上传/i)).toBeInTheDocument();
+    });
+
+    it('supports selecting engine providers including Gemini', () => {
+        const handleProviderChange = vi.fn();
+
+        render(
+            <VoiceClonePage
+                clone={createVoiceCloneController()}
+                errorRuntimeContext={{}}
+                voiceProvider="gemini"
+                onVoiceProviderChange={handleProviderChange}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /克隆新音色/ }));
+
+        const select = screen.getByRole('combobox');
+        expect(select).toHaveValue('gemini');
+
+        fireEvent.change(select, { target: { value: 'qwen' } });
+        expect(handleProviderChange).toHaveBeenCalledWith('qwen');
     });
 });
