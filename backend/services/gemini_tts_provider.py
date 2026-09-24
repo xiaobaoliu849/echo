@@ -57,16 +57,16 @@ def gemini_headers(api_key: str) -> dict[str, str]:
 def _build_speech_config(voice: str) -> dict[str, Any]:
     v = voice.strip()
     if v.startswith("voice_") or v.startswith("voicekey_"):
-        return {"voice_config": {"voice": v}}
+        return {"voiceConfig": {"voice": v}}
     # Prebuilt voice
     matched_name = next(
         (cand["name"] for cand in GEMINI_TTS_VOICES if cand["name"].lower() == v.lower()),
         v or DEFAULT_GEMINI_TTS_VOICE,
     )
     return {
-        "voice_config": {
-            "prebuilt_voice_config": {
-                "voice_name": matched_name
+        "voiceConfig": {
+            "prebuiltVoiceConfig": {
+                "voiceName": matched_name
             }
         }
     }
@@ -100,9 +100,9 @@ async def gemini_tts_synthesize(
                 "parts": [part_obj],
             }
         ],
-        "config": {
-            "response_modalities": ["AUDIO"],
-            "speech_config": _build_speech_config(clean_voice),
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": _build_speech_config(clean_voice),
         },
     }
 

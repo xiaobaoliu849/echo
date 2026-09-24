@@ -499,6 +499,7 @@ export default function App() {
                       setActiveTab("chat");
                     }}
                     voiceProvider={voiceManagement.voiceProvider}
+                    cloneProvider={voiceManagement.cloneProvider}
                     onVoiceProviderChange={voiceManagement.setVoiceProvider}
                     onOpenSettings={(prov) => {
                       if (prov) settings.onProviderChange(prov);

@@ -44,6 +44,9 @@ export const VoiceCard: React.FC<Props> = ({ item, onDelete }) => {
   const hash = useMemo(() => hashStr(item.voice), [item.voice]);
   const palette = COVER_GRADIENTS[hash % COVER_GRADIENTS.length];
   const isDesign = item.type === "voice_design";
+  const providerLabel = item.provider ? ({
+    qwen: "Qwen", gemini: "Gemini", elevenlabs: "ElevenLabs", gpt_sovits: "GPT-SoVITS",
+  } as Record<string, string>)[item.provider] || item.provider : "";
 
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState("");
@@ -77,6 +80,7 @@ export const VoiceCard: React.FC<Props> = ({ item, onDelete }) => {
       const result = await fetchSpeakAudio({
         text: language === "zh-CN" ? PREVIEW_TEXT_ZH : PREVIEW_TEXT_EN,
         voice: item.voice,
+        engine: item.provider === "gemini" ? "gemini" : item.provider === "elevenlabs" ? "elevenlabs" : undefined,
       });
       setPreviewUrl(URL.createObjectURL(result.blob));
     } catch {
@@ -110,7 +114,7 @@ export const VoiceCard: React.FC<Props> = ({ item, onDelete }) => {
         />
         <DiamondPattern color="rgba(255,255,255,0.8)" />
         <span className="vsTranscribeCardFormatBadge">
-          {isDesign ? "Design" : "Clone"}
+          {providerLabel ? `${providerLabel} · ${isDesign ? "Design" : "Clone"}` : isDesign ? "Design" : "Clone"}
         </span>
       </div>
 

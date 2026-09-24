@@ -277,6 +277,7 @@ export type CustomVoice = {
   voice: string;
   type: VoiceType;
   target_model: string;
+  provider?: string;
   language?: string;
   name?: string;
   gender?: string;

@@ -34,23 +34,27 @@ def test_is_gemini_voice():
 def test_build_speech_config():
     prebuilt_cfg = _build_speech_config("Puck")
     assert prebuilt_cfg == {
-        "voice_config": {
-            "prebuilt_voice_config": {
-                "voice_name": "Puck"
+        "voiceConfig": {
+            "prebuiltVoiceConfig": {
+                "voiceName": "Puck"
             }
         }
     }
 
     custom_cfg = _build_speech_config("voice_custom_abc")
     assert custom_cfg == {
-        "voice_config": {
+        "voiceConfig": {
             "voice": "voice_custom_abc"
         }
     }
 
 
 @pytest.mark.asyncio
-async def test_gemini_tts_synthesize_success():
+@pytest.mark.parametrize(
+    ("voice", "style"),
+    [("Kore", None), ("voice_pzimzi1rhjx3", "warm and friendly")],
+)
+async def test_gemini_tts_synthesize_success(voice: str, style: str | None):
     fake_wav_bytes = b"RIFF....WAVEfmt ...."
     fake_b64 = base64.b64encode(fake_wav_bytes).decode("ascii")
 
@@ -73,14 +77,30 @@ async def test_gemini_tts_synthesize_success():
         ]
     }
 
-    with patch("httpx.AsyncClient.post", return_value=mock_response):
+    with patch("httpx.AsyncClient.post", return_value=mock_response) as post:
         audio_out = await gemini_tts_synthesize(
             text="Hello from Gemini 3.8 Flash TTS!",
-            voice="Kore",
+            voice=voice,
             api_key="fake-gemini-key",
             model="gemini-3.8-flash-tts",
+            style=style,
         )
         assert audio_out == fake_wav_bytes
+        url = post.call_args.args[0]
+        payload = post.call_args.kwargs["json"]
+        assert url == (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3.8-flash-tts:generateContent"
+        )
+        assert "config" not in payload
+        assert payload["generationConfig"] == {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": _build_speech_config(voice),
+        }
+        expected_part = {"text": "Hello from Gemini 3.8 Flash TTS!"}
+        if style:
+            expected_part["speech_metadata"] = {"style": style}
+        assert payload["contents"][0]["parts"] == [expected_part]
 
 
 @pytest.mark.asyncio

@@ -139,4 +139,27 @@ describe('VoiceClonePage', () => {
         expect(screen.getByRole('button', { name: /麦克风现场录制/ })).toBeEnabled();
         expect(screen.getByLabelText(/选择音频文件/)).toBeEnabled();
     });
+
+    it('shows a Gemini clone in the library and finds it by display name', () => {
+        render(
+            <VoiceClonePage
+                clone={createVoiceCloneController({
+                    cloneVoices: [{
+                        voice: 'voice_my_gemini_clone',
+                        name: 'My Gemini Voice',
+                        type: 'voice_clone',
+                        target_model: 'gemini-3.8-flash-tts',
+                        provider: 'gemini',
+                    }],
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+        expect(screen.getByText('My Gemini Voice')).toBeInTheDocument();
+        expect(screen.getByText('Gemini · Clone')).toBeInTheDocument();
+        fireEvent.change(screen.getByPlaceholderText('搜索克隆的音色…'), {
+            target: { value: 'My Gemini Voice' },
+        });
+        expect(screen.getByText('My Gemini Voice')).toBeInTheDocument();
+    });
 });
