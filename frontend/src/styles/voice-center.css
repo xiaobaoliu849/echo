@@ -338,25 +338,28 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 12px;
-  padding: 10px 22px;
-  background: #ffffff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 8px 22px;
+  background: var(--bg-card, #ffffff);
+  border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.06));
   flex-shrink: 0;
+  min-height: 48px;
 }
 
 .vsTtsBarLeft {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .vsTtsBarRight {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 /* Voice Center SubTab Dropdown (TTS Mode integrated) */

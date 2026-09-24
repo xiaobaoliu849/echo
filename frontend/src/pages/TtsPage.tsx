@@ -614,7 +614,7 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
         {/* ── Top Studio Bar: Streamlined Parameters ── */}
         {tts.ttsMode !== "dialogue" && (
           <header className="vsTtsStudioBar vsTtsPrimaryHeader">
-            <div className="vsTtsBarRight">
+            <div className="vsTtsBarLeft">
               <div className="vsTtsToolbarField vsTtsFieldEngine">
                 <span className="vsFieldLabel">{t("TTS 引擎:", "TTS Engine:")}</span>
                 <div className="vsSelectWrapper">
@@ -670,45 +670,9 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                   {tts.loadingVoices && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
                 </div>
               </div>
+            </div>
 
-              <div className="vsTtsToolbarField vsTtsFieldRate">
-                <div className="vsRateCapsule">
-                  <span className="vsRateLabel">{t("语速", "Rate")}</span>
-                  <input
-                    type="text"
-                    className="vsInput vsInputModern vsInputRate"
-                    value={tts.rate}
-                    onChange={(e) => tts.onRateChange(e.target.value)}
-                    placeholder="+0%"
-                  />
-                  <div className="vsRateQuickPresets" role="group" aria-label="语速预设">
-                    {[
-                      { label: "0.8x", val: "-20%" },
-                      { label: "1.0x", val: "+0%" },
-                      { label: "1.2x", val: "+20%" },
-                    ].map((preset) => (
-                      <button
-                        key={preset.val}
-                        type="button"
-                        className={`vsRatePresetTag ${tts.rate === preset.val ? "active" : ""}`}
-                        onClick={() => tts.onRateChange(preset.val)}
-                        title={`设为 ${preset.val}`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="vsBtnGhost vsRateResetBtn"
-                    onClick={() => tts.onRateChange("+0%")}
-                    title={t("重置语速", "Reset rate")}
-                  >
-                    {t("重置", "Reset")}
-                  </button>
-                </div>
-              </div>
-
+            <div className="vsTtsBarRight">
               <button
                 type="button"
                 className={`vsTtsHistoryTriggerBtn ${historyDrawerOpen ? "active" : ""}`}

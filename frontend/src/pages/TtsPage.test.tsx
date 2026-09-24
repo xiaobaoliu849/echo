@@ -87,9 +87,6 @@ describe('TtsPage', () => {
         fireEvent.change(screen.getByDisplayValue('Sample test text'), {
             target: { value: 'Updated script' }
         });
-        fireEvent.change(screen.getByDisplayValue('+0%'), {
-            target: { value: '+10%' }
-        });
         const combos = screen.getAllByRole('combobox');
         fireEvent.change(combos[0], {
             target: { value: 'edge' }
@@ -101,7 +98,6 @@ describe('TtsPage', () => {
 
         expect(tts.onEngineChange).toHaveBeenCalledWith('edge');
         expect(tts.onTextChange).toHaveBeenCalledWith('Updated script');
-        expect(tts.onRateChange).toHaveBeenCalledWith('+10%');
         expect(tts.onVoiceChange).toHaveBeenCalledWith('zh-CN-XiaoxiaoNeural');
         expect(tts.onSubmit).toHaveBeenCalledTimes(1);
         expect(tts.onSubmit).toHaveBeenCalledWith(expect.any(Object));
