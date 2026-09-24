@@ -136,6 +136,35 @@ async def test_list_voices_success(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_list_voices_follows_filtered_pages_and_preserves_display_name(tmp_path: Path):
+    service = _service_with_config(tmp_path)
+    requests = []
+
+    async def mock_get(url, **kwargs):
+        requests.append(kwargs["params"])
+        response = MagicMock(spec=httpx.Response)
+        response.status_code = 200
+        if len(requests) == 1:
+            response.json.return_value = {
+                "voices": [{"id": "voice_first", "type": "replicated", "display_name": "Xiao"}],
+                "next_page_token": "next-page",
+            }
+        else:
+            response.json.return_value = {
+                "voices": [{"id": "voice_second", "type": "replicated", "display_name": "Xiao 2"}],
+            }
+        return response
+
+    with patch("httpx.AsyncClient.get", side_effect=mock_get):
+        result = await service.list_voices(voice_type="voice_clone")
+
+    assert [voice["voice"] for voice in result["voices"]] == ["voice_first", "voice_second"]
+    assert result["voices"][0]["name"] == "Xiao"
+    assert requests[0]["type"] == ["replicated", "prompted"]
+    assert requests[1]["page_token"] == "next-page"
+
+
+@pytest.mark.asyncio
 async def test_delete_voice_success(tmp_path: Path):
     service = _service_with_config(tmp_path)
 

@@ -594,6 +594,18 @@ function apiFetch(
 // hook mount or engine switch within a session.
 const GET_CACHE_TTL_MS = 60_000;
 const idempotentGetCache = new Map<string, { promise: Promise<unknown>; expires: number }>();
+export const VOICE_CATALOG_CHANGED_EVENT = "echo:voice-catalog-changed";
+
+function invalidateVoiceCatalog(): void {
+  for (const url of idempotentGetCache.keys()) {
+    if (url.includes("/api/tts/voices") || url.includes("/api/voices/")) {
+      idempotentGetCache.delete(url);
+    }
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(VOICE_CATALOG_CHANGED_EVENT));
+  }
+}
 
 function cachedGetJson<T>(
   url: string,
@@ -1268,7 +1280,9 @@ export async function createVoiceDesign(
   if (!response.ok) {
     await throwApiError(response);
   }
-  return response.json();
+  const result = await response.json() as VoiceCreateResponse;
+  invalidateVoiceCatalog();
+  return result;
 }
 
 export async function createVoiceClone(params: {
@@ -1294,7 +1308,9 @@ export async function createVoiceClone(params: {
   if (!response.ok) {
     await throwApiError(response);
   }
-  return response.json();
+  const result = await response.json() as VoiceCreateResponse;
+  invalidateVoiceCatalog();
+  return result;
 }
 
 export async function deleteCustomVoice(
@@ -1310,6 +1326,7 @@ export async function deleteCustomVoice(
   if (!response.ok) {
     await throwApiError(response);
   }
+  invalidateVoiceCatalog();
 }
 
 export async function fetchSettings(): Promise<SettingsResponse> {

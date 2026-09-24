@@ -350,40 +350,64 @@ class GeminiVoiceService:
             "provider": "gemini",
         }
 
+    async def list_stored_voices(self) -> list[dict[str, Any]]:
+        """Return all stored custom voices, following Google's filtered catalog pages."""
+        api_key, base_url = self._get_credentials()
+        url = f"{base_url}/v1beta/voices"
+        voices: list[dict[str, Any]] = []
+        page_token = ""
+        seen_tokens: set[str] = set()
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                while True:
+                    params: dict[str, Any] = {
+                        "type": ["replicated", "prompted"],
+                        "page_size": 1000,
+                    }
+                    if page_token:
+                        params["page_token"] = page_token
+                    response = await client.get(url, headers=gemini_headers(api_key), params=params)
+                    if response.status_code != 200:
+                        raise RuntimeError(
+                            f"Gemini voice list failed ({response.status_code}): {self._extract_error(response)}"
+                        )
+                    data = response.json()
+                    if not isinstance(data, dict):
+                        raise RuntimeError("Gemini voice list returned an invalid response.")
+                    page = data.get("voices", [])
+                    if not isinstance(page, list):
+                        raise RuntimeError("Gemini voice list returned an invalid voices array.")
+                    voices.extend(voice for voice in page if isinstance(voice, dict))
+                    page_token = str(data.get("next_page_token") or "")
+                    if not page_token:
+                        break
+                    if page_token in seen_tokens:
+                        raise RuntimeError("Gemini voice list returned a repeated page token.")
+                    seen_tokens.add(page_token)
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"Gemini voice network error: {exc}") from exc
+        return voices
+
     async def list_voices(
         self,
         voice_type: VoiceType = "voice_design",
         page_index: int = 0,
         page_size: int = 100,
     ) -> dict[str, Any]:
-        api_key, base_url = self._get_credentials()
-        url = f"{base_url}/v1beta/voices"
+        if page_index < 0 or not 1 <= page_size <= 200:
+            raise ValueError("Invalid Gemini voice list page.")
+        voices_raw = await self.list_stored_voices()
 
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(url, headers=gemini_headers(api_key))
-            if response.status_code != 200:
-                raise RuntimeError(
-                    f"Gemini voice list failed ({response.status_code}): {self._extract_error(response)}"
-                )
-            data = response.json()
-        except httpx.HTTPError as exc:
-            raise RuntimeError(f"Gemini voice network error: {exc}") from exc
-
-        voices_raw = data.get("voices", []) if isinstance(data, dict) else []
         items: list[dict[str, Any]] = []
 
         expected_type = "prompted" if voice_type == "voice_design" else "replicated"
 
         for v in voices_raw:
-            if not isinstance(v, dict):
-                continue
             v_id = str(v.get("id") or v.get("voice_id") or v.get("name") or "").strip()
             if not v_id:
                 continue
             v_type = str(v.get("type", "")).strip().lower()
-            # If type matches or if not specified
-            if v_type and v_type != expected_type:
+            if v_type != expected_type:
                 continue
 
             display_name = str(v.get("display_name", "") or v_id)
@@ -403,10 +427,12 @@ class GeminiVoiceService:
                 }
             )
 
+        start = page_index * page_size
+        page_items = items[start:start + page_size]
         return {
             "voice_type": voice_type,
-            "count": len(items),
-            "voices": items,
+            "count": len(page_items),
+            "voices": page_items,
             "voice_provider": "gemini",
         }
 
