@@ -9,6 +9,7 @@ API reference:
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from typing import Any, Literal
 
@@ -22,13 +23,24 @@ from .gemini_tts_provider import (
     gemini_tts_synthesize,
 )
 
+logger = logging.getLogger(__name__)
+
 VoiceType = Literal["voice_design", "voice_clone"]
+
+# Maximum number of retries for transient Gemini 500 errors.
+_MAX_RETRIES = 2
+_RETRY_DELAY_SECONDS = 1.5
 
 
 def _normalize_to_gemini_wav(audio_bytes: bytes) -> tuple[bytes, str]:
-    """Convert input audio to 24kHz 16-bit mono PCM WAV for Google Gemini voice replication."""
+    """Convert input audio to 24kHz 16-bit mono PCM WAV for Google Gemini voice replication.
+
+    Raises ValueError on failure instead of silently returning un-normalized
+    bytes, because sending non-WAV data with ``mime_type: audio/wav`` causes
+    Google to return a cryptic 500 Internal Error.
+    """
     if not audio_bytes:
-        return audio_bytes, "audio/wav"
+        raise ValueError("Audio data is empty — nothing to normalize.")
     try:
         from pydub import AudioSegment
         import io
@@ -37,8 +49,15 @@ def _normalize_to_gemini_wav(audio_bytes: bytes) -> tuple[bytes, str]:
         out = io.BytesIO()
         seg.export(out, format="wav")
         return out.getvalue(), "audio/wav"
-    except Exception:
-        return audio_bytes, "audio/wav"
+    except ImportError:
+        raise ValueError(
+            "pydub is not installed.  Audio normalization requires pydub and ffmpeg."
+        )
+    except Exception as exc:
+        raise ValueError(
+            f"Failed to normalize audio to 24 kHz WAV.  "
+            f"Make sure ffmpeg is installed and the audio file is valid.  Detail: {exc}"
+        ) from exc
 
 
 class GeminiVoiceService:
@@ -67,12 +86,20 @@ class GeminiVoiceService:
 
     @staticmethod
     def _extract_error(response: httpx.Response) -> str:
+        """Extract a human-readable error message from a Gemini API error response.
+
+        The method tries to surface the most specific details available so users
+        and server logs can identify the root cause instead of seeing a generic
+        "Internal error encountered." message.
+        """
         try:
             payload = response.json()
             if isinstance(payload, dict):
                 error_obj = payload.get("error", {})
                 if isinstance(error_obj, dict):
                     msg = str(error_obj.get("message", "")).strip()
+                    error_code = error_obj.get("code", "")
+                    status = error_obj.get("status", "")
                     details = error_obj.get("details", [])
                     for d in details:
                         if isinstance(d, dict):
@@ -86,10 +113,17 @@ class GeminiVoiceService:
                                 orig = detail_str.split("Original error:")[1].strip().split("\n")[0]
                                 if orig:
                                     return orig
-                            if detail_str and not detail_str.startswith("INTERNAL:"):
+                            # Surface INTERNAL: messages too — they contain useful detail.
+                            if detail_str.strip():
                                 return detail_str.strip().split("\n")[0]
+                    # Build an enriched message from code + status + message.
+                    parts = []
+                    if status:
+                        parts.append(f"[{status}]")
                     if msg:
-                        return msg
+                        parts.append(msg)
+                    if parts:
+                        return " ".join(parts)
                 elif isinstance(error_obj, str) and error_obj.strip():
                     return error_obj.strip()
                 if "detail" in payload:
@@ -198,6 +232,8 @@ class GeminiVoiceService:
         consent_bytes: bytes | None = None,
         consent_mime_type: str | None = None,
     ) -> dict[str, Any]:
+        import asyncio
+
         preferred = preferred_name.strip()
         if not preferred:
             raise ValueError("preferred_name is required.")
@@ -207,11 +243,15 @@ class GeminiVoiceService:
         api_key, base_url = self._get_credentials()
 
         # Google Gemini Voice Replication strictly requires 24kHz mono 16-bit PCM WAV.
-        # Normalize source audio to 24kHz WAV so any browser audio (e.g. WebM/Opus) or MP3/OGG works seamlessly.
+        # _normalize_to_gemini_wav now raises ValueError on failure instead of
+        # silently returning un-normalized bytes (which caused cryptic Google 500s).
         norm_source, _ = _normalize_to_gemini_wav(audio_bytes)
         source_b64 = base64.b64encode(norm_source).decode("ascii")
 
-        # Normalize consent audio if provided separately, otherwise reuse source audio
+        # Normalize consent audio if provided separately, otherwise reuse source audio.
+        # Note: Google requires the consent audio to clearly contain the verbal consent
+        # phrase.  When a single recording contains both sample speech and the consent
+        # statement, using the same audio for both fields is acceptable.
         if consent_bytes:
             norm_consent, _ = _normalize_to_gemini_wav(consent_bytes)
             consent_b64 = base64.b64encode(norm_consent).decode("ascii")
@@ -239,16 +279,52 @@ class GeminiVoiceService:
             },
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(url, headers=gemini_headers(api_key), json=payload)
-            if response.status_code not in (200, 201):
-                raise RuntimeError(
-                    f"Gemini voice clone failed ({response.status_code}): {self._extract_error(response)}"
+        # Retry transient 500 errors with exponential backoff.
+        last_error: RuntimeError | None = None
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    response = await client.post(url, headers=gemini_headers(api_key), json=payload)
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    break
+
+                error_detail = self._extract_error(response)
+                logger.warning(
+                    "Gemini voice clone attempt %d/%d failed (HTTP %d): %s | raw=%s",
+                    attempt + 1,
+                    _MAX_RETRIES + 1,
+                    response.status_code,
+                    error_detail,
+                    response.text[:800],
                 )
-            data = response.json()
-        except httpx.HTTPError as exc:
-            raise RuntimeError(f"Gemini voice network error: {exc}") from exc
+
+                # Only retry on 5xx (server) errors; 4xx are client errors and won't resolve.
+                if response.status_code < 500:
+                    raise RuntimeError(
+                        f"Gemini voice clone failed ({response.status_code}): {error_detail}"
+                    )
+
+                last_error = RuntimeError(
+                    f"Gemini voice clone failed ({response.status_code}): {error_detail}"
+                )
+                if attempt < _MAX_RETRIES:
+                    delay = _RETRY_DELAY_SECONDS * (2 ** attempt)
+                    logger.info("Retrying Gemini voice clone in %.1fs…", delay)
+                    await asyncio.sleep(delay)
+
+            except httpx.HTTPError as exc:
+                last_error = RuntimeError(f"Gemini voice network error: {exc}")
+                if attempt < _MAX_RETRIES:
+                    delay = _RETRY_DELAY_SECONDS * (2 ** attempt)
+                    logger.info("Retrying after network error in %.1fs…", delay)
+                    await asyncio.sleep(delay)
+                else:
+                    raise last_error from exc
+        else:
+            # All retries exhausted
+            raise last_error  # type: ignore[misc]
 
         if not isinstance(data, dict):
             raise RuntimeError("Gemini voice clone returned invalid non-JSON response.")

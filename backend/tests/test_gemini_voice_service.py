@@ -1,11 +1,11 @@
 import asyncio
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import httpx
 import pytest
 
-from services.gemini_voice_service import GeminiVoiceService
+from services.gemini_voice_service import GeminiVoiceService, _normalize_to_gemini_wav
 from services.config_loader import BackendConfig
 
 
@@ -21,6 +21,34 @@ def _service_with_config(tmp_path: Path, *, api_key: str = "test-google-key") ->
         encoding="utf-8",
     )
     return GeminiVoiceService(config=BackendConfig(config_path=config_file))
+
+
+def _make_valid_wav_bytes() -> bytes:
+    """Create a minimal valid 24kHz mono 16-bit PCM WAV for tests."""
+    import struct, io
+    sample_rate = 24000
+    num_channels = 1
+    bits_per_sample = 16
+    num_samples = 2400  # 0.1s
+    data_size = num_samples * num_channels * (bits_per_sample // 8)
+    fmt_chunk_size = 16
+    riff_size = 4 + (8 + fmt_chunk_size) + (8 + data_size)
+    buf = io.BytesIO()
+    buf.write(b"RIFF")
+    buf.write(struct.pack("<I", riff_size))
+    buf.write(b"WAVE")
+    buf.write(b"fmt ")
+    buf.write(struct.pack("<I", fmt_chunk_size))
+    buf.write(struct.pack("<HHIIHH", 1, num_channels, sample_rate,
+                          sample_rate * num_channels * (bits_per_sample // 8),
+                          num_channels * (bits_per_sample // 8), bits_per_sample))
+    buf.write(b"data")
+    buf.write(struct.pack("<I", data_size))
+    buf.write(b"\x00" * data_size)
+    return buf.getvalue()
+
+
+VALID_WAV = _make_valid_wav_bytes()
 
 
 @pytest.mark.asyncio
@@ -58,10 +86,9 @@ async def test_create_voice_clone_success(tmp_path: Path):
         "voice_id": "voice_gemini_cloned_user",
     }
 
-    fake_audio = b"RIFFfakeaudio"
     with patch("httpx.AsyncClient.post", return_value=mock_response):
         res = await service.create_voice_clone(
-            audio_bytes=fake_audio,
+            audio_bytes=VALID_WAV,
             mime_type="audio/wav",
             preferred_name="My Cloned Voice",
         )
@@ -152,7 +179,7 @@ async def test_base_url_v1beta_normalization(tmp_path: Path):
 
     with patch("httpx.AsyncClient.post", side_effect=mock_post):
         await service.create_voice_clone(
-            audio_bytes=b"dummy-audio",
+            audio_bytes=VALID_WAV,
             mime_type="audio/wav",
             preferred_name="test_voice",
         )
@@ -175,7 +202,7 @@ async def test_create_voice_clone_payload_structure(tmp_path: Path):
 
     with patch("httpx.AsyncClient.post", side_effect=mock_post):
         res = await service.create_voice_clone(
-            audio_bytes=b"hello-voice",
+            audio_bytes=VALID_WAV,
             mime_type="audio/wav",
             preferred_name="MyVoice",
         )
@@ -212,6 +239,23 @@ async def test_extract_error_consent_flow(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_extract_error_surfaces_status_and_message():
+    """_extract_error now includes the status field from Google."""
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 500
+    resp.json.return_value = {
+        "error": {
+            "code": 500,
+            "message": "Internal error encountered.",
+            "status": "INTERNAL",
+        }
+    }
+    err = GeminiVoiceService._extract_error(resp)
+    assert "INTERNAL" in err
+    assert "Internal error encountered." in err
+
+
+@pytest.mark.asyncio
 async def test_create_voice_clone_normalizes_audio_to_wav(tmp_path: Path):
     service = _service_with_config(tmp_path)
     captured_payload = {}
@@ -225,7 +269,7 @@ async def test_create_voice_clone_normalizes_audio_to_wav(tmp_path: Path):
 
     with patch("httpx.AsyncClient.post", side_effect=mock_post):
         res = await service.create_voice_clone(
-            audio_bytes=b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80>\x00\x00\x00}\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00",
+            audio_bytes=VALID_WAV,
             mime_type="audio/webm;codecs=opus",
             preferred_name="NormalizedVoice",
         )
@@ -234,3 +278,83 @@ async def test_create_voice_clone_normalizes_audio_to_wav(tmp_path: Path):
         # Must be audio/wav, not audio/webm
         assert replicated["source_audio"]["mime_type"] == "audio/wav"
         assert replicated["consent_audio"]["mime_type"] == "audio/wav"
+
+
+@pytest.mark.asyncio
+async def test_normalize_raises_on_invalid_audio():
+    """_normalize_to_gemini_wav should raise ValueError for undecodable audio,
+    not silently return the raw bytes."""
+    with pytest.raises(ValueError, match="Failed to normalize audio"):
+        _normalize_to_gemini_wav(b"NOT-VALID-AUDIO-BYTES")
+
+
+@pytest.mark.asyncio
+async def test_normalize_raises_on_empty_audio():
+    """_normalize_to_gemini_wav should raise ValueError for empty audio."""
+    with pytest.raises(ValueError, match="empty"):
+        _normalize_to_gemini_wav(b"")
+
+
+@pytest.mark.asyncio
+async def test_create_voice_clone_retries_on_500(tmp_path: Path):
+    """create_voice_clone should retry transient 500 errors."""
+    service = _service_with_config(tmp_path)
+    call_count = 0
+
+    async def mock_post(url, *args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        resp = MagicMock(spec=httpx.Response)
+        if call_count < 3:
+            resp.status_code = 500
+            resp.json.return_value = {
+                "error": {"code": 500, "message": "Internal error encountered.", "status": "INTERNAL"}
+            }
+            resp.text = '{"error":{"code":500,"message":"Internal error encountered."}}'
+        else:
+            resp.status_code = 200
+            resp.json.return_value = {"id": "voice_retry_ok"}
+        return resp
+
+    # Patch retry delay to 0 for fast tests
+    with (
+        patch("httpx.AsyncClient.post", side_effect=mock_post),
+        patch("services.gemini_voice_service._RETRY_DELAY_SECONDS", 0),
+    ):
+        res = await service.create_voice_clone(
+            audio_bytes=VALID_WAV,
+            mime_type="audio/wav",
+            preferred_name="RetryVoice",
+        )
+        assert res["voice"] == "voice_retry_ok"
+        assert call_count == 3  # 2 failures + 1 success
+
+
+@pytest.mark.asyncio
+async def test_create_voice_clone_no_retry_on_400(tmp_path: Path):
+    """create_voice_clone should NOT retry 4xx client errors."""
+    service = _service_with_config(tmp_path)
+    call_count = 0
+
+    async def mock_post(url, *args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        resp = MagicMock(spec=httpx.Response)
+        resp.status_code = 400
+        resp.json.return_value = {
+            "error": {"code": 400, "message": "Bad request", "status": "INVALID_ARGUMENT"}
+        }
+        resp.text = '{"error":{"code":400,"message":"Bad request"}}'
+        return resp
+
+    with (
+        patch("httpx.AsyncClient.post", side_effect=mock_post),
+        patch("services.gemini_voice_service._RETRY_DELAY_SECONDS", 0),
+    ):
+        with pytest.raises(RuntimeError, match="Bad request"):
+            await service.create_voice_clone(
+                audio_bytes=VALID_WAV,
+                mime_type="audio/wav",
+                preferred_name="NoRetryVoice",
+            )
+        assert call_count == 1  # Should NOT retry
