@@ -148,4 +148,27 @@ describe("useVoiceManagement", () => {
     expect(listCustomVoices).toHaveBeenCalledWith("voice_design", "gemini");
     expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "gemini");
   });
+
+  it("blocks Gemini cloning until a separate consent clip is selected", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() =>
+      useVoiceManagement({ formatErrorMessage, googleApiKeyConfigured: true })
+    );
+    const sample = new File(["sample"], "sample.wav", { type: "audio/wav" });
+    const consent = new File(["consent"], "consent.wav", { type: "audio/wav" });
+    act(() => {
+      result.current.setVoiceProvider("gemini");
+      result.current.clone.onAudioFileChange(sample);
+      result.current.clone.onNameChange("myvoice");
+    });
+    expect(result.current.clone.cloneCanSubmit).toBe(false);
+    await act(async () => {
+      await result.current.clone.onSubmit({ preventDefault() {} } as any);
+    });
+    expect(result.current.clone.cloneError).toContain("单独录制");
+    expect(createVoiceClone).not.toHaveBeenCalled();
+
+    act(() => result.current.clone.onConsentFileChange(consent));
+    expect(result.current.clone.cloneCanSubmit).toBe(true);
+  });
 });

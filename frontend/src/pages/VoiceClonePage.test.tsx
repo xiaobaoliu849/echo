@@ -99,4 +99,32 @@ describe('VoiceClonePage', () => {
         fireEvent.change(select, { target: { value: 'qwen' } });
         expect(handleProviderChange).toHaveBeenCalledWith('qwen');
     });
+
+    it('requires a separate Gemini consent recording and exposes its upload', () => {
+        const sample = new File(['sample'], 'sample.wav', { type: 'audio/wav' });
+        const consent = new File(['consent'], 'consent.wav', { type: 'audio/wav' });
+        const onConsentFileChange = vi.fn();
+        const controller = createVoiceCloneController({
+            cloneAudioFile: sample,
+            onConsentFileChange,
+        });
+        const { rerender } = render(
+            <VoiceClonePage clone={controller} errorRuntimeContext={{}} voiceProvider="gemini" />
+        );
+        fireEvent.click(screen.getByRole('button', { name: /克隆新音色/ }));
+        expect(screen.getByRole('button', { name: /开始克隆/ })).toBeDisabled();
+        expect(screen.getByText(/请先录制 10–30 秒的自然语音样板/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /上传授权录音/ }));
+        fireEvent.change(screen.getByLabelText(/选择授权录音/), { target: { files: [consent] } });
+        expect(onConsentFileChange).toHaveBeenCalledWith(consent);
+
+        rerender(
+            <VoiceClonePage
+                clone={{ ...controller, cloneConsentFile: consent, cloneCanSubmit: true }}
+                errorRuntimeContext={{}}
+                voiceProvider="gemini"
+            />
+        );
+        expect(screen.getByRole('button', { name: /开始克隆/ })).toBeEnabled();
+    });
 });

@@ -219,6 +219,8 @@ async def create_voice_clone(
             if consent_file and consent_file.filename:
                 consent_data = await consent_file.read()
                 consent_mime = consent_file.content_type or ""
+                if len(consent_data) > MAX_LOCAL_CLONE_FILE_BYTES:
+                    raise ValueError("consent_file is too large. Keep it within 20MB.")
             result = await gemini_voice_service.create_voice_clone(
                 audio_bytes=data,
                 mime_type=audio_file.content_type or "",

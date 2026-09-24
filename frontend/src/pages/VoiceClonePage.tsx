@@ -27,6 +27,7 @@ export default function VoiceClonePage({
   const { t } = useI18n();
   const [viewMode, setViewMode] = useState<"library" | "workspace">("library");
   const [sourceMode, setSourceMode] = useState<"upload" | "record">("upload");
+  const [consentMode, setConsentMode] = useState<"upload" | "record">("record");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,7 +87,7 @@ export default function VoiceClonePage({
           <button
             type="submit"
             className="vsVoiceStudioSubmit"
-            disabled={clone.cloneBusy || !clone.cloneAudioFile}
+            disabled={!clone.cloneCanSubmit}
           >
             {clone.cloneBusy ? (
               <>
@@ -179,8 +180,8 @@ export default function VoiceClonePage({
                   </p>
                   <p className="vsFieldHint" style={{ margin: 0, fontSize: 12 }}>
                     {t(
-                      "Google API 强制要求声音复刻音频中必须包含原说话人清楚朗读的授权声明，否则将返回校验失败：",
-                      "Google API strictly requires the voice sample to include the speaker reciting this verbal consent statement, otherwise verification will fail:"
+                      "请先录制 10–30 秒的自然语音样板，再由同一人单独录制以下授权声明：",
+                      "Record a 10–30 second natural speech sample, then record this consent statement separately with the same speaker:"
                     )}
                   </p>
                   <blockquote
@@ -214,8 +215,8 @@ export default function VoiceClonePage({
                   </blockquote>
                   <p className="vsFieldHint" style={{ margin: "8px 0 0 0", fontSize: 11, color: "var(--brand, #3b82f6)" }}>
                     {t(
-                      "⚡ 系统已集成自动转码：无论麦克风录制 (WebM) 还是本地上传任何音频，后端均会自动规范化为 Google 必需的 24kHz 16-bit PCM WAV 标准流。",
-                      "⚡ Automatic Transcoding: Whether recording via microphone (WebM) or uploading any audio format, the backend automatically normalizes the stream to Google's required 24kHz 16-bit PCM WAV standard."
+                      "系统会将两段音频分别转为 24kHz、单声道、16-bit PCM WAV。请确认两段均清晰、无背景音乐。",
+                      "Echo converts both clips to 24kHz mono 16-bit PCM WAV. Keep both recordings clear and free of background music."
                     )}
                   </p>
                 </div>
@@ -343,6 +344,44 @@ export default function VoiceClonePage({
                     currentFile={clone.cloneAudioFile}
                     disabled={clone.cloneBusy}
                   />
+                </div>
+              )}
+
+              {voiceProvider === "gemini" && (
+                <div className="vsField">
+                  <span className="vsFieldLabel">{t("授权声明录音（必填）", "Consent recording (required)")}</span>
+                  <span className="vsFieldHint">
+                    {t("请由样板中的同一位说话人单独朗读上方完整英文声明。", "The same speaker must recite the complete statement above in a separate clip.")}
+                  </span>
+                  <div className="vsCloneSourceSelector">
+                    <button type="button" className={`vsCloneSourceTab ${consentMode === "record" ? "active" : ""}`} onClick={() => setConsentMode("record")}>{t("录制授权", "Record consent")}</button>
+                    <button type="button" className={`vsCloneSourceTab ${consentMode === "upload" ? "active" : ""}`} onClick={() => setConsentMode("upload")}>{t("上传授权录音", "Upload consent audio")}</button>
+                  </div>
+                  {consentMode === "record" ? (
+                    <VoiceRecorder
+                      consentPrompt
+                      currentFile={clone.cloneConsentFile}
+                      onRecordingComplete={clone.onConsentFileChange}
+                      onDiscard={() => clone.onConsentFileChange(null)}
+                      disabled={clone.cloneBusy}
+                    />
+                  ) : (
+                    <div className="vsVoiceStudioUploadWrap">
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        aria-label={t("选择授权录音", "Choose consent audio")}
+                        onChange={(e) => clone.onConsentFileChange(e.target.files?.[0] || null)}
+                      />
+                      {clone.cloneConsentFile && (
+                        <AudioPreviewPlayer
+                          file={clone.cloneConsentFile}
+                          title={clone.cloneConsentFile.name}
+                          onRemove={() => clone.onConsentFileChange(null)}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

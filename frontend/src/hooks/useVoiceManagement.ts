@@ -247,6 +247,14 @@ export default function useVoiceManagement({
       setCloneError(t("请先选择音频文件。", "Choose an audio file first."));
       return;
     }
+    if (cloneProvider === "gemini" && !cloneConsentFile) {
+      setCloneError(t("请单独录制或上传授权声明。", "Record or upload a separate consent clip."));
+      return;
+    }
+    if (cloneProvider === "gemini" && cloneConsentFile && cloneConsentFile.size > MAX_CLONE_FILE_BYTES) {
+      setCloneError(t("授权录音过大，请控制在 20MB 以内。", "The consent clip is too large. Keep it within 20MB."));
+      return;
+    }
     if (!isProviderKeyConfigured(cloneProvider)) {
       setMissingKeyError("voice_clone");
       return;
@@ -311,6 +319,22 @@ export default function useVoiceManagement({
     setCloneInfo(t(`已载入样本：${file.name} (${formatBytes(file.size)})`, `Loaded sample: ${file.name} (${formatBytes(file.size)})`));
   }
 
+  function onCloneConsentFileChange(file: File | null) {
+    setCloneError("");
+    if (file && file.size > MAX_CLONE_FILE_BYTES) {
+      setCloneConsentFile(null);
+      setCloneError(t("授权录音过大，请控制在 20MB 以内。", "The consent clip is too large. Keep it within 20MB."));
+      return;
+    }
+    const baseType = file?.type.split(";")[0].trim().toLowerCase() || "";
+    if (file?.type && !CLONE_ACCEPTED_TYPES.includes(file.type) && !CLONE_ACCEPTED_TYPES.includes(baseType)) {
+      setCloneConsentFile(null);
+      setCloneError(t("授权录音格式不受支持。", "The consent audio format is not supported."));
+      return;
+    }
+    setCloneConsentFile(file);
+  }
+
   const designCanSubmit =
     !designBusy &&
     designName.trim().length > 0 &&
@@ -321,6 +345,8 @@ export default function useVoiceManagement({
     !cloneBusy &&
     cloneName.trim().length > 0 &&
     cloneAudioFile !== null &&
+    (cloneProvider !== "gemini" || cloneConsentFile !== null) &&
+    (cloneProvider !== "gemini" || !cloneConsentFile || cloneConsentFile.size <= MAX_CLONE_FILE_BYTES) &&
     cloneAudioFile.size <= MAX_CLONE_FILE_BYTES &&
     (!cloneAudioFile.type ||
       CLONE_ACCEPTED_TYPES.includes(cloneAudioFile.type) ||
@@ -382,7 +408,7 @@ export default function useVoiceManagement({
       cloneConsentFile,
       onNameChange: setCloneName,
       onAudioFileChange: onCloneAudioFileChange,
-      onConsentFileChange: setCloneConsentFile
+      onConsentFileChange: onCloneConsentFileChange
     }
   };
 }

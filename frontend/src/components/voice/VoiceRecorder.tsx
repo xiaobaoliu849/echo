@@ -8,6 +8,7 @@ type VoiceRecorderProps = {
   onDiscard?: () => void;
   currentFile?: File | null;
   disabled?: boolean;
+  consentPrompt?: boolean;
 };
 
 type RecordingState = "idle" | "recording" | "paused" | "completed";
@@ -51,6 +52,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   onDiscard,
   currentFile,
   disabled = false,
+  consentPrompt = false,
 }) => {
   const { t, language } = useI18n();
 
@@ -393,7 +395,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   };
 
   const handleCopyScript = () => {
-    const currentScript = SAMPLE_SCRIPTS[activeScriptIndex];
+    const currentScript = consentPrompt ? SAMPLE_SCRIPTS[4] : SAMPLE_SCRIPTS[activeScriptIndex];
     const textToCopy =
       language === "zh-CN" ? currentScript.text : currentScript.text;
     navigator.clipboard?.writeText(textToCopy);
@@ -407,7 +409,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const isSufficient = elapsedSeconds > 30;
 
   // Active script
-  const activeScript = SAMPLE_SCRIPTS[activeScriptIndex];
+  const activeScript = consentPrompt ? SAMPLE_SCRIPTS[4] : SAMPLE_SCRIPTS[activeScriptIndex];
   const scriptCategory =
     language === "zh-CN" ? activeScript.category : activeScript.categoryEn;
 
@@ -432,7 +434,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
           <AudioPreviewPlayer
             file={currentFile}
-            title={t("录制的声纹样本", "Recorded Voice Sample")}
+            title={consentPrompt ? t("录制的授权声明", "Recorded Consent") : t("录制的声纹样本", "Recorded Voice Sample")}
             onReplace={handleRetake}
             onRemove={handleRetake}
           />
@@ -469,7 +471,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             <div className="vsRecorderTimerRow">
               <span className="vsRecorderTimerVal">{formatTime(elapsedSeconds)}</span>
 
-              {recordingState !== "idle" && (
+              {recordingState !== "idle" && !consentPrompt && (
                 <div className="vsRecorderGuideline">
                   {isTooShort && (
                     <span className="vsRecorderZone warning">
@@ -559,11 +561,11 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             <div className="vsRecorderScriptHeader">
               <div className="vsRecorderScriptTitle">
                 <BookOpen size={15} />
-                <span>{t("💡 朗读示例范本", "💡 Sample Reading Prompts")}</span>
+                <span>{consentPrompt ? t("请完整朗读授权声明", "Read the full consent statement") : t("💡 朗读示例范本", "💡 Sample Reading Prompts")}</span>
                 <span className="vsRecorderScriptTag">{scriptCategory}</span>
               </div>
               <div className="vsRecorderScriptActions">
-                <button
+                {!consentPrompt && <button
                   type="button"
                   className="vsRecorderScriptBtn"
                   onClick={handleNextScript}
@@ -571,7 +573,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 >
                   <Sparkles size={13} />
                   <span>{t("换一句", "Next")}</span>
-                </button>
+                </button>}
                 <button
                   type="button"
                   className="vsRecorderScriptBtn copy"

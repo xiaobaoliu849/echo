@@ -319,8 +319,8 @@ export function buildErrorHints(message: string): string[] {
   if (code.startsWith("VOICE_")) {
     if (/google|gemini/i.test(text)) {
       return [
-        "Check google_api_key in Settings → Google Gemini.",
-        "For Gemini Voice Replication, ensure your recording recites the required consent statement: 'I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.'"
+        "Record 10–30 seconds of natural speech for the sample, then record the exact Google consent statement separately with the same speaker.",
+        "If Google still returns 500, try the same two clips in Google AI Studio Voice Replication and keep the provider request ID for support."
       ];
     }
     if (/elevenlabs/i.test(text)) {
