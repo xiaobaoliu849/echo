@@ -118,26 +118,6 @@ async def create_voice_design(payload: VoiceDesignRequest) -> VoiceCreateRespons
             result["provider"] = "xiaomi"
         elif provider == "gpt_sovits":
             raise ValueError("GPT-SoVITS local API does not support voice design. Use voice clone instead.")
-        elif provider == "gemini":
-            result = await gemini_voice_service.create_voice_clone(
-                audio_bytes=data,
-                mime_type=audio_file.content_type or "",
-                preferred_name=preferred_name,
-            )
-            result["provider"] = "gemini"
-        elif provider == "gemini":
-            result = await gemini_voice_service.list_voices(
-                voice_type=voice_type,
-                page_index=page_index,
-                page_size=page_size,
-            )
-            result["voice_provider"] = "gemini"
-        elif provider == "gemini":
-            result = await gemini_voice_service.delete_voice(
-                voice_name=voice_name,
-                voice_type=voice_type,
-            )
-            result["type"] = voice_type
         elif provider == "elevenlabs":
             raise ValueError("ElevenLabs does not support voice design. Use voice clone instead.")
         else:
@@ -232,6 +212,13 @@ async def create_voice_clone(
                 preferred_name=preferred_name,
             )
             result["provider"] = "elevenlabs"
+        elif provider == "gemini":
+            result = await gemini_voice_service.create_voice_clone(
+                audio_bytes=data,
+                mime_type=audio_file.content_type or "",
+                preferred_name=preferred_name,
+            )
+            result["provider"] = "gemini"
         elif provider == "gpt_sovits":
             prompt_text = ""
             saved = tts_service.save_local_gpt_sovits_voice(
@@ -315,6 +302,13 @@ async def list_voices(
         elif provider == "elevenlabs":
             result = await elevenlabs_voice_service.list_voices()
             result["voice_provider"] = "elevenlabs"
+        elif provider == "gemini":
+            result = await gemini_voice_service.list_voices(
+                voice_type=voice_type,
+                page_index=page_index,
+                page_size=page_size,
+            )
+            result["voice_provider"] = "gemini"
         else:
             result = await qwen_voice_service.list_voices(
                 voice_type=voice_type,
@@ -375,6 +369,12 @@ async def delete_voice(
             }
         elif provider == "elevenlabs":
             result = await elevenlabs_voice_service.delete_voice(voice_name=voice_name)
+            result["type"] = voice_type
+        elif provider == "gemini":
+            result = await gemini_voice_service.delete_voice(
+                voice_name=voice_name,
+                voice_type=voice_type,
+            )
             result["type"] = voice_type
         else:
             result = await qwen_voice_service.delete_voice(voice_name=voice_name, voice_type=voice_type)
