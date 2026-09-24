@@ -17,7 +17,7 @@ Google introduced Gemini 3.8 Flash TTS on September 23, 2026. It is dedicated to
 - **Headers**:
   - `x-goog-api-key: <API_KEY>` or `Authorization: Bearer <API_KEY>`
   - `Content-Type: application/json`
-- **Request Body**:
+- **REST Request Body** (`generateContent`; SDK calls use a separate `config` argument):
 ```json
 {
   "contents": [
@@ -31,12 +31,12 @@ Google introduced Gemini 3.8 Flash TTS on September 23, 2026. It is dedicated to
       ]
     }
   ],
-  "config": {
-    "response_modalities": ["AUDIO"],
-    "speech_config": {
-      "voice_config": {
-        "prebuilt_voice_config": {
-          "voice_name": "Kore"
+  "generationConfig": {
+    "responseModalities": ["AUDIO"],
+    "speechConfig": {
+      "voiceConfig": {
+        "prebuiltVoiceConfig": {
+          "voiceName": "Kore"
         }
       }
     }
@@ -44,7 +44,7 @@ Google introduced Gemini 3.8 Flash TTS on September 23, 2026. It is dedicated to
 }
 ```
 - **Response**:
-  - Returns `candidates[0].content.parts[0].inline_data.data` as base64-encoded WAV (24kHz 16-bit PCM mono).
+  - Returns `candidates[0].content.parts[0].inlineData.data` as base64-encoded WAV (24kHz 16-bit PCM mono).
 
 ### Prebuilt Voices
 - `Puck` (Enthusiastic, Male)
