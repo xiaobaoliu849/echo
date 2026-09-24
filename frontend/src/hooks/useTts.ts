@@ -84,6 +84,10 @@ const DEFAULT_ENGINE_MODELS: Record<TtsEngine, { defaultModel: string; available
     defaultModel: "tts-rt-v2",
     availableModels: ["tts-rt-v2"]
   },
+  gemini: {
+    defaultModel: "gemini-3.8-flash-tts",
+    availableModels: ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
+  },
 };
 
 export default function useTts({ defaultText, formatErrorMessage, language = "zh-CN" }: Options) {
@@ -230,6 +234,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
       { value: "doubao" as TtsEngine, label: "豆包 TTS (火山引擎)", hint: t("火山引擎豆包语音合成，支持大模型音色、情感控制与流式合成。", "Volcengine Doubao TTS with large-model voices, emotion control and streaming synthesis.") },
       { value: "cartesia" as TtsEngine, label: "Cartesia Sonic", hint: t("Cartesia Sonic 超低延迟合成，支持 44 种语言与自然情感表达。", "Cartesia Sonic ultra-low-latency synthesis across 44 languages with natural expressiveness.") },
       { value: "soniox" as TtsEngine, label: "Soniox TTS", hint: t("Soniox 超低延迟 Speech AI 合成，tts-rt-v2 60+ 多语言自然音色与情绪标签。", "Soniox ultra-low latency Speech AI synthesis, tts-rt-v2 60+ multilingual natural voices with audio tags.") },
+      { value: "gemini" as TtsEngine, label: "Gemini TTS (Google)", hint: t("Google 官方 Gemini 3.8 Flash TTS，高保真表现力与舞台脚本级演绎。", "Google official Gemini 3.8 Flash TTS with high-fidelity expressiveness and stage direction.") },
     ],
     [t]
   );

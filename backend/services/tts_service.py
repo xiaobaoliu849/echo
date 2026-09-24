@@ -44,6 +44,14 @@ from .gradium_tts_provider import (
     fetch_gradium_voices,
     is_gradium_voice,
 )
+from .gemini_tts_provider import (
+    GEMINI_TTS_VOICES,
+    DEFAULT_GEMINI_TTS_MODEL,
+    DEFAULT_GEMINI_TTS_VOICE,
+    DEFAULT_GEMINI_BASE_URL,
+    gemini_tts_synthesize,
+    is_gemini_voice,
+)
 from .soniox_tts_provider import (
     SONIOX_TTS_VOICES,
     DEFAULT_SONIOX_TTS_MODEL,
@@ -107,6 +115,7 @@ TTS_ENGINE_DOUBAO = "doubao"
 TTS_ENGINE_CARTESIA = "cartesia"
 TTS_ENGINE_GRADIUM = "gradium"
 TTS_ENGINE_SONIOX = "soniox"
+TTS_ENGINE_GEMINI = "gemini"
 
 SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_EDGE,
@@ -122,6 +131,7 @@ SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_CARTESIA,
     TTS_ENGINE_GRADIUM,
     TTS_ENGINE_SONIOX,
+    TTS_ENGINE_GEMINI,
 }
 
 OPENAI_VOICES = [
@@ -572,7 +582,7 @@ class TTSService:
         return voice
 
     def _audio_profile_for_engine(self, engine: str) -> tuple[str, str]:
-        if engine in {TTS_ENGINE_CHATTTS, TTS_ENGINE_GPT_SOVITS}:
+        if engine in {TTS_ENGINE_CHATTTS, TTS_ENGINE_GPT_SOVITS, TTS_ENGINE_GEMINI}:
             return "wav", MEDIA_TYPE_WAV
         return "mp3", MEDIA_TYPE_MP3
 
@@ -748,6 +758,40 @@ class TTSService:
         except Exception:
             pass
         return SONIOX_TTS_VOICES
+
+    def _gemini_settings(self) -> tuple[str, str]:
+        """Return (api_key, base_url) for Google Gemini TTS."""
+        self.config.reload()
+        cfg = self.config.get_all()
+        api_key = (
+            str(cfg.get("api_keys", {}).get("google_api_key", "")).strip()
+            or os.environ.get("GOOGLE_API_KEY", "").strip()
+            or os.environ.get("GEMINI_API_KEY", "").strip()
+        )
+        base_url = str(cfg.get("api_urls", {}).get("Google", "")).strip()
+        if not base_url:
+            base_url = DEFAULT_GEMINI_BASE_URL
+        return api_key, base_url
+
+    async def _generate_gemini_audio(
+        self, text: str, voice: str, path: Path, model: str | None = None
+    ) -> None:
+        api_key, base_url = self._gemini_settings()
+        if not api_key:
+            raise RuntimeError(
+                "Google / Gemini API Key is not configured. 请在 设置 → Google 中填写 google_api_key。"
+            )
+        audio_bytes = await gemini_tts_synthesize(
+            text=text,
+            voice=voice,
+            api_key=api_key,
+            base_url=base_url,
+            model=model or DEFAULT_GEMINI_TTS_MODEL,
+        )
+        self._atomic_write_bytes(path, audio_bytes)
+
+    async def _fetch_gemini_voices(self) -> list[dict[str, Any]]:
+        return list(GEMINI_TTS_VOICES)
 
     def _doubao_settings(self) -> tuple[str, str, str]:
         """Return (access_token, app_id, cluster) for Doubao OpenSpeech TTS."""
@@ -1285,6 +1329,9 @@ class TTSService:
         # Check Soniox voices
         if is_soniox_voice(voice):
             return TTS_ENGINE_SONIOX
+        # Check Gemini voices
+        if is_gemini_voice(voice):
+            return TTS_ENGINE_GEMINI
         # 2. Check MiniMax voices
         if any(v["name"] == voice for v in MINIMAX_VOICES):
             return TTS_ENGINE_MINIMAX
@@ -1345,6 +1392,8 @@ class TTSService:
             selected_voice = voice or DEFAULT_GRADIUM_VOICE
         elif normalized_engine == TTS_ENGINE_SONIOX:
             selected_voice = voice or DEFAULT_SONIOX_TTS_VOICE
+        elif normalized_engine == TTS_ENGINE_GEMINI:
+            selected_voice = voice or DEFAULT_GEMINI_TTS_VOICE
         else:
             selected_voice = voice or XIAOMI_VOICES[0]["name"]
 
@@ -1384,6 +1433,8 @@ class TTSService:
             await self._generate_gradium_audio(cleaned, selected_voice, path, model=model)
         elif normalized_engine == TTS_ENGINE_SONIOX:
             await self._generate_soniox_audio(cleaned, selected_voice, path, model=model)
+        elif normalized_engine == TTS_ENGINE_GEMINI:
+            await self._generate_gemini_audio(cleaned, selected_voice, path, model=model)
         else:
             await self._generate_xiaomi_audio(cleaned, selected_voice, path, model=model)
 
@@ -1510,6 +1561,9 @@ class TTSService:
             return self._filter_by_locale(voices, locale)
         if normalized_engine == TTS_ENGINE_SONIOX:
             voices = await self._fetch_soniox_voices()
+            return self._filter_by_locale(voices, locale)
+        if normalized_engine == TTS_ENGINE_GEMINI:
+            voices = await self._fetch_gemini_voices()
             return self._filter_by_locale(voices, locale)
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
             # The two Qwen TTS families use incompatible voice sets; when the
