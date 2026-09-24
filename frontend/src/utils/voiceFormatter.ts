@@ -90,7 +90,7 @@ export function formatVoiceLabel(
   const localeEntry = resolveLocaleDisplay(item.locale || "");
   let localeStr = localeEntry
     ? t(localeEntry.zh, localeEntry.en)
-    : (item.locale || "");
+    : ((item.locale || "").toLowerCase() === "multi" ? "" : (item.locale || ""));
   const localePart = localeStr ? ` - ${localeStr}` : "";
 
   return `${name}${genderPart}${localePart}`;

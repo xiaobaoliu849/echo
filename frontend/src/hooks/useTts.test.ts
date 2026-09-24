@@ -57,7 +57,7 @@ describe('useTts', () => {
         const clonedVoice = {
             name: 'voice_xiao_123',
             short_name: 'xiao',
-            locale: '',
+            locale: 'multi',
             gender: 'Custom',
         };
 

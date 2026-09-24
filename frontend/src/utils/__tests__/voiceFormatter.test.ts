@@ -6,6 +6,17 @@ const tZh = (zh: string, _en: string) => zh;
 const tEn = (_zh: string, en: string) => en;
 
 describe("voiceFormatter", () => {
+  it("treats a multilingual voice as available without adding locale noise", () => {
+    const voice: VoiceInfo = {
+      name: "voice_xiao_123",
+      short_name: "xiao",
+      gender: "Custom",
+      locale: "multi",
+    };
+
+    expect(formatVoiceLabel(voice, tZh)).toBe("xiao (自定义)");
+  });
+
   it("formats Edge neural voice name, gender and locale in Chinese", () => {
     const voice: VoiceInfo = {
       name: "zh-CN-XiaoxiaoNeural",

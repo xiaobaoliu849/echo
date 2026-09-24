@@ -595,7 +595,12 @@ class TTSService:
     def _filter_by_locale(self, voices: list[dict[str, Any]], locale: str | None) -> list[dict[str, Any]]:
         if not locale:
             return voices
-        return [voice for voice in voices if str(voice.get("locale", "")).startswith(locale)]
+        return [
+            voice
+            for voice in voices
+            if str(voice.get("locale", "")).startswith(locale)
+            or str(voice.get("locale", "")).lower() == "multi"
+        ]
 
     def _dashscope_key(self) -> str:
         return self.config.get_provider_settings("DashScope").get("api_key", "").strip()
@@ -813,7 +818,7 @@ class TTSService:
             voices.append({
                 "name": voice_id,
                 "short_name": str(item.get("display_name") or voice_id),
-                "locale": "",
+                "locale": "multi",
                 "gender": "Custom",
                 "description": str(item.get("description") or ""),
             })
