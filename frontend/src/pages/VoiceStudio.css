@@ -596,28 +596,31 @@
 }
 
 .vsAudioPreviewBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 11px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 6px 11px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--line) !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  transition: all 0.15s ease !important;
 }
 
 .vsAudioPreviewBtn:hover {
-  background: var(--surface);
-  color: var(--text);
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  transform: none !important;
 }
 
 .vsAudioPreviewBtn.remove:hover {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
-  background: var(--danger-soft);
+  color: var(--danger) !important;
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent) !important;
+  background: var(--danger-soft) !important;
 }
 
 .vsAudioPreviewControls {
@@ -628,24 +631,43 @@
 }
 
 .vsAudioPreviewPlayBtn {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: none;
-  background: var(--brand);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.15s ease, background 0.15s ease;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 30%, transparent);
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  max-width: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 50% !important;
+  border: none !important;
+  background: var(--brand) !important;
+  color: #ffffff !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 30%, transparent) !important;
+  line-height: 1 !important;
+  transition: transform 0.15s ease, background 0.15s ease !important;
 }
 
 .vsAudioPreviewPlayBtn:hover {
-  transform: scale(1.05);
-  background: color-mix(in srgb, var(--brand) 88%, #000);
+  transform: scale(1.06) !important;
+  background: color-mix(in srgb, var(--brand) 88%, #000) !important;
+}
+
+.vsAudioPreviewPlayBtn:active {
+  transform: scale(0.96) !important;
+}
+
+.vsAudioPreviewPlayBtn svg {
+  display: block !important;
+  flex-shrink: 0 !important;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: #ffffff !important;
 }
 
 .vsAudioPreviewScrubber {
@@ -697,6 +719,8 @@
   display: flex;
   align-items: center;
   gap: 3px;
+  min-width: 82px;
+  justify-content: flex-end;
 }
 
 .vsAudioPreviewTimes .current {
@@ -705,20 +729,29 @@
 }
 
 .vsAudioPreviewMuteBtn {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s ease;
+  background: transparent !important;
+  border: none !important;
+  color: var(--muted) !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: none !important;
+  flex-shrink: 0 !important;
+  transition: color 0.15s ease, background 0.15s ease !important;
 }
 
 .vsAudioPreviewMuteBtn:hover {
-  color: var(--text);
+  color: var(--text) !important;
+  background: var(--surface) !important;
+  transform: none !important;
 }
 
 /* ── Voice Recording Studio Console ── */

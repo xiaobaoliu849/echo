@@ -4,6 +4,7 @@ import { useI18n } from "../../i18n";
 
 type AudioPreviewPlayerProps = {
   file: File;
+  initialDuration?: number;
   onRemove?: () => void;
   onReplace?: () => void;
   title?: string;
@@ -25,6 +26,7 @@ function formatFileSize(bytes: number): string {
 
 export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
   file,
+  initialDuration,
   onRemove,
   onReplace,
   title,
@@ -34,28 +36,74 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState<number>(
+    initialDuration && isFinite(initialDuration) && initialDuration > 0
+      ? initialDuration
+      : 0
+  );
   const [isMuted, setIsMuted] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string>("");
 
   useEffect(() => {
     let url = "";
+    let disposed = false;
+    let audioContext: AudioContext | null = null;
+
     try {
       url = URL.createObjectURL(file);
       setAudioUrl(url);
       setIsPlaying(false);
       setCurrentTime(0);
-      setDuration(0);
+      setDuration(
+        initialDuration && isFinite(initialDuration) && initialDuration > 0
+          ? initialDuration
+          : 0
+      );
     } catch {
       // Ignore if createObjectURL not supported
     }
 
+    // Decode audio data via Web Audio API to accurately determine duration
+    // (especially essential for MediaRecorder WebM blobs where duration header is missing/Infinity)
+    const decodeAccurateDuration = async () => {
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtx) return;
+        audioContext = new AudioCtx();
+        const arrayBuffer = await file.arrayBuffer();
+        if (disposed) return;
+        const decoded = await audioContext.decodeAudioData(arrayBuffer);
+        if (disposed) return;
+        if (decoded && isFinite(decoded.duration) && decoded.duration > 0) {
+          setDuration(decoded.duration);
+        }
+      } catch {
+        // Fallback to HTMLAudioElement loadedmetadata/durationchange
+      } finally {
+        if (audioContext && audioContext.state !== "closed") {
+          try {
+            await audioContext.close();
+          } catch {
+            // ignore
+          }
+        }
+      }
+    };
+
+    decodeAccurateDuration();
+
     return () => {
+      disposed = true;
       if (url) {
         URL.revokeObjectURL(url);
       }
+      if (audioContext && audioContext.state !== "closed") {
+        audioContext.close().catch(() => {});
+      }
     };
-  }, [file]);
+  }, [file, initialDuration]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -85,8 +133,22 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
 
   const handleLoadedMetadata = () => {
     const audio = audioRef.current;
-    if (audio && !isNaN(audio.duration) && isFinite(audio.duration)) {
+    if (!audio) return;
+
+    if (!isNaN(audio.duration) && isFinite(audio.duration) && audio.duration > 0) {
       setDuration(audio.duration);
+    } else if (audio.duration === Infinity) {
+      // Chromium MediaRecorder WebM duration is Infinity.
+      // Seeking to an arbitrary large time forces the demuxer to parse the entire stream.
+      const onTimeUpdateOnce = () => {
+        audio.removeEventListener("timeupdate", onTimeUpdateOnce);
+        if (isFinite(audio.currentTime) && audio.currentTime > 0) {
+          setDuration(audio.currentTime);
+        }
+        audio.currentTime = 0;
+      };
+      audio.addEventListener("timeupdate", onTimeUpdateOnce, { once: true });
+      audio.currentTime = 1e101;
     }
   };
 
@@ -127,6 +189,7 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
           onEnded={handleEnded}
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
+          onDurationChange={handleLoadedMetadata}
           preload="metadata"
         />
       )}
@@ -184,7 +247,11 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
           onClick={togglePlay}
           aria-label={isPlaying ? t("暂停试听", "Pause preview") : t("试听样本", "Play preview")}
         >
-          {isPlaying ? <Pause size={18} /> : <Play size={18} style={{ marginLeft: 2 }} />}
+          {isPlaying ? (
+            <Pause size={18} fill="currentColor" stroke="currentColor" />
+          ) : (
+            <Play size={18} fill="currentColor" stroke="currentColor" style={{ marginLeft: 2 }} />
+          )}
         </button>
 
         <div className="vsAudioPreviewScrubber">

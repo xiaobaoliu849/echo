@@ -52,6 +52,59 @@ describe("AudioPreviewPlayer", () => {
 
     const playBtn = screen.getByLabelText(/试听样本/i);
     expect(playBtn).toBeInTheDocument();
+    expect(playBtn).toHaveClass("vsAudioPreviewPlayBtn");
     fireEvent.click(playBtn);
+  });
+
+  it("displays duration badge and enables scrubber when initialDuration is provided", () => {
+    const mockFile = new File(["sample content"], "voice_record.webm", {
+      type: "audio/webm",
+    });
+
+    render(
+      <AudioPreviewPlayer
+        file={mockFile}
+        initialDuration={15}
+      />
+    );
+
+    expect(screen.getByText("⏱️ 00:15")).toBeInTheDocument();
+    expect(screen.getByText("00:15")).toBeInTheDocument();
+
+    const slider = screen.getByLabelText(/播放进度/i) as HTMLInputElement;
+    expect(slider).toBeInTheDocument();
+    expect(slider).not.toBeDisabled();
+    expect(slider.max).toBe("15");
+  });
+
+  it("decodes duration using AudioContext when available", async () => {
+    const mockFile = new File(["dummy raw audio"], "custom.wav", {
+      type: "audio/wav",
+    });
+
+    const mockDecodeAudioData = vi.fn().mockResolvedValue({
+      duration: 25.4,
+      numberOfChannels: 1,
+      sampleRate: 44100,
+    });
+    const mockClose = vi.fn().mockResolvedValue(undefined);
+
+    class MockAudioContext {
+      decodeAudioData = mockDecodeAudioData;
+      close = mockClose;
+      state = "running";
+    }
+
+    vi.stubGlobal("AudioContext", MockAudioContext);
+
+    try {
+      render(<AudioPreviewPlayer file={mockFile} />);
+
+      const durationBadge = await screen.findByText("⏱️ 00:25");
+      expect(durationBadge).toBeInTheDocument();
+      expect(mockDecodeAudioData).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
