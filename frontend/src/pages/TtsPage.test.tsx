@@ -226,4 +226,74 @@ describe('TtsPage', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(drawer).not.toHaveClass('open');
     });
+
+    it('toggles playback with the dock player play button', () => {
+        render(
+            <TtsPage
+                tts={createTtsController({
+                    audioUrl: 'blob:test-url',
+                    audioBlob: new Blob(['audio'], { type: 'audio/mpeg' })
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const playButton = screen.getByRole('button', { name: '播放' });
+        expect(playButton).toBeInTheDocument();
+
+        fireEvent.click(playButton);
+        expect(screen.getByRole('button', { name: '暂停' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: '暂停' }));
+        expect(screen.getByRole('button', { name: '播放' })).toBeInTheDocument();
+    });
+
+    it('opens 3-dot more options menu and triggers download from menuitem', async () => {
+        const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => { });
+
+        render(
+            <TtsPage
+                tts={createTtsController({
+                    audioUrl: 'blob:test-url',
+                    audioBlob: new Blob(['audio'], { type: 'audio/mpeg' })
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const moreBtn = screen.getByRole('button', { name: '更多选项' });
+        expect(moreBtn).toBeInTheDocument();
+
+        fireEvent.click(moreBtn);
+
+        const downloadMenuItem = screen.getByRole('menuitem', { name: /下载音频/ });
+        expect(downloadMenuItem).toBeInTheDocument();
+        expect(screen.getByText('播放速度')).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(downloadMenuItem);
+        });
+
+        await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1));
+    });
+
+    it('closes 3-dot menu when pressing escape', () => {
+        render(
+            <TtsPage
+                tts={createTtsController({
+                    audioUrl: 'blob:test-url',
+                    audioBlob: new Blob(['audio'], { type: 'audio/mpeg' })
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const moreBtn = screen.getByRole('button', { name: '更多选项' });
+        fireEvent.click(moreBtn);
+        expect(screen.getByRole('menuitem', { name: /下载音频/ })).toBeInTheDocument();
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('menuitem', { name: /下载音频/ })).not.toBeInTheDocument();
+    });
 });
+

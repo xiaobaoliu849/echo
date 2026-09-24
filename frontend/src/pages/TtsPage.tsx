@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { History, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { Download, History, MoreVertical, Pause, Play, RotateCcw, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import useTtsHistory, { type TtsHistoryEntry } from "../hooks/useTtsHistory";
 import type { UseTtsResult } from "../hooks/useTts";
@@ -202,6 +202,245 @@ function TtsHistoryMiniPlayer({ src }: { src: string }) {
       <span className="vsTtsMiniTime">
         {displayTime}
       </span>
+    </div>
+  );
+}
+
+type TtsDockPlayerProps = {
+  src: string;
+  onDownload: () => void;
+  t: (zh: string, en: string) => string;
+};
+
+function TtsDockPlayer({ src, onDownload, t }: TtsDockPlayerProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+      audioRef.current.currentTime = 0;
+    }
+  }, [src, playbackRate]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen]);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      try {
+        audio.pause();
+      } catch {
+        // ignore
+      }
+      setIsPlaying(false);
+    } else {
+      document.querySelectorAll("audio").forEach((el) => {
+        if (el !== audio && !el.paused) {
+          try {
+            el.pause();
+          } catch {
+            // ignore
+          }
+        }
+      });
+      try {
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => setIsPlaying(false));
+        }
+        setIsPlaying(true);
+      } catch {
+        setIsPlaying(true);
+      }
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current && isFinite(audioRef.current.duration)) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleDurationChange = () => {
+    if (audioRef.current && isFinite(audioRef.current.duration)) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = val;
+      setCurrentTime(val);
+    }
+  };
+
+  const toggleMute = () => {
+    if (audioRef.current) {
+      const nextMuted = !isMuted;
+      audioRef.current.muted = nextMuted;
+      setIsMuted(nextMuted);
+    }
+  };
+
+  const handleSpeedChange = (rate: number) => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+    setPlaybackRate(rate);
+    setMenuOpen(false);
+  };
+
+  const formatSecs = (s: number) => {
+    if (isNaN(s) || !isFinite(s) || s < 0) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+
+  return (
+    <div className="vsDockPlayer">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        }}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onDurationChange={handleDurationChange}
+        style={{ display: "none" }}
+      />
+
+      <button
+        type="button"
+        className="vsDockPlayBtn"
+        onClick={togglePlay}
+        title={isPlaying ? t("暂停", "Pause") : t("播放", "Play")}
+        aria-label={isPlaying ? t("暂停", "Pause") : t("播放", "Play")}
+      >
+        {isPlaying ? (
+          <Pause size={13} fill="currentColor" />
+        ) : (
+          <Play size={13} fill="currentColor" style={{ marginLeft: "1.5px" }} />
+        )}
+      </button>
+
+      <span className="vsDockTime">
+        {formatSecs(currentTime)} / {formatSecs(duration)}
+      </span>
+
+      <div className="vsDockProgressWrap">
+        <input
+          type="range"
+          min={0}
+          max={duration || 1}
+          step={0.05}
+          value={currentTime}
+          onChange={handleSeek}
+          className="vsDockRangeInput"
+          aria-label={t("播放进度", "Playback progress")}
+        />
+        <div
+          className="vsDockProgressBar"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+
+      <button
+        type="button"
+        className="vsDockIconButton"
+        onClick={toggleMute}
+        title={isMuted ? t("恢复音量", "Unmute") : t("静音", "Mute")}
+        aria-label={isMuted ? t("恢复音量", "Unmute") : t("静音", "Mute")}
+      >
+        {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+      </button>
+
+      <div className="vsDockMenuContainer" ref={menuRef}>
+        <button
+          type="button"
+          className={`vsDockIconButton ${menuOpen ? "active" : ""}`}
+          onClick={() => setMenuOpen(!menuOpen)}
+          title={t("更多选项", "More options")}
+          aria-label={t("更多选项", "More options")}
+          aria-haspopup="true"
+          aria-expanded={menuOpen}
+        >
+          <MoreVertical size={15} />
+        </button>
+
+        {menuOpen && (
+          <div className="vsDockDropdownMenu" role="menu">
+            <button
+              type="button"
+              className="vsDockMenuItem"
+              onClick={() => {
+                setMenuOpen(false);
+                onDownload();
+              }}
+              role="menuitem"
+            >
+              <Download size={14} />
+              <span>{t("下载音频", "Download audio")}</span>
+            </button>
+
+            <div className="vsDockMenuDivider" />
+            <div className="vsDockMenuLabel">{t("播放速度", "Playback speed")}</div>
+            <div className="vsDockSpeedOptions">
+              {[0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  className={`vsDockSpeedBtn ${playbackRate === rate ? "active" : ""}`}
+                  onClick={() => handleSpeedChange(rate)}
+                >
+                  {rate === 1.0 ? "1x" : `${rate}x`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -695,7 +934,11 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
           <div className="vsTtsFooterLeft">
             {tts.audioUrl && (
               <div className="vsAudioPlayerDock">
-                <audio controls src={tts.audioUrl} className="vsAudioElement" />
+                <TtsDockPlayer
+                  src={tts.audioUrl}
+                  onDownload={handleDownload}
+                  t={t}
+                />
                 <button
                   type="button"
                   className="vsBtnSecondary vsExportAudioBtn"

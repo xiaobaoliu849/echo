@@ -172,7 +172,7 @@ export default function AudioOverviewPage({
                 {audioOverview.audioOverviewAudioUrl && (
                   <div className="vsAudioPlayerCard">
                     <h3 className="vsAudioPlayerTitle">{t("收听播客", "Listen to your podcast")}</h3>
-                    <audio controls src={audioOverview.audioOverviewAudioUrl} className="vsAudioPlayerElement" />
+                    <audio controls controlsList="nodownload" src={audioOverview.audioOverviewAudioUrl} className="vsAudioPlayerElement" />
                   </div>
                 )}
 

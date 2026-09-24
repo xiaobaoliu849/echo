@@ -1435,19 +1435,223 @@ button.vsRTWarningBtn:hover {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  background: #ffffff;
-  padding: 5px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  background: var(--bg-card, #ffffff);
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   width: 100%;
-  max-width: 480px;
+  max-width: 530px;
+  position: relative;
 }
 
 .vsAudioPlayerDock audio {
+  display: none;
+}
+
+.vsDockPlayer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex: 1;
-  height: 32px;
   min-width: 0;
+  position: relative;
+}
+
+.vsDockPlayBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, background-color 0.12s ease;
+  flex-shrink: 0;
+}
+
+.vsDockPlayBtn:hover {
+  background: var(--brand-dark, #2b3a32);
+  transform: scale(1.05);
+}
+
+.vsDockTime {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #64748b);
+  white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.vsDockProgressWrap {
+  position: relative;
+  flex: 1;
+  min-width: 60px;
+  height: 5px;
+  background: color-mix(in srgb, var(--surface, #f1f5f9) 80%, var(--line, #cbd5e1));
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.vsDockProgressBar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--brand);
+  border-radius: 3px;
+  pointer-events: none;
+  transition: width 0.05s linear;
+}
+
+.vsDockRangeInput {
+  position: absolute;
+  inset: -8px 0;
+  width: 100%;
+  height: 22px;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  z-index: 2;
+}
+
+.vsDockIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--muted, #64748b);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+}
+
+.vsDockIconButton:hover,
+.vsDockIconButton.active {
+  background: color-mix(in srgb, var(--surface, #f1f5f9) 60%, transparent);
+  color: var(--text, #1e293b);
+}
+
+.vsDockMenuContainer {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.vsDockDropdownMenu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  min-width: 160px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: vsDockMenuFadeIn 0.15s ease-out;
+}
+
+@keyframes vsDockMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.vsDockMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text, #334155);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  text-align: left;
+}
+
+.vsDockMenuItem:hover {
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  color: var(--brand-dark, #2b3a32);
+}
+
+.vsDockMenuDivider {
+  height: 1px;
+  background: var(--line, rgba(0, 0, 0, 0.06));
+  margin: 4px 0;
+}
+
+.vsDockMenuLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted, #94a3b8);
+  padding: 2px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vsDockSpeedOptions {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+  padding: 2px 4px;
+}
+
+.vsDockSpeedBtn {
+  font-size: 11px;
+  padding: 4px 0;
+  text-align: center;
+  background: color-mix(in srgb, var(--surface, #f8fafc) 80%, transparent);
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+  border-radius: 4px;
+  color: var(--text, #475569);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.12s ease;
+}
+
+.vsDockSpeedBtn:hover {
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+  color: var(--brand-dark, #2b3a32);
+}
+
+.vsDockSpeedBtn.active {
+  background: var(--brand);
+  color: #ffffff;
+  border-color: var(--brand);
+  font-weight: 600;
 }
 
 .vsExportAudioBtn {
