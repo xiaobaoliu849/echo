@@ -1710,10 +1710,30 @@ button.vsRTWarningBtn:hover {
 .vsTtsHistoryDrawerList {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+
+.vsTtsHistoryDrawerList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.vsTtsHistoryDrawerList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vsTtsHistoryDrawerList::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 999px;
+}
+
+.vsTtsHistoryDrawerList::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
 }
 
 /* Empty State */
@@ -1765,6 +1785,13 @@ button.vsRTWarningBtn:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
+.vsTtsHistoryCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .vsTtsHistoryCardMeta {
   display: flex;
   align-items: center;
@@ -1772,6 +1799,8 @@ button.vsRTWarningBtn:hover {
   font-size: 11px;
   color: var(--muted);
   flex-wrap: wrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .vsTtsHistoryCardTime {
@@ -1819,25 +1848,96 @@ button.vsRTWarningBtn:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   margin-top: 4px;
   padding-top: 8px;
   border-top: 1px dashed var(--line);
 }
 
-.vsTtsHistoryAudio {
-  height: 28px;
-  flex: 1;
-  min-width: 120px;
-  max-width: 200px;
-  border-radius: 6px;
-}
-
-.vsTtsHistoryCardBtns {
+/* Custom Mini Audio Player */
+.vsTtsMiniPlayer {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  background: color-mix(in srgb, var(--surface) 60%, #ffffff);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 0 10px 0 3px;
+  box-sizing: border-box;
+}
+
+.vsTtsMiniPlayBtn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 50% !important;
+  background: var(--brand) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  cursor: pointer;
   flex-shrink: 0;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.vsTtsMiniPlayBtn:hover {
+  background: var(--brand-dark, #2b3a32) !important;
+  transform: scale(1.06) !important;
+  filter: none !important;
+}
+
+.vsTtsMiniProgressWrap {
+  position: relative;
+  flex: 1;
+  min-width: 40px;
+  height: 4px;
+  background: color-mix(in srgb, var(--surface) 80%, var(--line));
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.vsTtsMiniProgressBar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--brand);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.vsTtsMiniRange {
+  position: absolute;
+  inset: -6px 0;
+  width: 100%;
+  height: 16px;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+  padding: 0 !important;
+  z-index: 2;
+}
+
+.vsTtsMiniTime {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--muted);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .vsTtsHistoryRestoreBtn {
@@ -1845,7 +1945,7 @@ button.vsRTWarningBtn:hover {
   align-items: center !important;
   gap: 4px;
   height: 26px !important;
-  padding: 0 8px !important;
+  padding: 0 10px !important;
   border: 1px solid var(--line) !important;
   border-radius: 6px !important;
   background: transparent !important;
@@ -1855,6 +1955,7 @@ button.vsRTWarningBtn:hover {
   font-weight: 600 !important;
   cursor: pointer;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .vsTtsHistoryRestoreBtn:hover {
@@ -1870,12 +1971,12 @@ button.vsRTWarningBtn:hover {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 26px !important;
-  height: 26px !important;
-  min-width: 26px !important;
-  max-width: 26px !important;
-  min-height: 26px !important;
-  max-height: 26px !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
   padding: 0 !important;
   margin: 0 !important;
   border: none !important;
@@ -1883,7 +1984,7 @@ button.vsRTWarningBtn:hover {
   box-shadow: none !important;
   color: var(--muted) !important;
   cursor: pointer;
-  border-radius: 6px !important;
+  border-radius: 5px !important;
   transition: all 0.15s ease;
   flex-shrink: 0;
 }
