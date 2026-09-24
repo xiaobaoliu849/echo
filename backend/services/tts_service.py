@@ -222,15 +222,120 @@ QWEN_AUDIO_TTS_VOICES = [
 
 DEFAULT_QWEN_AUDIO_TTS_VOICE = "longanhuan_v3.6"
 
+# Qwen-Audio-3.1-TTS-Flash system voices (v3.1 voice generation).
+# Official voice list: https://help.aliyun.com/zh/model-studio/qwen-audio-tts-voice-list
+QWEN_AUDIO_31_TTS_VOICES = [
+    # Multilingual & Dialects (all 4 voices support 16 Chinese dialects + 8 languages: EN/JP/KR/FR/DE/PT/IT/VI/ID)
+    {"name": "longanhuan_v3.1", "short_name": "龙安欢 (多语种/方言)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanlingxin_v3.1", "short_name": "龙安灵心 (多语种/方言)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanfengyue_v3.1", "short_name": "龙安风悦 (多语种/方言)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "xunanchuan_v3.1", "short_name": "许南川 (多语种/方言)", "locale": "zh-CN", "gender": "Male"},
+    # Premium Chinese Voices (Mandarin)
+    {"name": "yuxiaoyun_v3.1", "short_name": "于小云 (元气亲切)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "qiaoxiaojiao_v3.1", "short_name": "乔小娇 (俏丽可爱)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "xiaxiaochen_v3.1", "short_name": "夏小晨 (元气明亮)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "anmingyuan_v3.1", "short_name": "安明远 (清亮自然)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "wenhuaiqing_v3.1", "short_name": "温怀清 (清亮柔和)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "anxiaolan_v3.1", "short_name": "安小岚 (清甜纯净)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "xieshurou_v3.1", "short_name": "谢舒柔 (柔和知性)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "baiqinglan_v3.1", "short_name": "白清岚 (明亮清纯)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "xuyuyuan_v3.1", "short_name": "许玉远 (知性成熟)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "anruorou_v3.1", "short_name": "安若柔 (气声知性)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "wenhuaizhi_v3.1", "short_name": "闻怀之 (稳重成熟)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "xiaoxingzhi_v3.1", "short_name": "萧行之 (端庄贵气)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "guyunshu_v3.1", "short_name": "顾云舒 (成熟稳重)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "huozhuoshi_v3.1", "short_name": "霍拙石 (清亮旁白)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "yeqinghe_v3.1", "short_name": "叶清禾 (亲切温柔)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "yunhuanhuan_v3.1", "short_name": "云欢欢 (高亢热情)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "xuxiaoqiao_v3.1", "short_name": "徐小俏 (自然俏皮)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "baianran_v3.1", "short_name": "白安然 (低沉浑厚)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "xuyanchu_v3.1", "short_name": "许言初 (沉稳磁性)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "yezhiqing_v3.1", "short_name": "叶知晴 (轻快自然)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "andi_v3.1", "short_name": "安迪 (ABC口音)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "anyuqing_v3.1", "short_name": "安语晴 (甜妹旁白)", "locale": "zh-CN", "gender": "Female"},
+    # Premium English Voices
+    {"name": "Emily_v3.1", "short_name": "Emily (英式女声)", "locale": "en-GB", "gender": "Female"},
+    {"name": "Luna_v3.1", "short_name": "Luna (英式女声)", "locale": "en-GB", "gender": "Female"},
+    {"name": "Eric_v3.1", "short_name": "Eric (英式男声)", "locale": "en-GB", "gender": "Male"},
+    {"name": "Luca_v3.1", "short_name": "Luca (英式男声)", "locale": "en-GB", "gender": "Male"},
+    {"name": "Abby_v3.1", "short_name": "Abby (美式女声)", "locale": "en-US", "gender": "Female"},
+    {"name": "Annie_v3.1", "short_name": "Annie (美式女声)", "locale": "en-US", "gender": "Female"},
+    {"name": "Ava_v3.1", "short_name": "Ava (美式女声)", "locale": "en-US", "gender": "Female"},
+    {"name": "Beth_v3.1", "short_name": "Beth (美式女声)", "locale": "en-US", "gender": "Female"},
+    {"name": "Betty_v3.1", "short_name": "Betty (美式女声)", "locale": "en-US", "gender": "Female"},
+    {"name": "Cally_v3.1", "short_name": "Cally (美式女声)", "locale": "en-US", "gender": "Female"},
+    {"name": "Cindy_v3.1", "short_name": "Cindy (美式女声)", "locale": "en-US", "gender": "Female"},
+    {"name": "Donna_v3.1", "short_name": "Donna (美式女声)", "locale": "en-US", "gender": "Female"},
+    {"name": "Andy_v3.1", "short_name": "Andy (美式男声)", "locale": "en-US", "gender": "Male"},
+    {"name": "Brian_v3.1", "short_name": "Brian (美式男声)", "locale": "en-US", "gender": "Male"},
+    {"name": "David_v3.1", "short_name": "David (美式男声)", "locale": "en-US", "gender": "Male"},
+    # Additional Story & Character Voices
+    {"name": "longanyuanfei_v3.1", "short_name": "龙安元妃 (高傲妃子)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longjielidou_v3.1", "short_name": "龙杰力豆 (天真男童)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longanlingxi_v3.1", "short_name": "龙安灵希 (可爱甜美)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longhuohuo_v3.1", "short_name": "龙火火 (顽皮少年)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longyingtao_v3.1", "short_name": "龙应桃 (温柔淡定)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanya_v3.1", "short_name": "龙安雅 (高雅气质)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longwan_v3.1", "short_name": "龙婉 (细腻柔声)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longxing_v3.1", "short_name": "龙星 (温婉邻家)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longhua_v3.1", "short_name": "龙华 (元气甜美)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longhan_v3.1", "short_name": "龙寒 (温暖男声)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longanzhi_v3.1", "short_name": "龙安智 (睿智轻熟)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longzhe_v3.1", "short_name": "龙哲 (暖男男声)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longanyang_v3.1", "short_name": "龙安洋 (阳光大男孩)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "libai_v3.1", "short_name": "李白 (诗仙朗诵)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longling_v3.1", "short_name": "龙铃 (稚气童声)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longniuniu_v3.1", "short_name": "龙牛牛 (阳光男童)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longshanshan_v3.1", "short_name": "龙闪闪 (戏剧童声)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longpaopao_v3.1", "short_name": "龙泡泡 (飞天泡泡)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "loongstella_v3.1", "short_name": "Loong Stella (利落播报)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longyuan_v3.1", "short_name": "龙媛 (温暖治愈)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longmiao_v3.1", "short_name": "龙妙 (抑扬顿挫)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longsanshu_v3.1", "short_name": "龙三叔 (沉稳质感)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longanli_v3.1", "short_name": "龙安莉 (利落从容)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanwen_v3.1", "short_name": "龙安温 (优雅知性)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanlang_v3.1", "short_name": "龙安朗 (清爽利落)", "locale": "zh-CN", "gender": "Male"},
+    {"name": "longxiaoxia_v3.1", "short_name": "龙小夏 (沉稳权威)", "locale": "zh-CN", "gender": "Female"},
+    {"name": "longanchong_v3.1", "short_name": "龙安冲 (激情推销)", "locale": "zh-CN", "gender": "Male"},
+]
+
+DEFAULT_QWEN_AUDIO_31_TTS_VOICE = "longanhuan_v3.1"
+
+# Presets / virtual styles for Qwen-Audio-3.1-TTS-Next AudioGen engine
+QWEN_AUDIO_TTS_NEXT_VOICES = [
+    {"name": "tts-next-auto", "short_name": "智能声景合成 (Prompt-Guided AudioGen)", "locale": "zh-CN", "gender": "Neutral"},
+    {"name": "tts-next-narrator", "short_name": "叙事旁白 (Cinematic Narrator)", "locale": "zh-CN", "gender": "Neutral"},
+    {"name": "tts-next-story", "short_name": "故事剧场 (Story & Soundscape)", "locale": "zh-CN", "gender": "Neutral"},
+    {"name": "tts-next-podcast", "short_name": "双人/多人播客 (Multi-Speaker Podcast)", "locale": "zh-CN", "gender": "Neutral"},
+]
+
+DEFAULT_QWEN_AUDIO_TTS_NEXT_VOICE = "tts-next-auto"
+
+
+def is_qwen_audio_tts_next_model(model: str | None) -> bool:
+    """True for Qwen-Audio-3.1-TTS-Next unified audio generation model."""
+    normalized = str(model or "").strip().lower()
+    return "qwen-audio-3.1-tts-next" in normalized
+
 
 def is_qwen_audio_tts_model(model: str | None) -> bool:
-    """True for the Qwen-Audio-TTS family (qwen-audio-3.0-tts-flash/plus).
+    """True for the Qwen-Audio-TTS family (qwen-audio-3.0-tts-* / qwen-audio-3.1-tts-*).
 
     These models use the longan voice family, unlike qwen3-tts-* models which
     use the Cherry/Ono Anna voice family.
     """
     normalized = str(model or "").strip().lower()
-    return normalized.startswith("qwen-audio-") and "-tts-" in normalized
+    return (
+        normalized.startswith("qwen-audio-")
+        and "-tts-" in normalized
+        and not is_qwen_audio_tts_next_model(model)
+    )
+
+
+def is_qwen_audio_31_tts_model(model: str | None) -> bool:
+    """True for Qwen-Audio-3.1-TTS interactive models (e.g. qwen-audio-3.1-tts-flash)."""
+    normalized = str(model or "").strip().lower()
+    return "qwen-audio-3.1-tts" in normalized and not is_qwen_audio_tts_next_model(model)
 
 
 MINIMAX_VOICES = [
@@ -1055,25 +1160,39 @@ class TTSService:
     def _resolve_qwen_voice_for_model(self, voice: str, model_name: str) -> str:
         """Validate the voice against the model's voice family.
 
-        qwen-audio-3.0-tts-* models only accept the longan voice family, while
+        qwen-audio-3.*-tts-* models only accept the longan/3.1 voice family, while
         qwen3-tts-* models only accept the Cherry/Ono Anna family. Mixing them
         makes the DashScope SDK return None audio with no useful error, so we
         fail fast with an actionable message. Unknown (custom/cloned) voices are
         passed through untouched.
         """
-        if is_qwen_audio_tts_model(model_name):
+        if is_qwen_audio_tts_next_model(model_name):
             if any(v["name"] == voice for v in QWEN_FLASH_VOICES):
                 raise ValueError(
+                    f"音色 {voice} 属于 qwen3-tts 系列，与统一音频模型 {model_name} 不兼容。"
+                    f"请使用声景预设（如 {DEFAULT_QWEN_AUDIO_TTS_NEXT_VOICE}）或直接在文本中编写提示词与音效指令。"
+                )
+            return voice or DEFAULT_QWEN_AUDIO_TTS_NEXT_VOICE
+        if is_qwen_audio_tts_model(model_name):
+            if any(v["name"] == voice for v in QWEN_FLASH_VOICES):
+                target_default = (
+                    DEFAULT_QWEN_AUDIO_31_TTS_VOICE
+                    if is_qwen_audio_31_tts_model(model_name)
+                    else DEFAULT_QWEN_AUDIO_TTS_VOICE
+                )
+                raise ValueError(
                     f"音色 {voice} 属于 qwen3-tts 系列，与模型 {model_name} 不兼容。"
-                    f"qwen-audio-3.0-tts 系列请使用龙系列音色（如 {DEFAULT_QWEN_AUDIO_TTS_VOICE}），"
+                    f"qwen-audio-tts 系列请使用龙/精品系列音色（如 {target_default}），"
                     "或在模型版本中选择 qwen3-tts-flash。"
                 )
+            if is_qwen_audio_31_tts_model(model_name) and voice == "longanhuan_v3.6":
+                return DEFAULT_QWEN_AUDIO_31_TTS_VOICE
             return voice
-        if any(v["name"] == voice for v in QWEN_AUDIO_TTS_VOICES):
+        if any(v["name"] == voice for v in QWEN_AUDIO_TTS_VOICES) or any(v["name"] == voice for v in QWEN_AUDIO_31_TTS_VOICES) or any(v["name"] == voice for v in QWEN_AUDIO_TTS_NEXT_VOICES):
             raise ValueError(
-                f"音色 {voice} 属于 qwen-audio-3.0-tts 系列，与模型 {model_name} 不兼容。"
+                f"音色 {voice} 属于 qwen-audio-tts 系列，与模型 {model_name} 不兼容。"
                 "qwen3-tts 系列请使用 Cherry/Ono Anna 等音色，"
-                "或在模型版本中选择 qwen-audio-3.0-tts-flash。"
+                "或在模型版本中选择 qwen-audio-3.1-tts-flash。"
             )
         return voice
 
@@ -1108,6 +1227,75 @@ class TTSService:
                 "并检查 DashScope 配额与网络。"
             )
         self._atomic_write_bytes(path, audio)
+
+    async def _generate_qwen_tts_next_audio(
+        self,
+        text: str,
+        voice: str | None,
+        path: Path,
+        model: str | None = None,
+        references: list[dict[str, Any]] | None = None,
+    ) -> None:
+        api_key = self._dashscope_key()
+        if not api_key:
+            raise RuntimeError("DashScope API Key is not configured.")
+
+        # Construct prompt according to selected preset if not already formatted
+        prompt = text.strip()
+        if voice == "tts-next-narrator" and not prompt.startswith("[") and not prompt.lower().startswith("narrator"):
+            prompt = f"[旁白/叙事风格] {prompt}"
+        elif voice == "tts-next-story" and not prompt.startswith("[") and not prompt.lower().startswith("story"):
+            prompt = f"[生动故事场景，带环境音效] {prompt}"
+        elif voice == "tts-next-podcast" and not prompt.startswith("[") and "@voice" not in prompt:
+            prompt = f"[播客自然对谈风格] {prompt}"
+
+        payload: dict[str, Any] = {
+            "model": model or "qwen-audio-3.1-tts-next",
+            "input": {
+                "text_prompt": prompt,
+                "format": "wav",
+                "sample_rate": 48000,
+                "channels": 2,
+            },
+        }
+        if references:
+            payload["input"]["references"] = references
+
+        endpoint = "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(endpoint, json=payload, headers=headers)
+
+        if resp.status_code != 200:
+            err_detail = resp.text.strip()
+            raise RuntimeError(f"Qwen TTS-Next 合成失败 ({resp.status_code}): {err_detail}")
+
+        try:
+            res_data = resp.json()
+        except Exception as exc:
+            raise RuntimeError(f"Qwen TTS-Next 返回无效响应: {exc}") from exc
+
+        output = res_data.get("output", {})
+        audio_info = output.get("audio", {}) if isinstance(output, dict) else {}
+        audio_url = audio_info.get("url") if isinstance(audio_info, dict) else None
+        audio_b64 = audio_info.get("data") if isinstance(audio_info, dict) else None
+
+        if audio_url:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                dl_resp = await client.get(audio_url)
+                if dl_resp.status_code != 200:
+                    raise RuntimeError(f"Qwen TTS-Next 下载音频失败 ({dl_resp.status_code})")
+                self._atomic_write_bytes(path, dl_resp.content)
+        elif audio_b64:
+            import base64
+            self._atomic_write_bytes(path, base64.b64decode(audio_b64))
+        else:
+            req_id = res_data.get("request_id", "")
+            raise RuntimeError(f"Qwen TTS-Next 未返回有效音频 URL (request_id: {req_id})")
 
     async def _generate_minimax_audio(self, text: str, voice: str, path: Path, model: str | None = None) -> None:
         api_key, base_url = self._minimax_settings()
@@ -1347,6 +1535,10 @@ class TTSService:
             return TTS_ENGINE_QWEN_FLASH
         if any(v["name"] == voice for v in QWEN_AUDIO_TTS_VOICES):
             return TTS_ENGINE_QWEN_FLASH
+        if any(v["name"] == voice for v in QWEN_AUDIO_31_TTS_VOICES):
+            return TTS_ENGINE_QWEN_FLASH
+        if any(v["name"] == voice for v in QWEN_AUDIO_TTS_NEXT_VOICES):
+            return TTS_ENGINE_QWEN_FLASH
         # Check Doubao voices
         if is_doubao_voice(voice):
             return TTS_ENGINE_DOUBAO
@@ -1401,6 +1593,10 @@ class TTSService:
         elif normalized_engine == TTS_ENGINE_QWEN_FLASH:
             if voice:
                 selected_voice = voice
+            elif is_qwen_audio_tts_next_model(model):
+                selected_voice = DEFAULT_QWEN_AUDIO_TTS_NEXT_VOICE
+            elif is_qwen_audio_31_tts_model(model):
+                selected_voice = DEFAULT_QWEN_AUDIO_31_TTS_VOICE
             elif is_qwen_audio_tts_model(model):
                 selected_voice = DEFAULT_QWEN_AUDIO_TTS_VOICE
             else:
@@ -1445,7 +1641,10 @@ class TTSService:
         if normalized_engine == TTS_ENGINE_EDGE:
             await self._generate_edge_audio(cleaned, selected_voice, rate, path)
         elif normalized_engine == TTS_ENGINE_QWEN_FLASH:
-            await self._generate_qwen_flash_audio(cleaned, selected_voice, path, model=model)
+            if is_qwen_audio_tts_next_model(model):
+                await self._generate_qwen_tts_next_audio(cleaned, selected_voice, path, model=model)
+            else:
+                await self._generate_qwen_flash_audio(cleaned, selected_voice, path, model=model)
         elif normalized_engine == TTS_ENGINE_MINIMAX:
             await self._generate_minimax_audio(cleaned, selected_voice, path, model=model)
         elif normalized_engine == TTS_ENGINE_OPENAI:
@@ -1597,8 +1796,12 @@ class TTSService:
             voices = await self._fetch_gemini_voices()
             return self._filter_by_locale(voices, locale)
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
-            # The two Qwen TTS families use incompatible voice sets; when the
+            # The Qwen TTS families use incompatible voice sets; when the
             # caller tells us the model, return only voices that work with it.
+            if is_qwen_audio_tts_next_model(model):
+                return self._filter_by_locale(QWEN_AUDIO_TTS_NEXT_VOICES, locale)
+            if is_qwen_audio_31_tts_model(model):
+                return self._filter_by_locale(QWEN_AUDIO_31_TTS_VOICES, locale)
             if is_qwen_audio_tts_model(model):
                 return self._filter_by_locale(QWEN_AUDIO_TTS_VOICES, locale)
             return self._filter_by_locale(QWEN_FLASH_VOICES, locale)

@@ -35,19 +35,25 @@ QWEN_ASR_SYNC_MODEL = "qwen3-asr-flash-2026-02-10"
 # DashScope async (file-transcription) ASR. "链式" URL jobs are DashScope-only;
 # the selectable engine is which DashScope ASR model the async task runs.
 QWEN_ASR_ASYNC_MODEL = "qwen3-asr-flash-filetrans"
-QWEN_AUDIO_ASR_ASYNC_MODEL = "qwen-audio-3.0-asr-flash-filetrans"
+QWEN_AUDIO_30_ASR_ASYNC_MODEL = "qwen-audio-3.0-asr-flash-filetrans"
+QWEN_AUDIO_31_ASR_ASYNC_MODEL = "qwen-audio-3.1-asr-flash-filetrans"
+QWEN_AUDIO_ASR_ASYNC_MODEL = QWEN_AUDIO_31_ASR_ASYNC_MODEL
 ASYNC_MODEL_BY_PROVIDER = {
     "qwen-filetrans": QWEN_ASR_ASYNC_MODEL,
     "qwen-audio-filetrans": QWEN_AUDIO_ASR_ASYNC_MODEL,
+    "qwen-audio-3.1-filetrans": QWEN_AUDIO_31_ASR_ASYNC_MODEL,
+    "qwen-audio-3.0-filetrans": QWEN_AUDIO_30_ASR_ASYNC_MODEL,
 }
 QWEN_COMPATIBLE_CHAT_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 # Alternate specialized endpoint for direct ASR tasks
 QWEN_ASR_DIRECT_URL = "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription"
 
-# Qwen-Audio-3.0-ASR-Flash (Fun-ASR Flash) — multimodal-generation API.
+# Qwen-Audio ASR Flash — multimodal-generation API.
 # Supports word-level timestamps, instant hotwords (vocabulary) and language hints.
 # https://help.aliyun.com/zh/model-studio/non-real-time-speech-recognition-for-fun-asr-flash
-QWEN_AUDIO_ASR_MODEL = "qwen-audio-3.0-asr-flash"
+QWEN_AUDIO_30_ASR_MODEL = "qwen-audio-3.0-asr-flash"
+QWEN_AUDIO_31_ASR_MODEL = "qwen-audio-3.1-asr-flash"
+QWEN_AUDIO_ASR_MODEL = QWEN_AUDIO_31_ASR_MODEL
 QWEN_AUDIO_ASR_PATH = "/services/aigc/multimodal-generation/generation"
 # Base64 data-URI uploads are limited to 10MB by the API.
 QWEN_AUDIO_ASR_MAX_BASE64_BYTES = 10 * 1024 * 1024
@@ -914,15 +920,30 @@ class TranscriptionService:
                     raise ValueError("OpenAI API key not configured.")
                 result = await self._transcribe_with_openai_whisper(path, api_key)
                 provider = "openai"
-            elif provider in {"dashscope", "qwen", "qwen-audio", "qwen-audio-asr", "funasr", "fun-asr"}:
+            elif provider in {
+                "dashscope",
+                "qwen",
+                "qwen-audio",
+                "qwen-audio-asr",
+                "funasr",
+                "fun-asr",
+                "qwen-audio-3.1-asr-flash",
+                "qwen-audio-3.0-asr-flash",
+            }:
                 api_key = self._dashscope_key()
                 if not api_key:
                     raise ValueError("DashScope API key not configured.")
+                asr_model = (
+                    provider
+                    if provider in {"qwen-audio-3.1-asr-flash", "qwen-audio-3.0-asr-flash"}
+                    else QWEN_AUDIO_ASR_MODEL
+                )
                 result = await self._transcribe_with_qwen_audio_asr(
                     path,
                     api_key,
                     language_hints=language_hints,
                     vocabulary=vocabulary,
+                    model=asr_model,
                 )
                 provider = "dashscope"
             elif provider in {"qwen-legacy", "qwen3-asr"}:
@@ -1121,8 +1142,9 @@ class TranscriptionService:
         *,
         language_hints: list[str] | None = None,
         vocabulary: dict[str, int] | None = None,
+        model: str = QWEN_AUDIO_ASR_MODEL,
     ) -> dict:
-        """Transcribe with Qwen-Audio-3.0-ASR-Flash via the multimodal-generation API.
+        """Transcribe with Qwen-Audio ASR Flash via the multimodal-generation API.
 
         Returns {"text": str, "duration_seconds": float | None, "words": list[dict] | None}.
         Supports instant hotwords (vocabulary, weight 1-5 or 50) and up to 4 language hints.
@@ -1147,7 +1169,7 @@ class TranscriptionService:
             "X-DashScope-SSE": "disable",
         }
         payload = {
-            "model": QWEN_AUDIO_ASR_MODEL,
+            "model": model,
             "input": {
                 "messages": [
                     {
@@ -2173,8 +2195,12 @@ class TranscriptionService:
             "Content-Type": "application/json",
             "X-DashScope-Async": "enable",
         }
+        model_to_use = (
+            ASYNC_MODEL_BY_PROVIDER.get(provider or "")
+            or (provider if provider and "filetrans" in provider else QWEN_ASR_ASYNC_MODEL)
+        )
         payload = {
-            "model": ASYNC_MODEL_BY_PROVIDER.get(provider or "", QWEN_ASR_ASYNC_MODEL),
+            "model": model_to_use,
             "input": {"file_url": normalized_url},
             "parameters": {
                 "channel_id": [0],

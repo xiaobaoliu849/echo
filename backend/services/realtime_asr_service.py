@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 GEMINI_TRANSCRIBE_LIVE_MODEL = "gemini-3.5-transcribe-live"
 QWEN_AUDIO_ASR_STREAMING_MODEL = "qwen-audio-3.0-asr-flash-streaming"
+QWEN_AUDIO_31_ASR_FLASH_MESSAGE = "qwen-audio-3.1-asr-flash-message"
 FUN_ASR_REALTIME_MODEL = "fun-asr-realtime"
 DEFAULT_STREAMING_WS_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
 # language_hints accepts at most 4 codes for this model family.
@@ -43,6 +44,7 @@ TASK_STARTED_TIMEOUT = 15.0
 # max language_hints each accepts.
 STREAMING_MODEL_LANGUAGE_HINT_CAPS = {
     GEMINI_TRANSCRIBE_LIVE_MODEL: 4,
+    QWEN_AUDIO_31_ASR_FLASH_MESSAGE: 4,
     QWEN_AUDIO_ASR_STREAMING_MODEL: 4,
     FUN_ASR_REALTIME_MODEL: 1,
 }

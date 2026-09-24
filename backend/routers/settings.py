@@ -229,6 +229,8 @@ GOOGLE_MODEL_LIST_SUPPLEMENTS = [
 ]
 DASHSCOPE_MODEL_LIST_SUPPLEMENTS = [
     # TTS synthesis models (current generation only)
+    "qwen-audio-3.1-tts-flash",
+    "qwen-audio-3.1-tts-next",
     "qwen-audio-3.0-tts-plus",
     "qwen-audio-3.0-tts-flash",
     # Qwen-Audio realtime conversation: 3.1 replaces 3.0, which is retired from

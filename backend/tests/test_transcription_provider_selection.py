@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, patch
 from routers.transcription import _parse_realtime_config
 from services.realtime_asr_service import (
     FUN_ASR_REALTIME_MODEL,
+    QWEN_AUDIO_31_ASR_FLASH_MESSAGE,
     QWEN_AUDIO_ASR_STREAMING_MODEL,
     build_streaming_asr_session,
 )
@@ -178,6 +179,7 @@ class AsyncModelSelectionTests(unittest.IsolatedAsyncioTestCase):
     def test_provider_model_mapping(self):
         self.assertEqual(ASYNC_MODEL_BY_PROVIDER["qwen-filetrans"], QWEN_ASR_ASYNC_MODEL)
         self.assertEqual(ASYNC_MODEL_BY_PROVIDER["qwen-audio-filetrans"], QWEN_AUDIO_ASR_ASYNC_MODEL)
+        self.assertEqual(QWEN_AUDIO_ASR_ASYNC_MODEL, "qwen-audio-3.1-asr-flash-filetrans")
         self.assertNotEqual(QWEN_ASR_ASYNC_MODEL, QWEN_AUDIO_ASR_ASYNC_MODEL)
 
     async def _submit_model(self, provider):
@@ -191,6 +193,14 @@ class AsyncModelSelectionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_maps_new_filetrans_model(self):
         self.assertEqual(await self._submit_model("qwen-audio-filetrans"), QWEN_AUDIO_ASR_ASYNC_MODEL)
+        self.assertEqual(
+            await self._submit_model("qwen-audio-3.1-asr-flash-filetrans"),
+            "qwen-audio-3.1-asr-flash-filetrans",
+        )
+        self.assertEqual(
+            await self._submit_model("qwen-audio-3.0-asr-flash-filetrans"),
+            "qwen-audio-3.0-asr-flash-filetrans",
+        )
 
     async def test_submit_maps_legacy_filetrans_model(self):
         self.assertEqual(await self._submit_model("qwen-filetrans"), QWEN_ASR_ASYNC_MODEL)
@@ -203,6 +213,8 @@ class RealtimeModelTests(unittest.TestCase):
     def test_parse_config_accepts_valid_streaming_model(self):
         config = _parse_realtime_config({"model": FUN_ASR_REALTIME_MODEL})
         self.assertEqual(config["model"], FUN_ASR_REALTIME_MODEL)
+        config_31 = _parse_realtime_config({"model": QWEN_AUDIO_31_ASR_FLASH_MESSAGE})
+        self.assertEqual(config_31["model"], QWEN_AUDIO_31_ASR_FLASH_MESSAGE)
 
     def test_parse_config_rejects_unknown_model(self):
         self.assertNotIn("model", _parse_realtime_config({"model": "not-a-model"}))
@@ -210,6 +222,10 @@ class RealtimeModelTests(unittest.TestCase):
     def test_build_session_defaults_to_qwen_streaming(self):
         session = build_streaming_asr_session(_Cfg())
         self.assertEqual(session._model, QWEN_AUDIO_ASR_STREAMING_MODEL)
+
+    def test_build_session_with_qwen_31_message_model(self):
+        session = build_streaming_asr_session(_Cfg(), model=QWEN_AUDIO_31_ASR_FLASH_MESSAGE)
+        self.assertEqual(session._model, QWEN_AUDIO_31_ASR_FLASH_MESSAGE)
 
     def test_build_session_caps_hints_for_fun_asr(self):
         session = build_streaming_asr_session(
