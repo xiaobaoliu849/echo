@@ -145,6 +145,8 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
         }
       } catch (err) {
         if (!disposed) {
+          setVoices([]);
+          setVoice("");
           setTtsError(formatErrorMessage(err, t("未知错误", "Unknown error.")));
         }
       } finally {
@@ -180,6 +182,8 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
         }
       } catch (err) {
         if (!disposed) {
+          setVoicesB([]);
+          setVoiceB("");
           setTtsError(formatErrorMessage(err, t("未知错误", "Unknown error.")));
         }
       } finally {
@@ -316,6 +320,9 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
   function onEngineChange(engine: TtsEngine) {
     setTtsEngine(engine);
     setTtsModel(DEFAULT_ENGINE_MODELS[engine]?.defaultModel || "");
+    setLoadingVoices(true);
+    setVoices([]);
+    setVoice("");
     setTtsError("");
     setTtsInfo("");
     if (audioUrl.startsWith("blob:")) {
@@ -328,11 +335,36 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
   function onEngineBChange(engine: TtsEngine) {
     setTtsEngineB(engine);
     setTtsModelB(DEFAULT_ENGINE_MODELS[engine]?.defaultModel || "");
+    setLoadingVoicesB(true);
+    setVoicesB([]);
+    setVoiceB("");
     setTtsError("");
     setTtsInfo("");
     if (audioUrl.startsWith("blob:")) {
       URL.revokeObjectURL(audioUrl);
     }
+    setAudioBlob(null);
+    setAudioUrl("");
+  }
+
+  function onModelChange(model: string) {
+    setTtsModel(model);
+    setLoadingVoices(true);
+    setVoices([]);
+    setVoice("");
+    setTtsError("");
+    setTtsInfo("");
+    setAudioBlob(null);
+    setAudioUrl("");
+  }
+
+  function onModelBChange(model: string) {
+    setTtsModelB(model);
+    setLoadingVoicesB(true);
+    setVoicesB([]);
+    setVoiceB("");
+    setTtsError("");
+    setTtsInfo("");
     setAudioBlob(null);
     setAudioUrl("");
   }
@@ -456,8 +488,8 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     onTtsModeChange,
     onEngineChange,
     onEngineBChange,
-    onModelChange: setTtsModel,
-    onModelBChange: setTtsModelB,
+    onModelChange,
+    onModelBChange,
     onTextChange,
     onDialogueTextChange,
     onPdfFileChange,

@@ -351,7 +351,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
@@ -945,6 +946,31 @@ button.vsRTWarningBtn:hover {
   white-space: nowrap;
 }
 
+.vsTtsFieldEngine .vsSelectWrapper,
+.vsTtsFieldModel .vsSelectWrapper {
+  width: clamp(150px, 13vw, 210px);
+  min-width: 0;
+}
+
+.vsTtsFieldEngine .vsSelect,
+.vsTtsFieldModel .vsSelect,
+.vsTtsFieldVoice .vsSelect,
+.vsTtsDialogueBar .vsSelect {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsTtsFieldVoice {
+  flex: 1 1 230px;
+  max-width: 360px;
+}
+
 .vsSelectModern {
   height: 32px;
   padding: 4px 10px;
@@ -966,9 +992,8 @@ button.vsRTWarningBtn:hover {
   display: flex;
   align-items: center;
   position: relative;
-  min-width: 200px;
-  max-width: 360px;
-  flex: 1;
+  width: 100%;
+  min-width: 0;
 }
 
 .vsVoiceCapsuleAvatar {
@@ -982,6 +1007,32 @@ button.vsRTWarningBtn:hover {
 .vsSelectVoice {
   width: 100%;
   padding-left: 28px !important;
+}
+
+@media (max-width: 1100px) {
+  .vsTtsFieldVoice {
+    max-width: none;
+  }
+
+  .vsTtsBarRight {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  .vsTtsPrimaryHeader,
+  .vsTtsStudioBar {
+    flex-wrap: wrap;
+    padding: 10px 14px;
+  }
+
+  .vsTtsBarLeft {
+    flex-basis: 100%;
+  }
+
+  .vsTtsBarRight {
+    margin-left: auto;
+  }
 }
 
 .vsRateCapsule {
@@ -1087,9 +1138,9 @@ button.vsRTWarningBtn:hover {
   padding: 8px 0;
 }
 
-/* Engine select wrapper — fixed width so the select fills it via width:100% */
+/* Leave room for provider names beside each speaker's voice. */
 .vsDialogueEngineWrap {
-  width: 110px;
+  width: 150px;
   flex-shrink: 0;
 }
 

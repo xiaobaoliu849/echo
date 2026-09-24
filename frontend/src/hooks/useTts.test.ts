@@ -1,5 +1,5 @@
-import { renderHook, act } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { renderHook, act, waitFor } from '@testing-library/react';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import useTts from './useTts';
 import { createFormatErrorMessageStub } from '../test/factories';
 import { fetchSpeakAudio, fetchVoices, extractPdfText, polishPdfText, VOICE_CATALOG_CHANGED_EVENT } from '../api';
@@ -13,6 +13,10 @@ vi.mock('../api', () => ({
 }));
 
 describe('useTts', () => {
+    beforeEach(() => {
+        vi.mocked(fetchVoices).mockReset().mockResolvedValue({ count: 0, voices: [] });
+    });
+
     it('supports switching to dialogue mode', () => {
         const formatErrorMessage = createFormatErrorMessageStub();
         const { result } = renderHook(() => useTts({ defaultText: 'Initial text', formatErrorMessage }));
@@ -49,6 +53,43 @@ describe('useTts', () => {
         });
 
         expect(result.current.ttsEngine).toBe('qwen_flash');
+    });
+
+    it('clears stale voices while provider and model catalogs load', async () => {
+        const edgeVoice = { name: 'edge-voice', short_name: 'Edge', locale: 'en-US', gender: 'Female' };
+        const cartesiaVoice = { name: 'cartesia-voice', short_name: 'Cartesia', locale: 'en-US', gender: 'Female' };
+        const nextVoice = { name: 'next-voice', short_name: 'Next', locale: 'en-US', gender: 'Male' };
+        let resolveCartesia!: (value: { count: number; voices: typeof cartesiaVoice[] }) => void;
+        let resolveNext!: (value: { count: number; voices: typeof nextVoice[] }) => void;
+        const cartesiaRequest = new Promise<{ count: number; voices: typeof cartesiaVoice[] }>((resolve) => { resolveCartesia = resolve; });
+        const nextRequest = new Promise<{ count: number; voices: typeof nextVoice[] }>((resolve) => { resolveNext = resolve; });
+        vi.mocked(fetchVoices).mockImplementation((_locale, engine, model) => {
+            if (engine === 'cartesia') return model === 'sonic-3' ? nextRequest : cartesiaRequest;
+            return Promise.resolve({ count: 1, voices: [edgeVoice] });
+        });
+
+        const formatErrorMessage = createFormatErrorMessageStub();
+        const { result } = renderHook(() => useTts({ defaultText: 'Sample', formatErrorMessage }));
+        await waitFor(() => expect(result.current.voice).toBe('edge-voice'));
+
+        act(() => result.current.onEngineChange('cartesia'));
+        expect(result.current.loadingVoices).toBe(true);
+        expect(result.current.voice).toBe('');
+        expect(result.current.voiceOptions).toEqual([]);
+        expect(result.current.ttsModel).toBe('sonic-preview');
+
+        await act(async () => resolveCartesia({ count: 1, voices: [cartesiaVoice] }));
+        expect(result.current.loadingVoices).toBe(false);
+        expect(result.current.voice).toBe('cartesia-voice');
+
+        act(() => result.current.onModelChange('sonic-3'));
+        expect(result.current.loadingVoices).toBe(true);
+        expect(result.current.voice).toBe('');
+        expect(result.current.voiceOptions).toEqual([]);
+
+        await act(async () => resolveNext({ count: 1, voices: [nextVoice] }));
+        expect(result.current.loadingVoices).toBe(false);
+        expect(result.current.voice).toBe('next-voice');
     });
 
     it('reloads and exposes a newly created Gemini voice when the voice catalog changes', async () => {

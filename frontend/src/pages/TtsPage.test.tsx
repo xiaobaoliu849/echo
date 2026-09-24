@@ -34,6 +34,22 @@ describe('TtsPage', () => {
         expect(screen.getByText('Xiaoxiao (zh-CN)')).toBeInTheDocument();
     });
 
+    it('keeps voice loading feedback inside the disabled selector', () => {
+        render(
+            <TtsPage
+                tts={createTtsController({ loadingVoices: true })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const voiceSelect = screen.getByRole('combobox', { name: '音色' });
+        expect(voiceSelect).toBeDisabled();
+        expect(voiceSelect).toHaveValue('');
+        expect(voiceSelect).toHaveTextContent('正在加载音色…');
+        expect(voiceSelect).not.toHaveTextContent('Xiaoxiao');
+        expect(document.querySelector('.vsSelectLoading')).toBeNull();
+    });
+
     it('renders text content in textarea', () => {
         render(
             <TtsPage

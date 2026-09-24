@@ -82,6 +82,12 @@ function truncate(text: string, max: number): string {
   return trimmed.slice(0, max) + "…";
 }
 
+function voicePlaceholder(loading: boolean, count: number, t: (zh: string, en: string) => string) {
+  if (loading) return t("正在加载音色…", "Loading voices…");
+  if (count === 0) return t("暂无可用音色", "No voices available");
+  return t("选择音色…", "Select voice…");
+}
+
 function formatHistoryVoiceName(voice: string): string {
   if (!voice) return "";
   const parenMatch = voice.match(/\(([^)]+)\)/);
@@ -656,18 +662,18 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                   <span className="vsVoiceCapsuleAvatar" aria-hidden="true">🎙️</span>
                   <select
                     className="vsSelect vsSelectModern vsSelectVoice"
-                    value={tts.voice}
+                    value={tts.loadingVoices ? "" : tts.voice}
                     onChange={(e) => tts.onVoiceChange(e.target.value)}
                     disabled={tts.loadingVoices || tts.voiceOptions.length === 0}
+                    aria-label={t("音色", "Voice")}
                   >
-                    <option value="" disabled>{t("-- 请选择音色 --", "-- Select a voice --")}</option>
-                    {tts.voiceOptions.map((item) => (
+                    <option value="" disabled>{voicePlaceholder(tts.loadingVoices, tts.voiceOptions.length, t)}</option>
+                    {!tts.loadingVoices && tts.voiceOptions.map((item) => (
                       <option key={item.value} value={item.value}>
                         {item.label}
                       </option>
                     ))}
                   </select>
-                  {tts.loadingVoices && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
                 </div>
               </div>
             </div>
@@ -709,13 +715,13 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
               <div className="vsDialogueVoiceWrap">
                 <select
                   className="vsSelect vsSelectModern"
-                  value={tts.voice}
+                  value={tts.loadingVoices ? "" : tts.voice}
                   onChange={(e) => tts.onVoiceChange(e.target.value)}
                   disabled={tts.loadingVoices || tts.voiceOptionsCompact.length === 0}
                   title={t("角色 A 音色", "Speaker A Voice")}
                 >
-                  <option value="" disabled>{t("选择音色…", "Select voice…")}</option>
-                  {tts.voiceOptionsCompact.map((item) => (
+                  <option value="" disabled>{voicePlaceholder(tts.loadingVoices, tts.voiceOptionsCompact.length, t)}</option>
+                  {!tts.loadingVoices && tts.voiceOptionsCompact.map((item) => (
                     <option key={item.value} value={item.value}>{item.label}</option>
                   ))}
                 </select>
@@ -742,13 +748,13 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
               <div className="vsDialogueVoiceWrap">
                 <select
                   className="vsSelect vsSelectModern"
-                  value={tts.voiceB}
+                  value={tts.loadingVoicesB ? "" : tts.voiceB}
                   onChange={(e) => tts.onVoiceBChange?.(e.target.value)}
                   disabled={tts.loadingVoicesB || tts.voiceOptionsBCompact.length === 0}
                   title={t("角色 B 音色", "Speaker B Voice")}
                 >
-                  <option value="" disabled>{t("选择音色…", "Select voice…")}</option>
-                  {tts.voiceOptionsBCompact.map((item) => (
+                  <option value="" disabled>{voicePlaceholder(tts.loadingVoicesB, tts.voiceOptionsBCompact.length, t)}</option>
+                  {!tts.loadingVoicesB && tts.voiceOptionsBCompact.map((item) => (
                     <option key={item.value} value={item.value}>{item.label}</option>
                   ))}
                 </select>
