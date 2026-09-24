@@ -343,7 +343,7 @@ async def transcribe_audio(
         default=None,
         description=(
             "ASR provider to use: deepgram, google/gemini (Gemini 3.5 Transcribe), openai/whisper, assemblyai, doubao, "
-            "dashscope/qwen (Qwen-Audio-3.0-ASR-Flash), xiaomi/mimo, "
+            "dashscope/qwen (Qwen-Audio-3.1-ASR-Flash / 3.0), xiaomi/mimo, "
             "qwen-legacy (qwen3-asr-flash). Auto-selects if not specified."
         ),
     ),
@@ -1355,7 +1355,7 @@ REALTIME_IDLE_TIMEOUT = 120.0
 
 @router.websocket("/realtime") # type: ignore
 async def transcription_realtime_ws(websocket: WebSocket) -> None:
-    """Proxy browser mic PCM (16kHz mono) to Qwen-Audio-3.0-ASR-Flash-Streaming.
+    """Proxy browser mic PCM (16kHz mono) to Qwen-Audio ASR Streaming (3.1 Message / 3.0 Streaming).
 
     Client protocol:
       1. (optional) text JSON {"type": "config", "language_hints": [...], "vocabulary": {...}}

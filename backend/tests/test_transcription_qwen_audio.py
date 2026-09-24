@@ -17,6 +17,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from services.transcription_service import (
+    QWEN_AUDIO_30_ASR_MODEL,
+    QWEN_AUDIO_31_ASR_MODEL,
     QWEN_AUDIO_ASR_MAX_BASE64_BYTES,
     QWEN_AUDIO_ASR_MODEL,
     QWEN_AUDIO_ASR_PATH,
@@ -237,6 +239,11 @@ class ProviderRoutingTests(unittest.IsolatedAsyncioTestCase):
             setattr(service, f"_{name}_key", lambda k=key: k)
         return service
 
+    def test_default_qwen_audio_asr_model_is_31(self):
+        self.assertEqual(QWEN_AUDIO_ASR_MODEL, "qwen-audio-3.1-asr-flash")
+        self.assertEqual(QWEN_AUDIO_31_ASR_MODEL, "qwen-audio-3.1-asr-flash")
+        self.assertEqual(QWEN_AUDIO_30_ASR_MODEL, "qwen-audio-3.0-asr-flash")
+
     async def test_qwen_aliases_route_to_qwen_audio_asr(self):
         for alias in ("dashscope", "qwen", "qwen-audio", "qwen-audio-asr", "funasr", "fun-asr"):
             service = self._service_with_keys({"dashscope": "sk"})
@@ -248,6 +255,29 @@ class ProviderRoutingTests(unittest.IsolatedAsyncioTestCase):
                 result = await service.transcribe_file("a.wav", provider=alias)
             self.assertEqual(result["text"], "ok", alias)
             service._transcribe_with_qwen_audio_asr.assert_awaited_once()
+
+    async def test_qwen_audio_31_and_30_specific_routing(self):
+        service = self._service_with_keys({"dashscope": "sk"})
+        service._transcribe_with_qwen_audio_asr = AsyncMock(return_value={"text": "ok31", "duration_seconds": None, "words": None})
+        with (
+            patch("services.transcription_service.Path.is_file", return_value=True),
+            patch("services.transcription_service.Path.stat", return_value=SimpleNamespace(st_size=10)),
+        ):
+            res31 = await service.transcribe_file("a.wav", provider="qwen-audio-3.1-asr-flash")
+        self.assertEqual(res31["text"], "ok31")
+        _, kwargs31 = service._transcribe_with_qwen_audio_asr.call_args
+        self.assertEqual(kwargs31.get("model"), "qwen-audio-3.1-asr-flash")
+
+        service._transcribe_with_qwen_audio_asr.reset_mock()
+        service._transcribe_with_qwen_audio_asr.return_value = {"text": "ok30", "duration_seconds": None, "words": None}
+        with (
+            patch("services.transcription_service.Path.is_file", return_value=True),
+            patch("services.transcription_service.Path.stat", return_value=SimpleNamespace(st_size=10)),
+        ):
+            res30 = await service.transcribe_file("a.wav", provider="qwen-audio-3.0-asr-flash")
+        self.assertEqual(res30["text"], "ok30")
+        _, kwargs30 = service._transcribe_with_qwen_audio_asr.call_args
+        self.assertEqual(kwargs30.get("model"), "qwen-audio-3.0-asr-flash")
 
     async def test_qwen_legacy_routes_to_compatible_mode(self):
         service = self._service_with_keys({"dashscope": "sk"})

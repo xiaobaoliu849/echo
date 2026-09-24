@@ -19,6 +19,7 @@ from routers.transcription import _parse_realtime_config, transcription_realtime
 from services.realtime_asr_service import (
     GEMINI_TRANSCRIBE_LIVE_MODEL,
     GoogleStreamingAsrSession,
+    QWEN_AUDIO_31_ASR_FLASH_MESSAGE,
     QWEN_AUDIO_ASR_STREAMING_MODEL,
     QwenAudioStreamingAsrSession,
     RealtimeAsrError,
@@ -250,6 +251,8 @@ class ParseRealtimeConfigTests(unittest.TestCase):
     def test_model_selection_in_config(self):
         config = _parse_realtime_config({"model": GEMINI_TRANSCRIBE_LIVE_MODEL})
         self.assertEqual(config.get("model"), GEMINI_TRANSCRIBE_LIVE_MODEL)
+        config_qwen31 = _parse_realtime_config({"model": QWEN_AUDIO_31_ASR_FLASH_MESSAGE})
+        self.assertEqual(config_qwen31.get("model"), QWEN_AUDIO_31_ASR_FLASH_MESSAGE)
         config_qwen = _parse_realtime_config({"model": QWEN_AUDIO_ASR_STREAMING_MODEL})
         self.assertEqual(config_qwen.get("model"), QWEN_AUDIO_ASR_STREAMING_MODEL)
 
@@ -382,6 +385,10 @@ class BuildStreamingAsrSessionTests(unittest.TestCase):
         self.assertIsInstance(session, QwenAudioStreamingAsrSession)
         self.assertEqual(session._api_key, "dash-key")
         self.assertEqual(session._model, QWEN_AUDIO_ASR_STREAMING_MODEL)
+
+        session31 = build_streaming_asr_session(cfg, model=QWEN_AUDIO_31_ASR_FLASH_MESSAGE)
+        self.assertIsInstance(session31, QwenAudioStreamingAsrSession)
+        self.assertEqual(session31._model, QWEN_AUDIO_31_ASR_FLASH_MESSAGE)
 
 
 class _FakeClientWs:

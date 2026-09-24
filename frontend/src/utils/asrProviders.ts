@@ -39,8 +39,8 @@ export const ASR_ENGINES: AsrEngine[] = [
   {
     id: "dashscope",
     group: "timestamps",
-    zh: "Qwen-Audio 3.0 ASR Flash（阿里云）",
-    en: "Qwen-Audio 3.0 ASR Flash (Alibaba Cloud)",
+    zh: "Qwen-Audio 3.1 ASR Flash（阿里云）",
+    en: "Qwen-Audio 3.1 ASR Flash (Alibaba Cloud)",
     noteZh: "字级时间戳，可导出精确字幕；支持即时热词与多语种混合识别。中文场景首选。",
     noteEn: "Word-level timestamps for precise subtitles; instant hotwords and mixed-language. Best for Chinese.",
   },
@@ -115,17 +115,17 @@ export type AsyncAsrModel = {
 export const ASYNC_ASR_MODELS: AsyncAsrModel[] = [
   {
     id: "qwen-audio-filetrans",
-    zh: "Qwen-Audio 3.0 ASR Flash Filetrans（新）",
-    en: "Qwen-Audio 3.0 ASR Flash Filetrans (New)",
+    zh: "Qwen-Audio 3.1 ASR Flash Filetrans（推荐）",
+    en: "Qwen-Audio 3.1 ASR Flash Filetrans (Recommended)",
     noteZh: "新一代离线文件转写模型，含字级时间戳，识别更准。",
     noteEn: "New-generation offline file-transcription model with word timestamps.",
   },
   {
     id: "qwen-filetrans",
-    zh: "Qwen3 ASR Flash Filetrans（默认）",
-    en: "Qwen3 ASR Flash Filetrans (Default)",
-    noteZh: "当前默认的离线文件转写模型，含字级时间戳。",
-    noteEn: "Current default offline file-transcription model with word timestamps.",
+    zh: "Qwen3 ASR Flash Filetrans（经典）",
+    en: "Qwen3 ASR Flash Filetrans (Classic)",
+    noteZh: "经典离线文件转写模型，含字级时间戳。",
+    noteEn: "Classic offline file-transcription model with word timestamps.",
   },
 ];
 
@@ -147,11 +147,18 @@ export const REALTIME_ASR_MODELS: RealtimeAsrModel[] = [
     noteEn: "Google's latest low-latency streaming transcription with 85+ languages and smart formatting.",
   },
   {
+    id: "qwen-audio-3.1-asr-flash-message",
+    zh: "Qwen-Audio 3.1 ASR Flash Message（推荐）",
+    en: "Qwen-Audio 3.1 ASR Flash Message (Recommended)",
+    noteZh: "阿里云最新短语音与交互流式识别，极低延迟，支持即时热词与最多 4 个语种提示。中文场景首选。",
+    noteEn: "Alibaba's latest interactive streaming ASR with low latency, instant hotwords, and up to 4 language hints. Best for Chinese.",
+  },
+  {
     id: "qwen-audio-3.0-asr-flash-streaming",
     zh: "Qwen-Audio 3.0 ASR Streaming",
     en: "Qwen-Audio 3.0 ASR Streaming",
-    noteZh: "阿里云实时流式识别，支持即时热词与最多 4 个语种提示。中文场景推荐。",
-    noteEn: "Realtime streaming with instant hotwords and up to 4 language hints. Recommended for Chinese.",
+    noteZh: "阿里云实时流式识别，支持即时热词与最多 4 个语种提示。",
+    noteEn: "Realtime streaming with instant hotwords and up to 4 language hints.",
   },
   {
     id: "fun-asr-realtime",
@@ -196,6 +203,7 @@ export const ASR_ENGINE_PROVIDER_MAP: Record<string, { providerName: string; key
   "qwen-audio-filetrans": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
   "qwen-filetrans": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
   "gemini-3.5-transcribe-live": { providerName: "Google", keyField: "google_api_key", labelZh: "Google Gemini", labelEn: "Google Gemini" },
+  "qwen-audio-3.1-asr-flash-message": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
   "qwen-audio-3.0-asr-flash-streaming": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
   "fun-asr-realtime": { providerName: "DashScope", keyField: "dashscope_api_key", labelZh: "阿里云 DashScope", labelEn: "Alibaba DashScope" },
 };
