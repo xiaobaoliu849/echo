@@ -10,7 +10,7 @@ import {
 import { createInlineTranslator, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 
-export type VoiceProviderId = "qwen" | "xiaomi" | "gpt_sovits" | "elevenlabs";
+export type VoiceProviderId = "qwen" | "xiaomi" | "gpt_sovits" | "elevenlabs" | "gemini";
 
 type Options = {
   formatErrorMessage: FormatErrorMessage;
@@ -18,6 +18,7 @@ type Options = {
   dashscopeApiKeyConfigured?: boolean;
   xiaomiApiKeyConfigured?: boolean;
   elevenlabsApiKeyConfigured?: boolean;
+  googleApiKeyConfigured?: boolean;
 };
 
 const CLONE_ACCEPTED_TYPES = [
@@ -48,6 +49,7 @@ export default function useVoiceManagement({
   dashscopeApiKeyConfigured = false,
   xiaomiApiKeyConfigured = false,
   elevenlabsApiKeyConfigured = false,
+  googleApiKeyConfigured = false,
 }: Options) {
   const [activeProvider, setActiveProvider] = useState<VoiceProviderId>("qwen");
   const t = createInlineTranslator(language);
@@ -117,13 +119,19 @@ export default function useVoiceManagement({
   function isProviderKeyConfigured(provider: VoiceProviderId): boolean {
     if (provider === "gpt_sovits") return true;
     if (provider === "elevenlabs") return elevenlabsApiKeyConfigured;
+    if (provider === "gemini") return googleApiKeyConfigured;
     return provider === "xiaomi" ? xiaomiApiKeyConfigured : dashscopeApiKeyConfigured;
   }
 
   function setMissingKeyError(voiceType: VoiceType) {
     const provider = voiceType === "voice_design" ? voiceProvider : cloneProvider;
     const message =
-      provider === "xiaomi"
+      provider === "gemini"
+        ? t(
+            "请先在设置中配置 Google API Key，再使用音色设计/克隆。",
+            "Configure the Google API Key in Settings before using voice design/clone."
+          )
+        : provider === "xiaomi"
         ? t(
             "请先在设置中配置小米 API Key，再使用音色设计/克隆。",
             "Configure the Xiaomi API Key in Settings before using voice design/clone."

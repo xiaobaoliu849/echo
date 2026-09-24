@@ -231,6 +231,7 @@ export default function App() {
     dashscopeApiKeyConfigured: settings.dashscopeApiKeyConfigured,
     xiaomiApiKeyConfigured: settings.xiaomiApiKeyConfigured,
     elevenlabsApiKeyConfigured: settings.elevenlabsApiKeyConfigured,
+    googleApiKeyConfigured: settings.googleApiKeyConfigured,
   });
   const { errorRuntimeContext } = settings;
 

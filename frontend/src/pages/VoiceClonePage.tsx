@@ -127,6 +127,7 @@ export default function VoiceClonePage({ clone, errorRuntimeContext, voiceProvid
                   style={{ height: "40px", fontSize: "14px" }}
                 >
                   <option value="qwen">{t("阿里 DashScope (Qwen)", "Alibaba DashScope (Qwen)")}</option>
+                  <option value="gemini">{t("Google Gemini (Gemini 3.8)", "Google Gemini (Gemini 3.8)")}</option>
                   <option value="xiaomi">{t("小米 MiMo", "Xiaomi MiMo")}</option>
                   <option value="gpt_sovits">{t("GPT-SoVITS (本地 API)", "GPT-SoVITS (Local API)")}</option>
                   <option value="elevenlabs">{t("ElevenLabs 克隆", "ElevenLabs Clone")}</option>

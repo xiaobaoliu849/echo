@@ -293,6 +293,11 @@ export default function useSettings({ formatErrorMessage }: Options) {
     return Boolean(trimOrEmpty(String(apiKeys.elevenlabs_api_key || "")));
   }, [settingsData]);
 
+  const googleApiKeyConfigured = useMemo(() => {
+    const apiKeys = settingsData?.api_keys || {};
+    return Boolean(trimOrEmpty(String(apiKeys.google_api_key || "")));
+  }, [settingsData]);
+
   const providerModelCatalog = useMemo<ProviderModelCatalog>(() => {
     if (!settingsData) {
       return {};
@@ -1035,6 +1040,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
     dashscopeApiKeyConfigured,
     xiaomiApiKeyConfigured,
     elevenlabsApiKeyConfigured,
+    googleApiKeyConfigured,
     providerModelCatalog,
     memorySection,
     transcriptionSection,

@@ -126,6 +126,7 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
                   style={{ height: "40px", fontSize: "14px" }}
                 >
                   <option value="qwen">{t("阿里 DashScope (Qwen)", "Alibaba DashScope (Qwen)")}</option>
+                  <option value="gemini">{t("Google Gemini (Gemini 3.8)", "Google Gemini (Gemini 3.8)")}</option>
                   <option value="xiaomi">{t("小米 MiMo", "Xiaomi MiMo")}</option>
                 </select>
               </label>

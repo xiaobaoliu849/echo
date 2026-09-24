@@ -129,4 +129,23 @@ describe("useVoiceManagement", () => {
 
     expect(result.current.design.designError).toContain("至少 10 个字");
   });
+
+  it("fetches Gemini custom voices when Google API key is configured and provider selected", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() =>
+      useVoiceManagement({
+        formatErrorMessage,
+        googleApiKeyConfigured: true,
+      })
+    );
+
+    act(() => {
+      result.current.setVoiceProvider("gemini");
+    });
+
+    await act(async () => {});
+
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_design", "gemini");
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "gemini");
+  });
 });

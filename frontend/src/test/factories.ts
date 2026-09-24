@@ -281,6 +281,7 @@ export function createSettingsController(
     dashscopeApiKeyConfigured: false,
     xiaomiApiKeyConfigured: false,
     elevenlabsApiKeyConfigured: false,
+    googleApiKeyConfigured: false,
     providerModelCatalog: {
       DashScope: { defaultModel: "qwen-plus", availableModels: ["qwen-plus", "qwen-max"], enabledModels: ["qwen-plus", "qwen-max"], ttsDefaultModel: "", ttsAvailableModels: [], ttsEnabledModels: [] },
       Google: { defaultModel: "gemini-2.5-flash", availableModels: ["gemini-2.5-flash"], enabledModels: ["gemini-2.5-flash"], ttsDefaultModel: "", ttsAvailableModels: [], ttsEnabledModels: [] },

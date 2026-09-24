@@ -9,6 +9,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from services.elevenlabs_voice_service import ElevenLabsVoiceService
+from services.gemini_voice_service import GeminiVoiceService
 from services.qwen_voice_service import QwenVoiceService
 from services.xiaomi_voice_service import XiaomiVoiceService
 from services.tts_service import TTSService
@@ -20,6 +21,7 @@ router = APIRouter()
 qwen_voice_service = QwenVoiceService()
 xiaomi_voice_service = XiaomiVoiceService()
 elevenlabs_voice_service = ElevenLabsVoiceService()
+gemini_voice_service = GeminiVoiceService()
 tts_service = TTSService()
 _whisper_model = None
 _whisper_model_lock = threading.Lock()
@@ -99,7 +101,15 @@ class StructuredErrorResponse(BaseModel):
 async def create_voice_design(payload: VoiceDesignRequest) -> VoiceCreateResponse:
     provider = (payload.provider or "qwen").strip().lower()
     try:
-        if provider == "xiaomi" or provider == "mimo":
+        if provider == "gemini":
+            result = await gemini_voice_service.create_voice_design(
+                voice_prompt=payload.voice_prompt,
+                preview_text=payload.preview_text,
+                preferred_name=payload.preferred_name,
+                language=payload.language,
+            )
+            result["provider"] = "gemini"
+        elif provider == "xiaomi" or provider == "mimo":
             result = await xiaomi_voice_service.create_voice_design(
                 voice_prompt=payload.voice_prompt,
                 preview_text=payload.preview_text,
@@ -108,6 +118,26 @@ async def create_voice_design(payload: VoiceDesignRequest) -> VoiceCreateRespons
             result["provider"] = "xiaomi"
         elif provider == "gpt_sovits":
             raise ValueError("GPT-SoVITS local API does not support voice design. Use voice clone instead.")
+        elif provider == "gemini":
+            result = await gemini_voice_service.create_voice_clone(
+                audio_bytes=data,
+                mime_type=audio_file.content_type or "",
+                preferred_name=preferred_name,
+            )
+            result["provider"] = "gemini"
+        elif provider == "gemini":
+            result = await gemini_voice_service.list_voices(
+                voice_type=voice_type,
+                page_index=page_index,
+                page_size=page_size,
+            )
+            result["voice_provider"] = "gemini"
+        elif provider == "gemini":
+            result = await gemini_voice_service.delete_voice(
+                voice_name=voice_name,
+                voice_type=voice_type,
+            )
+            result["type"] = voice_type
         elif provider == "elevenlabs":
             raise ValueError("ElevenLabs does not support voice design. Use voice clone instead.")
         else:
