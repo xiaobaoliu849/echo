@@ -122,10 +122,8 @@
   width: 40px;
   height: 40px;
   border-radius: 14px;
-  /* Mirrors the packaged app icon (resources/icons/logo.png) gradient and
-     glyph color so the in-app brand mark matches the desktop icon. */
-  background:
-    linear-gradient(160deg, oklch(0.611 0.028 161), oklch(0.52 0.027 161));
+  /* The normal state displays the same PNG used to build the Windows icon. */
+  background: linear-gradient(160deg, rgb(117, 137, 126), rgb(92, 110, 100));
   color: white;
   display: flex;
   align-items: center;
@@ -166,6 +164,12 @@
 .vsBrandIconMark {
   opacity: 1;
   transform: scale(1);
+}
+
+.vsBrandIconMark img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .vsBrandIconHoverAction {

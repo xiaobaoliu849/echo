@@ -26,6 +26,7 @@ backend/temp_audio/
 
 # Media/Temp
 *.png
+!frontend/src/assets/echo-icon.png
 !resources/icons/*.png
 !electron/icon.png
 *.mp3

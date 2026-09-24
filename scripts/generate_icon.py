@@ -1,12 +1,10 @@
-"""Regenerate resources/icons/logo.png and logo.ico from the in-app brand spec.
+"""Regenerate the shared in-app, Electron, and Windows installer icon.
 
-The desktop icon and the sidebar brand tile must be pixel-identical in
-color, so both derive from one source: the gradient of `.vsBrandIcon` in
-frontend/src/styles.css and the soundwave glyph of `brandMark` in
-frontend/src/components/AppSidebar.tsx. Keep the constants below in sync
-with those two places when the brand changes.
+The brand gradient and glyph geometry below define the single icon used by
+the frontend, Electron, the Windows executable, and the installer.
 
-Run with the packaging environment: python scripts/generate_icon.py
+Run with Python 3.12, NumPy, and Pillow, for example:
+    .packaging-venv/Scripts/python.exe scripts/generate_icon.py
 
 The NSIS sidebar BMP is wired in electron/electron-builder.yml as
 nsis.installerSidebar / uninstallerSidebar.
@@ -21,19 +19,20 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "resources" / "icons"
+FRONTEND_ICON_PATH = ROOT / "frontend" / "src" / "assets" / "echo-icon.png"
+ELECTRON_ICON_PATH = ROOT / "electron" / "icon.png"
 
-# .vsBrandIcon background: linear-gradient(160deg, oklch(0.611 0.028 161), oklch(0.52 0.027 161))
+# Sage gradient formerly used by .vsBrandIcon in CSS.
 GRADIENT_TOP = (0x75, 0x89, 0x7E)
 GRADIENT_BOTTOM = (0x5C, 0x6E, 0x64)
 # .vsBrandIcon color: white (soundwave glyph)
 GLYPH = (255, 255, 255)
-# .vsBrandIcon border-radius: 14px on a 40px tile; the glyph geometry is
-# brandMark's 24x24 viewBox: bars at x=4/8/12/16/20, heights 4/12/18/12/4,
-# stroke-width 2.4 with round caps.
+# The in-app tile was 40px with a 22px SVG. Preserve those proportions.
 CORNER_RADIUS_RATIO = 14 / 40
 BARS = ((4, 4), (8, 12), (12, 18), (16, 12), (20, 4))
 STROKE_WIDTH = 2.4
 VIEWBOX = 24
+GLYPH_SIZE_RATIO = 22 / 40
 # CSS linear-gradient(160deg): 0deg points up, clockwise; the axis unit
 # vector in screen coordinates (x right, y down).
 AXIS = (math.sin(math.radians(160)), -math.cos(math.radians(160)))
@@ -44,7 +43,7 @@ ICO_SIZES = (16, 32, 48, 64, 128, 256)
 # NSIS assisted-installer sidebar (electron-builder `installerSidebar`).
 SIDEBAR_SIZE = (164, 314)
 SIDEBAR_PATH = ROOT / "resources" / "installer" / "sidebar.bmp"
-SIDEBAR_BOTTOM = (0x4B, 0x5D, 0x53)  # slightly deeper than the icon for depth
+SIDEBAR_BOTTOM = GRADIENT_BOTTOM
 
 
 def render_sidebar() -> Image.Image:
@@ -99,10 +98,12 @@ def render(size: int) -> Image.Image:
     draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=size * CORNER_RADIUS_RATIO, fill=255)
     img.putalpha(mask)
     draw = ImageDraw.Draw(img)
-    stroke = STROKE_WIDTH / VIEWBOX * size
+    glyph_size = size * GLYPH_SIZE_RATIO
+    inset = (size - glyph_size) / 2
+    stroke = STROKE_WIDTH / VIEWBOX * glyph_size
     for cx, height in BARS:
-        x = cx / VIEWBOX * size
-        h = height / VIEWBOX * size
+        x = inset + cx / VIEWBOX * glyph_size
+        h = height / VIEWBOX * glyph_size
         draw.rounded_rectangle(
             [x - stroke / 2, size / 2 - h / 2, x + stroke / 2, size / 2 + h / 2],
             radius=stroke / 2,
@@ -114,7 +115,9 @@ def render(size: int) -> Image.Image:
 def main() -> None:
     master = render(SUPERSAMPLE)
     png = master.resize((512, 512), Image.LANCZOS)
-    png.save(OUT_DIR / "logo.png")
+    for path in (OUT_DIR / "logo.png", FRONTEND_ICON_PATH, ELECTRON_ICON_PATH):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        png.save(path)
     # ICO frames are produced via `sizes`; append_images is silently
     # ignored by Pillow's ICO writer.
     master.resize((256, 256), Image.LANCZOS).save(
@@ -123,7 +126,7 @@ def main() -> None:
     SIDEBAR_PATH.parent.mkdir(parents=True, exist_ok=True)
     render_sidebar().save(SIDEBAR_PATH)
     print(f"Wrote {SIDEBAR_PATH} for the NSIS assisted installer")
-    print(f"Wrote {OUT_DIR / 'logo.png'} and logo.ico {ICO_SIZES} from the in-app brand spec")
+    print(f"Wrote matching frontend, Electron, and Windows icons {ICO_SIZES}")
 
 
 if __name__ == "__main__":

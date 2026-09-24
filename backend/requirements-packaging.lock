@@ -37,6 +37,7 @@ multidict==6.8.0
 numpy==2.5.3
 packaging==26.3
 pefile==2024.8.26
+pillow==12.2.0
 pluggy==1.6.0
 propcache==0.5.2
 pyasn1==0.6.4

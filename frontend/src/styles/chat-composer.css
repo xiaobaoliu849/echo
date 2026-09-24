@@ -42,16 +42,20 @@
 .vsWelcomeHeroIcon {
   width: 64px;
   height: 64px;
-  border-radius: 20px;
-  background:
-    linear-gradient(160deg, color-mix(in oklab, var(--brand) 74%, white), color-mix(in oklab, var(--brand-dark) 78%, var(--brand)));
-  color: #ffffff;
+  border-radius: 22px;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow:
     0 12px 28px color-mix(in oklab, var(--brand-dark) 24%, transparent),
     inset 0 1px 0 color-mix(in oklab, white 65%, transparent);
+}
+
+.vsWelcomeHeroIcon img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .vsWelcomeHeroTitle {

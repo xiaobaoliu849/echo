@@ -11,6 +11,7 @@ import CanvasCodeView from "../components/canvas/CanvasCodeView";
 import { useCanvasLayout } from "../hooks/useCanvasLayout";
 import { PanelRight, Code2, Monitor, X, Trash2 } from "lucide-react";
 import { useI18n } from "../i18n";
+import echoIcon from "../assets/echo-icon.png";
 import type { ErrorRuntimeContext } from "../types/ui";
 
 type Props = {
@@ -883,13 +884,7 @@ export default function ChatPage({
           <div className="vsChatCentered">
             <div className="vsWelcomeHero">
               <div className="vsWelcomeHeroIcon" aria-hidden="true">
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3v18" />
-                  <path d="M8 6v12" />
-                  <path d="M16 6v12" />
-                  <path d="M4 10v4" />
-                  <path d="M20 10v4" />
-                </svg>
+                <img src={echoIcon} alt="" />
               </div>
               <div>
                 <h1 className="vsWelcomeHeroTitle">{t("Echo · 回声", "Echo")}</h1>

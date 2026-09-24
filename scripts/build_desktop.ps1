@@ -18,6 +18,24 @@ if (-not (Test-Path -LiteralPath $buildPython)) {
 Invoke-Checked $buildPython @("-m", "pip", "install", "-r", "backend/requirements-packaging.lock")
 Invoke-Checked $buildPython @("-m", "pip", "check")
 Invoke-Checked $buildPython @("-c", "import importlib.util,sys; assert sys.prefix != sys.base_prefix; assert not any(importlib.util.find_spec(n) for n in ['torch','gradio','transformers','PySide6','PyQt5']), 'Use a clean .packaging-venv'")
+# Keep committed artwork in sync with the exact images embedded by Windows.
+$iconPaths = @(
+    "resources/icons/logo.png",
+    "resources/icons/logo.ico",
+    "resources/installer/sidebar.bmp",
+    "frontend/src/assets/echo-icon.png",
+    "electron/icon.png"
+)
+$iconHashes = @{}
+foreach ($path in $iconPaths) {
+    $iconHashes[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+}
+Invoke-Checked $buildPython @("scripts/generate_icon.py")
+foreach ($path in $iconPaths) {
+    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $iconHashes[$path]) {
+        throw "Brand asset is stale: $path. Regenerate with scripts/generate_icon.py and commit the result."
+    }
+}
 Invoke-Checked "npm.cmd" @("--prefix", "frontend", "ci")
 Invoke-Checked "npm.cmd" @("--prefix", "electron", "ci")
 

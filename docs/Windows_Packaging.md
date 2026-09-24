@@ -23,6 +23,11 @@ before producing `electron/dist/Echo-Setup-<version>.exe`. It then extracts the
 NSIS application payload and runs that copy as well. Any failing stage stops
 the build. Nothing is automatically published to GitHub Releases.
 
+The sidebar and welcome icons, Electron PNG, executable ICO, and installer
+sidebar all come from `scripts/generate_icon.py`. The build checks that the
+tracked artwork matches the generator. After changing the icon, run that
+script and commit its generated assets before packaging.
+
 For the in-app update flow, signing requirements and release validation, see
 [Application Updates](Application_Updates.md). Before publishing, run
 `node scripts/verify_update_release.cjs` for signed releases. An explicitly

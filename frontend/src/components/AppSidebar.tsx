@@ -6,6 +6,7 @@ import {
   type HistoryItem
 } from "../appConfig";
 import { useI18n } from "../i18n";
+import echoIcon from "../assets/echo-icon.png";
 import {
   Bot,
   Languages,
@@ -46,16 +47,6 @@ const IconMap: Record<string, React.ElementType> = {
   Video,
   PanelRight
 };
-
-const brandMark = (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 3v18" />
-    <path d="M8 6v12" />
-    <path d="M16 6v12" />
-    <path d="M4 10v4" />
-    <path d="M20 10v4" />
-  </svg>
-);
 
 type Props = {
   activeTab: ActiveTab;
@@ -315,7 +306,7 @@ function AppSidebar({
               title={toggleLabel}
             >
               <span className="vsBrandIcon" aria-hidden="true">
-                <span className="vsBrandIconMark">{brandMark}</span>
+                <span className="vsBrandIconMark"><img src={echoIcon} alt="" /></span>
                 <span className="vsBrandIconHoverAction">
                   {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
                 </span>
