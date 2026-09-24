@@ -34,11 +34,6 @@ const SAMPLE_SCRIPTS = [
     categoryEn: "English Standard",
     text: "The quick brown fox jumps over the lazy dog. A wonderful journey of voice cloning brings digital characters to life with warmth and authenticity.",
   },
-  {
-    category: "Google 授权声明",
-    categoryEn: "Google Consent Phrase",
-    text: "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.",
-  },
 ];
 
 function formatTime(seconds: number): string {
@@ -395,7 +390,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   };
 
   const handleCopyScript = () => {
-    const currentScript = consentPrompt ? SAMPLE_SCRIPTS[4] : SAMPLE_SCRIPTS[activeScriptIndex];
+    const currentScript = SAMPLE_SCRIPTS[activeScriptIndex];
     const textToCopy =
       language === "zh-CN" ? currentScript.text : currentScript.text;
     navigator.clipboard?.writeText(textToCopy);
@@ -409,7 +404,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const isSufficient = elapsedSeconds > 30;
 
   // Active script
-  const activeScript = consentPrompt ? SAMPLE_SCRIPTS[4] : SAMPLE_SCRIPTS[activeScriptIndex];
+  const activeScript = SAMPLE_SCRIPTS[activeScriptIndex];
   const scriptCategory =
     language === "zh-CN" ? activeScript.category : activeScript.categoryEn;
 
@@ -557,15 +552,16 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           </div>
 
           {/* Reference Script Prompts Card */}
-          <div className="vsRecorderScriptCard">
+          {!consentPrompt && (
+            <div className="vsRecorderScriptCard">
             <div className="vsRecorderScriptHeader">
               <div className="vsRecorderScriptTitle">
                 <BookOpen size={15} />
-                <span>{consentPrompt ? t("请完整朗读授权声明", "Read the full consent statement") : t("💡 朗读示例范本", "💡 Sample Reading Prompts")}</span>
+                <span>{t("💡 朗读示例范本", "💡 Sample Reading Prompts")}</span>
                 <span className="vsRecorderScriptTag">{scriptCategory}</span>
               </div>
               <div className="vsRecorderScriptActions">
-                {!consentPrompt && <button
+                <button
                   type="button"
                   className="vsRecorderScriptBtn"
                   onClick={handleNextScript}
@@ -573,7 +569,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 >
                   <Sparkles size={13} />
                   <span>{t("换一句", "Next")}</span>
-                </button>}
+                </button>
                 <button
                   type="button"
                   className="vsRecorderScriptBtn copy"
@@ -597,7 +593,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 )}
               </span>
             </div>
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>

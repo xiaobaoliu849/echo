@@ -113,8 +113,11 @@ describe('VoiceClonePage', () => {
         );
         fireEvent.click(screen.getByRole('button', { name: /克隆新音色/ }));
         expect(screen.getByRole('button', { name: /开始克隆/ })).toBeDisabled();
-        expect(screen.getByText(/请先录制 10–30 秒的自然语音样板/)).toBeInTheDocument();
+        expect(screen.getByText(/先录制 10–30 秒自然语音样板/)).toBeInTheDocument();
+        expect(screen.getAllByText(/I am the owner of this voice and I consent to Google/)).toHaveLength(1);
+        expect(screen.queryByText(/Google Gemini 声音复刻口述授权要求/)).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /上传授权录音/ }));
+        expect(screen.getAllByText(/I am the owner of this voice and I consent to Google/)).toHaveLength(1);
         fireEvent.change(screen.getByLabelText(/选择授权录音/), { target: { files: [consent] } });
         expect(onConsentFileChange).toHaveBeenCalledWith(consent);
 

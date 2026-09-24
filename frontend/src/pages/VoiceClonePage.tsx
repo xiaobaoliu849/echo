@@ -9,6 +9,9 @@ import { useI18n } from "../i18n";
 import type { ErrorRuntimeContext } from "../types/ui";
 import "./VoiceStudio.css";
 
+const GOOGLE_VOICE_CONSENT_STATEMENT =
+  "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.";
+
 type Props = {
   clone: VoiceCloneController;
   errorRuntimeContext: ErrorRuntimeContext;
@@ -162,66 +165,6 @@ export default function VoiceClonePage({
                 </select>
               </label>
 
-              {voiceProvider === "gemini" && (
-                <div
-                  className="vsVoiceStudioReminder"
-                  style={{
-                    backgroundColor: "rgba(59, 130, 246, 0.08)",
-                    borderColor: "rgba(59, 130, 246, 0.3)",
-                    borderWidth: 1,
-                    borderStyle: "solid",
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 16,
-                  }}
-                >
-                  <p style={{ margin: "0 0 6px 0", fontSize: 13, fontWeight: 600, color: "var(--brand, #3b82f6)" }}>
-                    {t("Google Gemini 声音复刻口述授权要求", "Google Gemini Voice Consent Requirement")}
-                  </p>
-                  <p className="vsFieldHint" style={{ margin: 0, fontSize: 12 }}>
-                    {t(
-                      "请先录制 10–30 秒的自然语音样板，再由同一人单独录制以下授权声明：",
-                      "Record a 10–30 second natural speech sample, then record this consent statement separately with the same speaker:"
-                    )}
-                  </p>
-                  <blockquote
-                    style={{
-                      margin: "8px 0 0 0",
-                      padding: "8px 10px",
-                      background: "rgba(0, 0, 0, 0.04)",
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontStyle: "italic",
-                      userSelect: "all",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <span>“I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.”</span>
-                    <button
-                      type="button"
-                      className="vsBtnGhost"
-                      style={{ fontSize: 11, padding: "3px 8px", height: "auto", whiteSpace: "nowrap" }}
-                      onClick={() => {
-                        navigator.clipboard?.writeText(
-                          "I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model."
-                        );
-                      }}
-                    >
-                      {t("复制", "Copy")}
-                    </button>
-                  </blockquote>
-                  <p className="vsFieldHint" style={{ margin: "8px 0 0 0", fontSize: 11, color: "var(--brand, #3b82f6)" }}>
-                    {t(
-                      "系统会将两段音频分别转为 24kHz、单声道、16-bit PCM WAV。请确认两段均清晰、无背景音乐。",
-                      "Echo converts both clips to 24kHz mono 16-bit PCM WAV. Keep both recordings clear and free of background music."
-                    )}
-                  </p>
-                </div>
-              )}
-
               <label className="vsField">
                 <span className="vsFieldLabel">{t("新音色命名", "New voice name")}</span>
                 <input
@@ -351,8 +294,21 @@ export default function VoiceClonePage({
                 <div className="vsField">
                   <span className="vsFieldLabel">{t("授权声明录音（必填）", "Consent recording (required)")}</span>
                   <span className="vsFieldHint">
-                    {t("请由样板中的同一位说话人单独朗读上方完整英文声明。", "The same speaker must recite the complete statement above in a separate clip.")}
+                    {t(
+                      "先录制 10–30 秒自然语音样板，再由同一人用相同麦克风单独朗读以下完整声明。",
+                      "Use a 10–30 second natural speech sample, then have the same speaker read this statement in a separate recording with the same microphone."
+                    )}
                   </span>
+                  <blockquote className="vsVoiceStudioReminder vsVoiceConsentStatement">
+                    <span>{GOOGLE_VOICE_CONSENT_STATEMENT}</span>
+                    <button
+                      type="button"
+                      className="vsBtnGhost"
+                      onClick={() => navigator.clipboard?.writeText(GOOGLE_VOICE_CONSENT_STATEMENT)}
+                    >
+                      {t("复制", "Copy")}
+                    </button>
+                  </blockquote>
                   <div className="vsCloneSourceSelector">
                     <button type="button" className={`vsCloneSourceTab ${consentMode === "record" ? "active" : ""}`} onClick={() => setConsentMode("record")}>{t("录制授权", "Record consent")}</button>
                     <button type="button" className={`vsCloneSourceTab ${consentMode === "upload" ? "active" : ""}`} onClick={() => setConsentMode("upload")}>{t("上传授权录音", "Upload consent audio")}</button>

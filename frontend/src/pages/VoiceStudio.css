@@ -363,6 +363,18 @@
   border: 1px solid var(--line);
 }
 
+.vsVoiceConsentStatement {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.vsVoiceConsentStatement button {
+  flex: none;
+}
+
 /* ── Voice Clone Source Switcher (Upload vs Record) ── */
 .vsCloneSourceSelector {
   display: flex;
@@ -1064,4 +1076,3 @@
     flex-wrap: wrap;
   }
 }
-
