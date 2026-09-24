@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { History, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { History, Pause, Play, RotateCcw, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import useTtsHistory, { type TtsHistoryEntry } from "../hooks/useTtsHistory";
 import type { UseTtsResult } from "../hooks/useTts";
@@ -206,6 +206,231 @@ function TtsHistoryMiniPlayer({ src }: { src: string }) {
   );
 }
 
+type TtsDockPlayerProps = {
+  src: string;
+  t: (zh: string, en: string) => string;
+};
+
+function TtsDockPlayer({ src, t }: TtsDockPlayerProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speedMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
+  const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+      audioRef.current.currentTime = 0;
+    }
+  }, [src, playbackRate]);
+
+  useEffect(() => {
+    if (!speedMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (speedMenuRef.current && !speedMenuRef.current.contains(e.target as Node)) {
+        setSpeedMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSpeedMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [speedMenuOpen]);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      try {
+        audio.pause();
+      } catch {
+        // ignore
+      }
+      setIsPlaying(false);
+    } else {
+      document.querySelectorAll("audio").forEach((el) => {
+        if (el !== audio && !el.paused) {
+          try {
+            el.pause();
+          } catch {
+            // ignore
+          }
+        }
+      });
+      try {
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => setIsPlaying(false));
+        }
+        setIsPlaying(true);
+      } catch {
+        setIsPlaying(true);
+      }
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current && isFinite(audioRef.current.duration)) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleDurationChange = () => {
+    if (audioRef.current && isFinite(audioRef.current.duration)) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = val;
+      setCurrentTime(val);
+    }
+  };
+
+  const toggleMute = () => {
+    if (audioRef.current) {
+      const nextMuted = !isMuted;
+      audioRef.current.muted = nextMuted;
+      setIsMuted(nextMuted);
+    }
+  };
+
+  const handleSpeedChange = (rate: number) => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+    setPlaybackRate(rate);
+    setSpeedMenuOpen(false);
+  };
+
+  const formatSecs = (s: number) => {
+    if (isNaN(s) || !isFinite(s) || s < 0) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+
+  return (
+    <div className="vsDockPlayer">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        }}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onDurationChange={handleDurationChange}
+        style={{ display: "none" }}
+      />
+
+      <button
+        type="button"
+        className="vsDockPlayBtn"
+        onClick={togglePlay}
+        title={isPlaying ? t("暂停", "Pause") : t("播放", "Play")}
+        aria-label={isPlaying ? t("暂停", "Pause") : t("播放", "Play")}
+      >
+        {isPlaying ? (
+          <Pause size={13} fill="currentColor" />
+        ) : (
+          <Play size={13} fill="currentColor" style={{ marginLeft: "1.5px" }} />
+        )}
+      </button>
+
+      <span className="vsDockTime">
+        {formatSecs(currentTime)} / {formatSecs(duration)}
+      </span>
+
+      <div className="vsDockProgressWrap">
+        <input
+          type="range"
+          min={0}
+          max={duration || 1}
+          step={0.05}
+          value={currentTime}
+          onChange={handleSeek}
+          className="vsDockRangeInput"
+          aria-label={t("播放进度", "Playback progress")}
+        />
+        <div
+          className="vsDockProgressBar"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+
+      <button
+        type="button"
+        className="vsDockIconButton"
+        onClick={toggleMute}
+        title={isMuted ? t("恢复音量", "Unmute") : t("静音", "Mute")}
+        aria-label={isMuted ? t("恢复音量", "Unmute") : t("静音", "Mute")}
+      >
+        {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+      </button>
+
+      <div className="vsDockSpeedContainer" ref={speedMenuRef}>
+        <button
+          type="button"
+          className={`vsDockSpeedPill ${speedMenuOpen ? "active" : ""}`}
+          onClick={() => setSpeedMenuOpen(!speedMenuOpen)}
+          title={t("播放速度", "Playback speed")}
+          aria-label={`${t("播放速度", "Playback speed")}: ${playbackRate % 1 === 0 ? `${playbackRate}.0x` : `${playbackRate}x`}`}
+          aria-haspopup="true"
+          aria-expanded={speedMenuOpen}
+        >
+          {playbackRate % 1 === 0 ? `${playbackRate}.0x` : `${playbackRate}x`}
+        </button>
+
+        {speedMenuOpen && (
+          <div className="vsDockSpeedMenu" role="menu">
+            <div className="vsDockMenuLabel">{t("播放速度", "Playback speed")}</div>
+            <div className="vsDockSpeedOptions">
+              {[0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  className={`vsDockSpeedBtn ${playbackRate === rate ? "active" : ""}`}
+                  onClick={() => handleSpeedChange(rate)}
+                  role="menuitem"
+                >
+                  {rate % 1 === 0 ? `${rate}.0x` : `${rate}x`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TtsPage({ tts, errorRuntimeContext }: Props) {
   const { t } = useI18n();
   const { history, addEntry, removeEntry, clearHistory, buildReplayUrl } = useTtsHistory();
@@ -389,7 +614,7 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
         {/* ── Top Studio Bar: Streamlined Parameters ── */}
         {tts.ttsMode !== "dialogue" && (
           <header className="vsTtsStudioBar vsTtsPrimaryHeader">
-            <div className="vsTtsBarRight">
+            <div className="vsTtsBarLeft">
               <div className="vsTtsToolbarField vsTtsFieldEngine">
                 <span className="vsFieldLabel">{t("TTS 引擎:", "TTS Engine:")}</span>
                 <div className="vsSelectWrapper">
@@ -445,45 +670,9 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                   {tts.loadingVoices && <span className="vsSelectLoading">{t("加载中…", "Loading...")}</span>}
                 </div>
               </div>
+            </div>
 
-              <div className="vsTtsToolbarField vsTtsFieldRate">
-                <div className="vsRateCapsule">
-                  <span className="vsRateLabel">{t("语速", "Rate")}</span>
-                  <input
-                    type="text"
-                    className="vsInput vsInputModern vsInputRate"
-                    value={tts.rate}
-                    onChange={(e) => tts.onRateChange(e.target.value)}
-                    placeholder="+0%"
-                  />
-                  <div className="vsRateQuickPresets" role="group" aria-label="语速预设">
-                    {[
-                      { label: "0.8x", val: "-20%" },
-                      { label: "1.0x", val: "+0%" },
-                      { label: "1.2x", val: "+20%" },
-                    ].map((preset) => (
-                      <button
-                        key={preset.val}
-                        type="button"
-                        className={`vsRatePresetTag ${tts.rate === preset.val ? "active" : ""}`}
-                        onClick={() => tts.onRateChange(preset.val)}
-                        title={`设为 ${preset.val}`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="vsBtnGhost vsRateResetBtn"
-                    onClick={() => tts.onRateChange("+0%")}
-                    title={t("重置语速", "Reset rate")}
-                  >
-                    {t("重置", "Reset")}
-                  </button>
-                </div>
-              </div>
-
+            <div className="vsTtsBarRight">
               <button
                 type="button"
                 className={`vsTtsHistoryTriggerBtn ${historyDrawerOpen ? "active" : ""}`}
@@ -695,7 +884,11 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
           <div className="vsTtsFooterLeft">
             {tts.audioUrl && (
               <div className="vsAudioPlayerDock">
-                <audio controls src={tts.audioUrl} className="vsAudioElement" />
+                <TtsDockPlayer
+                  src={tts.audioUrl}
+                  t={t}
+                />
+                <span className="vsDockDivider" aria-hidden="true" />
                 <button
                   type="button"
                   className="vsBtnSecondary vsExportAudioBtn"

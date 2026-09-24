@@ -108,7 +108,7 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
                 <p className="vsVoiceStudioPreviewTitle">
                   {t(`✨ 音色设计成功！这是新音色《${design.designName}》的试听：`, `✨ Voice design succeeded. Preview for "${design.designName}":`)}
                 </p>
-                <audio controls src={design.designPreviewAudio} className="vsAudioElement" style={{ width: "100%", height: "36px" }} />
+                <audio controls controlsList="nodownload" src={design.designPreviewAudio} className="vsAudioElement" style={{ width: "100%", height: "36px" }} />
               </div>
             )}
 

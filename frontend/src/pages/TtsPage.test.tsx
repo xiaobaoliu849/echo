@@ -87,9 +87,6 @@ describe('TtsPage', () => {
         fireEvent.change(screen.getByDisplayValue('Sample test text'), {
             target: { value: 'Updated script' }
         });
-        fireEvent.change(screen.getByDisplayValue('+0%'), {
-            target: { value: '+10%' }
-        });
         const combos = screen.getAllByRole('combobox');
         fireEvent.change(combos[0], {
             target: { value: 'edge' }
@@ -101,7 +98,6 @@ describe('TtsPage', () => {
 
         expect(tts.onEngineChange).toHaveBeenCalledWith('edge');
         expect(tts.onTextChange).toHaveBeenCalledWith('Updated script');
-        expect(tts.onRateChange).toHaveBeenCalledWith('+10%');
         expect(tts.onVoiceChange).toHaveBeenCalledWith('zh-CN-XiaoxiaoNeural');
         expect(tts.onSubmit).toHaveBeenCalledTimes(1);
         expect(tts.onSubmit).toHaveBeenCalledWith(expect.any(Object));
@@ -226,4 +222,70 @@ describe('TtsPage', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(drawer).not.toHaveClass('open');
     });
+
+    it('toggles playback with the dock player play button', () => {
+        render(
+            <TtsPage
+                tts={createTtsController({
+                    audioUrl: 'blob:test-url',
+                    audioBlob: new Blob(['audio'], { type: 'audio/mpeg' })
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const playButton = screen.getByRole('button', { name: '播放' });
+        expect(playButton).toBeInTheDocument();
+
+        fireEvent.click(playButton);
+        expect(screen.getByRole('button', { name: '暂停' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: '暂停' }));
+        expect(screen.getByRole('button', { name: '播放' })).toBeInTheDocument();
+    });
+
+    it('opens playback speed menu from the speed badge pill and changes speed', () => {
+        render(
+            <TtsPage
+                tts={createTtsController({
+                    audioUrl: 'blob:test-url',
+                    audioBlob: new Blob(['audio'], { type: 'audio/mpeg' })
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const speedBtn = screen.getByRole('button', { name: /播放速度: 1.0x/ });
+        expect(speedBtn).toBeInTheDocument();
+
+        fireEvent.click(speedBtn);
+
+        const speedOption = screen.getByRole('menuitem', { name: '1.5x' });
+        expect(speedOption).toBeInTheDocument();
+
+        fireEvent.click(speedOption);
+
+        expect(screen.getByRole('button', { name: /播放速度: 1.5x/ })).toBeInTheDocument();
+        expect(screen.queryByRole('menuitem', { name: '1.5x' })).not.toBeInTheDocument();
+    });
+
+    it('closes playback speed menu when pressing escape', () => {
+        render(
+            <TtsPage
+                tts={createTtsController({
+                    audioUrl: 'blob:test-url',
+                    audioBlob: new Blob(['audio'], { type: 'audio/mpeg' })
+                })}
+                errorRuntimeContext={{}}
+            />
+        );
+
+        const speedBtn = screen.getByRole('button', { name: /播放速度: 1.0x/ });
+        fireEvent.click(speedBtn);
+        expect(screen.getByRole('menuitem', { name: '2.0x' })).toBeInTheDocument();
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('menuitem', { name: '2.0x' })).not.toBeInTheDocument();
+    });
 });
+

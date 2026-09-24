@@ -8,6 +8,7 @@ vi.mock("./api", async () => {
   return {
     ...actual,
     fetchApiRuntimeInfo: vi.fn(),
+    fetchDesktopStatus: vi.fn().mockResolvedValue(null),
     fetchVoices: vi.fn(),
     fetchSpeakAudio: vi.fn(),
     fetchSettings: vi.fn(),
