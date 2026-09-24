@@ -18,7 +18,7 @@ vi.mock("../api", () => ({
 
 describe("useVoiceManagement", () => {
   beforeEach(() => {
-    vi.mocked(listCustomVoices).mockClear();
+    vi.mocked(listCustomVoices).mockReset().mockImplementation(async type => ({ voice_type: type, count: 0, voices: [] }));
     vi.mocked(createVoiceDesign).mockReset();
     vi.mocked(createVoiceClone).mockReset();
     vi.mocked(deleteCustomVoice).mockReset();
@@ -61,6 +61,172 @@ describe("useVoiceManagement", () => {
     expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "qwen", true);
   });
 
+  it("keeps Qwen and Gemini designed voices together across provider changes", async () => {
+    vi.mocked(listCustomVoices).mockImplementation(async (type, provider) => ({
+      voice_type: type,
+      count: type === "voice_design" ? 1 : 0,
+      voices: type === "voice_design" ? [{
+        voice: provider === "gemini" ? "gemini-design" : "qwen-design",
+        type: "voice_design",
+        target_model: provider === "gemini" ? "gemini-3.8-flash-tts" : "qwen3-tts-vd-realtime",
+      }] : [],
+    }));
+    vi.mocked(deleteCustomVoice).mockResolvedValue();
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() => useVoiceManagement({
+      formatErrorMessage,
+      dashscopeApiKeyConfigured: true,
+      googleApiKeyConfigured: true,
+    }));
+
+    await waitFor(() => expect(result.current.design.designVoices).toHaveLength(2));
+    expect(result.current.design.designVoices).toEqual(expect.arrayContaining([
+      expect.objectContaining({ voice: "qwen-design", provider: "qwen" }),
+      expect.objectContaining({ voice: "gemini-design", provider: "gemini" }),
+    ]));
+
+    act(() => result.current.setVoiceProvider("gemini"));
+    expect(result.current.design.designVoices).toHaveLength(2);
+    act(() => result.current.setVoiceProvider("qwen"));
+    expect(result.current.design.designVoices).toHaveLength(2);
+    act(() => result.current.setVoiceProvider("elevenlabs"));
+    expect(result.current.design.designVoices).toHaveLength(2);
+
+    await act(async () => {
+      await result.current.design.onDeleteVoice("gemini-design", "gemini");
+    });
+    expect(deleteCustomVoice).toHaveBeenCalledWith("gemini-design", "voice_design", "gemini");
+  });
+
+  it("shows available designs while another provider catalog is slow", async () => {
+    let finishQwen!: (value: { voice_type: "voice_design"; count: number; voices: [] }) => void;
+    vi.mocked(listCustomVoices).mockImplementation((type, provider) => {
+      if (type === "voice_design" && provider === "qwen") {
+        return new Promise(resolve => { finishQwen = resolve; });
+      }
+      return Promise.resolve({
+        voice_type: type,
+        count: type === "voice_design" ? 1 : 0,
+        voices: type === "voice_design" ? [{
+          voice: "gemini-design", type: "voice_design", target_model: "gemini-3.8-flash-tts",
+        }] : [],
+      });
+    });
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() => useVoiceManagement({
+      formatErrorMessage,
+      dashscopeApiKeyConfigured: true,
+      googleApiKeyConfigured: true,
+    }));
+
+    await waitFor(() => expect(result.current.design.designVoices).toEqual([
+      expect.objectContaining({ voice: "gemini-design", provider: "gemini" }),
+    ]));
+    expect(result.current.design.designListBusy).toBe(true);
+    await act(async () => finishQwen({ voice_type: "voice_design", count: 0, voices: [] }));
+    expect(result.current.design.designListBusy).toBe(false);
+  });
+
+  it("keeps successful designs visible when one provider fails", async () => {
+    vi.mocked(listCustomVoices).mockImplementation(async (type, provider) => {
+      if (type === "voice_design" && provider === "qwen") throw new Error("catalog unavailable");
+      return {
+        voice_type: type,
+        count: type === "voice_design" ? 1 : 0,
+        voices: type === "voice_design" ? [{
+          voice: "gemini-design", type: "voice_design", target_model: "gemini-3.8-flash-tts",
+        }] : [],
+      };
+    });
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() => useVoiceManagement({
+      formatErrorMessage,
+      dashscopeApiKeyConfigured: true,
+      googleApiKeyConfigured: true,
+    }));
+
+    await waitFor(() => expect(result.current.design.designListBusy).toBe(false));
+    expect(result.current.design.designVoices).toEqual([
+      expect.objectContaining({ voice: "gemini-design", provider: "gemini" }),
+    ]);
+    expect(result.current.design.designError).toContain("qwen:");
+  });
+
+  it("ignores a stale design catalog response after a newer refresh", async () => {
+    let finishOld!: (value: { voice_type: "voice_design"; count: number; voices: [] }) => void;
+    let designCalls = 0;
+    vi.mocked(listCustomVoices).mockImplementation((type, provider) => {
+      if (type === "voice_design" && provider === "qwen") {
+        designCalls += 1;
+        if (designCalls === 1) return new Promise(resolve => { finishOld = resolve; });
+        return Promise.resolve({
+          voice_type: type, count: 1,
+          voices: [{ voice: "current-design", type, target_model: "qwen3-tts-vd-realtime" }],
+        });
+      }
+      return Promise.resolve({ voice_type: type, count: 0, voices: [] });
+    });
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() => useVoiceManagement({
+      formatErrorMessage,
+      dashscopeApiKeyConfigured: true,
+    }));
+
+    await act(async () => result.current.design.onRefresh());
+    expect(result.current.design.designVoices).toEqual([
+      expect.objectContaining({ voice: "current-design", provider: "qwen" }),
+    ]);
+    await act(async () => finishOld({ voice_type: "voice_design", count: 0, voices: [] }));
+    expect(result.current.design.designVoices).toHaveLength(1);
+  });
+
+  it("removes a deleted design even when the follow-up catalog refresh fails", async () => {
+    let designCalls = 0;
+    vi.mocked(listCustomVoices).mockImplementation(async (type, provider) => {
+      if (type === "voice_design" && provider === "qwen") {
+        designCalls += 1;
+        if (designCalls > 1) throw new Error("catalog unavailable");
+        return {
+          voice_type: type, count: 1,
+          voices: [{ voice: "old-design", type, target_model: "qwen3-tts-vd-realtime" }],
+        };
+      }
+      return { voice_type: type, count: 0, voices: [] };
+    });
+    vi.mocked(deleteCustomVoice).mockResolvedValue();
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() => useVoiceManagement({
+      formatErrorMessage,
+      dashscopeApiKeyConfigured: true,
+    }));
+    await waitFor(() => expect(result.current.design.designVoices).toHaveLength(1));
+
+    await act(async () => result.current.design.onDeleteVoice("old-design", "qwen"));
+    expect(result.current.design.designVoices).toEqual([]);
+    expect(result.current.design.designError).toContain("qwen:");
+  });
+
+  it("explains that Xiaomi design produces a preview without a saved voice", async () => {
+    vi.mocked(createVoiceDesign).mockResolvedValue({
+      type: "voice_design",
+      preview_audio_data: "audio-data",
+    });
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() => useVoiceManagement({
+      formatErrorMessage,
+      xiaomiApiKeyConfigured: true,
+    }));
+    act(() => result.current.setVoiceProvider("xiaomi"));
+
+    await act(async () => {
+      await result.current.design.onSubmit({ preventDefault() {} } as any);
+    });
+    expect(result.current.design.designInfo).toContain("小米不会保存可复用的音色");
+    expect(result.current.design.designPreviewAudio).toContain("audio-data");
+    expect(result.current.design.designVoices).toEqual([]);
+    expect(listCustomVoices).not.toHaveBeenCalledWith("voice_design", "xiaomi", true);
+  });
+
   it("fetches ElevenLabs clone voices after switching provider", async () => {
     const formatErrorMessage = createFormatErrorMessageStub();
     const { result } = renderHook(() =>
@@ -78,6 +244,19 @@ describe("useVoiceManagement", () => {
 
     expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "elevenlabs", true);
     expect(result.current.cloneProvider).toBe("elevenlabs");
+  });
+
+  it("keeps the last design-capable provider after selecting a clone-only provider", () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() => useVoiceManagement({ formatErrorMessage }));
+
+    act(() => result.current.setVoiceProvider("gemini"));
+    act(() => result.current.setVoiceProvider("gpt_sovits"));
+    expect(result.current.voiceProvider).toBe("gemini");
+    expect(result.current.cloneProvider).toBe("gpt_sovits");
+
+    act(() => result.current.setVoiceProvider("elevenlabs"));
+    expect(result.current.voiceProvider).toBe("gemini");
   });
 
   it("validates clone audio file metadata on selection", () => {

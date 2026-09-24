@@ -38,7 +38,7 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
     if (!searchQuery.trim()) return design.designVoices;
     const q = searchQuery.toLowerCase();
     return design.designVoices.filter(
-      (v) => v.voice.toLowerCase().includes(q)
+      (v) => [v.voice, v.name, v.provider].some(value => value?.toLowerCase().includes(q))
     );
   }, [design.designVoices, searchQuery]);
 
@@ -130,6 +130,11 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
                   <option value="xiaomi">{t("小米 MiMo", "Xiaomi MiMo")}</option>
                 </select>
               </label>
+              {voiceProvider === "xiaomi" && (
+                <p className="vsFieldHint">
+                  {t("小米 MiMo 只返回本次试听音频，不会创建可保存到音色库的音色。", "Xiaomi MiMo returns a preview for this session; it does not create a reusable voice in the library.")}
+                </p>
+              )}
 
               <div className="vsFormRow">
                 <label className="vsField">
@@ -229,6 +234,16 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
         </div>
       </div>
 
+      {design.designError && (
+        <div className="vsVoiceStudioLibraryError" role="alert">
+          <ErrorNotice
+            message={design.designError}
+            scope="voice_design"
+            context={{ ...errorRuntimeContext, source: "voice_library" }}
+          />
+        </div>
+      )}
+
       {/* Card Grid */}
       <div className="vsVoiceStudioGridWrap custom-scrollbar">
         {design.designListBusy && design.designVoices.length === 0 ? (
@@ -248,11 +263,15 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
             <h3 className="vsVoiceStudioEmptyTitle">
               {searchQuery
                 ? t("没有匹配的音色", "No matching voices")
+                : design.designError
+                  ? t("音色库暂不可用", "Voice library unavailable")
                 : t("暂无设计的音色", "No designed voices yet")}
             </h3>
             <p className="vsVoiceStudioEmptyDesc">
               {searchQuery
                 ? t("尝试调整搜索条件。", "Try adjusting your search criteria.")
+                : design.designError
+                  ? t("请查看上方错误，检查配置后重试。", "Check the error above, then retry after reviewing your configuration.")
                 : t("点击右上角的「设计新音色」开始通过自然语言创造专属声音。", "Click 'Design New Voice' in the top right to create a custom voice using natural language.")}
             </p>
           </div>
@@ -260,12 +279,12 @@ export default function VoiceDesignPage({ design, errorRuntimeContext, voiceProv
           <div className="vsVoiceStudioGrid">
             {filteredVoices.map((item) => (
               <VoiceCard
-                key={item.voice}
+                key={`${item.provider}:${item.voice}`}
                 item={item}
                 onDelete={(e) => {
                   e.stopPropagation();
                   if (confirm(t(`确定要删除音色 "${item.voice}" 吗？`, `Are you sure you want to delete voice "${item.voice}"?`))) {
-                    void design.onDeleteVoice(item.voice);
+                    void design.onDeleteVoice(item.voice, item.provider as VoiceProviderId | undefined);
                   }
                 }}
               />

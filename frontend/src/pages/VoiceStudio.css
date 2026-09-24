@@ -79,6 +79,11 @@
   margin-left: auto;
 }
 
+.vsVoiceStudioLibraryError {
+  flex-shrink: 0;
+  padding: 12px 24px 0;
+}
+
 /* Grid */
 .vsVoiceStudioGridWrap {
   flex: 1;
@@ -1092,6 +1097,9 @@
 @media (max-width: 700px) {
   .vsVoiceStudioToolbar {
     padding: 12px 16px;
+  }
+  .vsVoiceStudioLibraryError {
+    padding: 12px 16px 0;
   }
   .vsVoiceStudioGridWrap {
     padding: 16px 16px 24px;
