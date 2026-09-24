@@ -209,3 +209,28 @@ async def test_extract_error_consent_flow(tmp_path: Path):
     err = GeminiVoiceService._extract_error(resp)
     assert "Consent flow failed" in err
     assert "Please recite" in err
+
+
+@pytest.mark.asyncio
+async def test_create_voice_clone_normalizes_audio_to_wav(tmp_path: Path):
+    service = _service_with_config(tmp_path)
+    captured_payload = {}
+
+    async def mock_post(url, *args, **kwargs):
+        captured_payload.update(kwargs.get("json", {}))
+        resp = MagicMock(spec=httpx.Response)
+        resp.status_code = 200
+        resp.json.return_value = {"id": "voice_cloned_wav"}
+        return resp
+
+    with patch("httpx.AsyncClient.post", side_effect=mock_post):
+        res = await service.create_voice_clone(
+            audio_bytes=b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80>\x00\x00\x00}\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00",
+            mime_type="audio/webm;codecs=opus",
+            preferred_name="NormalizedVoice",
+        )
+        assert res["voice"] == "voice_cloned_wav"
+        replicated = captured_payload["voice"]["replicated"]
+        # Must be audio/wav, not audio/webm
+        assert replicated["source_audio"]["mime_type"] == "audio/wav"
+        assert replicated["consent_audio"]["mime_type"] == "audio/wav"

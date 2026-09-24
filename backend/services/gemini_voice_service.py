@@ -25,6 +25,22 @@ from .gemini_tts_provider import (
 VoiceType = Literal["voice_design", "voice_clone"]
 
 
+def _normalize_to_gemini_wav(audio_bytes: bytes) -> tuple[bytes, str]:
+    """Convert input audio to 24kHz 16-bit mono PCM WAV for Google Gemini voice replication."""
+    if not audio_bytes:
+        return audio_bytes, "audio/wav"
+    try:
+        from pydub import AudioSegment
+        import io
+        seg = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        seg = seg.set_frame_rate(24000).set_channels(1).set_sample_width(2)
+        out = io.BytesIO()
+        seg.export(out, format="wav")
+        return out.getvalue(), "audio/wav"
+    except Exception:
+        return audio_bytes, "audio/wav"
+
+
 class GeminiVoiceService:
     def __init__(self, config: BackendConfig | None = None):
         self.config = config or BackendConfig()
@@ -54,33 +70,28 @@ class GeminiVoiceService:
         try:
             payload = response.json()
             if isinstance(payload, dict):
-                details = (
-                    payload.get("error", {}).get("details", [])
-                    if isinstance(payload.get("error"), dict)
-                    else []
-                )
-                for d in details:
-                    if isinstance(d, dict):
-                        detail_text = str(d.get("detail", ""))
-                        if "Consent flow failed" in detail_text:
-                            return (
-                                "Consent flow failed: The audio did not match the required Google consent statement. "
-                                "Please recite: 'I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.'"
-                            )
-                        if detail_text and not detail_text.startswith("INTERNAL:"):
-                            return detail_text.strip().split("\n")[0]
-                if "error" in payload:
-                    err = payload["error"]
-                    if isinstance(err, dict) and "message" in err:
-                        msg = str(err["message"])
-                        if "Error translating server response" in msg:
-                            for d in details:
-                                if isinstance(d, dict):
-                                    txt = str(d.get("detail", ""))
-                                    if "Original error:" in txt:
-                                        return txt.split("Original error:")[1].strip().split("\n")[0]
+                error_obj = payload.get("error", {})
+                if isinstance(error_obj, dict):
+                    msg = str(error_obj.get("message", "")).strip()
+                    details = error_obj.get("details", [])
+                    for d in details:
+                        if isinstance(d, dict):
+                            detail_str = str(d.get("detail", ""))
+                            if "Consent flow failed" in detail_str:
+                                return (
+                                    "Consent flow failed: The consent audio did not match the required statement. "
+                                    "Please recite: 'I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.'"
+                                )
+                            if "Original error:" in detail_str:
+                                orig = detail_str.split("Original error:")[1].strip().split("\n")[0]
+                                if orig:
+                                    return orig
+                            if detail_str and not detail_str.startswith("INTERNAL:"):
+                                return detail_str.strip().split("\n")[0]
+                    if msg:
                         return msg
-                    return str(err)
+                elif isinstance(error_obj, str) and error_obj.strip():
+                    return error_obj.strip()
                 if "detail" in payload:
                     return str(payload["detail"])
         except Exception:
@@ -184,6 +195,8 @@ class GeminiVoiceService:
         audio_bytes: bytes,
         mime_type: str,
         preferred_name: str,
+        consent_bytes: bytes | None = None,
+        consent_mime_type: str | None = None,
     ) -> dict[str, Any]:
         preferred = preferred_name.strip()
         if not preferred:
@@ -192,10 +205,20 @@ class GeminiVoiceService:
             raise ValueError("audio file is empty.")
 
         api_key, base_url = self._get_credentials()
-        audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-        url = f"{base_url}/v1beta/voices"
 
-        media_mime = (mime_type or "audio/wav").split(";")[0].strip() or "audio/wav"
+        # Google Gemini Voice Replication strictly requires 24kHz mono 16-bit PCM WAV.
+        # Normalize source audio to 24kHz WAV so any browser audio (e.g. WebM/Opus) or MP3/OGG works seamlessly.
+        norm_source, _ = _normalize_to_gemini_wav(audio_bytes)
+        source_b64 = base64.b64encode(norm_source).decode("ascii")
+
+        # Normalize consent audio if provided separately, otherwise reuse source audio
+        if consent_bytes:
+            norm_consent, _ = _normalize_to_gemini_wav(consent_bytes)
+            consent_b64 = base64.b64encode(norm_consent).decode("ascii")
+        else:
+            consent_b64 = source_b64
+
+        url = f"{base_url}/v1beta/voices"
 
         payload = {
             "store": True,
@@ -205,12 +228,12 @@ class GeminiVoiceService:
                 "model": DEFAULT_GEMINI_TTS_MODEL,
                 "replicated": {
                     "source_audio": {
-                        "mime_type": media_mime,
-                        "data": audio_b64,
+                        "mime_type": "audio/wav",
+                        "data": source_b64,
                     },
                     "consent_audio": {
-                        "mime_type": media_mime,
-                        "data": audio_b64,
+                        "mime_type": "audio/wav",
+                        "data": consent_b64,
                     },
                 },
             },

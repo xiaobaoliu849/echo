@@ -164,6 +164,7 @@ async def create_voice_design(payload: VoiceDesignRequest) -> VoiceCreateRespons
 async def create_voice_clone(
     preferred_name: str = Form(..., min_length=1, max_length=80),
     audio_file: UploadFile = File(...),
+    consent_file: UploadFile | None = File(None),
     provider: str = Form(default="qwen"),
 ) -> VoiceCreateResponse:
     if not audio_file.filename:
@@ -213,10 +214,17 @@ async def create_voice_clone(
             )
             result["provider"] = "elevenlabs"
         elif provider == "gemini":
+            consent_data = None
+            consent_mime = ""
+            if consent_file and consent_file.filename:
+                consent_data = await consent_file.read()
+                consent_mime = consent_file.content_type or ""
             result = await gemini_voice_service.create_voice_clone(
                 audio_bytes=data,
                 mime_type=audio_file.content_type or "",
                 preferred_name=preferred_name,
+                consent_bytes=consent_data,
+                consent_mime_type=consent_mime,
             )
             result["provider"] = "gemini"
         elif provider == "gpt_sovits":
