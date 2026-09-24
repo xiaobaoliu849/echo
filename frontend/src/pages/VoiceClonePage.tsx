@@ -161,6 +161,44 @@ export default function VoiceClonePage({
                 </select>
               </label>
 
+              {voiceProvider === "gemini" && (
+                <div
+                  className="vsVoiceStudioReminder"
+                  style={{
+                    backgroundColor: "rgba(59, 130, 246, 0.08)",
+                    borderColor: "rgba(59, 130, 246, 0.3)",
+                    borderWidth: 1,
+                    borderStyle: "solid",
+                    borderRadius: 8,
+                    padding: 12,
+                    marginBottom: 16,
+                  }}
+                >
+                  <p style={{ margin: "0 0 6px 0", fontSize: 13, fontWeight: 600, color: "var(--brand, #3b82f6)" }}>
+                    {t("Google Gemini 声音复刻口述授权要求", "Google Gemini Voice Consent Requirement")}
+                  </p>
+                  <p className="vsFieldHint" style={{ margin: 0, fontSize: 12 }}>
+                    {t(
+                      "Google API 强制要求声音复刻音频中必须包含原说话人清楚朗读的授权声明，否则将返回校验失败：",
+                      "Google API strictly requires the voice sample to include the speaker reciting this verbal consent statement, otherwise verification will fail:"
+                    )}
+                  </p>
+                  <blockquote
+                    style={{
+                      margin: "8px 0 0 0",
+                      padding: "8px 10px",
+                      background: "rgba(0, 0, 0, 0.04)",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontStyle: "italic",
+                      userSelect: "all",
+                    }}
+                  >
+                    “I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.”
+                  </blockquote>
+                </div>
+              )}
+
               <label className="vsField">
                 <span className="vsFieldLabel">{t("新音色命名", "New voice name")}</span>
                 <input

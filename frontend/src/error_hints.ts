@@ -315,6 +315,38 @@ export function buildErrorHints(message: string): string[] {
     ];
   }
 
+  // Dynamic context-aware hints for VOICE (Voice Design / Voice Clone)
+  if (code.startsWith("VOICE_")) {
+    if (/google|gemini/i.test(text)) {
+      return [
+        "Check google_api_key in Settings → Google Gemini.",
+        "For Gemini Voice Replication, ensure your recording recites the required consent statement: 'I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.'"
+      ];
+    }
+    if (/elevenlabs/i.test(text)) {
+      return [
+        "Check elevenlabs_api_key in Settings → ElevenLabs.",
+        "Verify your ElevenLabs subscription tier supports custom voice cloning."
+      ];
+    }
+    if (/xiaomi|mimo/i.test(text)) {
+      return [
+        "Check xiaomi_api_key in Settings → Xiaomi mimo.",
+        "Verify Xiaomi MiMo API endpoint and token quota."
+      ];
+    }
+    if (/dashscope|qwen/i.test(text)) {
+      return [
+        "Check dashscope_api_key in Settings → 阿里云 DashScope.",
+        "Verify DashScope Voice Design/Clone service quota on Alibaba Cloud console."
+      ];
+    }
+    return [
+      "Check voice provider API key and service status in Settings.",
+      "Retry with a clean, short audio sample or simpler prompt."
+    ];
+  }
+
   for (const item of PREFIX_HINTS) {
     if (code.startsWith(item.prefix)) {
       return item.hints;

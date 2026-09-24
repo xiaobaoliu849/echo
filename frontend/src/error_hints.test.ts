@@ -41,6 +41,21 @@ describe("error_hints", () => {
     ]);
   });
 
+  it("returns provider-specific hints for VOICE clone/design errors", () => {
+    expect(
+      buildErrorHints("VOICE_CLONE_PROVIDER_ERROR: Gemini voice clone failed (404)")
+    ).toEqual([
+      "Check google_api_key in Settings → Google Gemini.",
+      "For Gemini Voice Replication, ensure your recording recites the required consent statement: 'I am the owner of this voice and I consent to Google using this voice to create a synthetic voice model.'"
+    ]);
+    expect(
+      buildErrorHints("VOICE_DESIGN_PROVIDER_ERROR: Qwen voice design failed")
+    ).toEqual([
+      "Check dashscope_api_key in Settings → 阿里云 DashScope.",
+      "Verify DashScope Voice Design/Clone service quota on Alibaba Cloud console."
+    ]);
+  });
+
   it("detects suggested provider target correctly", () => {
     expect(detectSuggestedProvider("Google API key not configured")).toEqual({
       provider: "Google",
