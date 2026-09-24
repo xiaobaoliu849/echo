@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import useVoiceManagement from "./useVoiceManagement";
 import { createFormatErrorMessageStub } from "../test/factories";
@@ -41,13 +41,14 @@ describe("useVoiceManagement", () => {
     expect(result.current.design.designCanSubmit).toBe(true);
   });
 
-  it("does not auto-fetch custom voices before DashScope API key is configured", () => {
+  it("loads local clones without a cloud API key", () => {
     const formatErrorMessage = createFormatErrorMessageStub();
     renderHook(() =>
       useVoiceManagement({ formatErrorMessage, dashscopeApiKeyConfigured: false })
     );
 
-    expect(listCustomVoices).not.toHaveBeenCalled();
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "gpt_sovits", true);
+    expect(listCustomVoices).not.toHaveBeenCalledWith("voice_design", "qwen", true);
   });
 
   it("auto-fetches custom voices when DashScope API key is configured", () => {
@@ -56,8 +57,8 @@ describe("useVoiceManagement", () => {
       useVoiceManagement({ formatErrorMessage, dashscopeApiKeyConfigured: true })
     );
 
-    expect(listCustomVoices).toHaveBeenCalledWith("voice_design", "qwen");
-    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "qwen");
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_design", "qwen", true);
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "qwen", true);
   });
 
   it("fetches ElevenLabs clone voices after switching provider", async () => {
@@ -75,7 +76,8 @@ describe("useVoiceManagement", () => {
 
     await act(async () => {});
 
-    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "elevenlabs");
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "elevenlabs", true);
+    expect(result.current.cloneProvider).toBe("elevenlabs");
   });
 
   it("validates clone audio file metadata on selection", () => {
@@ -145,8 +147,8 @@ describe("useVoiceManagement", () => {
 
     await act(async () => {});
 
-    expect(listCustomVoices).toHaveBeenCalledWith("voice_design", "gemini");
-    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "gemini");
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_design", "gemini", true);
+    expect(listCustomVoices).toHaveBeenCalledWith("voice_clone", "gemini", true);
   });
 
   it("blocks Gemini cloning until a separate consent clip is selected", async () => {
@@ -195,5 +197,61 @@ describe("useVoiceManagement", () => {
 
     expect(result.current.clone.cloneInfo).toContain("xiao");
     expect(result.current.clone.cloneInfo).not.toContain("voice_xiao_123");
+  });
+
+  it("shows Gemini and Qwen clones together and deletes through the matching provider", async () => {
+    vi.mocked(listCustomVoices).mockImplementation(async (type, provider) => ({
+      voice_type: type,
+      count: provider === "gpt_sovits" ? 0 : 1,
+      voices: provider === "gpt_sovits" ? [] : [{
+        voice: provider === "gemini" ? "voice_gemini_clone" : "qwen_clone",
+        type: "voice_clone",
+        target_model: provider === "gemini" ? "gemini-3.8-flash-tts" : "qwen3-tts-vc-realtime",
+        name: provider === "gemini" ? "My voice" : "Qwen voice",
+      }],
+    }));
+    vi.mocked(deleteCustomVoice).mockResolvedValue();
+    const { result } = renderHook(() => useVoiceManagement({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      dashscopeApiKeyConfigured: true,
+      googleApiKeyConfigured: true,
+    }));
+    await act(async () => {});
+    expect(result.current.clone.cloneVoices).toEqual(expect.arrayContaining([
+      expect.objectContaining({ voice: "voice_gemini_clone", provider: "gemini" }),
+      expect.objectContaining({ voice: "qwen_clone", provider: "qwen" }),
+    ]));
+    await act(async () => {
+      await result.current.clone.onDeleteVoice("voice_gemini_clone", "gemini");
+    });
+    expect(deleteCustomVoice).toHaveBeenCalledWith("voice_gemini_clone", "voice_clone", "gemini");
+  });
+
+  it("shows Gemini clones while the Qwen catalog is still loading", async () => {
+    let finishQwen!: (value: { voice_type: "voice_clone"; count: number; voices: [] }) => void;
+    vi.mocked(listCustomVoices).mockImplementation((type, provider) => {
+      if (type === "voice_clone" && provider === "qwen") {
+        return new Promise(resolve => { finishQwen = resolve; });
+      }
+      return Promise.resolve({
+        voice_type: type,
+        count: provider === "gemini" ? 1 : 0,
+        voices: provider === "gemini" ? [{
+          voice: "voice_gemini_clone", type: "voice_clone", target_model: "gemini-3.8-flash-tts",
+        }] : [],
+      });
+    });
+    const formatErrorMessage = createFormatErrorMessageStub();
+    const { result } = renderHook(() => useVoiceManagement({
+      formatErrorMessage,
+      dashscopeApiKeyConfigured: true,
+      googleApiKeyConfigured: true,
+    }));
+    await waitFor(() => expect(result.current.clone.cloneVoices).toEqual(expect.arrayContaining([
+      expect.objectContaining({ voice: "voice_gemini_clone", provider: "gemini" }),
+    ])));
+    expect(result.current.clone.cloneListBusy).toBe(true);
+    act(() => finishQwen({ voice_type: "voice_clone", count: 0, voices: [] }));
+    await waitFor(() => expect(result.current.clone.cloneListBusy).toBe(false));
   });
 });

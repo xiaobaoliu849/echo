@@ -53,7 +53,9 @@ export default function VoiceClonePage({
   const filteredVoices = useMemo(() => {
     if (!searchQuery.trim()) return clone.cloneVoices;
     const q = searchQuery.toLowerCase();
-    return clone.cloneVoices.filter((v) => v.voice.toLowerCase().includes(q));
+    return clone.cloneVoices.filter((v) =>
+      `${v.voice} ${v.name || ""} ${v.provider || ""}`.toLowerCase().includes(q)
+    );
   }, [clone.cloneVoices, searchQuery]);
 
   const acceptedFormats =
@@ -429,6 +431,7 @@ export default function VoiceClonePage({
 
       {/* Card Grid */}
       <div className="vsVoiceStudioGridWrap custom-scrollbar">
+        {clone.cloneError && <ErrorNotice message={clone.cloneError} scope="voice_clone" />}
         {clone.cloneListBusy && clone.cloneVoices.length === 0 ? (
           <div className="vsVoiceStudioEmpty">
             <div className="vsVoiceStudioEmptyIcon">
@@ -470,7 +473,7 @@ export default function VoiceClonePage({
           <div className="vsVoiceStudioGrid">
             {filteredVoices.map((item) => (
               <VoiceCard
-                key={item.voice}
+                key={`${item.provider || "unknown"}:${item.voice}`}
                 item={item}
                 onDelete={(e) => {
                   e.stopPropagation();
@@ -482,7 +485,7 @@ export default function VoiceClonePage({
                       )
                     )
                   ) {
-                    void clone.onDeleteVoice(item.voice);
+                    void clone.onDeleteVoice(item.voice, item.provider as VoiceProviderId | undefined);
                   }
                 }}
               />

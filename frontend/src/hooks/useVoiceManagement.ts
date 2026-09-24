@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   createVoiceClone,
   createVoiceDesign,
@@ -105,6 +105,7 @@ export default function useVoiceManagement({
   const [cloneError, setCloneError] = useState("");
   const [cloneInfo, setCloneInfo] = useState("");
   const [cloneVoices, setCloneVoices] = useState<CustomVoice[]>([]);
+  const cloneRequestRef = useRef(0);
 
   // Design and Clone tabs share one provider selector. ElevenLabs only
   // supports cloning, so a provider picked on the clone page must not leak
@@ -154,44 +155,62 @@ export default function useVoiceManagement({
   }
 
   async function refreshCustomVoices(voiceType: VoiceType, options: { silentIfMissingKey?: boolean } = {}) {
-    if (!isProviderKeyConfigured(voiceType === "voice_design" ? voiceProvider : cloneProvider)) {
+    if (voiceType === "voice_clone") {
+      await refreshCloneVoices();
+      return;
+    }
+    if (!isProviderKeyConfigured(voiceProvider)) {
       if (!options.silentIfMissingKey) {
-        setMissingKeyError(voiceType);
+        setMissingKeyError("voice_design");
       }
       return;
     }
     try {
-      if (voiceType === "voice_design") {
-        setDesignListBusy(true);
-      } else {
-        setCloneListBusy(true);
-      }
-      const result = await listCustomVoices(voiceType, voiceType === "voice_design" ? voiceProvider : cloneProvider);
-      if (voiceType === "voice_design") {
-        setDesignVoices(result.voices);
-      } else {
-        setCloneVoices(result.voices);
-      }
+      setDesignListBusy(true);
+      const result = await listCustomVoices("voice_design", voiceProvider, true);
+      setDesignVoices(result.voices.map(item => ({ ...item, provider: voiceProvider })));
     } catch (err) {
       const message = formatErrorMessage(err, t("加载音色列表失败。", "Failed to load the voice list."));
-      if (voiceType === "voice_design") {
-        setDesignError(message);
-      } else {
-        setCloneError(message);
-      }
+      setDesignError(message);
     } finally {
-      if (voiceType === "voice_design") {
-        setDesignListBusy(false);
-      } else {
-        setCloneListBusy(false);
-      }
+      setDesignListBusy(false);
     }
+  }
+
+  async function refreshCloneVoices() {
+    const requestId = ++cloneRequestRef.current;
+    const providers: VoiceProviderId[] = ["gpt_sovits"];
+    if (dashscopeApiKeyConfigured) providers.push("qwen");
+    if (googleApiKeyConfigured) providers.push("gemini");
+    if (elevenlabsApiKeyConfigured) providers.push("elevenlabs");
+    setCloneListBusy(true);
+    setCloneError("");
+    setCloneVoices(previous => previous.filter(item => providers.includes(item.provider as VoiceProviderId)));
+    await Promise.all(providers.map(async provider => {
+      try {
+        const result = await listCustomVoices("voice_clone", provider, true);
+        if (requestId !== cloneRequestRef.current) return;
+        setCloneVoices(previous => [
+          ...previous.filter(item => item.provider !== provider),
+          ...result.voices.map(item => ({ ...item, provider })),
+        ]);
+      } catch (err) {
+        if (requestId === cloneRequestRef.current) {
+          const message = formatErrorMessage(err, t("加载音色列表失败。", "Failed to load the voice list."));
+          setCloneError(previous => `${previous ? `${previous}\n` : ""}${provider}: ${message}`);
+        }
+      }
+    }));
+    if (requestId === cloneRequestRef.current) setCloneListBusy(false);
   }
 
   useEffect(() => {
     void refreshCustomVoices("voice_design", { silentIfMissingKey: true });
-    void refreshCustomVoices("voice_clone", { silentIfMissingKey: true });
-  }, [dashscopeApiKeyConfigured, xiaomiApiKeyConfigured, elevenlabsApiKeyConfigured, voiceProvider, cloneProvider]);
+  }, [dashscopeApiKeyConfigured, xiaomiApiKeyConfigured, elevenlabsApiKeyConfigured, googleApiKeyConfigured, voiceProvider]);
+
+  useEffect(() => {
+    void refreshCloneVoices();
+  }, [dashscopeApiKeyConfigured, elevenlabsApiKeyConfigured, googleApiKeyConfigured]);
 
   async function onDesignSubmit(event: FormEvent) {
     event.preventDefault();
@@ -270,7 +289,14 @@ export default function useVoiceManagement({
       });
       const displayName = result.preferred_name || cloneName.trim();
       setCloneInfo(t(`已创建音色：${displayName}`, `Created voice: ${displayName}`));
-      await refreshCustomVoices("voice_clone");
+      const voiceId = result.voice;
+      if (voiceId) {
+        setCloneVoices(previous => [
+          { voice: voiceId, type: "voice_clone", target_model: result.target_model || "", name: displayName, provider: cloneProvider },
+          ...previous.filter(item => item.voice !== voiceId || item.provider !== cloneProvider),
+        ]);
+      }
+      void refreshCloneVoices();
     } catch (err) {
       setCloneError(formatErrorMessage(err, t("创建克隆音色失败。", "Failed to create the cloned voice.")));
     } finally {
@@ -278,10 +304,16 @@ export default function useVoiceManagement({
     }
   }
 
-  async function onDeleteVoice(voiceName: string, voiceType: VoiceType) {
+  async function onDeleteVoice(voiceName: string, voiceType: VoiceType, provider?: VoiceProviderId) {
     try {
-      await deleteCustomVoice(voiceName, voiceType, voiceType === "voice_design" ? voiceProvider : cloneProvider);
-      await refreshCustomVoices(voiceType);
+      const targetProvider = provider || (voiceType === "voice_design" ? voiceProvider : cloneProvider);
+      await deleteCustomVoice(voiceName, voiceType, targetProvider);
+      if (voiceType === "voice_clone") {
+        setCloneVoices(previous => previous.filter(item => item.voice !== voiceName || item.provider !== targetProvider));
+        void refreshCloneVoices();
+      } else {
+        await refreshCustomVoices(voiceType);
+      }
     } catch (err) {
       const message = formatErrorMessage(err, t("删除音色失败。", "Failed to delete the voice."));
       if (voiceType === "voice_design") {
@@ -360,6 +392,7 @@ export default function useVoiceManagement({
 
   return {
     voiceProvider,
+    cloneProvider,
     setVoiceProvider,
     design: {
       designPrompt,
@@ -406,7 +439,7 @@ export default function useVoiceManagement({
       ],
       onSubmit: onCloneSubmit,
       onRefresh: () => refreshCustomVoices("voice_clone"),
-      onDeleteVoice: (voiceName: string) => onDeleteVoice(voiceName, "voice_clone"),
+      onDeleteVoice: (voiceName: string, provider?: VoiceProviderId) => onDeleteVoice(voiceName, "voice_clone", provider),
       cloneConsentFile,
       onNameChange: setCloneName,
       onAudioFileChange: onCloneAudioFileChange,

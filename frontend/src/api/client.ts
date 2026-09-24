@@ -1260,12 +1260,14 @@ export async function translateImage(params: {
 
 export async function listCustomVoices(
   voiceType: VoiceType,
-  provider?: string
+  provider?: string,
+  fresh = false
 ): Promise<CustomVoiceListResponse> {
   let url = `${API_BASE_URL}/api/voices/?voice_type=${encodeURIComponent(voiceType)}`;
   if (provider) {
     url += `&provider=${encodeURIComponent(provider)}`;
   }
+  if (fresh) idempotentGetCache.delete(url);
   return cachedGetJson<CustomVoiceListResponse>(url);
 }
 

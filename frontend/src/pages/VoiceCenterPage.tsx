@@ -20,6 +20,7 @@ type Props = {
   errorRuntimeContext: ErrorRuntimeContext;
   onSendToChat?: (text: string) => void;
   voiceProvider?: VoiceProviderId;
+  cloneProvider?: VoiceProviderId;
   onVoiceProviderChange?: (provider: VoiceProviderId) => void;
   onOpenSettings?: (provider?: string) => void;
 };
@@ -32,6 +33,7 @@ export default function VoiceCenterPage({
   errorRuntimeContext,
   onSendToChat,
   voiceProvider = "qwen",
+  cloneProvider = "qwen",
   onVoiceProviderChange,
   onOpenSettings,
 }: Props) {
@@ -210,7 +212,7 @@ export default function VoiceCenterPage({
              <div className="vsVoiceSubContent"><VoiceDesignPage design={design} errorRuntimeContext={errorRuntimeContext} voiceProvider={voiceProvider} onVoiceProviderChange={onVoiceProviderChange} onDetailModeChange={setIsDetailMode} /></div>
           )}
           {activeTab === "clone" && (
-             <div className="vsVoiceSubContent"><VoiceClonePage clone={clone} errorRuntimeContext={errorRuntimeContext} voiceProvider={voiceProvider} onVoiceProviderChange={onVoiceProviderChange} onDetailModeChange={setIsDetailMode} /></div>
+             <div className="vsVoiceSubContent"><VoiceClonePage clone={clone} errorRuntimeContext={errorRuntimeContext} voiceProvider={cloneProvider} onVoiceProviderChange={onVoiceProviderChange} onDetailModeChange={setIsDetailMode} /></div>
           )}
           {activeTab === "transcribe" && (
              <div className="vsVoiceSubContent"><TranscriptionPage onSendToChat={onSendToChat} onDetailModeChange={setIsDetailMode} onOpenSettings={onOpenSettings} /></div>
