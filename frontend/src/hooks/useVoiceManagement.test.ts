@@ -171,4 +171,29 @@ describe("useVoiceManagement", () => {
     act(() => result.current.clone.onConsentFileChange(consent));
     expect(result.current.clone.cloneCanSubmit).toBe(true);
   });
+
+  it("reports the requested display name after Gemini creates a generated voice ID", async () => {
+    const formatErrorMessage = createFormatErrorMessageStub();
+    vi.mocked(createVoiceClone).mockResolvedValue({
+      voice: "voice_xiao_123",
+      preferred_name: "xiao",
+      type: "voice_clone",
+    });
+    const { result } = renderHook(() =>
+      useVoiceManagement({ formatErrorMessage, googleApiKeyConfigured: true })
+    );
+    act(() => {
+      result.current.setVoiceProvider("gemini");
+      result.current.clone.onNameChange("xiao");
+      result.current.clone.onAudioFileChange(new File(["sample"], "sample.wav", { type: "audio/wav" }));
+      result.current.clone.onConsentFileChange(new File(["consent"], "consent.wav", { type: "audio/wav" }));
+    });
+
+    await act(async () => {
+      await result.current.clone.onSubmit({ preventDefault() {} } as any);
+    });
+
+    expect(result.current.clone.cloneInfo).toContain("xiao");
+    expect(result.current.clone.cloneInfo).not.toContain("voice_xiao_123");
+  });
 });

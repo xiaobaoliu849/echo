@@ -222,7 +222,8 @@ export default function useVoiceManagement({
         language: designLanguage.trim() || "zh",
         provider: voiceProvider,
       });
-      setDesignInfo(t(`已创建音色：${result.voice ?? "未知"}`, `Created voice: ${result.voice ?? "unknown"}`));
+      const displayName = result.preferred_name || designName.trim();
+      setDesignInfo(t(`已创建音色：${displayName}`, `Created voice: ${displayName}`));
       const previewAudioData = result.preview_audio_data || "";
       setDesignPreviewAudio(
         previewAudioData ? `data:audio/wav;base64,${previewAudioData}` : ""
@@ -267,7 +268,8 @@ export default function useVoiceManagement({
         consent_file: cloneConsentFile,
         provider: cloneProvider,
       });
-      setCloneInfo(t(`已创建音色：${result.voice ?? "未知"}`, `Created voice: ${result.voice ?? "unknown"}`));
+      const displayName = result.preferred_name || cloneName.trim();
+      setCloneInfo(t(`已创建音色：${displayName}`, `Created voice: ${displayName}`));
       await refreshCustomVoices("voice_clone");
     } catch (err) {
       setCloneError(formatErrorMessage(err, t("创建克隆音色失败。", "Failed to create the cloned voice.")));

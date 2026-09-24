@@ -122,7 +122,7 @@ export const VoiceCard: React.FC<Props> = ({ item, onDelete }) => {
           </span>
         </div>
         <h4 className="vsTranscribeCardTitle" title={item.voice}>
-          {item.voice}
+          {item.name || item.voice}
         </h4>
         <p className="vsTranscribeCardPreview">
           {isDesign

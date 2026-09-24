@@ -2,9 +2,10 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import useTts from './useTts';
 import { createFormatErrorMessageStub } from '../test/factories';
-import { fetchSpeakAudio, extractPdfText, polishPdfText } from '../api';
+import { fetchSpeakAudio, fetchVoices, extractPdfText, polishPdfText, VOICE_CATALOG_CHANGED_EVENT } from '../api';
 
 vi.mock('../api', () => ({
+    VOICE_CATALOG_CHANGED_EVENT: 'echo:voice-catalog-changed',
     fetchVoices: vi.fn().mockResolvedValue({ voices: [] }),
     fetchSpeakAudio: vi.fn(),
     extractPdfText: vi.fn().mockResolvedValue({ filename: 'demo.pdf', page_count: 1, text: '' }),
@@ -48,6 +49,24 @@ describe('useTts', () => {
         });
 
         expect(result.current.ttsEngine).toBe('qwen_flash');
+    });
+
+    it('reloads and exposes a newly created Gemini voice when the voice catalog changes', async () => {
+        const formatErrorMessage = createFormatErrorMessageStub();
+        const { result } = renderHook(() => useTts({ defaultText: 'Initial text', formatErrorMessage }));
+        const clonedVoice = {
+            name: 'voice_xiao_123',
+            short_name: 'xiao',
+            locale: '',
+            gender: 'Custom',
+        };
+
+        vi.mocked(fetchVoices).mockResolvedValue({ count: 1, voices: [clonedVoice] });
+        await act(async () => {
+            window.dispatchEvent(new Event(VOICE_CATALOG_CHANGED_EVENT));
+        });
+
+        expect(result.current.voiceOptions).toContainEqual({ value: 'voice_xiao_123', label: 'xiao (自定义)' });
     });
 
     it('blocks pdf mode submit without prepared text', async () => {

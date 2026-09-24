@@ -6,6 +6,7 @@ import functools
 import hashlib
 import html
 import json
+import logging
 import os
 import re
 import sys
@@ -52,6 +53,7 @@ from .gemini_tts_provider import (
     gemini_tts_synthesize,
     is_gemini_voice,
 )
+from .gemini_voice_service import GeminiVoiceService
 from .soniox_tts_provider import (
     SONIOX_TTS_VOICES,
     DEFAULT_SONIOX_TTS_MODEL,
@@ -791,7 +793,31 @@ class TTSService:
         self._atomic_write_bytes(path, audio_bytes)
 
     async def _fetch_gemini_voices(self) -> list[dict[str, Any]]:
-        return list(GEMINI_TTS_VOICES)
+        voices = list(GEMINI_TTS_VOICES)
+        try:
+            stored = await GeminiVoiceService(config=self.config).list_stored_voices()
+        except ValueError:
+            return voices  # The prebuilt catalog remains available before key setup.
+        except (RuntimeError, httpx.HTTPError) as exc:
+            logging.getLogger(__name__).warning("Could not load stored Gemini voices: %s", exc)
+            return voices
+
+        seen = {str(voice["name"]).lower() for voice in voices}
+        for item in stored:
+            if str(item.get("type", "")).lower() not in {"replicated", "prompted"}:
+                continue
+            voice_id = str(item.get("id") or item.get("voice_id") or "").strip()
+            if not voice_id.startswith("voice_") or voice_id.lower() in seen:
+                continue
+            seen.add(voice_id.lower())
+            voices.append({
+                "name": voice_id,
+                "short_name": str(item.get("display_name") or voice_id),
+                "locale": "",
+                "gender": "Custom",
+                "description": str(item.get("description") or ""),
+            })
+        return voices
 
     def _doubao_settings(self) -> tuple[str, str, str]:
         """Return (access_token, app_id, cluster) for Doubao OpenSpeech TTS."""

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { fetchSpeakAudio, fetchVoices, extractPdfText, polishPdfText, type TtsEngine, type VoiceInfo } from "../api";
+import { fetchSpeakAudio, fetchVoices, extractPdfText, polishPdfText, VOICE_CATALOG_CHANGED_EVENT, type TtsEngine, type VoiceInfo } from "../api";
 import { createInlineTranslator, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 import { formatVoiceLabel } from "../utils/voiceFormatter";
@@ -115,6 +115,13 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
   const [polishingPdf, setPolishingPdf] = useState(false);
   const [ttsError, setTtsError] = useState("");
   const [ttsInfo, setTtsInfo] = useState("");
+  const [voiceCatalogRevision, setVoiceCatalogRevision] = useState(0);
+
+  useEffect(() => {
+    const refreshVoiceCatalog = () => setVoiceCatalogRevision((revision) => revision + 1);
+    window.addEventListener(VOICE_CATALOG_CHANGED_EVENT, refreshVoiceCatalog);
+    return () => window.removeEventListener(VOICE_CATALOG_CHANGED_EVENT, refreshVoiceCatalog);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -132,7 +139,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
         if (data.voices.length > 0) {
           // Set default voice as the first sorted voice for better UX
           const sorted = sortVoices(data.voices, language);
-          setVoice(sorted[0].name);
+          setVoice((current) => data.voices.some((item) => item.name === current) ? current : sorted[0].name);
         } else {
           setVoice("");
         }
@@ -151,7 +158,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     return () => {
       disposed = true;
     };
-  }, [formatErrorMessage, ttsEngine, ttsModel, language]);
+  }, [formatErrorMessage, ttsEngine, ttsModel, language, voiceCatalogRevision]);
 
   useEffect(() => {
     let disposed = false;
@@ -167,7 +174,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
         setVoicesB(data.voices);
         if (data.voices.length > 0) {
           const sorted = sortVoices(data.voices, language);
-          setVoiceB(sorted[0].name);
+          setVoiceB((current) => data.voices.some((item) => item.name === current) ? current : sorted[0].name);
         } else {
           setVoiceB("");
         }
@@ -186,7 +193,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     return () => {
       disposed = true;
     };
-  }, [formatErrorMessage, ttsEngineB, ttsModelB, language]);
+  }, [formatErrorMessage, ttsEngineB, ttsModelB, language, voiceCatalogRevision]);
 
   const voiceOptions = useMemo(() => {
     const sorted = sortVoices(voices, language);
