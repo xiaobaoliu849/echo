@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { History, RotateCcw, Trash2, X } from "lucide-react";
+import { History, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import ErrorNotice from "../components/ErrorNotice";
 import useTtsHistory, { type TtsHistoryEntry } from "../hooks/useTtsHistory";
 import type { UseTtsResult } from "../hooks/useTts";
@@ -80,6 +80,130 @@ function truncate(text: string, max: number): string {
   const trimmed = text.trim().replace(/\s+/g, " ");
   if (trimmed.length <= max) return trimmed;
   return trimmed.slice(0, max) + "…";
+}
+
+function formatHistoryVoiceName(voice: string): string {
+  if (!voice) return "";
+  const parenMatch = voice.match(/\(([^)]+)\)/);
+  let base = voice.replace(/\s*\([^)]*\)/g, "").trim();
+  base = base.replace(/^[a-z]{2,3}-[A-Z]{2,3}-/, "");
+  base = base.replace(/Neural$/i, "");
+  base = base.replace(/^[-_]+/, "");
+  if (parenMatch && parenMatch[1]) {
+    const parenContent = parenMatch[1].trim();
+    if (!parenContent.includes(base) && !base.includes(parenContent)) {
+      return `${base} (${parenContent})`;
+    }
+  }
+  return base || voice;
+}
+
+function TtsHistoryMiniPlayer({ src }: { src: string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      document.querySelectorAll("audio").forEach((el) => {
+        if (el !== audio && !el.paused) {
+          el.pause();
+        }
+      });
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => setIsPlaying(false));
+      }
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current && isFinite(audioRef.current.duration)) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = val;
+      setCurrentTime(val);
+    }
+  };
+
+  const formatSecs = (s: number) => {
+    if (isNaN(s) || !isFinite(s) || s < 0) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  const displayTime = isPlaying || currentTime > 0
+    ? `${formatSecs(currentTime)} / ${formatSecs(duration)}`
+    : formatSecs(duration);
+
+  return (
+    <div className="vsTtsMiniPlayer">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        }}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+      />
+      <button
+        type="button"
+        className={`vsTtsMiniPlayBtn ${isPlaying ? "playing" : ""}`}
+        onClick={togglePlay}
+        title={isPlaying ? "暂停" : "播放"}
+        aria-label={isPlaying ? "暂停" : "播放"}
+      >
+        {isPlaying ? (
+          <Pause size={10} fill="currentColor" />
+        ) : (
+          <Play size={10} fill="currentColor" style={{ marginLeft: "1px" }} />
+        )}
+      </button>
+
+      <div className="vsTtsMiniProgressWrap">
+        <input
+          type="range"
+          min={0}
+          max={duration || 1}
+          step={0.1}
+          value={currentTime}
+          onChange={handleSeek}
+          className="vsTtsMiniRange"
+          aria-label="播放进度"
+        />
+        <div
+          className="vsTtsMiniProgressBar"
+          style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+        />
+      </div>
+
+      <span className="vsTtsMiniTime">
+        {displayTime}
+      </span>
+    </div>
+  );
 }
 
 export default function TtsPage({ tts, errorRuntimeContext }: Props) {
@@ -687,59 +811,49 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
             ) : (
               history.map((entry: TtsHistoryEntry) => (
                 <div key={entry.id} className="vsTtsHistoryCard">
-                  <div className="vsTtsHistoryCardMeta">
-                    <span className="vsTtsHistoryCardTime">{formatHistoryTime(entry.createdAt, t)}</span>
-                    <span className="vsTtsHistoryCardSep">·</span>
-                    <span className="vsTtsHistoryCardEngine">{entry.engine}</span>
-                    {entry.voice && (
-                      <>
-                        <span className="vsTtsHistoryCardSep">·</span>
-                        <span className="vsTtsHistoryCardVoice" title={entry.voice}>
-                          {entry.voice.split(/[-_]/).pop() || entry.voice}
-                        </span>
-                      </>
-                    )}
-                    {entry.rate && entry.rate !== "+0%" && (
-                      <span className="vsTtsHistoryCardRate">{entry.rate}</span>
-                    )}
+                  <div className="vsTtsHistoryCardHeader">
+                    <div className="vsTtsHistoryCardMeta">
+                      <span className="vsTtsHistoryCardTime">{formatHistoryTime(entry.createdAt, t)}</span>
+                      <span className="vsTtsHistoryCardSep">·</span>
+                      <span className="vsTtsHistoryCardEngine">{entry.engine}</span>
+                      {entry.voice && (
+                        <>
+                          <span className="vsTtsHistoryCardSep">·</span>
+                          <span className="vsTtsHistoryCardVoice" title={entry.voice}>
+                            {formatHistoryVoiceName(entry.voice)}
+                          </span>
+                        </>
+                      )}
+                      {entry.rate && entry.rate !== "+0%" && (
+                        <span className="vsTtsHistoryCardRate">{entry.rate}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="vsTtsHistoryRemove"
+                      onClick={() => removeEntry(entry.id)}
+                      title={t("删除", "Delete")}
+                      aria-label={t("删除", "Delete")}
+                    >
+                      <X size={13} aria-hidden="true" />
+                    </button>
                   </div>
+
                   <div className="vsTtsHistoryCardText" title={entry.text}>
                     {truncate(entry.text, 120)}
                   </div>
+
                   <div className="vsTtsHistoryCardFooter">
-                    <audio
-                      controls
-                      src={buildReplayUrl(entry)}
-                      className="vsTtsHistoryAudio"
-                      preload="none"
-                      onPlay={(e) => {
-                        document.querySelectorAll("audio").forEach((el) => {
-                          if (el !== e.currentTarget && !el.paused) {
-                            el.pause();
-                          }
-                        });
-                      }}
-                    />
-                    <div className="vsTtsHistoryCardBtns">
-                      <button
-                        type="button"
-                        className="vsTtsHistoryRestoreBtn"
-                        onClick={() => handleRestoreText(entry)}
-                        title={t("恢复此文本与配置到输入框", "Restore text and voice to editor")}
-                      >
-                        <RotateCcw size={12} aria-hidden="true" />
-                        <span>{t("恢复", "Restore")}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="vsTtsHistoryRemove"
-                        onClick={() => removeEntry(entry.id)}
-                        title={t("删除", "Delete")}
-                        aria-label={t("删除", "Delete")}
-                      >
-                        <X size={14} aria-hidden="true" />
-                      </button>
-                    </div>
+                    <TtsHistoryMiniPlayer src={buildReplayUrl(entry)} />
+                    <button
+                      type="button"
+                      className="vsTtsHistoryRestoreBtn"
+                      onClick={() => handleRestoreText(entry)}
+                      title={t("恢复此文本与配置到输入框", "Restore text and voice to editor")}
+                    >
+                      <RotateCcw size={12} aria-hidden="true" />
+                      <span>{t("恢复", "Restore")}</span>
+                    </button>
                   </div>
                 </div>
               ))
