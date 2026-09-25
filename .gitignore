@@ -33,6 +33,8 @@ backend/temp_audio/
 *.jpg
 *.wav
 output/
+output_showcase/
+scratch_words.json
 backup_before_cleanup/
 backend/temp_stream_test.html
 backend/patch_tts_router.py
