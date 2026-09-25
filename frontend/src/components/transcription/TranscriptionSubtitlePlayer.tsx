@@ -27,7 +27,9 @@ import {
 import {
   burnTranscriptionVideo,
   fetchTranscriptionTranslation,
+  fetchTranslationProviders,
   translateTranscriptionCues,
+  type TranslationProviderOption,
   type WordTimestamp,
 } from "../../api";
 import { useI18n } from "../../i18n";
@@ -79,6 +81,29 @@ const SUPPORTED_TRANSLATE_LANGUAGES = [
   { code: "es", label: "Español (西班牙语)" },
   { code: "ru", label: "Русский (俄语)" },
 ];
+
+/**
+ * Offline fallback when the backend catalog endpoint is unreachable. Labels
+ * intentionally stay brand-level (no pinned version numbers) so the fallback
+ * itself cannot go stale; the live endpoint decorates each option with the
+ * provider's actually configured default model.
+ */
+const FALLBACK_TRANSLATION_PROVIDERS: TranslationProviderOption[] = [
+  { id: "DashScope", label: "DashScope (通义千问 Qwen)", note: "推荐 · 官方 Qwen 系列", model: "qwen-plus", has_api_key: false, custom: false },
+  { id: "Google", label: "Google (Gemini)", note: "Gemini 系列", model: "gemini-2.5-flash", has_api_key: false, custom: false },
+  { id: "DeepSeek", label: "DeepSeek", note: "V3 / R1 系列", model: "deepseek-chat", has_api_key: false, custom: false },
+  { id: "OpenRouter", label: "OpenRouter", note: "多厂商聚合网关", model: "deepseek/deepseek-chat", has_api_key: false, custom: false },
+  { id: "SiliconFlow", label: "SiliconFlow (硅基流动)", note: "开源模型聚合", model: "deepseek-ai/DeepSeek-V3", has_api_key: false, custom: false },
+];
+
+/** Dropdown label: brand + the live configured model + key-missing hint. */
+function translationOptionLabel(opt: TranslationProviderOption, t: (zh: string, en: string) => string, showKeyHint: boolean): string {
+  const suffixes: string[] = [];
+  if (opt.model) suffixes.push(opt.model);
+  if (showKeyHint && !opt.has_api_key) suffixes.push(t("未配置 Key", "no API key"));
+  const suffix = suffixes.length > 0 ? ` — ${suffixes.join(" · ")}` : "";
+  return `${opt.label}${suffix}`;
+}
 
 function isVideoFile(name?: string | null): boolean {
   if (!name) return false;
@@ -532,8 +557,40 @@ export default function TranscriptionSubtitlePlayer({
   const [langView, setLangView] = useState<"bilingual" | "source" | "target">("bilingual");
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [targetLang, setTargetLang] = useState("zh-CN");
-  const [translateModel, setTranslateModel] = useState("DashScope");
+  const [translateModel, setTranslateModel] = useState(FALLBACK_TRANSLATION_PROVIDERS[0].id);
+  const [translationProviders, setTranslationProviders] = useState<TranslationProviderOption[]>(FALLBACK_TRANSLATION_PROVIDERS);
+  // The offline fallback list cannot know key status, so the "未配置 Key"
+  // hint is only rendered once live backend data has arrived.
+  const [providersFromBackend, setProvidersFromBackend] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+
+  // Live translation-engine catalog from the backend: fresh labels plus each
+  // provider's actually configured default chat model and API-key status.
+  const translateModelTouchedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchTranslationProviders()
+      .then((res) => {
+        if (cancelled || !res || !Array.isArray(res.providers) || res.providers.length === 0) return;
+        setTranslationProviders(res.providers);
+        setProvidersFromBackend(true);
+        setTranslateModel((current) => {
+          // Respect an explicit user pick; clamp if it vanished from the live list.
+          if (translateModelTouchedRef.current) {
+            return res.providers.some((p) => p.id === current) ? current : (res.providers[0].id || current);
+          }
+          // Otherwise land on the backend's recommendation (first provider
+          // with a configured API key) instead of a blind default.
+          return res.recommended || current;
+        });
+      })
+      .catch(() => {
+        // Keep the offline fallback list; select stays functional.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Inline Cue Editing
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -1240,16 +1297,18 @@ export default function TranscriptionSubtitlePlayer({
                     <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("翻译大模型", "Translation Engine")}</label>
                     <select
                       value={translateModel}
-                      onChange={(e) => setTranslateModel(e.target.value)}
+                      onChange={(e) => {
+                        translateModelTouchedRef.current = true;
+                        setTranslateModel(e.target.value);
+                      }}
                       className="vsSelect"
                       style={{ height: 38, borderRadius: 8, fontSize: 13 }}
                     >
-                      <option value="DashScope">DashScope (通义千问 Qwen / 推荐)</option>
-                      <option value="Google">Google (Gemini 2.5 Flash)</option>
-                      <option value="DeepSeek">DeepSeek (V3 / R1)</option>
-                      <option value="Xiaomi">Xiaomi (小米 MiMo)</option>
-                      <option value="OpenRouter">OpenRouter</option>
-                      <option value="SiliconFlow">SiliconFlow (硅基流动)</option>
+                      {translationProviders.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {translationOptionLabel(opt, t, providersFromBackend)}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

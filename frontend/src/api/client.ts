@@ -38,6 +38,7 @@ import type {
   TranscriptionJobResponse,
   TranscriptionResponse,
   TranslateJobResponse,
+  TranslationProvidersResponse,
   TranslateRequest,
   WordTimestamp,
   TranslateResponse,
@@ -1821,6 +1822,16 @@ export async function fetchTranscriptionTranslation(
   );
   if (!response.ok) {
     return null;
+  }
+  return response.json();
+}
+
+export async function fetchTranslationProviders(): Promise<TranslationProvidersResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/transcription/translation-providers`
+  );
+  if (!response.ok) {
+    await throwApiError(response);
   }
   return response.json();
 }

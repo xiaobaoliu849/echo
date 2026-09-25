@@ -1085,6 +1085,43 @@ class TranslateJobResponse(BaseModel):
     cues: list[CueItem]
 
 
+class TranslationProviderOption(BaseModel):
+    id: str
+    label: str
+    note: str = ""
+    model: str = ""
+    has_api_key: bool = False
+    custom: bool = False
+
+
+class TranslationProvidersResponse(BaseModel):
+    providers: list[TranslationProviderOption]
+    recommended: str = "DashScope"
+
+
+@router.get( # type: ignore
+    "/translation-providers",
+    response_model=TranslationProvidersResponse,
+    responses={
+        500: {"description": "Failed to list translation providers.", "model": StructuredErrorResponse},
+    },
+)
+async def list_translation_providers() -> TranslationProvidersResponse:
+    """Live options for the subtitle-translation engine picker.
+
+    Mirrors each provider's actually configured default chat model and API-key
+    status (plus custom OpenAI-compatible providers) so the frontend dropdown
+    never shows stale hardcoded model names again.
+    """
+    try:
+        return TranslationProvidersResponse(**transcription_service.list_translation_providers())
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_error("TRANSLATION_PROVIDERS_FAILED", str(exc)),
+        ) from exc
+
+
 class BurnVideoRequest(BaseModel):
     srt_content: str = Field(..., min_length=1)
     target_language: str | None = None

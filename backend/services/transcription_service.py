@@ -23,7 +23,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-from .config_loader import BackendConfig
+from .config_loader import BackendConfig, PROVIDER_KEY_MAP
 from .evermem_config import EverMemConfig
 from .transcription_publish_adapter import build_transcription_publisher
 from .llm_service import LLMService
@@ -2379,8 +2379,91 @@ class TranscriptionService:
         "DeepSeek": "deepseek-chat",
         "OpenRouter": "deepseek/deepseek-chat",
         "SiliconFlow": "deepseek-ai/DeepSeek-V3",
-        "Xiaomi": "mimo-v2.5-pro",
+        "Groq": "llama-3.3-70b-versatile",
+        "Ollama": "qwen2.5:7b",
     }
+
+    # Chat-capable providers usable by subtitle translation. Must stay a subset
+    # of llm_service.SUPPORTED_PROVIDERS (custom providers aside) — every entry
+    # here is routed through chat_completion / the Google Interactions API.
+    # Ordered by recommendation; the frontend renders the list in this order.
+    TRANSLATION_PROVIDER_LABELS = [
+        ("DashScope", "DashScope (通义千问 Qwen)", "推荐 · 官方 Qwen 系列"),
+        ("Google", "Google (Gemini)", "Gemini 系列"),
+        ("DeepSeek", "DeepSeek", "V3 / R1 系列"),
+        ("OpenRouter", "OpenRouter", "多厂商聚合网关"),
+        ("SiliconFlow", "SiliconFlow (硅基流动)", "开源模型聚合"),
+        ("Groq", "Groq", "Llama 系列超低延迟"),
+        ("Ollama", "Ollama (本地模型)", "本地部署 · 离线可用"),
+    ]
+
+    def list_translation_providers(self) -> dict[str, Any]:
+        """Build the translation-engine picker payload from live config.
+
+        The old frontend dropdown hardcoded brand labels + stale model names;
+        this returns each provider's *actually configured* default chat model
+        (default_models in config.json / fetch-models results) plus whether an
+        API key is present, so the UI never drifts from the backend again.
+        Custom providers (custom_providers) are appended so users can translate
+        through any OpenAI-compatible gateway they configured in Settings.
+        """
+        config = self.config.get_all()
+        api_keys = config.get("api_keys", {}) if isinstance(config.get("api_keys"), dict) else {}
+        default_models = config.get("default_models", {}) if isinstance(config.get("default_models"), dict) else {}
+
+        def _provider_default_model(provider: str) -> str:
+            value = default_models.get(provider)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, dict):
+                default = value.get("default")
+                if isinstance(default, str) and default.strip():
+                    return default.strip()
+            return ""
+
+        providers: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for provider_id, label, note in self.TRANSLATION_PROVIDER_LABELS:
+            key_field = PROVIDER_KEY_MAP.get(provider_id, "")
+            # Ollama runs locally with no API key (llm_service fakes one), so it
+            # is always usable — don't scare users with a "missing key" hint.
+            has_key = provider_id == "Ollama" or bool(str(api_keys.get(key_field, "")).strip())
+            model = _provider_default_model(provider_id) or self.DEFAULT_TRANSLATION_MODELS.get(provider_id, "")
+            providers.append({
+                "id": provider_id,
+                "label": label,
+                "note": note,
+                "model": model,
+                "has_api_key": has_key,
+                "custom": False,
+            })
+            seen.add(provider_id)
+
+        for cp in config.get("custom_providers", []):
+            if not isinstance(cp, dict):
+                continue
+            cp_id = str(cp.get("id", "")).strip()
+            if not cp_id or cp_id in seen:
+                continue
+            providers.append({
+                "id": cp_id,
+                "label": str(cp.get("name", "")).strip() or cp_id,
+                "note": "自定义 OpenAI 兼容渠道 (Custom provider)",
+                "model": str(cp.get("default_model", "")).strip(),
+                "has_api_key": bool(str(cp.get("api_key", "")).strip()),
+                "custom": True,
+            })
+
+        # The persisted pick stays valid; otherwise recommend the first cloud
+        # provider with a key actually configured (DashScope first). Ollama is
+        # key-less by design, so it never "wins" the recommendation merely by
+        # needing no key — a local runtime the user may not have installed is
+        # a worse default than the primary cloud recommendation.
+        recommended = next(
+            (p["id"] for p in providers if p["has_api_key"] and p["id"] != "Ollama"),
+            "DashScope",
+        )
+        return {"providers": providers, "recommended": recommended}
 
     async def translate_cues(
         self,
@@ -2411,12 +2494,16 @@ class TranscriptionService:
         }
         target_name = lang_names.get(target_language, target_language)
 
-        # 1. Resolve provider with configured API key
+        # 1. Resolve provider with configured API key. Ollama is exempt: it is
+        # a local runtime without an API key (llm_service fakes one upstream),
+        # so it is the last-resort fallback when no cloud key exists.
         resolved_provider = provider or "DashScope"
         p_settings = self.config.get_provider_settings(resolved_provider)
-        if not p_settings.get("api_key"):
+        if not p_settings.get("api_key") and resolved_provider != "Ollama":
             found = False
-            for fallback_p in ["DashScope", "Google", "DeepSeek", "Xiaomi", "OpenRouter", "SiliconFlow"]:
+            # Keep every entry routable by llm_service.chat_completion. Xiaomi is
+            # deliberately absent: chat_completion raises "Unsupported provider".
+            for fallback_p in ["DashScope", "Google", "DeepSeek", "OpenRouter", "SiliconFlow", "Groq"]:
                 candidate = self.config.get_provider_settings(fallback_p)
                 if candidate.get("api_key"):
                     resolved_provider = fallback_p
@@ -2424,7 +2511,8 @@ class TranscriptionService:
                     found = True
                     break
             if not found:
-                raise ValueError("未检测到任何可用的大模型 API Key。请在“设置 -> API 设置”中配置 DashScope、Google、DeepSeek 或 Xiaomi 的 API Key。")
+                resolved_provider = "Ollama"
+                p_settings = self.config.get_provider_settings("Ollama")
 
         # 2. Resolve model name for the provider
         resolved_model = (model or "").strip()

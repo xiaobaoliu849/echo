@@ -340,6 +340,22 @@ export type SettingsResponse = {
   settings: AppSettings;
 };
 
+// ── Subtitle translation engine picker (live backend catalog) ───────────────
+
+export type TranslationProviderOption = {
+  id: string;
+  label: string;
+  note: string;
+  model: string;
+  has_api_key: boolean;
+  custom: boolean;
+};
+
+export type TranslationProvidersResponse = {
+  providers: TranslationProviderOption[];
+  recommended: string;
+};
+
 export type DesktopStatusResponse = {
   runtime_dir: string;
   diagnostics_dir: string;
