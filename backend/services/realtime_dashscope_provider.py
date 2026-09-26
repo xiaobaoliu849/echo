@@ -25,6 +25,10 @@ from .realtime_constants import (
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE,
     DEFAULT_QWEN_OMNI_REALTIME_VOICE,
+    DEFAULT_QWEN_OMNI_TURN_DETECTION_TYPE,
+    DEFAULT_QWEN_OMNI_THRESHOLD,
+    DEFAULT_QWEN_OMNI_SILENCE_MS,
+    DEFAULT_QWEN_OMNI_PREFIX_PADDING_MS,
     QWEN_AUDIO_BENIGN_ERROR_PATTERNS,
     QWEN_OMNI_REALTIME_VOICES,
     _is_dashscope_audio_realtime_model,
@@ -163,7 +167,16 @@ class DashScopeRealtimeMixin:
                 
         return normalized
     @staticmethod
-    def _configure_dashscope_conversation(conversation: Any, *, voice: str, instructions: str) -> None:
+    def _configure_dashscope_conversation(
+        conversation: Any,
+        *,
+        voice: str,
+        instructions: str,
+        turn_detection_type: str | None = None,
+        turn_detection_threshold: float | None = None,
+        turn_detection_silence_duration_ms: int | None = None,
+        prefix_padding_ms: int | None = None,
+    ) -> None:
         if type(conversation) is DashScopeAudioRealtimeConversation:
             # Qwen-Audio raw client: its update_session() already sends the full
             # config on the first call and instructions+tools on later calls.
@@ -198,17 +211,37 @@ class DashScopeRealtimeMixin:
             return
         model_str = str(getattr(conversation, "model", "") or "").lower()
         is_omni = _is_dashscope_omni_realtime_model(model_str)
+        resolved_turn_type = str(
+            turn_detection_type or (DEFAULT_QWEN_OMNI_TURN_DETECTION_TYPE if is_omni else "server_vad")
+        ).strip().lower()
+        resolved_threshold = (
+            float(turn_detection_threshold)
+            if turn_detection_threshold is not None
+            else (DEFAULT_QWEN_OMNI_THRESHOLD if is_omni else 0.2)
+        )
+        resolved_silence_ms = (
+            int(turn_detection_silence_duration_ms)
+            if turn_detection_silence_duration_ms is not None
+            else (DEFAULT_QWEN_OMNI_SILENCE_MS if is_omni else 1200)
+        )
+        resolved_padding_ms = (
+            int(prefix_padding_ms)
+            if prefix_padding_ms is not None
+            else (DEFAULT_QWEN_OMNI_PREFIX_PADDING_MS if is_omni else 300)
+        )
+        asr_model = "qwen3-asr-flash-realtime" if is_omni else None
+
         logger.info(
-            "dashscope_omni_session_update model=%s voice=%s omni_profile=%s asr_model=%s",
+            "dashscope_omni_session_update model=%s voice=%s omni_profile=%s asr_model=%s turn_type=%s threshold=%s silence_ms=%s padding_ms=%s",
             model_str,
             voice,
             is_omni,
-            "qwen3-asr-flash-realtime" if is_omni else None,
+            asr_model,
+            resolved_turn_type,
+            resolved_threshold,
+            resolved_silence_ms,
+            resolved_padding_ms,
         )
-        turn_type = "semantic_vad" if is_omni else "server_vad"
-        threshold = 0.5 if is_omni else 0.2
-        silence_duration_ms = 900 if is_omni else 1200
-        asr_model = "qwen3-asr-flash-realtime" if is_omni else None
 
         conversation.update_session(
             output_modalities=[MultiModality.AUDIO, MultiModality.TEXT],  # type: ignore[union-attr]
@@ -218,10 +251,10 @@ class DashScopeRealtimeMixin:
             enable_input_audio_transcription=True,
             input_audio_transcription_model=asr_model,
             enable_turn_detection=True,
-            turn_detection_type=turn_type,
-            turn_detection_threshold=threshold,
-            prefix_padding_ms=500 if is_omni else 300,
-            turn_detection_silence_duration_ms=silence_duration_ms,
+            turn_detection_type=resolved_turn_type,
+            turn_detection_threshold=resolved_threshold,
+            prefix_padding_ms=resolved_padding_ms,
+            turn_detection_silence_duration_ms=resolved_silence_ms,
             turn_detection_param={"interrupt_response": False},
             instructions=instructions,
             tools=dashscope_tool_declarations(),
@@ -1343,10 +1376,19 @@ class DashScopeRealtimeMixin:
             else:
                 conversation.connect()
             await asyncio.sleep(0.5)
+            all_settings = self.config.get_all()
+            dashscope_rt_cfg = all_settings.get("dashscope_realtime")
+            rt_cfg = dashscope_rt_cfg if isinstance(dashscope_rt_cfg, dict) else {}
             self._configure_dashscope_conversation(
                 conversation,
                 voice=resolved_voice,
                 instructions=self._build_realtime_instructions(),
+                turn_detection_type=rt_cfg.get("turn_detection_type"),
+                turn_detection_threshold=rt_cfg.get("turn_detection_threshold"),
+                turn_detection_silence_duration_ms=(
+                    rt_cfg.get("silence_duration_ms") or rt_cfg.get("turn_detection_silence_duration_ms")
+                ),
+                prefix_padding_ms=rt_cfg.get("prefix_padding_ms"),
             )
             await asyncio.sleep(0.5)
             await self._send_event(

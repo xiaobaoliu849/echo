@@ -805,13 +805,34 @@ class TestDashScopeOmniSessionConfig(unittest.TestCase):
 
         self.assertEqual(len(conversation.update_session_calls), 1)
         kwargs = conversation.update_session_calls[0]
-        self.assertEqual(kwargs.get("turn_detection_type"), "semantic_vad")
-        self.assertEqual(kwargs.get("turn_detection_threshold"), 0.5)
-        self.assertEqual(kwargs.get("turn_detection_silence_duration_ms"), 900)
-        self.assertEqual(kwargs.get("prefix_padding_ms"), 500)
+        self.assertEqual(kwargs.get("turn_detection_type"), "server_vad")
+        self.assertEqual(kwargs.get("turn_detection_threshold"), 0.2)
+        self.assertEqual(kwargs.get("turn_detection_silence_duration_ms"), 800)
+        self.assertEqual(kwargs.get("prefix_padding_ms"), 300)
         self.assertEqual(kwargs.get("input_audio_transcription_model"), "qwen3-asr-flash-realtime")
         self.assertTrue(kwargs.get("enable_input_audio_transcription"))
         self.assertTrue(conversation._vs_omni_session_configured)
+
+    def test_qwen_omni_custom_vad_overrides(self) -> None:
+        service = RealtimeVoiceService.__new__(RealtimeVoiceService)
+        conversation = _StubOmniConversation("qwen3.8-omni-flash-realtime")
+
+        service._configure_dashscope_conversation(
+            conversation,
+            voice="Tina",
+            instructions="hello",
+            turn_detection_type="semantic_vad",
+            turn_detection_threshold=0.35,
+            turn_detection_silence_duration_ms=1000,
+            prefix_padding_ms=400,
+        )
+
+        self.assertEqual(len(conversation.update_session_calls), 1)
+        kwargs = conversation.update_session_calls[0]
+        self.assertEqual(kwargs.get("turn_detection_type"), "semantic_vad")
+        self.assertEqual(kwargs.get("turn_detection_threshold"), 0.35)
+        self.assertEqual(kwargs.get("turn_detection_silence_duration_ms"), 1000)
+        self.assertEqual(kwargs.get("prefix_padding_ms"), 400)
 
     def test_followup_config_sends_instructions_only(self) -> None:
         service = RealtimeVoiceService.__new__(RealtimeVoiceService)

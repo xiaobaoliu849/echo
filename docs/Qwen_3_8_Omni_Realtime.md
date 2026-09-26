@@ -78,16 +78,18 @@ so the backend had no code, no message and no log line either.
 | --- | --- |
 | `realtime_constants.DASHSCOPE_OMNI_REALTIME_PATTERN` | new shared pattern `qwen3\.(?:5\|8)-omni-(?:plus\|flash)-realtime(?:-date)?` |
 | `realtime_tool_protocol.dashscope_supports_native_tools` | imports that pattern instead of keeping its own 3.5-only copy |
-| `realtime_dashscope_provider` | the omni session profile (semantic_vad / 0.5 / 900 ms silence / `qwen3-asr-flash-realtime` / 500 ms prefix) and the omni voice validation are keyed on `_is_dashscope_omni_realtime_model`, not on the literal `"qwen3.5-omni"` substring |
+| `realtime_dashscope_provider` | the omni session profile (`server_vad` / threshold 0.2 / 800 ms silence / `qwen3-asr-flash-realtime` / 300 ms prefix) and the omni voice validation are keyed on `_is_dashscope_omni_realtime_model`, not on the literal `"qwen3.5-omni"` substring. Turn detection type, threshold, and silence duration support runtime overrides via `dashscope_realtime` in config.json |
 | `settings.DASHSCOPE_MODEL_LIST_SUPPLEMENTS` | does **not** force-add `qwen3.8-omni-flash-realtime` — advertising a model the account cannot use only produces an AccessDenied call. `_filter_dashscope_models` keeps the id, so discovery surfaces it the moment the vendor lists it |
 | `settings_service` DashScope defaults | 3.8 omni is in `available`, **not** in `enabled` (the picker's default set) |
 | `realtime_constants.DEFAULT_DASHSCOPE_REALTIME_MODEL`, `useVoiceChatHelpers.DEFAULT_DASHSCOPE_MODEL` | both stay `qwen3.5-omni-plus-realtime` |
 | `realtime_voice_service` model-support error | names the 3.8 model first, keeps the 3.5 and qwen-audio entries |
 | `useVoiceChatHelpers.isRealtimeVoiceModel` | accepts the 3.8 omni family; still rejects the non-realtime `qwen3.8-omni-flash` |
 
-The literal-substring bug mattered on its own: before it, a 3.8 omni session fell
-through to the generic profile (server_vad, no ASR model, 1200 ms silence), which
-would have degraded turn-taking even once the model is available.
+Previously, an experimental `semantic_vad` with threshold `0.5` caused low-to-normal
+speech to be missed (or delayed by up to 4.88s), and caused turn-completion to hang for
+up to 60 seconds (the DashScope server buffer limit) before flushing. Using `server_vad`
+with SDK default threshold `0.2` and 800 ms silence brings initial ASR preview latency
+down to <250 ms and ends turns immediately upon 800 ms of local silence.
 
 ## Diagnostics added
 

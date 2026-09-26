@@ -71,6 +71,17 @@ QWEN_LIVETRANSLATE_38_TURN_DETECTION: dict[str, Any] = {
     "silence_duration_ms": QWEN_LIVETRANSLATE_SILENCE_MS,
 }
 
+# Turn detection parameters for Qwen Omni realtime models (qwen3.5/3.8 omni).
+#
+# Server VAD with threshold 0.2 and 800ms silence matches the official SDK
+# defaults and ensures sensitive, low-latency turn-taking across varying mic volumes.
+# Previously, semantic_vad with threshold 0.5 caused low/normal speech to be missed
+# or delayed, and hung for up to 60 seconds (the server buffer timeout) before flushing.
+DEFAULT_QWEN_OMNI_TURN_DETECTION_TYPE = "server_vad"
+DEFAULT_QWEN_OMNI_THRESHOLD = 0.2
+DEFAULT_QWEN_OMNI_SILENCE_MS = 800
+DEFAULT_QWEN_OMNI_PREFIX_PADDING_MS = 300
+
 # Voices supported by the qwen3.5 / qwen3.8 omni realtime models (default:
 # Tina), per the official omni voice list. The provider rejects voices from the
 # older qwen3-omni / qwen-omni-turbo family (e.g. "Cherry"), so the backend
