@@ -30,14 +30,11 @@ GOOGLE_REALTIME_VOICES = (
     "Laomedeia", "Pulcherrima", "Rasalgethi", "Sadachbia", "Sadaltager",
     "Schedar", "Sulafat", "Umbriel", "Vindemiatrix", "Zubenelgenubi",
 )
-# Shipped DashScope default. Qwen3.8-Omni-Flash-Realtime exists
-# (``qwen3.8-omni-flash-realtime`` is listed by the vendor's voice-cloning API
-# reference) but its session is closed by the server right after the socket
-# opens in the configured workspace, and the vendor's own model-selection page
-# still routes realtime audio/video dialogue to 3.5. The 3.5 alias stays the
-# default until a live call on 3.8 succeeds — see docs/Qwen_3_8_Omni_Realtime.md
-# for the evidence and the one-line flip.
-DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-plus-realtime"
+# Shipped DashScope default. ``qwen3.8-omni-flash-realtime`` was verified live
+# in the configured cn-beijing workspace on 2026-09-26 (full adapter payload →
+# ``session.updated``, see docs/Qwen_3_8_Omni_Realtime.md), so 3.8 takes over
+# from the 3.5 omni alias, which remains in the picker as a fallback.
+DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.8-omni-flash-realtime"
 DEFAULT_DASHSCOPE_REALTIME_VOICE = "Tina"
 
 # Realtime omni model ids Echo can drive. Mirrored by

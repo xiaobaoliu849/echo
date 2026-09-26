@@ -32,7 +32,7 @@ References:
 - `response.function_call_arguments.done` contains `call_id`, `name`, and JSON arguments.
 - VoiceSpirit sends `conversation.item.create` with item type `function_call_output` and the same `call_id`.
 - Because VoiceSpirit configures `create_response: false`, it explicitly sends `response.create` after the output item.
-- VoiceSpirit defaults to the moving `qwen3.5-omni-plus-realtime` alias. The 3.8 generation (`qwen3.8-omni-flash-realtime`) is supported and runs on the same profile but is not the default yet — its sessions are closed by the server right after they open in the configured workspace; see `docs/Qwen_3_8_Omni_Realtime.md`. Older Qwen 3 Omni Realtime models are rejected because their WebSocket API does not support Function Calling.
+- VoiceSpirit defaults to the `qwen3.8-omni-flash-realtime` alias (verified live 2026-09-26); the 3.5 generation (`qwen3.5-omni-plus-realtime`) runs on the same profile and stays in the picker as a fallback. See `docs/Qwen_3_8_Omni_Realtime.md`. Older Qwen 3 Omni Realtime models are rejected because their WebSocket API does not support Function Calling.
 
 References:
 

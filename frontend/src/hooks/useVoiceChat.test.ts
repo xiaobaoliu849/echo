@@ -578,10 +578,12 @@ describe("useVoiceChat", () => {
       })
     );
 
-    // The DashScope fallback stays on 3.5 omni until a 3.8 omni call is verified.
-    expect(result.current.voiceChatModel).toBe("qwen3.5-omni-plus-realtime");
-    // Only the current live-translate generation is offered.
+    // The DashScope fallback is the 3.8 omni default (verified live 2026-09-26).
+    expect(result.current.voiceChatModel).toBe("qwen3.8-omni-flash-realtime");
+    // Only the current omni/live-translate generations are offered, with 3.5
+    // omni kept as a fallback for workspaces without 3.8 access.
     expect(result.current.voiceChatModelOptions).toEqual([
+      "qwen3.8-omni-flash-realtime",
       "qwen3.5-omni-plus-realtime",
       "qwen3.8-livetranslate-flash-realtime",
       "qwen-audio-3.1-realtime-plus",
@@ -632,8 +634,9 @@ describe("useVoiceChat", () => {
       })
     );
 
-    expect(result.current.voiceChatModel).toBe("qwen3.5-omni-plus-realtime");
+    expect(result.current.voiceChatModel).toBe("qwen3.8-omni-flash-realtime");
     expect(result.current.voiceChatModelOptions).toEqual([
+      "qwen3.8-omni-flash-realtime",
       "qwen3.5-omni-plus-realtime",
       "qwen3.8-livetranslate-flash-realtime",
       "qwen-audio-3.1-realtime-plus",

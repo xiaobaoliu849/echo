@@ -1,15 +1,23 @@
 # Qwen 3.8 Omni Realtime
 
-Status: **the 3.8 omni realtime path is wired and tested, but the shipped default
-stays on `qwen3.5-omni-plus-realtime`.** A 3.8 session opened from the app is
-closed by the server right after the socket opens, so it must not be the model a
-fresh install starts a call with.
+Status: **the 3.8 omni realtime path is wired, tested, and is now the shipped
+default** (`qwen3.8-omni-flash-realtime`, flipped on 2026-09-26 after the vendor
+rollout reached the configured cn-beijing workspace). `qwen3.5-omni-plus-realtime`
+stays in the picker as a fallback for workspaces that do not have 3.8 access yet.
 
 ## What we observed
 
 Selecting `qwen3.8-omni-flash-realtime` in a cn-beijing workspace on 2026-09-20:
 the call opens, then closes on its own within a second or two, with no audio and
 no assistant turn.
+
+Re-run on 2026-09-26 with the same probe: both the minimal session and the full
+adapter payload (semantic_vad profile, `qwen3-asr-flash-realtime` transcription,
+native tools) now receive `session.created` + `session.updated` and hold the
+socket until `session.finish` — identical behavior to 3.5. The account's model
+catalog now lists `qwen3.8-omni-flash-realtime`, so the rollout has arrived and
+the default was flipped (see "Flipping the default to 3.8" below for the steps,
+now executed).
 
 The failure was previously undiagnosable from the app side: the DashScope close
 code and close message were dropped in `_dashscope_to_client_loop`, and an
@@ -109,19 +117,19 @@ payload, the payload without `input_audio_transcription` (the 3.5-era ASR model 
 the field our 3.8 LiveTranslate adapter had to stop sending), and the 3.5 model
 as a control.
 
-## Flipping the default to 3.8
+## Flipping the default to 3.8 (executed 2026-09-26)
 
-0. Wait for the rollout (`GET /compatible-mode/v1/models` must list
+0. ~~Wait for the rollout (`GET /compatible-mode/v1/models` must list
    `qwen3.8-omni-flash-realtime`), then confirm a live session with
    `python tests/manual_probe_omni_session.py --minimal`: it must answer
-   `session.updated` instead of AccessDenied. 阿里云 ticket/支持 can confirm
-   whether the account can be allow-listed early.
-1. `DEFAULT_DASHSCOPE_REALTIME_MODEL` → `qwen3.8-omni-flash-realtime`
-   (or `qwen3.8-omni-plus-realtime`, the pattern accepts both).
-2. Add the same id to the `enabled` list in
-   `settings_service.DEFAULT_MODELS`'s DashScope entry (no supplement needed once
-   the model list returns it).
-3. `DEFAULT_DASHSCOPE_MODEL` in `frontend/src/hooks/useVoiceChatHelpers.ts` to match.
+   `session.updated` instead of AccessDenied.~~ Done: minimal **and** full
+   adapter payloads return `session.updated` on 2026-09-26.
+1. ~~`DEFAULT_DASHSCOPE_REALTIME_MODEL` → `qwen3.8-omni-flash-realtime`~~ Done.
+2. ~~Add the same id to the `enabled` list in
+   `settings_service.DEFAULT_MODELS`'s DashScope entry~~ Done.
+3. ~~`DEFAULT_DASHSCOPE_MODEL` in `frontend/src/hooks/useVoiceChatHelpers.ts` to
+   match~~ Done; the built-in DashScope list also keeps
+   `qwen3.5-omni-plus-realtime` as an explicit fallback entry.
 4. Update this doc with the measured behavior, and the `Closing note` in
    `docs/Realtime_Native_Tool_Calling_Design.md` if the id changes.
 

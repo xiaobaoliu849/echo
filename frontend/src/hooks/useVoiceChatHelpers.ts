@@ -86,9 +86,10 @@ export function normalizeProviderKey(provider: string): string {
   return LEGACY_PROVIDER_ALIASES[trimmed] ?? trimmed;
 }
 // Shipped DashScope realtime default. Mirrors DEFAULT_DASHSCOPE_REALTIME_MODEL
-// in backend/services/realtime_constants.py: 3.5 until a 3.8 omni call is
-// verified live (the 3.8 realtime session is closed by the server today).
-export const DEFAULT_DASHSCOPE_MODEL = "qwen3.5-omni-plus-realtime";
+// in backend/services/realtime_constants.py: 3.8 omni was verified live on
+// 2026-09-26 (docs/Qwen_3_8_Omni_Realtime.md); 3.5 stays in the picker as a
+// fallback for workspaces without 3.8 access.
+export const DEFAULT_DASHSCOPE_MODEL = "qwen3.8-omni-flash-realtime";
 export const DEFAULT_OPENAI_MODEL = "gpt-realtime-2";
 export const DEFAULT_STEPFUN_MODEL = "stepaudio-3-realtime-preview";
 export const DEFAULT_DOUBAO_MODEL = "doubao-realtime";
@@ -915,6 +916,8 @@ export function resolveRealtimeModelOptions(
   const dashscopeBuiltIns = provider === DASHSCOPE_PROVIDER
     ? [
         DEFAULT_DASHSCOPE_MODEL,
+        // Kept as a fallback: some workspaces still lack 3.8 omni access.
+        "qwen3.5-omni-plus-realtime",
         "qwen3.8-livetranslate-flash-realtime",
         // Qwen-Audio realtime: 3.1 replaces 3.0 (which the backend retires from
         // the picker; a saved 3.0 selection still runs).
