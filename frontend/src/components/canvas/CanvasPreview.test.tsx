@@ -36,6 +36,9 @@ describe("CanvasPreview React execution", () => {
     "export default () => <h1>Canvas cat</h1>;",
     "const Cat = () => <h1>Canvas cat</h1>; export default Cat;",
     "function App() { return <h1>Canvas cat</h1>; }",
+    "export function Cat() { return <h1>Canvas cat</h1>; }",
+    "function Cat() { return <h1>Canvas cat</h1>; }",
+    "const Cat = () => <h1>Canvas cat</h1>;",
   ])("renders supported component syntax: %s", code => {
     const preview = executePreview(code);
     try {

@@ -116,16 +116,65 @@ def dashscope_supports_native_tools(model: str | None) -> bool:
     )
 
 
+import ast
+
+
 def parse_tool_arguments(arguments: Any) -> dict[str, Any]:
     if isinstance(arguments, dict):
         return dict(arguments)
     if isinstance(arguments, str):
+        text = arguments.strip()
+        if not text:
+            return {}
+
+        # Strip markdown code fences if wrapped in ```json ... ``` or ``` ... ```
+        fence_match = re.match(r"^```(?:json)?\s*\n?([\s\S]*?)\n?```$", text, re.IGNORECASE)
+        if fence_match:
+            text = fence_match.group(1).strip()
+
+        # 1. Primary parse with strict=False to tolerate literal newlines/tabs inside code strings
         try:
-            decoded = json.loads(arguments)
-        except json.JSONDecodeError as exc:
-            raise ValueError("Tool arguments are not valid JSON.") from exc
-        if isinstance(decoded, dict):
-            return decoded
+            decoded = json.loads(text, strict=False)
+            if isinstance(decoded, dict):
+                return decoded
+            raise ValueError("Tool arguments must be a JSON object.")
+        except json.JSONDecodeError:
+            pass
+
+        # 2. Try removing trailing commas before closing braces/brackets
+        cleaned = re.sub(r",\s*([}\]])", r"\1", text)
+        try:
+            decoded = json.loads(cleaned, strict=False)
+            if isinstance(decoded, dict):
+                return decoded
+            raise ValueError("Tool arguments must be a JSON object.")
+        except json.JSONDecodeError:
+            pass
+
+        # 3. Extract the outermost JSON object if surrounding text exists
+        obj_match = re.search(r"\{[\s\S]*\}", text)
+        if obj_match:
+            cleaned_obj = re.sub(r",\s*([}\]])", r"\1", obj_match.group(0))
+            try:
+                decoded = json.loads(cleaned_obj, strict=False)
+                if isinstance(decoded, dict):
+                    return decoded
+            except Exception:
+                pass
+
+        # 4. Fallback for Python-style dict strings
+        try:
+            parsed = ast.literal_eval(text)
+            if isinstance(parsed, dict):
+                return {str(k): v for k, v in parsed.items()}
+            if isinstance(parsed, (list, tuple, int, float, bool)):
+                raise ValueError("Tool arguments must be a JSON object.")
+        except (ValueError, SyntaxError) as exc:
+            if "JSON object" in str(exc):
+                raise
+            pass
+
+        raise ValueError("Tool arguments are not valid JSON.")
     raise ValueError("Tool arguments must be a JSON object.")
 
 
@@ -134,26 +183,93 @@ def tool_call_to_request(call: RealtimeToolCall) -> VoiceToolRequest:
     if not call_id:
         raise ValueError("Native tool call is missing provider_call_id.")
     arguments = parse_tool_arguments(call.arguments)
-    name = str(call.tool_name or "").strip()
+    name = str(call.tool_name or "").strip().lower()
+
+    # Normalize tool name aliases
+    if name in {"search_web", "web_search", "google_search", "search"}:
+        name = "search_web"
+    elif name in {"recall_memory", "memory", "retrieve_memory", "search_memory"}:
+        name = "recall_memory"
+    elif name in {"render_canvas", "canvas", "draw_canvas", "update_canvas", "render", "draw", "draw_component"}:
+        name = "render_canvas"
+    elif name in {"translate_text", "translate"}:
+        name = "translate_text"
+    elif name in {"summarize_transcript", "summarize", "summary"}:
+        name = "summarize_transcript"
 
     if name == "search_web":
-        return VoiceToolRequest(name, _required_text(arguments, "query", max_length=240), "搜索网页资料")
+        query = (
+            arguments.get("query")
+            or arguments.get("search_query")
+            or arguments.get("q")
+            or arguments.get("prompt")
+        )
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("Tool argument 'query' must be a non-empty string.")
+        return VoiceToolRequest("search_web", query.strip()[:240], "搜索网页资料")
+
     if name == "recall_memory":
-        return VoiceToolRequest(name, _required_text(arguments, "query", max_length=240), "检索长期记忆")
+        query = (
+            arguments.get("query")
+            or arguments.get("search_query")
+            or arguments.get("q")
+            or arguments.get("prompt")
+        )
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("Tool argument 'query' must be a non-empty string.")
+        return VoiceToolRequest("recall_memory", query.strip()[:240], "检索长期记忆")
+
     if name == "translate_text":
         source = _required_text(arguments, "text", max_length=4000)
         target = _required_text(arguments, "target_language", max_length=80)
-        return VoiceToolRequest(name, f"{source}\n目标语言:{target}", "翻译文本")
+        return VoiceToolRequest("translate_text", f"{source}\n目标语言:{target}", "翻译文本")
+
     if name == "summarize_transcript":
-        return VoiceToolRequest(name, _required_text(arguments, "text", max_length=4000), "总结转录文本")
+        return VoiceToolRequest("summarize_transcript", _required_text(arguments, "text", max_length=4000), "总结转录文本")
+
     if name == "render_canvas":
-        code = _required_text(arguments, "code", max_length=50000)
-        mode = str(arguments.get("mode") or "react").strip().lower()
+        code_raw = (
+            arguments.get("code")
+            or arguments.get("jsx")
+            or arguments.get("html")
+            or arguments.get("component")
+            or arguments.get("content")
+            or arguments.get("source")
+            or arguments.get("canvas_code")
+            or arguments.get("svg")
+            or arguments.get("body")
+        )
+        if isinstance(code_raw, dict):
+            code_raw = (
+                code_raw.get("code")
+                or code_raw.get("jsx")
+                or code_raw.get("component")
+                or code_raw.get("html")
+                or code_raw.get("content")
+                or code_raw.get("source")
+            )
+        if not isinstance(code_raw, str) or not code_raw.strip():
+            raise ValueError("Tool argument 'code' must be a non-empty string containing the React component or HTML to render.")
+
+        code = code_raw.strip()
+        fence_match = re.match(r"^```(?:jsx|tsx|react|html|javascript|js)?\s*\n?([\s\S]*?)\n?```$", code, re.IGNORECASE)
+        if fence_match:
+            code = fence_match.group(1).strip()
+        code = code[:50000]
+
+        mode = str(arguments.get("mode") or "").strip().lower()
         if mode not in {"react", "html"}:
-            mode = "react"
-        title = str(arguments.get("title") or "Canvas Component").strip()[:100]
+            if "<!doctype html" in code.lower() or "<html" in code.lower():
+                mode = "html"
+            else:
+                mode = "react"
+
+        title = str(arguments.get("title") or "").strip()[:100]
+        if not title:
+            title = "Canvas Component"
+
         return VoiceToolRequest(
-            name,
+            "render_canvas",
             json.dumps({"code": code, "mode": mode, "title": title}, ensure_ascii=False),
             "渲染画布组件",
         )

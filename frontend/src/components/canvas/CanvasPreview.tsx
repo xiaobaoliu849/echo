@@ -49,12 +49,34 @@ function getReactHtml(code: string) {
         const evaluate = new Function('React', 'require',
           'const { useState, useEffect, useRef, useMemo, useCallback } = React;\\n' +
           'return function(module, exports) {\\n' +
-          compiled + '\\n;return module.exports.default || (typeof App !== "undefined" ? App : ' +
-          '(typeof DefaultComponent !== "undefined" ? DefaultComponent : null));\\n};');
-        const Component = evaluate(React, require)(module, module.exports);
+          compiled + '\\n;' +
+          'var __comp = module.exports.default || (typeof App !== "undefined" ? App : ' +
+          '(typeof DefaultComponent !== "undefined" ? DefaultComponent : null));\\n' +
+          'if (!__comp && module.exports) {\\n' +
+          '  var __vals = Object.values(module.exports);\\n' +
+          '  for (var i = 0; i < __vals.length; i++) {\\n' +
+          '    if (typeof __vals[i] === "function") { __comp = __vals[i]; break; }\\n' +
+          '  }\\n' +
+          '}\\n' +
+          'return __comp;\\n};');
+        let Component = evaluate(React, require)(module, module.exports);
+        if (!Component) {
+          const candidateNames = Array.from(${source}.matchAll(/(?:function|const|class)\\s+([A-Z]\\w*)/g), m => m[1]);
+          for (const name of candidateNames) {
+            if (name === 'App' || name === 'DefaultComponent' || name === 'React' || name === 'ReactDOM') continue;
+            try {
+              const findComp = new Function('React', 'require',
+                'const { useState, useEffect, useRef, useMemo, useCallback } = React;\\n' +
+                'return function(module, exports) {\\n' +
+                compiled + '\\n;return typeof ' + name + ' !== "undefined" && typeof ' + name + ' === "function" ? ' + name + ' : null;\\n};');
+              const found = findComp(React, require)(module, module.exports);
+              if (found) { Component = found; break; }
+            } catch (_) {}
+          }
+        }
         if (!Component) throw new Error('No React component found (expected a default export or App).');
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(Component));
+        root.render(React.isValidElement(Component) ? Component : React.createElement(Component));
       } catch (err) {
         reportError(err);
       }

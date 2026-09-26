@@ -522,6 +522,32 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         conversation.create_response.assert_called_once_with()
         websocket.send_json.assert_awaited_once()
 
+    async def test_dashscope_canvas_result_omits_code_from_acknowledgement(self) -> None:
+        websocket = MagicMock()
+        websocket.send_json = AsyncMock()
+        conversation = MagicMock()
+        result = {
+            "tool_name": "render_canvas",
+            "query": "Puppy",
+            "answer": "Rendered Puppy",
+            "artifact": {"type": "canvas", "mode": "react", "title": "Puppy", "code": "export default () => <svg />;"},
+        }
+
+        await self.service._send_dashscope_tool_response(
+            websocket,
+            conversation,
+            provider_call_id="call-canvas-1",
+            tool_name="render_canvas",
+            response_payload=tool_result_payload(result),
+            result=result,
+        )
+
+        raw_event = json.loads(conversation.send_raw.call_args.args[0])
+        output_payload = json.loads(raw_event["item"]["output"])
+        self.assertTrue(output_payload["ok"])
+        self.assertEqual(output_payload["artifact"]["title"], "Puppy")
+        self.assertNotIn("code", output_payload["artifact"])
+
     async def test_dashscope_tool_delivery_failure_closes_conversation(self) -> None:
         websocket = MagicMock()
         websocket.send_json = AsyncMock()

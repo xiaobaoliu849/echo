@@ -79,6 +79,13 @@ class DashScopeRealtimeMixin:
     ) -> None:
         if not provider_call_id:
             raise ValueError("DashScope native tool response requires a provider call ID.")
+        if tool_name == "render_canvas" and isinstance(response_payload, dict):
+            artifact = response_payload.get("artifact")
+            if isinstance(artifact, dict) and "code" in artifact:
+                response_payload = {
+                    **response_payload,
+                    "artifact": {key: value for key, value in artifact.items() if key != "code"},
+                }
         try:
             conversation.send_raw(
                 json.dumps(

@@ -69,11 +69,49 @@ class RealtimeToolProtocolTests(unittest.TestCase):
     def test_arguments_require_json_object_and_required_fields(self) -> None:
         self.assertEqual(parse_tool_arguments('{"query":"weather"}'), {"query": "weather"})
         with self.assertRaisesRegex(ValueError, "valid JSON"):
-            parse_tool_arguments("{")
+            parse_tool_arguments("invalid non json string")
         with self.assertRaisesRegex(ValueError, "JSON object"):
             parse_tool_arguments("[]")
         with self.assertRaisesRegex(ValueError, "query"):
             tool_call_to_request(RealtimeToolCall("Google", "call-1", "search_web", {}))
+
+    def test_arguments_tolerate_unescaped_newlines_and_markdown_fences(self) -> None:
+        raw_with_newline = '{\n"code": "function App() {\nreturn <div>Hi</div>;\n}"\n}'
+        parsed = parse_tool_arguments(raw_with_newline)
+        self.assertIn("function App()", parsed["code"])
+
+        fenced = "```json\n{\"query\": \"echo assistant\"}\n```"
+        self.assertEqual(parse_tool_arguments(fenced), {"query": "echo assistant"})
+
+        trailing_comma = '{"code": "const X = 1;", "mode": "react",}'
+        self.assertEqual(parse_tool_arguments(trailing_comma)["code"], "const X = 1;")
+
+    def test_render_canvas_supports_aliases_fences_and_nested_payloads(self) -> None:
+        # Tool name alias: 'canvas' or 'draw_canvas'
+        req1 = tool_call_to_request(
+            RealtimeToolCall(
+                "DashScope",
+                "call-c1",
+                "canvas",
+                {"jsx": "```jsx\nexport default function Puppy() { return <svg />; }\n```", "title": "Puppy"},
+            )
+        )
+        self.assertEqual(req1.tool_name, "render_canvas")
+        self.assertIn('"title": "Puppy"', req1.query)
+        self.assertIn("export default function Puppy()", req1.query)
+        self.assertNotIn("```", req1.query)
+
+        # Nested argument structure: {"code": {"component": "..."}}
+        req2 = tool_call_to_request(
+            RealtimeToolCall(
+                "DashScope",
+                "call-c2",
+                "render_canvas",
+                {"code": {"component": "export default () => <div>Detailed Puppy</div>"}},
+            )
+        )
+        self.assertIn("Detailed Puppy", req2.query)
+        self.assertIn('"mode": "react"', req2.query)
 
     def test_translation_arguments_are_normalized_for_existing_executor(self) -> None:
         request = tool_call_to_request(
