@@ -121,6 +121,7 @@ QWEN_AUDIO_BENIGN_ERROR_PATTERNS = (
     "no active response",
     "Cannot cancel",
     "already has an active response",
+    "Unknown function call id",
 )
 
 DEFAULT_OPENAI_REALTIME_MODEL = "gpt-realtime-2"

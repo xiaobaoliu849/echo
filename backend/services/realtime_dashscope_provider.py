@@ -25,6 +25,7 @@ from .realtime_constants import (
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_DASHSCOPE_LIVETRANSLATE_VOICE,
     DEFAULT_QWEN_OMNI_REALTIME_VOICE,
+    QWEN_AUDIO_BENIGN_ERROR_PATTERNS,
     QWEN_OMNI_REALTIME_VOICES,
     _is_dashscope_audio_realtime_model,
     _is_dashscope_live_translate_model,
@@ -497,16 +498,14 @@ class DashScopeRealtimeMixin:
                 ) -> None:
                     nonlocal gated_tool_turn_id
                     gated_tool_turn_id = ""
-                    await self._send_dashscope_tool_response(
-                        websocket,
-                        conversation,
-                        provider_call_id=call_id,
-                        tool_name=name,
-                        response_payload=tool_error_payload(message),
-                        create_response=False,
-                        conversation_turn_id=canonical_turn_id,
-                        tool_call_id=local_tool_call_id,
-                        recorder=recorder,
+                    # After a barge-in, DashScope's response.cancel invalidates
+                    # the pending call_id on the server.  Sending a
+                    # function_call_output for that id triggers "Unknown function
+                    # call id".  Skip the write-back; the frontend already
+                    # received tool_call_cancelled from VoiceAgentToolSession.
+                    logger.info(
+                        "dashscope_native_tool_cancel_skipped call_id=%s name=%s reason=%s",
+                        call_id, name, message,
                     )
 
                 gated_tool_turn_id = tool_turn_id
@@ -749,7 +748,10 @@ class DashScopeRealtimeMixin:
                 continue
             if event_type == "error":
                 error_msg = str(event.get("message", ""))
-                if "no active response" in error_msg.lower():
+                # Benign race conditions (turn-management collisions, stale
+                # call_ids after barge-in) must not kill the session.  Use the
+                # shared pattern list so both DashScope providers stay in sync.
+                if any(pattern.lower() in error_msg.lower() for pattern in QWEN_AUDIO_BENIGN_ERROR_PATTERNS):
                     logger.warning("DashScope returned non-fatal error: %s. Ignoring.", error_msg)
                     continue
                 if "cannot create response" in error_msg.lower():
