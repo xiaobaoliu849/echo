@@ -4,7 +4,6 @@ import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
   DASHSCOPE_PROVIDER,
-  DEFAULT_DASHSCOPE_MODEL,
   DEFAULT_TAVUS_MODEL,
   GLM4VOICE_PROVIDER,
   PERSONAPLEX_PROVIDER,
@@ -131,17 +130,24 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
         let models = provider === TAVUS_PROVIDER
           ? [{ model: DEFAULT_TAVUS_MODEL, value: buildModelChoiceValue(provider, DEFAULT_TAVUS_MODEL), isRealtime: true }]
           : Array.from(modelMap.values());
-        // Deduplicate dated snapshot models when the unversioned alias exists (e.g. qwen3.5-omni-plus-realtime vs qwen3.5-omni-plus-realtime-2026-03-15)
+        // Deduplicate dated snapshot models when the unversioned alias exists
+        // (e.g. qwen3.5-omni-plus-realtime vs qwen3.5-omni-plus-realtime-2026-03-15).
+        // Generic over every omni realtime family — keying this on
+        // DEFAULT_DASHSCOPE_MODEL breaks the moment the shipped default changes.
         if (provider === DASHSCOPE_PROVIDER) {
-          const hasBaseOmni = models.some((m) => m.model === DEFAULT_DASHSCOPE_MODEL);
-          const datedOmniIndex = models.findIndex((m) => m.model === `${DEFAULT_DASHSCOPE_MODEL}-2026-03-15`);
-          if (hasBaseOmni && datedOmniIndex !== -1) {
-            const currentSelected = voiceChat.voiceChatModel || chat?.chatModel;
-            if (currentSelected === `${DEFAULT_DASHSCOPE_MODEL}-2026-03-15`) {
-              models = models.filter((m) => m.model !== DEFAULT_DASHSCOPE_MODEL);
-            } else {
-              models = models.filter((m) => m.model !== `${DEFAULT_DASHSCOPE_MODEL}-2026-03-15`);
-            }
+          const currentSelected = voiceChat.voiceChatModel || chat?.chatModel;
+          const datedPattern = /^(qwen3\.(?:5|8)-omni-(?:plus|flash)-realtime)-\d{4}-\d{2}-\d{2}$/;
+          const hidden = new Set<string>();
+          for (const m of models) {
+            const match = datedPattern.exec(m.model);
+            if (!match) continue;
+            const base = match[1];
+            if (!models.some((other) => other.model === base)) continue;
+            // Keep whichever one is currently selected, hide the other.
+            hidden.add(currentSelected === m.model ? base : m.model);
+          }
+          if (hidden.size > 0) {
+            models = models.filter((m) => !hidden.has(m.model));
           }
         }
         return {

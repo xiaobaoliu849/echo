@@ -584,6 +584,34 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.queryByText("qwen3.5-omni-plus-realtime")).not.toBeInTheDocument();
   });
 
+  it("deduplicates the 3.5 dated snapshot even when the shipped default is 3.8", () => {
+    // Regression: the dedup used to key on DEFAULT_DASHSCOPE_MODEL, so flipping
+    // the default to 3.8 made qwen3.5-omni-plus-realtime-2026-03-15 reappear
+    // alongside its unversioned base.
+    renderPopover({
+      voiceChatProvider: "DashScope",
+      voiceChatModel: "qwen3.8-omni-flash-realtime",
+      voiceChatRealtimeChoicesByProvider: [
+        {
+          provider: "DashScope",
+          models: [
+            "qwen3.8-omni-flash-realtime",
+            "qwen3.5-omni-plus-realtime",
+            "qwen3.5-omni-plus-realtime-2026-03-15",
+            "qwen3.8-livetranslate-flash-realtime",
+          ],
+        },
+      ],
+    });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("DashScope"));
+
+    expect(screen.getByText("qwen3.8-omni-flash-realtime")).toBeInTheDocument();
+    expect(screen.getByText("qwen3.5-omni-plus-realtime")).toBeInTheDocument();
+    expect(screen.queryByText("qwen3.5-omni-plus-realtime-2026-03-15")).not.toBeInTheDocument();
+    expect(screen.getByText("qwen3.8-livetranslate-flash-realtime")).toBeInTheDocument();
+  });
+
   it("constrains Level-2 flyout maxHeight to available space below flyoutTop", () => {
     vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
       const text = this.textContent || "";
