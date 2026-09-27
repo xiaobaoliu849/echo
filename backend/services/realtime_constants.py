@@ -82,12 +82,7 @@ DEFAULT_QWEN_OMNI_THRESHOLD = 0.2
 DEFAULT_QWEN_OMNI_SILENCE_MS = 800
 DEFAULT_QWEN_OMNI_PREFIX_PADDING_MS = 300
 
-# Voices supported by the qwen3.5 / qwen3.8 omni realtime models (default:
-# Tina), per the official omni voice list. The provider rejects voices from the
-# older qwen3-omni / qwen-omni-turbo family (e.g. "Cherry"), so the backend
-# defensively falls back to a valid default instead of failing the session.
-# The 3.8 release reuses the same voice set; an unsupported 3.8-only voice
-# would be caught by the same fallback rather than breaking the call.
+# Voices supported by Qwen3.5 Omni Realtime (default: Tina).
 QWEN_OMNI_REALTIME_VOICES = (
     "Tina", "Cindy", "Liora Mira", "Sunnybobi", "Raymond", "Ethan", "Theo Calm",
     "Serena", "Harvey", "Maia", "Evan", "Qiao", "Momo", "Wil", "Angel",
@@ -99,6 +94,13 @@ QWEN_OMNI_REALTIME_VOICES = (
     "Sigga", "Bea", "Chloe",
 )
 DEFAULT_QWEN_OMNI_REALTIME_VOICE = "Tina"
+# The official 3.8 voice list substitutes these three voices and adds
+# longanlingxin. Keep the model-specific set so a 3.5-only selection cannot
+# silently fall back to Tina on the shipped 3.8 default.
+QWEN_OMNI_38_REALTIME_VOICES = tuple(
+    voice for voice in QWEN_OMNI_REALTIME_VOICES
+    if voice not in {"Sunnybobi", "Ethan", "Harvey"}
+) + ("Zane", "Cici", "longanlingxin")
 
 # Voices supported by Qwen-Audio 3.0 realtime models (qwen-audio-3.0-realtime-*).
 QWEN_AUDIO_REALTIME_VOICES = (

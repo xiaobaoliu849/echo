@@ -42,6 +42,7 @@ import {
   QWEN_AUDIO_VOICES,
   QWEN_LIVETRANSLATE_VOICES,
   QWEN_OMNI_REALTIME_VOICES,
+  QWEN_OMNI_38_REALTIME_VOICES,
   TAVUS_PROVIDER,
   buildToolMeta,
   decodeBase64Pcm,
@@ -325,7 +326,9 @@ export default function useVoiceChat({
         ? QWEN_AUDIO_VOICES
         : isLiveTranslateModel(voiceChatProvider, voiceChatModel)
           ? QWEN_LIVETRANSLATE_VOICES
-          : QWEN_OMNI_REALTIME_VOICES;
+          : voiceChatModel.toLowerCase().startsWith("qwen3.8-omni-")
+            ? QWEN_OMNI_38_REALTIME_VOICES
+            : QWEN_OMNI_REALTIME_VOICES;
       if (!validVoices.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice(isQwenAudioModel(voiceChatModel) ? "longanqian" : "Tina");
       }
@@ -1121,9 +1124,11 @@ export default function useVoiceChat({
           setVoiceChatAssistantInterrupted(false);
           setAssistantPlaybackGain(1);
         }
-        currentAssistantTurnRef.current = event.cumulative
-          ? mergeAssistantText(currentAssistantTurnRef.current, event.text)
-          : appendAssistantDelta(currentAssistantTurnRef.current, event.text);
+        currentAssistantTurnRef.current = event.replace
+          ? event.text
+          : event.cumulative
+            ? mergeAssistantText(currentAssistantTurnRef.current, event.text)
+            : appendAssistantDelta(currentAssistantTurnRef.current, event.text);
         setVoiceChatReply(currentAssistantTurnRef.current);
         setVoiceChatStatus(t("助手正在说话…", "Assistant speaking…"));
         return;

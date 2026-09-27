@@ -17,7 +17,20 @@ import {
   getProviderSortOrder,
   resolveRealtimeProvider,
   resolveRealtimeModelOptions,
+  formatRealtimeVoiceOptions,
 } from "./useVoiceChatHelpers";
+
+describe("Qwen Omni voice options", () => {
+  it("offers 3.8 voices without 3.5-only choices", () => {
+    const newer = formatRealtimeVoiceOptions("DashScope", "en-US", "qwen3.8-omni-flash-realtime").map((voice) => voice.value);
+    const older = formatRealtimeVoiceOptions("DashScope", "en-US", "qwen3.5-omni-plus-realtime").map((voice) => voice.value);
+    expect(newer).toContain("Zane");
+    expect(newer).toContain("Cici");
+    expect(newer).toContain("longanlingxin");
+    expect(newer).not.toContain("Ethan");
+    expect(older).toContain("Ethan");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // resolveRealtimeProvider

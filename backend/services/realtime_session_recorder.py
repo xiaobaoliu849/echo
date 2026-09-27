@@ -194,7 +194,7 @@ class VoiceAgentSessionRecorder:
         )
         return self._current_turn_id
 
-    async def note_assistant_text(self, text: str, *, cumulative: bool = False) -> str:
+    async def note_assistant_text(self, text: str, *, cumulative: bool = False, replace: bool = False) -> str:
         clean_text = str(text or "")
         if not clean_text.strip():
             return ""
@@ -208,7 +208,7 @@ class VoiceAgentSessionRecorder:
         # the row with that pad, and a cumulative correction (e.g. DashScope
         # ``response.*.done``) must not re-append what already streamed.
         already = self._current_assistant_text
-        merged = _merge_memory_text(already, clean_text, cumulative=cumulative)
+        merged = clean_text if replace else _merge_memory_text(already, clean_text, cumulative=cumulative)
         self._current_assistant_text = merged
         if not merged.startswith(already):
             # A cumulative correction that is NOT an extension of what streamed

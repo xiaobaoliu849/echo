@@ -394,10 +394,13 @@ class RealtimeMemorySession:
             self._last_retrieve_attempted = False
         self._current_user_text = cleaned
 
-    def note_assistant_text(self, text: str, *, cumulative: bool = False) -> None:
-        self._current_assistant_text = _merge_memory_text(
-            self._current_assistant_text, text, cumulative=cumulative
-        )
+    def note_assistant_text(self, text: str, *, cumulative: bool = False, replace: bool = False) -> None:
+        if replace:
+            self._current_assistant_text = str(text or "")
+        else:
+            self._current_assistant_text = _merge_memory_text(
+                self._current_assistant_text, text, cumulative=cumulative
+            )
 
     def discard_turn(self) -> None:
         """Drop an interrupted turn without writing partial content to long-term memory."""

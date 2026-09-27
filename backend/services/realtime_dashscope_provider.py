@@ -31,6 +31,7 @@ from .realtime_constants import (
     DEFAULT_QWEN_OMNI_PREFIX_PADDING_MS,
     QWEN_AUDIO_BENIGN_ERROR_PATTERNS,
     QWEN_OMNI_REALTIME_VOICES,
+    QWEN_OMNI_38_REALTIME_VOICES,
     _is_dashscope_audio_realtime_model,
     _is_dashscope_live_translate_model,
     _is_dashscope_omni_realtime_model,
@@ -381,11 +382,9 @@ class DashScopeRealtimeMixin:
         interruption = interruption or InterruptionDecisionCoordinator()
         suppressed_response_ids: set[str] = set()
         tool_phase_response_ids: set[str] = set()
-        # response_ids for which at least one non-final assistant_text delta has
-        # been forwarded. The final (response.audio_transcript.done / response
-        # .text.done) event for such a response must be suppressed — it carries
-        # the FULL transcript, which would duplicate the already-streamed deltas.
-        streamed_text_response_ids: set[str] = set()
+        # Keep the verbatim streamed text per response so a different final
+        # transcript can replace it, even when session recording is disabled.
+        streamed_text_by_response: dict[str, str] = {}
         cannot_create_response_retries = 0
         gated_tool_turn_id = ""
         previewed_item_ids: dict[str, None] = {}
@@ -572,7 +571,7 @@ class DashScopeRealtimeMixin:
             if event_type == "tool_phase_complete":
                 response_id = str(event.get("response_id", "")).strip()
                 tool_phase_response_ids.discard(response_id)
-                streamed_text_response_ids.discard(response_id)
+                streamed_text_by_response.pop(response_id, None)
                 if response_id == interruption.active_response_id:
                     interruption.active_response_id = ""
                 continue
@@ -699,26 +698,25 @@ class DashScopeRealtimeMixin:
                     continue
                 if not gated_tool_turn_id:
                     if event.get("final"):
-                        # response.audio_transcript.done / response.text.done
-                        # delivers the FULL canonical transcript.  When streaming
-                        # deltas already covered this response, emit only the
-                        # novel suffix (if any) as a correction delta — this
-                        # recovers text that was lost to network issues or
-                        # deduplication during the streaming phase.
-                        final_text = str(event.get("text", "")).strip()
-                        if response_id and response_id in streamed_text_response_ids:
-                            recorded = recorder.current_assistant_text if recorder else ""
-                            if final_text and recorded and len(final_text) > len(recorded) + 2:
-                                # The final text is meaningfully longer — emit
-                                # the full final and let the frontend merge
-                                # handle overlap deduplication.
-                                event = {**event, "text": final_text}
-                            else:
-                                continue
-                        elif not response_id and recorder is not None and bool(recorder.current_assistant_text):
+                        # The done event is the canonical full transcript. It
+                        # can correct streamed words without changing length,
+                        # and recording may be disabled, so compare with the
+                        # actual deltas instead of recorder state.
+                        final_text = str(event.get("text", ""))
+                        # A done frame is also sent for canceled or incomplete
+                        # responses. An empty transcript is not a correction
+                        # to already spoken text.
+                        if not final_text.strip():
                             continue
+                        streamed = streamed_text_by_response.get(response_id)
+                        if streamed is not None and final_text.strip() == streamed.strip():
+                            continue
+                        if streamed is not None:
+                            event = {**event, "replace": True}
                     else:
-                        streamed_text_response_ids.add(response_id)
+                        streamed_text_by_response[response_id] = (
+                            streamed_text_by_response.get(response_id, "") + str(event.get("text", ""))
+                        )
                     await self._emit_assistant_output(
                         websocket,
                         interruption,
@@ -744,7 +742,7 @@ class DashScopeRealtimeMixin:
                 response_id = str(event.get("response_id", ""))
                 if response_id in tool_phase_response_ids:
                     tool_phase_response_ids.discard(response_id)
-                    streamed_text_response_ids.discard(response_id)
+                    streamed_text_by_response.pop(response_id, None)
                     if response_id == interruption.active_response_id:
                         interruption.active_response_id = ""
                     continue
@@ -755,7 +753,7 @@ class DashScopeRealtimeMixin:
                     continue
                 if interruption.defer_terminal(dict(event)):
                     continue
-                streamed_text_response_ids.discard(response_id)
+                streamed_text_by_response.pop(response_id, None)
                 if not response_id or response_id == interruption.active_response_id:
                     interruption.active_response_id = ""
                 if str(event.get("status", "completed")) in {"cancelled", "canceled", "failed"}:
@@ -1328,7 +1326,12 @@ class DashScopeRealtimeMixin:
         memory_session = RealtimeMemorySession()
         tool_session = VoiceAgentToolSession(default_provider="DashScope")
         resolved_voice = (voice or DEFAULT_QWEN_OMNI_REALTIME_VOICE).strip()
-        if _is_dashscope_omni_realtime_model(settings["model"]) and resolved_voice not in QWEN_OMNI_REALTIME_VOICES:
+        omni_voices = (
+            QWEN_OMNI_38_REALTIME_VOICES
+            if settings["model"].lower().startswith("qwen3.8-omni-")
+            else QWEN_OMNI_REALTIME_VOICES
+        )
+        if _is_dashscope_omni_realtime_model(settings["model"]) and resolved_voice not in omni_voices:
             logger.warning(
                 "qwen_omni_unsupported_voice voice=%s fallback=%s",
                 resolved_voice, DEFAULT_QWEN_OMNI_REALTIME_VOICE,

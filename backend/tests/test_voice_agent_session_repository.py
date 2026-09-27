@@ -498,6 +498,16 @@ class VoiceAgentSessionRecorderCoalescingTests(unittest.IsolatedAsyncioTestCase)
         turns = self.repository.list_turns(self.session_id)
         self.assertEqual(turns[0]["assistant_text"], "完整回复。")
 
+    async def test_final_replacement_preserves_equal_length_word_correction(self) -> None:
+        recorder = self._make_recorder()
+        await recorder.note_user_transcript("Book a flight")
+        await recorder.note_assistant_text("Book Austin")
+        await recorder.note_assistant_text("Book Boston", cumulative=True, replace=True)
+        await recorder.complete_turn()
+
+        turns = self.repository.list_turns(self.session_id)
+        self.assertEqual(turns[0]["assistant_text"], "Book Boston")
+
     async def test_divergent_cumulative_correction_rewrites_instead_of_appending(self) -> None:
         """A canonical correction that revises text mid-string is not an extension
         of what streamed, so the append-only column would end up holding the stale

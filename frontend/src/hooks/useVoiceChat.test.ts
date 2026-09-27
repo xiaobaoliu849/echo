@@ -187,6 +187,17 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Please book a flight to Boston.", "When?"]);
   });
 
+  it("replaces streamed assistant words with the canonical final transcript", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "assistant_text", text: "Book Austin" });
+      socket.emitMessage({ type: "assistant_text", text: "Book Boston", cumulative: true, replace: true });
+    });
+    expect(result.current.voiceChatReply).toBe("Book Boston");
+    act(() => { socket.emitMessage({ type: "turn_complete" }); });
+    expect(result.current.voiceChatMessages.at(-1)?.content).toBe("Book Boston");
+  });
+
   it.each(["interrupted", "turn_complete"])("preserves the previous utterance and pending caption across %s", async (terminal) => {
     const { result, socket } = await startTranscriptTestSession();
     act(() => {

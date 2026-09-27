@@ -424,16 +424,23 @@ class RealtimeVoiceService(
             # canonical correction) and supersedes what was streamed; anything
             # else is a verbatim delta that must be appended exactly as sent.
             cumulative = bool(event.get("cumulative") or event.get("final"))
+            replace = bool(event.get("replace"))
             if record_memory:
-                memory_session.note_assistant_text(text, cumulative=cumulative)
-            turn_id = (
-                await recorder.note_assistant_text(text, cumulative=cumulative)
-                if recorder is not None
-                else ""
-            )
+                if replace:
+                    memory_session.note_assistant_text(text, cumulative=cumulative, replace=True)
+                else:
+                    memory_session.note_assistant_text(text, cumulative=cumulative)
+            turn_id = ""
+            if recorder is not None:
+                if replace:
+                    turn_id = await recorder.note_assistant_text(text, cumulative=cumulative, replace=True)
+                else:
+                    turn_id = await recorder.note_assistant_text(text, cumulative=cumulative)
             payload: dict[str, Any] = {"text": text, "turn_id": turn_id}
             if cumulative:
                 payload["cumulative"] = True
+            if replace:
+                payload["replace"] = True
             await self._send_event(websocket, "assistant_text", **payload)
             return
         if event_type == "assistant_audio":
