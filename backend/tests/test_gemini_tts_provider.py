@@ -5,12 +5,26 @@ from unittest.mock import patch, MagicMock
 
 from services.gemini_tts_provider import (
     GEMINI_TTS_MODELS,
+    GEMINI_TTS_VOICES,
     DEFAULT_GEMINI_TTS_MODEL,
     DEFAULT_GEMINI_TTS_VOICE,
     is_gemini_voice,
     _build_speech_config,
     gemini_tts_synthesize,
 )
+
+
+def test_gemini_prebuilt_voice_catalog_matches_google():
+    names = [voice["name"] for voice in GEMINI_TTS_VOICES]
+    assert len(names) == len(set(names)) == 30
+    assert set(names) == {
+        "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", "Aoede",
+        "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba",
+        "Despina", "Erinome", "Algenib", "Rasalgethi", "Laomedeia", "Achernar",
+        "Alnilam", "Schedar", "Gacrux", "Pulcherrima", "Achird", "Zubenelgenubi",
+        "Vindemiatrix", "Sadachbia", "Sadaltager", "Sulafat",
+    }
+    assert all(voice["short_name"] and voice["description"] for voice in GEMINI_TTS_VOICES)
 
 
 def test_gemini_tts_models_and_defaults():

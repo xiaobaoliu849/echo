@@ -498,6 +498,8 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
       : tts.ttsMode === "pdf"
         ? tts.pdfText.length
         : tts.text.length;
+  const vercelRateNote = t("Vercel Gemini 语速为近似控制，实际节奏可能不同。", "Vercel Gemini pacing is approximate; actual speed may vary.");
+  const usesVercelGemini = tts.ttsEngine === "vercel_gemini" || (tts.ttsMode === "dialogue" && tts.ttsEngineB === "vercel_gemini");
   const errorNotice = tts.ttsError ? (
     <div className="vsTtsErrorNotice" role="alert">
       <ErrorNotice
@@ -693,6 +695,9 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
             </div>
           </header>
         )}
+        {tts.ttsMode !== "dialogue" && usesVercelGemini && (
+          <div className="vsRateLabel" role="note" style={{ padding: "4px 22px" }}>{vercelRateNote}</div>
+        )}
 
         {/* ── Dialogue Config Toolbar ── */}
         {tts.ttsMode === "dialogue" && (
@@ -773,6 +778,7 @@ export default function TtsPage({ tts, errorRuntimeContext }: Props) {
                 onChange={(e) => tts.onRateChange(e.target.value)}
                 placeholder="+0%"
               />
+              {usesVercelGemini && <span className="vsRateLabel" role="note">{vercelRateNote}</span>}
               <button
                 type="button"
                 className="vsBtnGhost vsRateResetBtn"

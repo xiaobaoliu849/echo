@@ -278,6 +278,10 @@ VERCEL_MODEL_LIST_SUPPLEMENTS = [
     "spacexai/grok-voice-think-fast-1.0",
     "spacexai/grok-voice-think-fast-2.0",
 ]
+VERCEL_TTS_MODEL_LIST_SUPPLEMENTS = [
+    "google/gemini-3.8-flash-tts",
+    "google/gemini-3.8-flash-lite-tts",
+]
 AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS = [
     # Mainline and frontier text/multimodal models
     "gemini-3.8-flash",
@@ -577,7 +581,7 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             return FetchModelsResponse(
                 provider=provider,
                 models=list(VERCEL_MODEL_LIST_SUPPLEMENTS),
-                tts_models=[],
+                tts_models=list(VERCEL_TTS_MODEL_LIST_SUPPLEMENTS),
             )
         if provider == "AgentPlatform":
             return FetchModelsResponse(
@@ -684,7 +688,7 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             return FetchModelsResponse(
                 provider=provider,
                 models=list(VERCEL_MODEL_LIST_SUPPLEMENTS),
-                tts_models=[],
+                tts_models=list(VERCEL_TTS_MODEL_LIST_SUPPLEMENTS),
             )
         if provider == "AgentPlatform":
             # Vertex AI (Google Agent Platform) has no un-scoped /v1/models endpoint.
@@ -765,9 +769,16 @@ async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModel
             model_ids.extend(DOUBAO_MODEL_LIST_SUPPLEMENTS)
         elif provider == "AgentPlatform":
             model_ids.extend(AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS)
+        elif provider == "Vercel":
+            model_ids.extend(VERCEL_MODEL_LIST_SUPPLEMENTS)
+            model_ids.extend(VERCEL_TTS_MODEL_LIST_SUPPLEMENTS)
 
         model_ids = sorted(list(set(model_ids)))
-        tts_ids = [m for m in model_ids if _is_tts_model_id(m)]
+        # Vercel's curated realtime models include "grok-voice" IDs. Keep them
+        # in the realtime/chat list even though the generic TTS keyword matcher
+        # sees "voice" in their names.
+        realtime_ids = set(VERCEL_MODEL_LIST_SUPPLEMENTS) if provider == "Vercel" else set()
+        tts_ids = [m for m in model_ids if m not in realtime_ids and _is_tts_model_id(m)]
         tts_set = set(tts_ids)
         chat_ids = [m for m in model_ids if m not in tts_set]
 

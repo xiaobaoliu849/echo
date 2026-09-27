@@ -55,6 +55,55 @@ describe('useTts', () => {
         expect(result.current.ttsEngine).toBe('qwen_flash');
     });
 
+    it('offers both Vercel Gemini TTS models and sends the selected model', async () => {
+        vi.mocked(fetchSpeakAudio).mockResolvedValue({
+            blob: new Blob(['audio'], { type: 'audio/wav' }),
+            memorySaved: false
+        });
+        const formatErrorMessage = createFormatErrorMessageStub();
+        const { result } = renderHook(() => useTts({ defaultText: 'Hello', formatErrorMessage, language: 'en-US' }));
+
+        act(() => result.current.onEngineChange('vercel_gemini'));
+        expect(result.current.ttsModel).toBe('google/gemini-3.8-flash-tts');
+        expect(result.current.ttsModelOptions).toEqual([
+            'google/gemini-3.8-flash-tts',
+            'google/gemini-3.8-flash-lite-tts'
+        ]);
+        expect(result.current.engineOptions.find(({ value }) => value === 'vercel_gemini')).toEqual(
+            expect.objectContaining({
+                label: 'Gemini TTS (Vercel Gateway)',
+                hint: expect.stringContaining('Vercel API key')
+            })
+        );
+        await waitFor(() => expect(fetchVoices).toHaveBeenCalledWith(
+            undefined, 'vercel_gemini', 'google/gemini-3.8-flash-tts'
+        ));
+
+        act(() => result.current.onModelChange('google/gemini-3.8-flash-lite-tts'));
+        await act(async () => result.current.onSubmit({ preventDefault() {} } as any));
+        expect(fetchSpeakAudio).toHaveBeenCalledWith(expect.objectContaining({
+            engine: 'vercel_gemini',
+            model: 'google/gemini-3.8-flash-lite-tts'
+        }));
+    });
+
+    it('offers Vercel Gemini TTS for both dialogue speakers', () => {
+        const formatErrorMessage = createFormatErrorMessageStub();
+        const { result } = renderHook(() => useTts({ defaultText: 'Hello', formatErrorMessage }));
+
+        act(() => {
+            result.current.onEngineChange('vercel_gemini');
+            result.current.onEngineBChange('vercel_gemini');
+        });
+        expect(result.current.ttsModelOptionsB).toEqual([
+            'google/gemini-3.8-flash-tts',
+            'google/gemini-3.8-flash-lite-tts'
+        ]);
+        expect(result.current.engineOptions.find(({ value }) => value === 'vercel_gemini')).toEqual(
+            expect.objectContaining({ label: 'Gemini TTS (Vercel 网关)' })
+        );
+    });
+
     it('clears stale voices while provider and model catalogs load', async () => {
         const edgeVoice = { name: 'edge-voice', short_name: 'Edge', locale: 'en-US', gender: 'Female' };
         const cartesiaVoice = { name: 'cartesia-voice', short_name: 'Cartesia', locale: 'en-US', gender: 'Female' };
