@@ -655,6 +655,28 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([event["text"] for event in texts], ["Book Austin", "Book Boston"])
         self.assertTrue(texts[1]["replace"])
 
+    async def test_empty_omni_final_keeps_streamed_reply(self) -> None:
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_event({
+            "type": "response.audio_transcript.delta",
+            "response_id": "response-1", "delta": "Partial reply",
+        })
+        callback.on_event({
+            "type": "response.audio_transcript.done",
+            "response_id": "response-1", "transcript": "",
+        })
+        callback.on_close(1000, "")
+        websocket = _FakeWebSocket()
+        await self.service._dashscope_to_client_loop(
+            websocket, queue, _MemorySession(),
+            _StubOmniConversation("qwen3.8-omni-flash-realtime"),
+            "Tina", VoiceAgentToolSession(default_provider="DashScope"),
+            recorder=None, interruption=InterruptionDecisionCoordinator(),
+        )
+        texts = [event for event in websocket.sent_events if event["type"] == "assistant_text"]
+        self.assertEqual([event["text"] for event in texts], ["Partial reply"])
+
     async def test_unexpected_server_close_is_reported_to_the_client(self) -> None:
         """A server-initiated close must say so instead of ending silently.
 

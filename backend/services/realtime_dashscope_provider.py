@@ -703,6 +703,11 @@ class DashScopeRealtimeMixin:
                         # and recording may be disabled, so compare with the
                         # actual deltas instead of recorder state.
                         final_text = str(event.get("text", ""))
+                        # A done frame is also sent for canceled or incomplete
+                        # responses. An empty transcript is not a correction
+                        # to already spoken text.
+                        if not final_text.strip():
+                            continue
                         streamed = streamed_text_by_response.get(response_id)
                         if streamed is not None and final_text.strip() == streamed.strip():
                             continue
