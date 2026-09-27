@@ -347,9 +347,7 @@ export const DOUBAO_REALTIME_VOICES = [
   { value: "en_female_stokie_uranus_bigtts", label: "Stokie · American English (Female)", description: "美式英语女声（仅 O2.0）" },
 ];
 
-// Voices for the qwen3.5 / qwen3.8 omni realtime models (default: Tina), per the
-// official omni voice list (docs/全模态.txt). The older Cherry-era voices belong
-// to qwen3-omni / qwen-omni-turbo and are rejected by the omni realtime models.
+// Convenient Qwen3.5 Omni Realtime voices (default: Tina).
 export const QWEN_OMNI_REALTIME_VOICES = [
   { value: "Tina", label: "Tina · 甜甜 (Female)", description: "像温热的奶茶，甜甜的暖暖的" },
   { value: "Ethan", label: "Ethan · 晨煦 (Male)", description: "标准普通话，阳光温暖有活力" },
@@ -363,6 +361,15 @@ export const QWEN_OMNI_REALTIME_VOICES = [
   { value: "Dylan", label: "Dylan · 北京-晓东 (Male)", description: "北京胡同里长大的少年" },
   { value: "Sunny", label: "Sunny · 四川-晴儿 (Female)", description: "甜到你心里的川妹子" },
   { value: "Peter", label: "Peter · 天津-李彼得 (Male)", description: "天津相声，专业捧哏" },
+];
+
+// Qwen3.8 has a different official voice set: Ethan is 3.5-only, while
+// Zane, Cici, and longanlingxin are new choices for the shipped default.
+export const QWEN_OMNI_38_REALTIME_VOICES = [
+  ...QWEN_OMNI_REALTIME_VOICES.filter((voice) => voice.value !== "Ethan"),
+  { value: "Zane", label: "Zane (Male)", description: "磁性温暖的男声" },
+  { value: "Cici", label: "Cici (Female)", description: "活泼甜美的女声" },
+  { value: "longanlingxin", label: "longanlingxin · 龙安灵心 (Female)", description: "温暖共情的女声" },
 ];
 
 export const QWEN_AUDIO_VOICES = [
@@ -546,7 +553,9 @@ export function formatRealtimeVoiceOptions(
     } else if (isLiveTranslateModel(provider, model ?? "")) {
       options = QWEN_LIVETRANSLATE_VOICES;
     } else {
-      options = QWEN_OMNI_REALTIME_VOICES;
+      options = (model || "").toLowerCase().startsWith("qwen3.8-omni-")
+        ? QWEN_OMNI_38_REALTIME_VOICES
+        : QWEN_OMNI_REALTIME_VOICES;
     }
   } else if (provider === OPENAI_PROVIDER) {
     options = OPENAI_REALTIME_VOICES;

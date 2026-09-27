@@ -5,6 +5,27 @@ default** (`qwen3.8-omni-flash-realtime`, flipped on 2026-09-26 after the vendor
 rollout reached the configured cn-beijing workspace). `qwen3.5-omni-plus-realtime`
 stays in the picker as a fallback for workspaces that do not have 3.8 access yet.
 
+## Documentation review (2026-09-27)
+
+- [Alibaba's realtime guide](https://help.aliyun.com/en/model-studio/realtime)
+  now documents 3.8 directly, including its workspace WebSocket endpoint,
+  16 kHz PCM input, 24 kHz PCM output, input ASR events, audio and text output
+  events, and the requirement for DashScope Python SDK 1.26.5 or later. Echo
+  uses these paths; the minimum SDK version is now reflected in requirements.
+- The [server event reference](https://help.aliyun.com/en/model-studio/server-events)
+  defines input transcription previews as `text + stash`, a final
+  `transcript`, streaming assistant text deltas, and a full final assistant
+  transcript. Echo shows previews without committing them. A final assistant
+  transcript that revises the streamed words now replaces them in the UI,
+  memory, and session record, including when recording is disabled.
+- The [3.8 voice list](https://help.aliyun.com/en/model-studio/omni-voice-list)
+  differs from 3.5: Zane, Cici, and longanlingxin are available, while
+  Sunnybobi, Ethan, and Harvey are 3.5-only. Echo now validates and offers
+  voices by model generation.
+
+The rollout and AccessDenied notes below record observations made before the
+model became available to the configured workspace. They are historical.
+
 ## What we observed
 
 Selecting `qwen3.8-omni-flash-realtime` in a cn-beijing workspace on 2026-09-20:
@@ -140,12 +161,9 @@ DashScope model list in Settings; the backend already runs it on the omni profil
 
 ## Not covered
 
-The 3.8-only capabilities — spatial-audio "听声辨位" session parameters and Skill
-injection for identity / business knowledge — are untouched. Echo drives the
-audio-in / audio-out conversational path only, which is identical across both
-generations. The omni voice list is still the 3.5 set (`QWEN_OMNI_REALTIME_VOICES`);
-the backend falls back to `Tina` for voices a model rejects, so a 3.8-only voice
-degrades instead of breaking a call.
+The 3.8-only spatial-audio input and Skill injection capabilities are untouched.
+Echo drives the mono audio-in / audio-out conversational path. Custom voice
+cloning is also outside this integration review.
 
 ## Test coverage
 

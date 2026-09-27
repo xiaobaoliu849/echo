@@ -124,6 +124,9 @@ class _MemorySession:
     def note_user_transcript(self, _text: str) -> None:
         return None
 
+    def note_assistant_text(self, _text: str, **_kwargs: Any) -> None:
+        return None
+
     async def flush_turn(self) -> dict:
         return {}
 
@@ -629,6 +632,29 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent_types.count("interruption_pending"), 1)
         self.assertEqual(sent_types.count("interruption_decision"), 1)
 
+    async def test_omni_final_transcript_replaces_streamed_correction_without_recorder(self) -> None:
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_event({
+            "type": "response.audio_transcript.delta",
+            "response_id": "response-1", "delta": "Book Austin",
+        })
+        callback.on_event({
+            "type": "response.audio_transcript.done",
+            "response_id": "response-1", "transcript": "Book Boston",
+        })
+        callback.on_close(1000, "")
+        websocket = _FakeWebSocket()
+        await self.service._dashscope_to_client_loop(
+            websocket, queue, _MemorySession(),
+            _StubOmniConversation("qwen3.8-omni-flash-realtime"),
+            "Tina", VoiceAgentToolSession(default_provider="DashScope"),
+            recorder=None, interruption=InterruptionDecisionCoordinator(),
+        )
+        texts = [event for event in websocket.sent_events if event["type"] == "assistant_text"]
+        self.assertEqual([event["text"] for event in texts], ["Book Austin", "Book Boston"])
+        self.assertTrue(texts[1]["replace"])
+
     async def test_unexpected_server_close_is_reported_to_the_client(self) -> None:
         """A server-initiated close must say so instead of ending silently.
 
@@ -838,6 +864,16 @@ class TestDashScopeOmniSessionConfig(unittest.TestCase):
         self.assertEqual(kwargs.get("input_audio_transcription_model"), "qwen3-asr-flash-realtime")
         self.assertTrue(kwargs.get("enable_input_audio_transcription"))
         self.assertTrue(conversation._vs_omni_session_configured)
+
+    def test_qwen38_voice_set_tracks_official_additions_and_removals(self) -> None:
+        from services.realtime_constants import (
+            QWEN_OMNI_38_REALTIME_VOICES, QWEN_OMNI_REALTIME_VOICES,
+        )
+        self.assertIn("Zane", QWEN_OMNI_38_REALTIME_VOICES)
+        self.assertIn("Cici", QWEN_OMNI_38_REALTIME_VOICES)
+        self.assertIn("longanlingxin", QWEN_OMNI_38_REALTIME_VOICES)
+        self.assertNotIn("Ethan", QWEN_OMNI_38_REALTIME_VOICES)
+        self.assertIn("Ethan", QWEN_OMNI_REALTIME_VOICES)
 
     def test_qwen_omni_custom_vad_overrides(self) -> None:
         service = RealtimeVoiceService.__new__(RealtimeVoiceService)

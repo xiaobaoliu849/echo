@@ -714,7 +714,7 @@ export type VoiceChatServerEvent =
   // correction) that replaces what was streamed so far. Without it, `text` is a
   // verbatim delta and must be appended exactly as received — see
   // appendAssistantDelta in hooks/useVoiceChatHelpers.ts.
-  | { type: "assistant_text"; text: string; turn_id?: string; cumulative?: boolean }
+  | { type: "assistant_text"; text: string; turn_id?: string; cumulative?: boolean; replace?: boolean }
   | {
       type: "assistant_audio";
       audio: string;

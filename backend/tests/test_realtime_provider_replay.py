@@ -64,7 +64,7 @@ class FakeMemorySession:
     def note_user_transcript(self, text: str) -> None:
         self.user_texts.append(text)
 
-    def note_assistant_text(self, text: str, *, cumulative: bool = False) -> None:
+    def note_assistant_text(self, text: str, *, cumulative: bool = False, replace: bool = False) -> None:
         self.assistant_texts.append(text)
 
     async def retrieve_memory_context(self) -> dict:
@@ -1241,16 +1241,7 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DashScopeOmniTextDedupTests(unittest.IsolatedAsyncioTestCase):
-    """Regression tests for qwen3.5-omni-*-realtime duplicated reply text.
-
-    The DashScope omni loop forwards BOTH the incremental
-    response.audio_transcript.delta deltas AND the full-text
-    response.audio_transcript.done / response.text.done. When the final
-    transcript differs from the accumulated deltas even slightly (trailing
-    punctuation, spacing, re-transcribed words), the frontend merge cannot dedup
-    it and the whole reply appears twice. The final full-text event must be
-    suppressed once deltas were already streamed for that response.
-    """
+    """The final Qwen Omni transcript must correct deltas without duplication."""
 
     async def asyncSetUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -1310,8 +1301,8 @@ class DashScopeOmniTextDedupTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_final_done_does_not_duplicate_streamed_delta(self) -> None:
         # The streaming delta and the final done transcript differ only in
-        # punctuation (the model re-transcribes the completed output). Forwarding
-        # both makes the frontend render the whole sentence twice.
+        # punctuation. Send the final as a replacement so the UI and recorder
+        # retain the corrected sentence without appending a second sentence.
         websocket = await self._run_loop(
             [
                 {"type": "response.created", "response": {"id": "resp-1"}},
@@ -1328,8 +1319,12 @@ class DashScopeOmniTextDedupTests(unittest.IsolatedAsyncioTestCase):
                 {"type": "response.done", "response": {"id": "resp-1", "status": "completed"}},
             ]
         )
-        texts = [event["text"] for event in websocket.events if event["type"] == "assistant_text"]
-        self.assertEqual(texts, ["Hello there how are you doing today?"])
+        texts = [event for event in websocket.events if event["type"] == "assistant_text"]
+        self.assertEqual([event["text"] for event in texts], [
+            "Hello there how are you doing today?",
+            "Hello there, how are you doing today?",
+        ])
+        self.assertTrue(texts[1]["replace"])
 
     async def test_final_done_fallback_when_no_delta_streamed(self) -> None:
         # Ultra-fast single-shot reply where response.audio_transcript.done
