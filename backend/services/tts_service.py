@@ -54,6 +54,11 @@ from .gemini_tts_provider import (
     is_gemini_voice,
 )
 from .gemini_voice_service import GeminiVoiceService
+from .vercel_gemini_tts_provider import (
+    DEFAULT_VERCEL_GEMINI_TTS_BASE_URL,
+    DEFAULT_VERCEL_GEMINI_TTS_MODEL,
+    vercel_gemini_tts_synthesize,
+)
 from .soniox_tts_provider import (
     SONIOX_TTS_VOICES,
     DEFAULT_SONIOX_TTS_MODEL,
@@ -118,6 +123,7 @@ TTS_ENGINE_CARTESIA = "cartesia"
 TTS_ENGINE_GRADIUM = "gradium"
 TTS_ENGINE_SONIOX = "soniox"
 TTS_ENGINE_GEMINI = "gemini"
+TTS_ENGINE_VERCEL_GEMINI = "vercel_gemini"
 
 SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_EDGE,
@@ -134,6 +140,7 @@ SUPPORTED_TTS_ENGINES = {
     TTS_ENGINE_GRADIUM,
     TTS_ENGINE_SONIOX,
     TTS_ENGINE_GEMINI,
+    TTS_ENGINE_VERCEL_GEMINI,
 }
 
 OPENAI_VOICES = [
@@ -689,7 +696,7 @@ class TTSService:
         return voice
 
     def _audio_profile_for_engine(self, engine: str) -> tuple[str, str]:
-        if engine in {TTS_ENGINE_CHATTTS, TTS_ENGINE_GPT_SOVITS, TTS_ENGINE_GEMINI}:
+        if engine in {TTS_ENGINE_CHATTTS, TTS_ENGINE_GPT_SOVITS, TTS_ENGINE_GEMINI, TTS_ENGINE_VERCEL_GEMINI}:
             return "wav", MEDIA_TYPE_WAV
         return "mp3", MEDIA_TYPE_MP3
 
@@ -928,6 +935,35 @@ class TTSService:
                 "description": str(item.get("description") or ""),
             })
         return voices
+
+    def _vercel_gemini_settings(self) -> tuple[str, str]:
+        """Return the gateway credential and configured Vercel base URL."""
+        self.config.reload()
+        cfg = self.config.get_all()
+        api_key = (
+            str(cfg.get("api_keys", {}).get("vercel_api_key", "")).strip()
+            or os.environ.get("AI_GATEWAY_API_KEY", "").strip()
+        )
+        base_url = str(cfg.get("api_urls", {}).get("Vercel", "")).strip()
+        return api_key, base_url or DEFAULT_VERCEL_GEMINI_TTS_BASE_URL
+
+    async def _generate_vercel_gemini_audio(
+        self, text: str, voice: str, path: Path, model: str | None = None, rate: str = "+0%"
+    ) -> None:
+        api_key, base_url = self._vercel_gemini_settings()
+        if not api_key:
+            raise RuntimeError(
+                "Vercel AI Gateway API key is not configured. 请在 设置 → Vercel 中填写 vercel_api_key。"
+            )
+        audio_bytes = await vercel_gemini_tts_synthesize(
+            text=text,
+            voice=voice,
+            api_key=api_key,
+            base_url=base_url,
+            model=model or DEFAULT_VERCEL_GEMINI_TTS_MODEL,
+            rate=rate,
+        )
+        self._atomic_write_bytes(path, audio_bytes)
 
     def _doubao_settings(self) -> tuple[str, str, str]:
         """Return (access_token, app_id, cluster) for Doubao OpenSpeech TTS."""
@@ -1619,7 +1655,7 @@ class TTSService:
             selected_voice = voice or DEFAULT_GRADIUM_VOICE
         elif normalized_engine == TTS_ENGINE_SONIOX:
             selected_voice = voice or DEFAULT_SONIOX_TTS_VOICE
-        elif normalized_engine == TTS_ENGINE_GEMINI:
+        elif normalized_engine in {TTS_ENGINE_GEMINI, TTS_ENGINE_VERCEL_GEMINI}:
             selected_voice = voice or DEFAULT_GEMINI_TTS_VOICE
         else:
             selected_voice = voice or XIAOMI_VOICES[0]["name"]
@@ -1665,6 +1701,8 @@ class TTSService:
             await self._generate_soniox_audio(cleaned, selected_voice, path, model=model)
         elif normalized_engine == TTS_ENGINE_GEMINI:
             await self._generate_gemini_audio(cleaned, selected_voice, path, model=model)
+        elif normalized_engine == TTS_ENGINE_VERCEL_GEMINI:
+            await self._generate_vercel_gemini_audio(cleaned, selected_voice, path, model=model, rate=rate)
         else:
             await self._generate_xiaomi_audio(cleaned, selected_voice, path, model=model)
 
@@ -1795,6 +1833,8 @@ class TTSService:
         if normalized_engine == TTS_ENGINE_GEMINI:
             voices = await self._fetch_gemini_voices()
             return self._filter_by_locale(voices, locale)
+        if normalized_engine == TTS_ENGINE_VERCEL_GEMINI:
+            return self._filter_by_locale(GEMINI_TTS_VOICES, locale)
         if normalized_engine == TTS_ENGINE_QWEN_FLASH:
             # The Qwen TTS families use incompatible voice sets; when the
             # caller tells us the model, return only voices that work with it.

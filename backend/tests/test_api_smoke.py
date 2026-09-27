@@ -9,7 +9,7 @@ import time
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.parse import quote, urlparse
 
 import httpx
@@ -2076,6 +2076,22 @@ class ApiSmokeTests(unittest.TestCase):
             data = response.json()
             self.assertEqual(data["provider"], "Doubao")
             self.assertIn("doubao-realtime", data["models"])
+
+    def test_fetch_models_vercel_keeps_realtime_voices_separate_from_tts(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": [{"id": "google/gemini-3.8-live"}]}
+        with patch("httpx.AsyncClient.get", return_value=mock_response):
+            response = self._request(
+                "POST",
+                "/api/settings/providers/Vercel/fetch-models",
+                json={"api_key": "test-vercel-key", "base_url": "https://ai-gateway.vercel.sh"},
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("spacexai/grok-voice-think-fast-1.0", data["models"])
+        self.assertIn("google/gemini-3.8-flash-tts", data["tts_models"])
+        self.assertIn("google/gemini-3.8-flash-lite-tts", data["tts_models"])
+        self.assertNotIn("spacexai/grok-voice-think-fast-1.0", data["tts_models"])
 
     def test_fetch_models_agent_platform_default_endpoint(self) -> None:
         response = self._request(

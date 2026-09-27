@@ -34,6 +34,24 @@ describe('TtsPage', () => {
         expect(screen.getByText('Xiaoxiao (zh-CN)')).toBeInTheDocument();
     });
 
+    it('explains approximate Vercel pacing for text and either dialogue speaker', () => {
+        const renderPage = (tts: ReturnType<typeof createTtsController>) => (
+            <TtsPage tts={tts} errorRuntimeContext={{}} />
+        );
+        const { rerender } = render(renderPage(createTtsController()));
+        expect(screen.queryByRole('note')).not.toBeInTheDocument();
+
+        rerender(renderPage(createTtsController({ ttsEngine: 'vercel_gemini' })));
+        expect(screen.getByRole('note')).toHaveTextContent('Vercel Gemini 语速为近似控制');
+
+        rerender(renderPage(createTtsController({
+            ttsMode: 'dialogue',
+            ttsEngine: 'edge',
+            ttsEngineB: 'vercel_gemini'
+        })));
+        expect(screen.getByRole('note')).toHaveTextContent('实际节奏可能不同');
+    });
+
     it('keeps voice loading feedback inside the disabled selector', () => {
         render(
             <TtsPage

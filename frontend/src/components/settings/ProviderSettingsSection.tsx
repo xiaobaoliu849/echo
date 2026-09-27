@@ -28,7 +28,7 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   Doubao: t("火山引擎 豆包", "Volcengine Doubao"),
   Cartesia: t("Cartesia 极速语音", "Cartesia Sonic Voice"),
   Gradium: t("Gradium 实时语音", "Gradium Voice AI"),
-  Vercel: t("Vercel AI Gateway 实时语音", "Vercel AI Gateway Realtime"),
+  Vercel: t("Vercel AI Gateway 实时语音与语音合成", "Vercel AI Gateway Realtime and TTS"),
   PersonaPlex: t("PersonaPlex 语音模型", "PersonaPlex"),
   GLM4Voice: t("智谱 GLM-4-Voice", "Zhipu GLM-4-Voice"),
 });
@@ -280,6 +280,13 @@ export default function ProviderSettingsSection({ settings }: Props) {
             <div className="vsProviderInfoCallout">
               <div><strong>{t("Google AI Studio（个人免费 · 实时语音前沿）", "Google AI Studio (Free Tier · Live Voice)")}</strong></div>
               <div style={{ marginTop: 4 }}>• {t("填入 AI Studio Key（新版通常以 AQ. 开头，旧版以 AIza... 开头），用于实时全双工双向语音通话，享受官方每日免费配额。", "Enter your AI Studio API key (new keys start with AQ., legacy start with AIza...) for realtime bidirectional voice chat with daily free quota.")}</div>
+            </div>
+          )}
+
+          {settings.settingsProvider === "Vercel" && (
+            <div className="vsProviderInfoCallout">
+              <div><strong>{t("Vercel AI Gateway 语音合成", "Vercel AI Gateway TTS")}</strong></div>
+              <div style={{ marginTop: 4 }}>{t("填写 Vercel API Key 后，在语音合成中选择 Gemini TTS (Vercel 网关)，可使用 Gemini 3.8 Flash TTS 或 Flash Lite TTS。", "Enter your Vercel API key, then choose Gemini TTS (Vercel Gateway) in Text to Speech to use Gemini 3.8 Flash TTS or Flash Lite TTS.")}</div>
             </div>
           )}
 

@@ -88,6 +88,10 @@ const DEFAULT_ENGINE_MODELS: Record<TtsEngine, { defaultModel: string; available
     defaultModel: "gemini-3.8-flash-tts",
     availableModels: ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
   },
+  vercel_gemini: {
+    defaultModel: "google/gemini-3.8-flash-tts",
+    availableModels: ["google/gemini-3.8-flash-tts", "google/gemini-3.8-flash-lite-tts"]
+  },
 };
 
 export default function useTts({ defaultText, formatErrorMessage, language = "zh-CN" }: Options) {
@@ -246,6 +250,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
       { value: "cartesia" as TtsEngine, label: "Cartesia Sonic", hint: t("Cartesia Sonic 超低延迟合成，支持 44 种语言与自然情感表达。", "Cartesia Sonic ultra-low-latency synthesis across 44 languages with natural expressiveness.") },
       { value: "soniox" as TtsEngine, label: "Soniox TTS", hint: t("Soniox 超低延迟 Speech AI 合成，tts-rt-v2 60+ 多语言自然音色与情绪标签。", "Soniox ultra-low latency Speech AI synthesis, tts-rt-v2 60+ multilingual natural voices with audio tags.") },
       { value: "gemini" as TtsEngine, label: "Gemini TTS (Google)", hint: t("Google 官方 Gemini 3.8 Flash TTS，高保真表现力与舞台脚本级演绎。", "Google official Gemini 3.8 Flash TTS with high-fidelity expressiveness and stage direction.") },
+      { value: "vercel_gemini" as TtsEngine, label: t("Gemini TTS (Vercel 网关)", "Gemini TTS (Vercel Gateway)"), hint: t("使用设置中的 Vercel API Key，经 Vercel AI Gateway 合成 Gemini 3.8 Flash 或 Flash Lite 语音。", "Use the Vercel API key in Settings to synthesize Gemini 3.8 Flash or Flash Lite speech through Vercel AI Gateway.") },
     ],
     [t]
   );

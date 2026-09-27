@@ -4,6 +4,15 @@ import ProviderSettingsSection from "./ProviderSettingsSection";
 import { createSettingsController } from "../../test/factories";
 
 describe("ProviderSettingsSection", () => {
+  it("explains Vercel Gemini TTS setup next to the API key", () => {
+    const settings = createSettingsController({ settingsProvider: "Vercel" });
+    render(<ProviderSettingsSection settings={settings} />);
+
+    expect(screen.getByText("Vercel AI Gateway 实时语音与语音合成")).toBeInTheDocument();
+    expect(screen.getByText("Vercel AI Gateway 语音合成")).toBeInTheDocument();
+    expect(screen.getByText(/填写 Vercel API Key 后/)).toHaveTextContent("Flash Lite TTS");
+  });
+
   it("opens and closes the custom provider modal properly", () => {
     const settings = createSettingsController();
     render(<ProviderSettingsSection settings={settings} />);

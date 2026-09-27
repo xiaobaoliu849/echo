@@ -17,7 +17,8 @@ DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
 GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
 DEFAULT_GEMINI_TTS_MODEL = "gemini-3.8-flash-tts"
 
-# Curated prebuilt voices for Gemini TTS
+# Google's 30 prebuilt Gemini TTS voices. The additional voices have no
+# published gender labels, so leave gender unspecified rather than guessing.
 GEMINI_TTS_VOICES = [
     {"name": "Kore", "short_name": "Kore (Gemini, Female)", "locale": "multi", "gender": "Female", "description": "清澈宁静女声，适合解说、播客与长文"},
     {"name": "Puck", "short_name": "Puck (Gemini, Male)", "locale": "multi", "gender": "Male", "description": "热情灵动男声，表现力丰富"},
@@ -27,6 +28,28 @@ GEMINI_TTS_VOICES = [
     {"name": "Leda", "short_name": "Leda (Gemini, Female)", "locale": "multi", "gender": "Female", "description": "亲切知性女声，适合助理与教学"},
     {"name": "Orus", "short_name": "Orus (Gemini, Male)", "locale": "multi", "gender": "Male", "description": "干练清晰男声，节奏适中"},
     {"name": "Zephyr", "short_name": "Zephyr (Gemini, Neutral)", "locale": "multi", "gender": "Neutral", "description": "柔和自然中性声，日常对话通用"},
+    {"name": "Callirrhoe", "short_name": "Callirrhoe (Gemini)", "locale": "multi", "gender": "", "description": "Easy-going prebuilt Gemini voice."},
+    {"name": "Autonoe", "short_name": "Autonoe (Gemini)", "locale": "multi", "gender": "", "description": "Bright prebuilt Gemini voice."},
+    {"name": "Enceladus", "short_name": "Enceladus (Gemini)", "locale": "multi", "gender": "", "description": "Breathy prebuilt Gemini voice."},
+    {"name": "Iapetus", "short_name": "Iapetus (Gemini)", "locale": "multi", "gender": "", "description": "Clear prebuilt Gemini voice."},
+    {"name": "Umbriel", "short_name": "Umbriel (Gemini)", "locale": "multi", "gender": "", "description": "Easy-going prebuilt Gemini voice."},
+    {"name": "Algieba", "short_name": "Algieba (Gemini)", "locale": "multi", "gender": "", "description": "Smooth prebuilt Gemini voice."},
+    {"name": "Despina", "short_name": "Despina (Gemini)", "locale": "multi", "gender": "", "description": "Smooth prebuilt Gemini voice."},
+    {"name": "Erinome", "short_name": "Erinome (Gemini)", "locale": "multi", "gender": "", "description": "Clear prebuilt Gemini voice."},
+    {"name": "Algenib", "short_name": "Algenib (Gemini)", "locale": "multi", "gender": "", "description": "Gravelly prebuilt Gemini voice."},
+    {"name": "Rasalgethi", "short_name": "Rasalgethi (Gemini)", "locale": "multi", "gender": "", "description": "Informative prebuilt Gemini voice."},
+    {"name": "Laomedeia", "short_name": "Laomedeia (Gemini)", "locale": "multi", "gender": "", "description": "Upbeat prebuilt Gemini voice."},
+    {"name": "Achernar", "short_name": "Achernar (Gemini)", "locale": "multi", "gender": "", "description": "Soft prebuilt Gemini voice."},
+    {"name": "Alnilam", "short_name": "Alnilam (Gemini)", "locale": "multi", "gender": "", "description": "Firm prebuilt Gemini voice."},
+    {"name": "Schedar", "short_name": "Schedar (Gemini)", "locale": "multi", "gender": "", "description": "Even prebuilt Gemini voice."},
+    {"name": "Gacrux", "short_name": "Gacrux (Gemini)", "locale": "multi", "gender": "", "description": "Mature prebuilt Gemini voice."},
+    {"name": "Pulcherrima", "short_name": "Pulcherrima (Gemini)", "locale": "multi", "gender": "", "description": "Forward prebuilt Gemini voice."},
+    {"name": "Achird", "short_name": "Achird (Gemini)", "locale": "multi", "gender": "", "description": "Friendly prebuilt Gemini voice."},
+    {"name": "Zubenelgenubi", "short_name": "Zubenelgenubi (Gemini)", "locale": "multi", "gender": "", "description": "Casual prebuilt Gemini voice."},
+    {"name": "Vindemiatrix", "short_name": "Vindemiatrix (Gemini)", "locale": "multi", "gender": "", "description": "Gentle prebuilt Gemini voice."},
+    {"name": "Sadachbia", "short_name": "Sadachbia (Gemini)", "locale": "multi", "gender": "", "description": "Lively prebuilt Gemini voice."},
+    {"name": "Sadaltager", "short_name": "Sadaltager (Gemini)", "locale": "multi", "gender": "", "description": "Knowledgeable prebuilt Gemini voice."},
+    {"name": "Sulafat", "short_name": "Sulafat (Gemini)", "locale": "multi", "gender": "", "description": "Warm prebuilt Gemini voice."},
 ]
 
 DEFAULT_GEMINI_TTS_VOICE = GEMINI_TTS_VOICES[0]["name"]
