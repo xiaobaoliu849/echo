@@ -75,6 +75,11 @@ class QwenAudioRealtimeMixin:
             message = await websocket.receive()
             message_type = message.get("type")
             if message_type == "websocket.disconnect":
+                logger.info(
+                    "qwen_audio_client_closed session_id=%s code=%s",
+                    recorder.session_id if recorder is not None else "",
+                    message.get("code"),
+                )
                 break
 
             text_data = message.get("text")
@@ -127,6 +132,10 @@ class QwenAudioRealtimeMixin:
                     interruption=interruption, provider="DashScope",
                 )
                 if result == "stop":
+                    logger.info(
+                        "qwen_audio_client_stopped session_id=%s",
+                        recorder.session_id if recorder is not None else "",
+                    )
                     break
                 continue
 
@@ -337,7 +346,29 @@ class QwenAudioRealtimeMixin:
                     # flush buffered output and finalize the turn.
                     await _resolve_deferred_response_done()
                 continue
-            except Exception:
+            except websockets.exceptions.ConnectionClosed as exc:
+                close_frame = exc.rcvd or exc.sent
+                close_code = close_frame.code if close_frame is not None else None
+                close_reason = str(close_frame.reason if close_frame is not None else "").strip()
+                logger.warning(
+                    "qwen_audio_upstream_closed session_id=%s code=%s reason=%s",
+                    recorder.session_id if recorder is not None else "",
+                    close_code, close_reason[:200],
+                )
+                await self._send_event(
+                    websocket, "error",
+                    message=(
+                        f"Qwen-Audio 连接已结束（code={close_code or 'unknown'}"
+                        f"{', reason=' + close_reason[:200] if close_reason else ''}）。请重新连接。"
+                    ),
+                )
+                break
+            except Exception as exc:
+                logger.warning(
+                    "qwen_audio_upstream_receive_failed session_id=%s error=%s: %s",
+                    recorder.session_id if recorder is not None else "",
+                    type(exc).__name__, exc,
+                )
                 break
 
             try:
@@ -889,6 +920,16 @@ class QwenAudioRealtimeMixin:
             topic = str(arguments.get("topic", "")).strip()
             query = topic
             tool_name = "create_audio_agent_run"
+        elif name_lower == "render_canvas":
+            query = json.dumps(
+                {
+                    "code": str(arguments.get("code", "")),
+                    "mode": str(arguments.get("mode", "react")),
+                    "title": str(arguments.get("title", "Canvas Component")),
+                },
+                ensure_ascii=False,
+            )
+            tool_name = "render_canvas"
         else:
             await self._send_qwen_audio_function_call_output(
                 dash_ws, call_id, json.dumps({"error": f"未知工具: {name}"})

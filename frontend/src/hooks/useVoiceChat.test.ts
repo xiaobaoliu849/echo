@@ -476,6 +476,34 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatStatus).toContain("实时会话已连接");
   });
 
+  it("reports an unexpected WebSocket close after the voice session connected", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["DashScope"],
+      preferredProvider: "DashScope",
+      preferredModel: "qwen-audio-3.1-realtime-plus",
+      providerModelCatalog: {
+        DashScope: {
+          defaultModel: "qwen-audio-3.1-realtime-plus",
+          availableModels: ["qwen-audio-3.1-realtime-plus"],
+        },
+      },
+    }));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({
+        type: "session_open", provider: "DashScope",
+        model: "qwen-audio-3.1-realtime-plus", voice: "betty_v3.1",
+      });
+    });
+    expect(result.current.voiceChatConnected).toBe(true);
+    act(() => socket.emitClose(1006, "upstream connection lost"));
+    expect(result.current.voiceChatConnected).toBe(false);
+    expect(result.current.voiceChatError).toContain("1006");
+  });
+
   it("sends the current EverMem group_id in websocket config and refreshes it after reset", async () => {
     const formatErrorMessage = createFormatErrorMessageStub();
     ensureEverMemConversationGroupIdMock

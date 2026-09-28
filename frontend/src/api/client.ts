@@ -46,6 +46,7 @@ import type {
   TtsEngine,
   VoiceAgentMetricsSummary,
   VoiceAgentSessionHistoryDetailResponse,
+  VoiceAgentTrajectoryResponse,
   VoiceAgentSessionHistoryListResponse,
   VoiceCreateResponse,
   VoiceDesignRequest,
@@ -740,6 +741,20 @@ export async function fetchVoiceAgentMetricsSummary(
     await throwApiError(response);
   }
   return (await response.json()) as VoiceAgentMetricsSummary;
+}
+
+export async function fetchVoiceAgentTrajectory(
+  days = 365
+): Promise<VoiceAgentTrajectoryResponse> {
+  const normalizedDays = Number.isFinite(days) ? Math.floor(days) : 365;
+  const safeDays = Math.max(1, Math.min(normalizedDays, 1825));
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/voice-chat/trajectory?days=${encodeURIComponent(String(safeDays))}`
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return (await response.json()) as VoiceAgentTrajectoryResponse;
 }
 
 export async function fetchVoiceAgentSession(

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -23,6 +24,28 @@ MAX_BYTES = 5 * 1024 * 1024
 BACKUP_COUNT = 3
 
 
+class _RedactWebSocketToken(logging.Filter):
+    """Keep URL query bearer tokens out of Uvicorn access logs."""
+
+    _token_pattern = re.compile(r"([?&]token=)[^&\s\"]+", re.IGNORECASE)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._token_pattern.sub(r"\1<redacted>", record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                self._token_pattern.sub(r"\1<redacted>", arg) if isinstance(arg, str) else arg
+                for arg in record.args
+            )
+        return True
+
+
+def _install_access_log_redaction() -> None:
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(item, _RedactWebSocketToken) for item in access_logger.filters):
+        access_logger.addFilter(_RedactWebSocketToken())
+
+
 def log_file_path() -> Path:
     return get_data_dir() / LOG_DIR_NAME / LOG_FILE_NAME
 
@@ -34,6 +57,7 @@ def setup_file_logging() -> Path | None:
     cannot be opened (read-only install dir, permissions, ...). Failing to open
     a log file must never prevent the app from starting.
     """
+    _install_access_log_redaction()
     if os.environ.get("ECHO_DISABLE_FILE_LOG", "").strip().lower() in {"1", "true", "yes"}:
         return None
 
