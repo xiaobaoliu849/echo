@@ -130,6 +130,33 @@ class VoiceAgentMetricsSummaryResponse(VoiceAgentMetricProviderResponse):
     providers: list[VoiceAgentMetricProviderResponse] = Field(default_factory=list)
 
 
+class VoiceAgentTrajectoryDayResponse(BaseModel):
+    date: str
+    duration_seconds: int = 0
+    turn_count: int = 0
+    session_count: int = 0
+    user_words: int = 0
+    assistant_words: int = 0
+    level: int = 0
+
+
+class VoiceAgentTrajectoryPeakDayResponse(BaseModel):
+    date: str
+    duration_seconds: int = 0
+    turn_count: int = 0
+
+
+class VoiceAgentTrajectoryResponse(BaseModel):
+    current_streak: int = 0
+    longest_streak: int = 0
+    total_seconds: int = 0
+    total_turns: int = 0
+    total_sessions: int = 0
+    active_days: int = 0
+    peak_day: VoiceAgentTrajectoryPeakDayResponse | None = None
+    daily_activity: dict[str, VoiceAgentTrajectoryDayResponse] = Field(default_factory=dict)
+
+
 class VoiceAgentSessionDetailResponse(VoiceAgentSessionResponse):
     turns: list[VoiceAgentTurnResponse] = Field(default_factory=list)
     tool_events: list[VoiceAgentToolEventResponse] = Field(default_factory=list)
@@ -165,6 +192,15 @@ async def get_voice_agent_metrics_summary(
         voice_agent_session_repository.summarize_metrics, limit=limit, provider=provider
     )
     return VoiceAgentMetricsSummaryResponse(provider=(provider or "all"), **summary)
+
+
+@router.get("/trajectory", response_model=VoiceAgentTrajectoryResponse)
+@router.get("/sessions/trajectory", response_model=VoiceAgentTrajectoryResponse)
+async def get_voice_agent_trajectory(
+    days: int = Query(default=365, ge=1, le=1825),
+) -> VoiceAgentTrajectoryResponse:
+    stats = await run_db_call(voice_agent_session_repository.get_trajectory_stats, days=days)
+    return VoiceAgentTrajectoryResponse(**stats)
 
 
 @router.get("/sessions/{session_id}", response_model=VoiceAgentSessionDetailResponse)

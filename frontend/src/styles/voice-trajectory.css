@@ -1,0 +1,220 @@
+/* Voice Trajectory & Learning Heatmap Styles */
+.trajectory-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.trajectory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.trajectory-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.trajectory-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--brand) 15%, transparent);
+  color: var(--brand-dark);
+}
+
+.trajectory-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.trajectory-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  margin: 0;
+}
+
+.trajectory-range-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.trajectory-range-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.trajectory-range-btn:hover {
+  color: var(--text-primary);
+}
+
+.trajectory-range-btn.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.trajectory-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.trajectory-stat-box {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.trajectory-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--text-soft);
+}
+
+.trajectory-stat-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-feature-settings: "tnum";
+}
+
+.trajectory-grid-wrapper {
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.trajectory-grid {
+  display: flex;
+  gap: 3px;
+  align-items: flex-start;
+}
+
+.trajectory-day-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 98px; /* 7 * 11px + 6 * 3px gap = 95px */
+  margin-right: 6px;
+  font-size: 0.68rem;
+  color: var(--text-soft);
+  user-select: none;
+}
+
+.trajectory-week-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.trajectory-square {
+  width: 11px;
+  height: 11px;
+  border-radius: 2.5px;
+  box-sizing: border-box;
+  transition: transform 0.1s ease, filter 0.1s ease;
+  cursor: pointer;
+}
+
+.trajectory-square:hover {
+  transform: scale(1.35);
+  z-index: 10;
+  filter: brightness(1.1);
+}
+
+/* Intensity levels */
+.trajectory-level-0 {
+  background: color-mix(in oklab, var(--line) 40%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
+}
+
+.trajectory-level-1 {
+  background: #9be9a8;
+  border: 1px solid #7bc96f;
+}
+
+.trajectory-level-2 {
+  background: #40c463;
+  border: 1px solid #34a853;
+}
+
+.trajectory-level-3 {
+  background: #30a14e;
+  border: 1px solid #238636;
+}
+
+.trajectory-level-4 {
+  background: #216e39;
+  border: 1px solid #195b2c;
+  box-shadow: 0 0 6px rgba(33, 110, 57, 0.4);
+}
+
+.trajectory-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  color: var(--text-soft);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.trajectory-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.trajectory-legend-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.trajectory-tooltip {
+  position: absolute;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  transform: translate(-50%, -100%);
+  margin-top: -8px;
+}

@@ -4,7 +4,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -644,10 +644,17 @@ class VoiceAgentSessionRepository:
         text = str(value or "").strip()
         if not text:
             return None
+        dt = None
         try:
-            return datetime.fromisoformat(text.replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
         except ValueError:
-            return None
+            try:
+                dt = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        if dt is not None and dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        return dt
 
     @staticmethod
     def _metric_summary(samples: list[float]) -> dict[str, int | None]:
@@ -1006,3 +1013,173 @@ class VoiceAgentSessionRepository:
             if "stage" in item["payload"]:
                 item["stage"] = item["payload"]["stage"]
         return timeline
+
+    def get_trajectory_stats(self, days: int = 365) -> dict[str, Any]:
+        """Calculates daily voice learning trajectory & activity streak statistics
+        (GitHub contribution graph style).
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id, provider, model, voice, status, started_at, ended_at, meta_json
+                FROM voice_agent_sessions
+                ORDER BY started_at ASC
+                """
+            )
+            sessions = [self._row_to_session(row) for row in cursor.fetchall() if row is not None]
+
+            turns_cursor = conn.execute(
+                """
+                SELECT session_id, started_at, completed_at,
+                       length(coalesce(user_text, '')) as user_len,
+                       length(coalesce(assistant_text, '')) as assistant_len
+                FROM voice_agent_turns
+                """
+            )
+            turns_rows = turns_cursor.fetchall()
+
+        turns_by_session: dict[str, list[dict[str, Any]]] = {}
+        for r in turns_rows:
+            sid = str(r["session_id"])
+            if sid not in turns_by_session:
+                turns_by_session[sid] = []
+            turns_by_session[sid].append({
+                "started_at": r["started_at"],
+                "completed_at": r["completed_at"],
+                "user_len": int(r["user_len"] or 0),
+                "assistant_len": int(r["assistant_len"] or 0),
+            })
+
+        daily_data: dict[str, dict[str, Any]] = {}
+        total_seconds = 0
+        total_turns = 0
+        total_sessions = 0
+
+        cutoff_date = None
+        if days > 0:
+            cutoff_date = (datetime.now() - timedelta(days=days)).date()
+
+        for s in sessions:
+            if not s:
+                continue
+            started_dt = self._parse_timestamp(s.get("started_at"))
+            if not started_dt:
+                continue
+
+            session_date = started_dt.date()
+            if cutoff_date and session_date < cutoff_date:
+                continue
+
+            date_str = session_date.strftime("%Y-%m-%d")
+            ended_dt = self._parse_timestamp(s.get("ended_at"))
+
+            duration = 0.0
+            if ended_dt and ended_dt >= started_dt:
+                duration = (ended_dt - started_dt).total_seconds()
+
+            s_turns = turns_by_session.get(s["id"], [])
+            turn_count = len(s_turns)
+            user_words = sum(t["user_len"] for t in s_turns)
+            assistant_words = sum(t["assistant_len"] for t in s_turns)
+
+            if duration <= 0:
+                if s_turns:
+                    first_turn_dt = self._parse_timestamp(s_turns[0]["started_at"]) or started_dt
+                    last_turn_dt = self._parse_timestamp(s_turns[-1]["completed_at"]) or self._parse_timestamp(s_turns[-1]["started_at"])
+                    if last_turn_dt and first_turn_dt and last_turn_dt >= first_turn_dt:
+                        duration = max((last_turn_dt - first_turn_dt).total_seconds(), float(turn_count * 15))
+                    else:
+                        duration = float(turn_count * 15)
+                else:
+                    duration = 10.0
+
+            duration_int = int(round(duration))
+            total_seconds += duration_int
+            total_turns += turn_count
+            total_sessions += 1
+
+            if date_str not in daily_data:
+                daily_data[date_str] = {
+                    "date": date_str,
+                    "duration_seconds": 0,
+                    "turn_count": 0,
+                    "session_count": 0,
+                    "user_words": 0,
+                    "assistant_words": 0,
+                    "level": 0,
+                }
+
+            day_entry = daily_data[date_str]
+            day_entry["duration_seconds"] += duration_int
+            day_entry["turn_count"] += turn_count
+            day_entry["session_count"] += 1
+            day_entry["user_words"] += user_words
+            day_entry["assistant_words"] += assistant_words
+
+        for day in daily_data.values():
+            secs = day["duration_seconds"]
+            if secs <= 0:
+                day["level"] = 0
+            elif secs < 300:
+                day["level"] = 1
+            elif secs < 900:
+                day["level"] = 2
+            elif secs < 1800:
+                day["level"] = 3
+            else:
+                day["level"] = 4
+
+        active_dates = sorted(daily_data.keys())
+        active_days_count = len(active_dates)
+
+        current_streak = 0
+        longest_streak = 0
+        peak_day = None
+        max_duration = -1
+
+        for d_str, day_info in daily_data.items():
+            if day_info["duration_seconds"] > max_duration:
+                max_duration = day_info["duration_seconds"]
+                peak_day = {
+                    "date": d_str,
+                    "duration_seconds": day_info["duration_seconds"],
+                    "turn_count": day_info["turn_count"],
+                }
+
+        if active_dates:
+            date_objs = [datetime.strptime(d, "%Y-%m-%d").date() for d in active_dates]
+            temp_streak = 1
+            longest_streak = 1
+            for i in range(1, len(date_objs)):
+                diff = (date_objs[i] - date_objs[i - 1]).days
+                if diff == 1:
+                    temp_streak += 1
+                    if temp_streak > longest_streak:
+                        longest_streak = temp_streak
+                elif diff > 1:
+                    temp_streak = 1
+
+            today = datetime.now().date()
+            yesterday = today - timedelta(days=1)
+            last_active = date_objs[-1]
+
+            if last_active == today or last_active == yesterday:
+                current_streak = 1
+                curr_idx = len(date_objs) - 1
+                while curr_idx > 0 and (date_objs[curr_idx] - date_objs[curr_idx - 1]).days == 1:
+                    current_streak += 1
+                    curr_idx -= 1
+            else:
+                current_streak = 0
+
+        return {
+            "current_streak": current_streak,
+            "longest_streak": longest_streak,
+            "total_seconds": total_seconds,
+            "total_turns": total_turns,
+            "total_sessions": total_sessions,
+            "active_days": active_days_count,
+            "peak_day": peak_day,
+            "daily_activity": daily_data,
+        }
+

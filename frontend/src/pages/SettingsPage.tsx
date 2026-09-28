@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Globe, Cpu, Brain, Mic, Monitor, AudioLines, ArrowLeft } from "lucide-react";
+import { Globe, Cpu, Brain, Mic, Monitor, AudioLines, ArrowLeft, Flame } from "lucide-react";
+import VoiceTrajectoryHeatmap from "../components/VoiceTrajectoryHeatmap";
 import ErrorNotice from "../components/ErrorNotice";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import { useI18n } from "../i18n";
@@ -14,10 +15,10 @@ type Props = {
   settings: UseSettingsResult;
   errorRuntimeContext?: ErrorRuntimeContext;
   onClose?: () => void;
-  initialCategory?: "provider" | "desktop";
+  initialCategory?: "provider" | "desktop" | "trajectory";
 };
 
-type SettingCategory = "general" | "provider" | "transcription" | "memory" | "desktop" | "local-voice";
+type SettingCategory = "general" | "trajectory" | "provider" | "transcription" | "memory" | "desktop" | "local-voice";
 
 export default function SettingsPage({ settings, errorRuntimeContext, onClose, initialCategory = "provider" }: Props) {
   const { t } = useI18n();
@@ -55,6 +56,18 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
                   <Globe size={16} />
                 </div>
                 <div className="vsSettingsNavItemTitle">{t("通用", "General")}</div>
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                className={`vsSettingsNavItem ${activeCategory === "trajectory" ? "active" : ""}`}
+                onClick={() => setActiveCategory("trajectory")}
+              >
+                <div className="vsSettingsNavIcon">
+                  <Flame size={16} style={{ color: "#ef4444" }} />
+                </div>
+                <div className="vsSettingsNavItemTitle">{t("语音足迹", "Voice Trajectory")}</div>
               </button>
             </li>
             <li>
@@ -140,6 +153,7 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
             <div className="vsSettingsHeadInfo">
               <h1 className="vsSettingsTitle">
                 {activeCategory === "general" && t("通用偏好", "General Preferences")}
+                {activeCategory === "trajectory" && t("语音学习足迹与打卡", "Voice Practice Trajectory & Streaks")}
                 {activeCategory === "provider" && t("AI 供应商参数", "AI Provider Settings")}
                 {activeCategory === "memory" && t("EverMem 长期记忆中心", "EverMem Memory Center")}
                 {activeCategory === "transcription" && t("文件转写与上传配置", "Transcription & Upload Settings")}
@@ -193,6 +207,11 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
             </div>
           )}
 
+          {activeCategory === "trajectory" && (
+            <div className="vsSettingsCard" style={{ padding: "0", background: "transparent", border: "none", boxShadow: "none" }}>
+              <VoiceTrajectoryHeatmap />
+            </div>
+          )}
           {activeCategory === "provider" && <ProviderSettingsSection settings={settings} />}
           {activeCategory === "memory" && <MemorySettingsSection settings={settings} />}
           {activeCategory === "transcription" && <TranscriptionSettingsSection settings={settings} />}
@@ -211,15 +230,17 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
                 <span className="status-ready">{t("参数配置就绪", "Settings ready")}</span>
               )}
             </div>
-            <div className="vsSettingsFooterActions">
-              <button
-                type="submit"
-                className="vsBtnPrimary vsFooterSaveBtn"
-                disabled={settings.settingsSaving || settings.settingsBusy}
-              >
-                {settings.settingsSaving ? t("保存中...", "Saving...") : t("保存", "Save")}
-              </button>
-            </div>
+            {activeCategory !== "trajectory" && (
+              <div className="vsSettingsFooterActions">
+                <button
+                  type="submit"
+                  className="vsBtnPrimary vsFooterSaveBtn"
+                  disabled={settings.settingsSaving || settings.settingsBusy}
+                >
+                  {settings.settingsSaving ? t("保存中...", "Saving...") : t("保存", "Save")}
+                </button>
+              </div>
+            )}
           </footer>
         </form>
       </section>

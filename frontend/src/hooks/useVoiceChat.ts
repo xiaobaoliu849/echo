@@ -1746,8 +1746,8 @@ export default function useVoiceChat({
         setVoiceChatError((prev) =>
           prev ||
           t(
-            `实时语音连接失败。请确认后端正在运行，并且模型支持实时语音：${voiceChatProvider} / ${voiceChatModel || "默认模型"}。WebSocket: ${wsUrl}`,
-            `Realtime voice connection failed. Confirm the backend is running and the model supports realtime voice: ${voiceChatProvider} / ${voiceChatModel || "default model"}. WebSocket: ${wsUrl}`
+            `实时语音连接失败。请确认后端正在运行，并且模型支持实时语音：${voiceChatProvider} / ${voiceChatModel || "默认模型"}。`,
+            `Realtime voice connection failed. Confirm the backend is running and the model supports realtime voice: ${voiceChatProvider} / ${voiceChatModel || "default model"}.`
           )
         );
         setVoiceChatStatus(t("实时语音连接失败", "Realtime voice connection failed"));
@@ -1757,9 +1757,8 @@ export default function useVoiceChat({
         if (sessionEpochRef.current !== sessionEpoch) {
           return;
         }
-        const wasConnected = voiceChatConnectedRef.current;
         stopSessionResources();
-        if (!wasConnected && event.code !== 1000) {
+        if (event.code !== 1000) {
           const authMsg = event.code === 1008
             ? t("实时语音认证失败：请在右上角登录账号或配置访问 Token 后重试。", "Realtime voice authentication failed: please login or provide an access token.")
             : "";

@@ -33,6 +33,10 @@ describe("SettingsPage", () => {
     expect(screen.getByText("文件转写与上传配置")).toBeInTheDocument();
     expect(screen.getByText("文件上传模式")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /语音足迹|Voice Trajectory/i }));
+    expect(screen.getByText(/语音学习足迹与打卡|Voice Practice Trajectory & Streaks/i)).toBeInTheDocument();
+    expect(screen.getByText(/当前连续打卡|Current Streak/i)).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: /系统/i }));
     expect(screen.getByText("系统与运行时状态")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "显示系统运行时日志" })).toBeInTheDocument();

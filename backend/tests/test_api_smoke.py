@@ -206,6 +206,16 @@ class ApiSmokeTests(unittest.TestCase):
                 self.assertEqual(metrics_response.json()["session_count"], 1)
                 self.assertEqual(metrics_response.json()["turn_count"], 1)
 
+                trajectory_response = self._request(
+                    "GET",
+                    "/api/voice-chat/trajectory?days=30",
+                )
+                self.assertEqual(trajectory_response.status_code, 200)
+                traj_json = trajectory_response.json()
+                self.assertIn("current_streak", traj_json)
+                self.assertIn("daily_activity", traj_json)
+                self.assertGreaterEqual(traj_json["total_sessions"], 1)
+
                 missing_response = self._request("GET", "/api/voice-chat/sessions/missing")
                 self.assertEqual(missing_response.status_code, 404)
                 self.assertEqual(

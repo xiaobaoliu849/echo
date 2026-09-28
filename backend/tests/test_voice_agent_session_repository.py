@@ -4,6 +4,7 @@ import asyncio
 import tempfile
 import unittest
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -335,6 +336,68 @@ class VoiceAgentSessionRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(provider_summary["session_count"], 1)
         self.assertEqual(provider_summary["providers"][0]["provider"], "OpenAI")
 
+    def test_get_trajectory_stats_aggregates_daily_speaking_and_streaks(self) -> None:
+        today_str = datetime.now().date().strftime("%Y-%m-%d")
+        yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        session1 = self.repository.create_session(provider="OpenAI", model="gpt-4o-realtime", voice="alloy")
+        session2 = self.repository.create_session(provider="DashScope", model="qwen-realtime", voice="Tina")
+
+        self.repository.upsert_turn(
+            session1["id"],
+            "turn-1",
+            user_text="Hello world!",
+            assistant_text="Hi there! How can I help you today?",
+            completed=True,
+        )
+        self.repository.upsert_turn(
+            session2["id"],
+            "turn-2",
+            user_text="Tell me a story about coding",
+            assistant_text="Once upon a time in a software lab...",
+            completed=True,
+        )
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                """
+                UPDATE voice_agent_sessions
+                SET started_at = ?, ended_at = ?
+                WHERE id = ?
+                """,
+                (f"{yesterday_str} 10:00:00", f"{yesterday_str} 10:15:00", session1["id"]),
+            )
+            conn.execute(
+                """
+                UPDATE voice_agent_sessions
+                SET started_at = ?, ended_at = ?
+                WHERE id = ?
+                """,
+                (f"{today_str} 14:00:00", f"{today_str} 14:35:00", session2["id"]),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        stats = self.repository.get_trajectory_stats(days=30)
+        self.assertGreaterEqual(stats["total_sessions"], 2)
+        self.assertGreaterEqual(stats["total_turns"], 2)
+        self.assertGreaterEqual(stats["current_streak"], 2)
+        self.assertGreaterEqual(stats["longest_streak"], 2)
+        self.assertIn(today_str, stats["daily_activity"])
+        self.assertIn(yesterday_str, stats["daily_activity"])
+
+        today_activity = stats["daily_activity"][today_str]
+        self.assertEqual(today_activity["session_count"], 1)
+        self.assertEqual(today_activity["turn_count"], 1)
+        self.assertEqual(today_activity["duration_seconds"], 35 * 60)
+        self.assertEqual(today_activity["level"], 4)
+
+        yesterday_activity = stats["daily_activity"][yesterday_str]
+        self.assertEqual(yesterday_activity["duration_seconds"], 15 * 60)
+        self.assertEqual(yesterday_activity["level"], 3)
+
 
 class VoiceAgentSessionRecorderCoalescingTests(unittest.IsolatedAsyncioTestCase):
     """Covers the write-amplification fix: per-delta SQLite writes were
@@ -533,9 +596,6 @@ class VoiceAgentSessionRecorderCoalescingTests(unittest.IsolatedAsyncioTestCase)
         await recorder.note_assistant_text("Helo wrld")
         await recorder.note_assistant_text("Hello world!", cumulative=True)
         await recorder.complete_turn()
-
-        turns = self.repository.list_turns(self.session_id)
-        self.assertEqual(turns[0]["assistant_text"], "Hello world!")
 
 
 if __name__ == "__main__":

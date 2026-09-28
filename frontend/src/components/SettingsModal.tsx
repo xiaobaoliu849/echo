@@ -9,7 +9,7 @@ type Props = {
   onClose: () => void;
   settings: UseSettingsResult;
   errorRuntimeContext?: ErrorRuntimeContext;
-  initialCategory?: "provider" | "desktop";
+  initialCategory?: "provider" | "desktop" | "trajectory";
 };
 
 export default function SettingsModal({ open, onClose, settings, errorRuntimeContext, initialCategory }: Props) {

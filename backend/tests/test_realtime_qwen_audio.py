@@ -19,9 +19,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from websockets.exceptions import ConnectionClosedOK
+from websockets.frames import Close
+
 from services.interruption_classifier import InterruptionDecisionCoordinator
 from services.realtime_voice_service import RealtimeVoiceService
-from services.voice_agent_tools import VoiceAgentToolSession, VoiceToolRequest
+from services.voice_agent_tools import VoiceAgentToolService, VoiceAgentToolSession, VoiceToolRequest
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +186,39 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         result = RealtimeVoiceService._build_qwen_audio_instructions(memory_ctx)
         self.assertIn("小云", result)
         self.assertIn(memory_ctx, result)
+
+    def test_qwen_audio_registers_canvas_tool(self):
+        tools = VoiceAgentToolService.build_tools_schema()
+        canvas = next(tool["function"] for tool in tools if tool["function"]["name"] == "render_canvas")
+        self.assertEqual(canvas["parameters"]["required"], ["code"])
+
+    async def test_qwen_audio_canvas_function_call_renders_artifact(self):
+        ws = CollectingWebSocket()
+        dash_ws = FakeDashWs()
+        tool_session = VoiceAgentToolSession()
+        code = "export default function App() { return <div>Joints</div>; }"
+        await self.service._handle_qwen_audio_function_call(
+            ws, dash_ws, "call-canvas", "render_canvas",
+            json.dumps({"code": code, "mode": "react", "title": "Joints"}),
+            tool_session=tool_session,
+        )
+        result = next(event for event in ws.events if event["type"] == "agent_result")
+        self.assertEqual(result["artifact"]["code"], code)
+        self.assertEqual(result["artifact"]["title"], "Joints")
+        sent = dash_ws.sent_payloads()
+        self.assertEqual(sent[0]["item"]["type"], "function_call_output")
+        self.assertNotIn(code, sent[0]["item"]["output"])
+        self.assertEqual(sent[1]["type"], "response.create")
+
+    async def test_qwen_audio_upstream_close_reaches_client(self):
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps([])
+        dash_ws.recv = AsyncMock(side_effect=ConnectionClosedOK(Close(1000, "idle timeout"), None))
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+        error = next(event for event in ws.events if event["type"] == "error")
+        self.assertIn("1000", error["message"])
+        self.assertIn("idle timeout", error["message"])
 
     async def test_microphone_keeps_streaming_during_and_after_playback(self):
         quiet_speech = struct.pack("<160h", *([120] * 160))

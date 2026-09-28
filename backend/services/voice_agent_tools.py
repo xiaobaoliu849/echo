@@ -1220,6 +1220,26 @@ class VoiceAgentToolService:
             {
                 "type": "function",
                 "function": {
+                    "name": "render_canvas",
+                    "description": (
+                        "Render or update a visual component on the user's canvas side panel. "
+                        "Call this when the user asks to draw, design, build, preview, or change "
+                        "a UI, diagram, or other canvas visual."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "code": {"type": "string", "description": "Complete React component or HTML to render."},
+                            "mode": {"type": "string", "enum": ["react", "html"]},
+                            "title": {"type": "string", "description": "Short title for the canvas."},
+                        },
+                        "required": ["code"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "search_web",
                     "description": (
                         "Search the web for real-time, factual, or current-event information. "

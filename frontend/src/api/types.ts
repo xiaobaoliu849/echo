@@ -213,6 +213,33 @@ export type VoiceAgentSessionHistoryDetailResponse = VoiceAgentSessionHistory & 
   agent_run_links?: VoiceAgentRunLink[];
 };
 
+export type VoiceAgentTrajectoryDay = {
+  date: string;
+  duration_seconds: number;
+  turn_count: number;
+  session_count: number;
+  user_words: number;
+  assistant_words: number;
+  level: number;
+};
+
+export type VoiceAgentTrajectoryPeakDay = {
+  date: string;
+  duration_seconds: number;
+  turn_count: number;
+};
+
+export type VoiceAgentTrajectoryResponse = {
+  current_streak: number;
+  longest_streak: number;
+  total_seconds: number;
+  total_turns: number;
+  total_sessions: number;
+  active_days: number;
+  peak_day: VoiceAgentTrajectoryPeakDay | null;
+  daily_activity: Record<string, VoiceAgentTrajectoryDay>;
+};
+
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
