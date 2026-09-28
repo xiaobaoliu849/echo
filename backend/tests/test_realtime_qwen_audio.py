@@ -14,6 +14,7 @@ Bug-reproduction tests (TDD red phase):
 
 import asyncio
 import json
+import struct
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -182,6 +183,208 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         result = RealtimeVoiceService._build_qwen_audio_instructions(memory_ctx)
         self.assertIn("小云", result)
         self.assertIn(memory_ctx, result)
+
+    async def test_microphone_keeps_streaming_during_and_after_playback(self):
+        quiet_speech = struct.pack("<160h", *([120] * 160))
+        ws = CollectingWebSocket([
+            {"type": "websocket.receive", "bytes": quiet_speech},
+            {"type": "websocket.disconnect"},
+        ])
+        dash_ws = FakeDashWs()
+        _, _, memory, tool_session, interruption = self._make_loop_deps([])
+        interruption.active_response_id = "response-1"
+
+        await self.service._client_to_qwen_audio_loop(
+            ws, dash_ws, memory, tool_session, interruption=interruption,
+        )
+        self.assertEqual(dash_ws.sent_payloads()[0]["type"], "input_audio_buffer.append")
+
+        ws = CollectingWebSocket([
+            {"type": "websocket.receive", "bytes": quiet_speech},
+            {"type": "websocket.disconnect"},
+        ])
+        dash_ws = FakeDashWs()
+        interruption.active_response_id = ""
+        interruption.expected_playback_end_time = float("inf")
+        await self.service._client_to_qwen_audio_loop(
+            ws, dash_ws, memory, tool_session, interruption=interruption,
+        )
+        self.assertEqual(dash_ws.sent_payloads()[0]["type"], "input_audio_buffer.append")
+
+    async def test_speech_start_stops_response_before_transcript(self):
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Tell me a story", "item_id": "user-1"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "Yg=="},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Actually, stop", "item_id": "user-2"},
+            {"type": "response.audio.delta", "response_id": "r2", "delta": "Yw=="},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        types = [event["type"] for event in ws.events]
+        pending_index = types.index("interruption_pending")
+        decision_index = types.index("interruption_decision")
+        playback_stop_index = types.index("assistant_playback_stop")
+        second_transcript_index = next(
+            index for index, event in enumerate(ws.events)
+            if event["type"] == "user_transcript" and event["text"] == "Actually, stop"
+        )
+        self.assertLess(playback_stop_index, pending_index)
+        self.assertLess(pending_index, decision_index)
+        self.assertLess(decision_index, second_transcript_index)
+        self.assertEqual(ws.events[decision_index]["classification"], "TRUE_BARGE_IN")
+        self.assertEqual(
+            [event["audio"] for event in ws.events if event["type"] == "assistant_audio"],
+            ["YQ==", "Yw=="],
+        )
+        self.assertFalse(any(payload["type"] == "response.cancel" for payload in dash_ws.sent_payloads()))
+
+    async def test_interruption_discards_audio_waiting_for_late_transcript(self):
+        events = [
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-1"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "A new question", "item_id": "user-2"},
+            {"type": "response.audio.delta", "response_id": "r2", "delta": "Yg=="},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+        self.assertEqual(
+            [event["audio"] for event in ws.events if event["type"] == "assistant_audio"],
+            ["Yg=="],
+        )
+
+    async def test_cancelled_response_does_not_flush_held_audio(self):
+        events = [
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-1"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+        self.assertNotIn("assistant_audio", [event["type"] for event in ws.events])
+
+    async def test_new_speech_does_not_play_deferred_completed_audio(self):
+        events = [
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-1"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "Earlier answer"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Next question", "item_id": "user-2"},
+            {"type": "response.audio.delta", "response_id": "r2", "delta": "Yg=="},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+        self.assertEqual(
+            [event["audio"] for event in ws.events if event["type"] == "assistant_audio"],
+            ["Yg=="],
+        )
+        self.assertIn(
+            "Earlier answer",
+            [event["text"] for event in ws.events if event["type"] == "assistant_text"],
+        )
+
+    async def test_smart_turn_ambient_speech_resumes_without_interrupting(self):
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Explain astronomy", "item_id": "user-1"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "input_audio_buffer.speech_started", "item_id": "ambient-1"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "Yg=="},
+            {"type": "conversation.item.ambient_audio_transcription.completed",
+             "item_id": "ambient-1", "transcript": "hmm"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "Yw=="},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+            "smart_turn",
+        )
+        decisions = [event for event in ws.events if event["type"] == "interruption_decision"]
+        self.assertEqual([decision["classification"] for decision in decisions], ["NOISE_OR_SILENCE"])
+        self.assertNotIn("interrupted", [event["type"] for event in ws.events])
+        self.assertEqual(
+            [event["audio"] for event in ws.events if event["type"] == "assistant_audio"],
+            ["YQ==", "Yg==", "Yw=="],
+        )
+
+    async def test_smart_turn_confirms_barge_in_on_native_cancellation(self):
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Explain astronomy", "item_id": "user-1"},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Tell me about cats", "item_id": "user-2"},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+            "smart_turn",
+        )
+        decisions = [event for event in ws.events if event["type"] == "interruption_decision"]
+        self.assertEqual([decision["classification"] for decision in decisions], ["TRUE_BARGE_IN"])
+        self.assertIn("Tell me about cats", [event["text"] for event in ws.events
+                                         if event["type"] == "user_transcript"])
+
+    async def test_smart_turn_transcript_can_confirm_before_cancellation(self):
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Explain astronomy", "item_id": "user-1"},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Tell me about cats", "item_id": "user-2"},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+            "smart_turn",
+        )
+        decisions = [event for event in ws.events if event["type"] == "interruption_decision"]
+        self.assertEqual([decision["classification"] for decision in decisions], ["TRUE_BARGE_IN"])
+        self.assertIn("Tell me about cats", memory.user_texts)
 
     # ---- 4: P0 bug – multiple concurrent function calls --------------------
 

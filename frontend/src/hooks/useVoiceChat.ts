@@ -1162,6 +1162,9 @@ export default function useVoiceChat({
           console.warn("[VoiceChat] assistant audio promise rejected:", err);
         });
         return;
+      case "assistant_playback_stop":
+        stopAssistantPlayback();
+        return;
       case "interruption_pending":
         if (handledInterruptionCandidatesRef.current.has(event.candidate_id)) {
           return;

@@ -724,6 +724,7 @@ export type VoiceChatServerEvent =
       turn_id?: string;
       first_audio_ms?: number;
     }
+  | { type: "assistant_playback_stop" }
   | {
       type: "interruption_pending";
       candidate_id: string;
