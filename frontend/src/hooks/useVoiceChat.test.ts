@@ -677,6 +677,30 @@ describe("useVoiceChat", () => {
     await waitFor(() => expect(result.current.voiceChatVoice).toBe("longanqian"));
   });
 
+  it("keeps a selected Qwen Audio 3.1 voice instead of resetting it to the 3.0 default", async () => {
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage: createFormatErrorMessageStub(),
+        providerOptions: ["DashScope"],
+        preferredProvider: "DashScope",
+        preferredModel: "qwen-audio-3.1-realtime-plus",
+        providerModelCatalog: {
+          DashScope: {
+            defaultModel: "qwen-audio-3.1-realtime-plus",
+            availableModels: ["qwen-audio-3.1-realtime-plus"],
+          },
+        },
+      })
+    );
+
+    expect(result.current.voiceChatVoice).toBe("longanqian_v3.1");
+    expect(result.current.voiceChatVoiceOptions.map((item) => item.value)).toContain("cally_v3.1");
+    act(() => result.current.onVoiceChange("cally_v3.1"));
+    await waitFor(() => expect(result.current.voiceChatVoice).toBe("cally_v3.1"));
+    await act(async () => { await result.current.onToggleRecording(); });
+    expect(new URL(FakeWebSocket.instances[0].url).searchParams.get("voice")).toBe("cally_v3.1");
+  });
+
   it("adds Live Translate target language parameters to the websocket URL", async () => {
     const formatErrorMessage = createFormatErrorMessageStub();
     ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-live-translate");
@@ -1723,6 +1747,38 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceAgentHistoryDetail).toBeNull();
     expect(result.current.voiceAgentHistoryExportText).toBe("");
     expect(result.current.voiceAgentHistoryError).toBe("加载历史语音 Agent 会话详情失败。");
+  });
+
+  it("clears queued Qwen audio when server VAD detects speech after response completion", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["DashScope"],
+      preferredProvider: "DashScope",
+      preferredModel: "qwen-audio-3.1-realtime-plus",
+      providerModelCatalog: {
+        DashScope: {
+          defaultModel: "qwen-audio-3.1-realtime-plus",
+          availableModels: ["qwen-audio-3.1-realtime-plus"],
+        },
+      },
+    }));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({
+        type: "session_open", provider: "DashScope",
+        model: "qwen-audio-3.1-realtime-plus", voice: "longanqian_v3.1",
+      });
+      socket.emitMessage({ type: "assistant_audio", audio: "AAA=", sample_rate: 24000 });
+      socket.emitMessage({ type: "turn_complete" });
+    });
+    expect(FakeAudioContext.bufferSources).toHaveLength(1);
+    act(() => {
+      socket.emitMessage({ type: "assistant_playback_stop" });
+    });
+    expect(FakeAudioContext.bufferSources[0].stop).toHaveBeenCalledTimes(1);
+    expect(result.current.voiceChatAssistantSpeaking).toBe(false);
   });
 
   it("stops all queued audio on native interruption and cannot resume from a stale timeout", async () => {

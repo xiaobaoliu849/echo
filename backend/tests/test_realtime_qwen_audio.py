@@ -14,6 +14,7 @@ Bug-reproduction tests (TDD red phase):
 
 import asyncio
 import json
+import struct
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -182,6 +183,208 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         result = RealtimeVoiceService._build_qwen_audio_instructions(memory_ctx)
         self.assertIn("小云", result)
         self.assertIn(memory_ctx, result)
+
+    async def test_microphone_keeps_streaming_during_and_after_playback(self):
+        quiet_speech = struct.pack("<160h", *([120] * 160))
+        ws = CollectingWebSocket([
+            {"type": "websocket.receive", "bytes": quiet_speech},
+            {"type": "websocket.disconnect"},
+        ])
+        dash_ws = FakeDashWs()
+        _, _, memory, tool_session, interruption = self._make_loop_deps([])
+        interruption.active_response_id = "response-1"
+
+        await self.service._client_to_qwen_audio_loop(
+            ws, dash_ws, memory, tool_session, interruption=interruption,
+        )
+        self.assertEqual(dash_ws.sent_payloads()[0]["type"], "input_audio_buffer.append")
+
+        ws = CollectingWebSocket([
+            {"type": "websocket.receive", "bytes": quiet_speech},
+            {"type": "websocket.disconnect"},
+        ])
+        dash_ws = FakeDashWs()
+        interruption.active_response_id = ""
+        interruption.expected_playback_end_time = float("inf")
+        await self.service._client_to_qwen_audio_loop(
+            ws, dash_ws, memory, tool_session, interruption=interruption,
+        )
+        self.assertEqual(dash_ws.sent_payloads()[0]["type"], "input_audio_buffer.append")
+
+    async def test_speech_start_stops_response_before_transcript(self):
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Tell me a story", "item_id": "user-1"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "Yg=="},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Actually, stop", "item_id": "user-2"},
+            {"type": "response.audio.delta", "response_id": "r2", "delta": "Yw=="},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+
+        types = [event["type"] for event in ws.events]
+        pending_index = types.index("interruption_pending")
+        decision_index = types.index("interruption_decision")
+        playback_stop_index = types.index("assistant_playback_stop")
+        second_transcript_index = next(
+            index for index, event in enumerate(ws.events)
+            if event["type"] == "user_transcript" and event["text"] == "Actually, stop"
+        )
+        self.assertLess(playback_stop_index, pending_index)
+        self.assertLess(pending_index, decision_index)
+        self.assertLess(decision_index, second_transcript_index)
+        self.assertEqual(ws.events[decision_index]["classification"], "TRUE_BARGE_IN")
+        self.assertEqual(
+            [event["audio"] for event in ws.events if event["type"] == "assistant_audio"],
+            ["YQ==", "Yw=="],
+        )
+        self.assertFalse(any(payload["type"] == "response.cancel" for payload in dash_ws.sent_payloads()))
+
+    async def test_interruption_discards_audio_waiting_for_late_transcript(self):
+        events = [
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-1"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "A new question", "item_id": "user-2"},
+            {"type": "response.audio.delta", "response_id": "r2", "delta": "Yg=="},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+        self.assertEqual(
+            [event["audio"] for event in ws.events if event["type"] == "assistant_audio"],
+            ["Yg=="],
+        )
+
+    async def test_cancelled_response_does_not_flush_held_audio(self):
+        events = [
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-1"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+        self.assertNotIn("assistant_audio", [event["type"] for event in ws.events])
+
+    async def test_new_speech_does_not_play_deferred_completed_audio(self):
+        events = [
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-1"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.text.delta", "response_id": "r1", "delta": "Earlier answer"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Next question", "item_id": "user-2"},
+            {"type": "response.audio.delta", "response_id": "r2", "delta": "Yg=="},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+        )
+        self.assertEqual(
+            [event["audio"] for event in ws.events if event["type"] == "assistant_audio"],
+            ["Yg=="],
+        )
+        self.assertIn(
+            "Earlier answer",
+            [event["text"] for event in ws.events if event["type"] == "assistant_text"],
+        )
+
+    async def test_smart_turn_ambient_speech_resumes_without_interrupting(self):
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Explain astronomy", "item_id": "user-1"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "YQ=="},
+            {"type": "input_audio_buffer.speech_started", "item_id": "ambient-1"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "Yg=="},
+            {"type": "conversation.item.ambient_audio_transcription.completed",
+             "item_id": "ambient-1", "transcript": "hmm"},
+            {"type": "response.audio.delta", "response_id": "r1", "delta": "Yw=="},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+            "smart_turn",
+        )
+        decisions = [event for event in ws.events if event["type"] == "interruption_decision"]
+        self.assertEqual([decision["classification"] for decision in decisions], ["NOISE_OR_SILENCE"])
+        self.assertNotIn("interrupted", [event["type"] for event in ws.events])
+        self.assertEqual(
+            [event["audio"] for event in ws.events if event["type"] == "assistant_audio"],
+            ["YQ==", "Yg==", "Yw=="],
+        )
+
+    async def test_smart_turn_confirms_barge_in_on_native_cancellation(self):
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Explain astronomy", "item_id": "user-1"},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Tell me about cats", "item_id": "user-2"},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+            "smart_turn",
+        )
+        decisions = [event for event in ws.events if event["type"] == "interruption_decision"]
+        self.assertEqual([decision["classification"] for decision in decisions], ["TRUE_BARGE_IN"])
+        self.assertIn("Tell me about cats", [event["text"] for event in ws.events
+                                         if event["type"] == "user_transcript"])
+
+    async def test_smart_turn_transcript_can_confirm_before_cancellation(self):
+        events = [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Explain astronomy", "item_id": "user-1"},
+            {"type": "input_audio_buffer.speech_started", "item_id": "user-2"},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "transcript": "Tell me about cats", "item_id": "user-2"},
+            {"type": "response.done", "response": {"id": "r1", "status": "cancelled",
+             "status_details": {"reason": "turn_detected"}}},
+            {"type": "response.created", "response": {"id": "r2"}},
+            {"type": "response.done", "response": {"id": "r2", "status": "completed"}},
+        ]
+        ws, dash_ws, memory, tool_session, interruption = self._make_loop_deps(events)
+        await self.service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", tool_session, None, interruption,
+            "smart_turn",
+        )
+        decisions = [event for event in ws.events if event["type"] == "interruption_decision"]
+        self.assertEqual([decision["classification"] for decision in decisions], ["TRUE_BARGE_IN"])
+        self.assertIn("Tell me about cats", memory.user_texts)
 
     # ---- 4: P0 bug – multiple concurrent function calls --------------------
 
@@ -486,6 +689,7 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
 
         dash_ws = FakeDashWs([
             {"type": "session.created", "session": {"id": "sess-1"}},
+            {"type": "session.updated", "session": {"id": "sess-1"}},
         ])  # handshake succeeds; subsequent recv raises ConnectionError
 
         class _FakeConnect:
@@ -549,7 +753,8 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         service._create_voice_session_recorder = AsyncMock(return_value=None)
 
         dash_ws = FakeDashWs([
-            {"type": "error", "error": {"message": "model not enabled for workspace"}},
+            {"type": "session.created", "session": {"id": "sess-1"}},
+            {"code": "AccessDenied", "message": "model not enabled for workspace"},
         ])
 
         class _FakeConnect:
@@ -579,6 +784,75 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
             any("model not enabled for workspace" in m for m in error_messages),
             f"Server error detail must reach the client. Events: {client_ws.events}",
         )
+
+    async def test_audio_session_waits_for_voice_configuration_before_open(self):
+        """session.created is not proof that the requested 3.1 voice was accepted."""
+        service = self.service
+        service._resolve_dashscope_settings = MagicMock(return_value={
+            "api_key": "sk-test",
+            "model": "qwen-audio-3.1-realtime-plus",
+            "realtime_base_url": "wss://ws-abc123.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime",
+        })
+        service._create_voice_session_recorder = AsyncMock(return_value=None)
+        dash_ws = FakeDashWs([
+            {"type": "session.created", "session": {"id": "sess-1"}},
+            {"type": "error", "error": {"code": "InvalidParameter", "message": "voice unsupported"}},
+        ])
+
+        class _FakeConnect:
+            def __call__(self, url, **kwargs):
+                return self
+
+            async def __aenter__(self):
+                return dash_ws
+
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch("services.realtime_qwen_audio_provider.websockets") as ws_module:
+            ws_module.connect = _FakeConnect()
+            client_ws = CollectingWebSocket()
+            await service.stream_dashscope_audio_session(
+                client_ws, model="qwen-audio-3.1-realtime-plus", voice="cally_v3.1",
+            )
+
+        self.assertNotIn("session_open", [event["type"] for event in client_ws.events])
+        self.assertIn("voice unsupported", client_ws.events[0]["message"])
+        session_update = dash_ws.sent_payloads()[0]["session"]
+        self.assertEqual(session_update["voice"], "cally_v3.1")
+
+    async def test_audio_session_rejects_a_provider_voice_fallback(self):
+        service = self.service
+        service._resolve_dashscope_settings = MagicMock(return_value={
+            "api_key": "sk-test",
+            "model": "qwen-audio-3.1-realtime-plus",
+            "realtime_base_url": "wss://ws-abc123.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime",
+        })
+        service._create_voice_session_recorder = AsyncMock(return_value=None)
+        dash_ws = FakeDashWs([
+            {"type": "session.created", "session": {"id": "sess-1"}},
+            {"type": "session.updated", "session": {"id": "sess-1", "voice": "longanqian_v3.1"}},
+        ])
+
+        class _FakeConnect:
+            def __call__(self, url, **kwargs):
+                return self
+
+            async def __aenter__(self):
+                return dash_ws
+
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch("services.realtime_qwen_audio_provider.websockets") as ws_module:
+            ws_module.connect = _FakeConnect()
+            client_ws = CollectingWebSocket()
+            await service.stream_dashscope_audio_session(
+                client_ws, model="qwen-audio-3.1-realtime-plus", voice="cally_v3.1",
+            )
+
+        self.assertNotIn("session_open", [event["type"] for event in client_ws.events])
+        self.assertIn("longanqian_v3.1", client_ws.events[0]["message"])
 
     async def test_audio_session_handshake_timeout_has_explicit_message(self):
         """A silent server must produce an explicit timeout error, not an empty one.
@@ -640,8 +914,8 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
             f"Error message must not be empty. Events: {client_ws.events}",
         )
         self.assertTrue(
-            any("session.created" in m for m in error_messages),
-            f"Timeout message should mention session.created. Events: {client_ws.events}",
+            any("session.updated" in m for m in error_messages),
+            f"Timeout message should mention session.updated. Events: {client_ws.events}",
         )
     # ---- 11: no manual response.create on transcription.completed -------------
 

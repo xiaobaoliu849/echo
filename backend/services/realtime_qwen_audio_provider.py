@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-import struct
 import time
 from typing import Any
 
@@ -19,11 +18,9 @@ from .realtime_constants import (
     QWEN_AUDIO_BENIGN_ERROR_PATTERNS,
     QWEN_AUDIO_REALTIME_INSTRUCTIONS,
     _normalize_dashscope_realtime_voice,
-    _audio_energy_qwen,
     _clean_transcript_text,
     _is_dashscope_audio_realtime_model,
     _merge_streaming_text,
-    _normalize_dashscope_realtime_voice,
 )
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
 from .realtime_memory_session import RealtimeMemorySession
@@ -32,12 +29,16 @@ from .voice_agent_tools import VoiceAgentToolService, VoiceAgentToolSession, Voi
 
 logger = logging.getLogger(__name__)
 
-# Post-playback echo mute: after the AI finishes speaking, mic audio is dropped
-# for this long to avoid feeding speaker echo back as a false barge-in. The
-# official Qwen-Audio demo uses 0.5s in echo-suppression mode; 0.3s trims the
-# dead air so users who start speaking right after the AI don't lose the first
-# words of their turn (previously 1.0s, which ate utterance onsets).
-POST_PLAYBACK_MUTE_SECONDS = 0.3
+def _provider_error_detail(event: dict[str, Any]) -> str:
+    """Preserve both typed Realtime errors and DashScope's untyped error envelopes."""
+    error = event.get("error")
+    if isinstance(error, dict):
+        message = str(error.get("message") or "").strip()
+        code = str(error.get("code") or "").strip()
+    else:
+        message = str(error or event.get("message") or "").strip()
+        code = str(event.get("code") or "").strip()
+    return f"{code}: {message}" if code and message else code or message or str(event)
 
 
 class QwenAudioRealtimeMixin:
@@ -119,10 +120,6 @@ class QwenAudioRealtimeMixin:
                     }))
                     await dash_ws.send(json.dumps({"type": "response.create"}))
                     continue
-                # Qwen-specific: reset echo gate before common handling
-                if command_type == "interruption_client_stopped":
-                    if hasattr(interruption, "expected_playback_end_time"):
-                        interruption.expected_playback_end_time = 0.0
                 result = await self._handle_common_client_command(
                     command_type, payload,
                     websocket=websocket, memory_session=memory_session,
@@ -135,22 +132,9 @@ class QwenAudioRealtimeMixin:
 
             audio_bytes = message.get("bytes")
             if audio_bytes:
-                # ── Half-duplex echo suppression with energy gate ──
-                # During AI playback we block ONLY low-energy audio (speaker echo)
-                # and let high-energy audio through so the user can still interrupt.
-                # This matches the official Qwen-Audio demo's "headphone mode".
-                NOISE_GATE_THRESHOLD = 500
-                ai_is_playing = bool(interruption and interruption.active_response_id)
-                if ai_is_playing:
-                    energy = _audio_energy_qwen(audio_bytes)
-                    if energy < NOISE_GATE_THRESHOLD:
-                        continue  # low energy → likely echo, suppress
-                    # User is speaking loudly enough → let it through to interrupt
-                elif interruption and hasattr(interruption, "expected_playback_end_time"):
-                    # Brief buffer for frontend/network echo tail after AI finishes
-                    if time.time() < getattr(interruption, "expected_playback_end_time") + POST_PLAYBACK_MUTE_SECONDS:
-                        continue
-
+                # Keep the microphone uplink continuous while Qwen speaks. Its
+                # server VAD needs these frames to detect a barge-in; dropping
+                # quiet speech or the first 300 ms after playback hides turns.
                 await dash_ws.send(json.dumps({
                     "type": "input_audio_buffer.append",
                     "audio": base64.b64encode(audio_bytes).decode("ascii"),
@@ -164,6 +148,7 @@ class QwenAudioRealtimeMixin:
         tool_session: VoiceAgentToolSession,
         recorder: VoiceAgentSessionRecorder | None = None,
         interruption: InterruptionDecisionCoordinator | None = None,
+        turn_detection_mode: str = "server_vad",
     ) -> None:
         async def send_tool_event(event_type: str, payload: dict[str, Any]) -> None:
             if recorder is not None:
@@ -326,13 +311,17 @@ class QwenAudioRealtimeMixin:
                     turn_id=completed_turn_id, interrupted=False,
                 )
 
-        async def _resolve_deferred_response_done() -> None:
+        async def _resolve_deferred_response_done(*, discard_audio: bool = False) -> None:
             """Flush buffered output and process a deferred response.done, if any."""
             nonlocal _deferred_response_done
             if _deferred_response_done is None:
                 return
             deferred = _deferred_response_done
             _deferred_response_done = None
+            if discard_audio:
+                _pending_ai_output[:] = [
+                    item for item in _pending_ai_output if item[0] != "audio"
+                ]
             await _flush_pending_output()
             await _process_response_done(deferred)
 
@@ -362,10 +351,13 @@ class QwenAudioRealtimeMixin:
             if event_type in {"session.created", "session.updated"}:
                 continue
             if event_type == "input_audio_buffer.speech_started":
+                # Playback may outlast response.done because the browser queues
+                # PCM locally. Stop that queue for every Qwen VAD speech start.
+                await self._send_event(websocket, "assistant_playback_stop")
                 # If a previous response.done is still waiting for its ASR
                 # transcript, the transcript will never arrive (user is speaking
                 # again).  Flush and finalize it before starting the new turn.
-                await _resolve_deferred_response_done()
+                await _resolve_deferred_response_done(discard_audio=True)
                 # New user speech starts: reset guards so the upcoming
                 # transcription and function calls are handled correctly.
                 _first_transcript_this_response = True
@@ -374,6 +366,7 @@ class QwenAudioRealtimeMixin:
                 if interruption.active_response_id or tool_session.has_active_task or (
                     recorder is not None and bool(recorder.current_assistant_text)
                 ):
+                    interrupted_response_id = interruption.active_response_id
                     await self._begin_interruption(
                         websocket,
                         interruption,
@@ -382,6 +375,25 @@ class QwenAudioRealtimeMixin:
                         recorder=recorder,
                         tool_session=tool_session,
                     )
+                    # Qwen's VAD modes cancel an in-progress response natively.
+                    # Stop local playback now, before ASR finishes, and never
+                    # replay late audio from the cancelled response.
+                    if interruption.pending is not None and turn_detection_mode != "smart_turn":
+                        _, decision = await self._decide_interruption(
+                            websocket, interruption, "",
+                            memory_session=memory_session,
+                            tool_session=tool_session,
+                            recorder=recorder,
+                            provider_interrupted=True,
+                        )
+                        if decision is not None and interrupted_response_id:
+                            suppressed_response_ids.add(interrupted_response_id)
+                            interruption.active_response_id = ""
+                            _pending_ai_output[:] = [
+                                item for item in _pending_ai_output
+                                if item[1].get("response_id") != interrupted_response_id
+                            ]
+                            response_delta_family_state.pop(interrupted_response_id, None)
                 continue
             if event_type == "response.created":
                 # If a previous response.done is still deferred (ASR transcript
@@ -427,12 +439,40 @@ class QwenAudioRealtimeMixin:
                     )
                 continue
             if event_type.startswith("conversation.item.ambient_audio_transcription"):
-                # smart_turn ambient-noise transcript (非有效轮次): not a user
-                # turn, never written to context — ignore for display.
+                # smart_turn can report acoustic speech that semantic turn
+                # detection rejects. Resume the assistant only after that
+                # decision; never turn ambient audio into a barge-in.
+                if event_type.endswith(".completed") and interruption.pending is not None:
+                    await self._decide_interruption(
+                        websocket, interruption, "",
+                        memory_session=memory_session,
+                        tool_session=tool_session,
+                        recorder=recorder,
+                    )
                 continue
             if event_type == "conversation.item.input_audio_transcription.completed":
                 _interim_transcripts.pop(str(event.get("item_id", "")), None)
                 user_text = str(event.get("transcript", "")).strip()
+                if turn_detection_mode == "smart_turn" and user_text and interruption.pending is not None:
+                    # A normal transcription (rather than an ambient one) is
+                    # Qwen's semantic confirmation of a real user turn. It may
+                    # arrive before the old response.done cancellation.
+                    interrupted_response_id = interruption.active_response_id
+                    _, decision = await self._decide_interruption(
+                        websocket, interruption, user_text,
+                        memory_session=memory_session,
+                        tool_session=tool_session,
+                        recorder=recorder,
+                        provider_interrupted=True,
+                    )
+                    if decision is not None and interrupted_response_id:
+                        suppressed_response_ids.add(interrupted_response_id)
+                        interruption.active_response_id = ""
+                        _pending_ai_output[:] = [
+                            item for item in _pending_ai_output
+                            if item[1].get("response_id") != interrupted_response_id
+                        ]
+                        response_delta_family_state.pop(interrupted_response_id, None)
                 # ── Interruption vs. first-transcript dispatch ──
                 # The server may send response.created before the ASR transcript.
                 # When that happens, active_response_id is already set and the
@@ -614,17 +654,6 @@ class QwenAudioRealtimeMixin:
                     continue
                 if not gated_tool_turn_id:
                     delta_b64 = str(event.get("delta", ""))
-                    if delta_b64:
-                        try:
-                            audio_len = len(delta_b64) * 3 // 4
-                            audio_duration = audio_len / 48000.0
-                            if not hasattr(interruption, "expected_playback_end_time"):
-                                interruption.expected_playback_end_time = time.time()
-                            if interruption.expected_playback_end_time < time.time():
-                                interruption.expected_playback_end_time = time.time()
-                            interruption.expected_playback_end_time += audio_duration
-                        except Exception:
-                            pass
                     payload = {
                         "type": "assistant_audio",
                         "audio": delta_b64,
@@ -738,6 +767,31 @@ class QwenAudioRealtimeMixin:
                         )
                 continue
             if event_type == "response.done":
+                response_data = event.get("response") or {}
+                response_id = str(response_data.get("id", ""))
+                status = str(response_data.get("status", ""))
+                if status in {"cancelled", "canceled", "failed"}:
+                    # A cancelled response has no output to wait for. In
+                    # particular, never replay audio held behind late ASR.
+                    _pending_ai_output[:] = [
+                        item for item in _pending_ai_output
+                        if item[1].get("response_id") != response_id
+                    ]
+                    if (
+                        (response_data.get("status_details") or {}).get("reason") == "turn_detected"
+                        and interruption.pending is not None
+                    ):
+                        _, decision = await self._decide_interruption(
+                            websocket, interruption, "",
+                            memory_session=memory_session,
+                            tool_session=tool_session,
+                            recorder=recorder,
+                            provider_interrupted=True,
+                        )
+                        if decision is not None and response_id:
+                            suppressed_response_ids.add(response_id)
+                    await _process_response_done(event)
+                    continue
                 # ★ KEY FIX: If the ASR transcript hasn't arrived yet, defer
                 # response.done processing instead of force-flushing the buffer.
                 # This ensures the frontend receives events in the correct order:
@@ -758,12 +812,8 @@ class QwenAudioRealtimeMixin:
                 continue
             if gated_tool_turn_id and event_type in {"assistant_audio", "assistant_text", "turn_complete"}:
                 continue
-            if event_type == "error":
-                error_data = event.get("error")
-                if isinstance(error_data, dict):
-                    message = str(error_data.get("message", "")).strip() or str(event)
-                else:
-                    message = str(error_data or event).strip()
+            if event_type == "error" or (not event_type and (event.get("code") or event.get("message"))):
+                message = _provider_error_detail(event)
                 # Benign race conditions (e.g. our response.create / response.cancel
                 # colliding with the server's own turn management) must not kill the
                 # session - log them and keep listening.
@@ -1034,19 +1084,17 @@ class QwenAudioRealtimeMixin:
                     "session": session_config,
                 }))
 
-                # Wait for the server's session.created/session.updated handshake.
-                # Read events in a loop so a server-side `error` event (e.g. invalid
-                # voice/param, wrong workspace URL, model not enabled for the
-                # workspace) surfaces its real message instead of being swallowed,
-                # and a silent server produces an explicit timeout message instead
-                # of a bare empty TimeoutError.
+                # session.created confirms the socket, but not the voice/tools/VAD
+                # configuration. Wait for session.updated before the UI starts
+                # streaming microphone audio, or surface the provider rejection.
                 session_id = ""
+                configured = False
                 handshake_deadline = time.monotonic() + 15
-                while not session_id:
+                while not configured:
                     remaining = handshake_deadline - time.monotonic()
                     if remaining <= 0:
                         raise RuntimeError(
-                            "已连接 DashScope，但 15 秒内未收到 session.created 确认；"
+                            "已连接 DashScope，但 15 秒内未收到 session.updated 配置确认；"
                             "请检查业务空间 Realtime URL 是否属于已开通 "
                             f"{settings['model']} 的空间，以及 API Key 是否匹配该空间。"
                         )
@@ -1054,7 +1102,7 @@ class QwenAudioRealtimeMixin:
                         raw = await asyncio.wait_for(dash_ws.recv(), timeout=remaining)
                     except asyncio.TimeoutError:
                         raise RuntimeError(
-                            "已连接 DashScope，但等待 session.created 超时；"
+                            "已连接 DashScope，但等待 session.updated 超时；"
                             "请检查业务空间 Realtime URL 与 API Key 是否正确。"
                         ) from None
                     try:
@@ -1063,15 +1111,17 @@ class QwenAudioRealtimeMixin:
                         continue
                     event_type = str(event.get("type", "")).strip()
                     logger.info("qwen_audio_handshake event_type=%s", event_type or "<unknown>")
-                    if event_type == "error":
-                        error_data = event.get("error")
-                        if isinstance(error_data, dict):
-                            detail = str(error_data.get("message", "")).strip() or str(error_data)
-                        else:
-                            detail = str(error_data or event).strip()
-                        raise RuntimeError(f"DashScope 服务端拒绝会话: {detail}")
+                    if event_type == "error" or (not event_type and (event.get("code") or event.get("message"))):
+                        raise RuntimeError(f"DashScope 服务端拒绝会话: {_provider_error_detail(event)}")
                     if event_type in {"session.created", "session.updated"}:
-                        session_id = str((event.get("session") or {}).get("id", "") or "ok")
+                        session_id = str((event.get("session") or {}).get("id", "") or session_id)
+                        if event_type == "session.updated":
+                            confirmed_voice = str((event.get("session") or {}).get("voice", "")).strip()
+                            if confirmed_voice and confirmed_voice != resolved_voice:
+                                raise RuntimeError(
+                                    f"DashScope 返回的音色 {confirmed_voice} 与请求的 {resolved_voice} 不一致。"
+                                )
+                        configured = event_type == "session.updated"
 
                 await self._send_event(
                     websocket,
@@ -1079,7 +1129,7 @@ class QwenAudioRealtimeMixin:
                     provider="DashScope",
                     model=settings["model"],
                     voice=resolved_voice,
-                    session_id=recorder.session_id if recorder is not None else session_id,
+                    session_id=recorder.session_id if recorder is not None else session_id or "ok",
                 )
 
                 interruption = InterruptionDecisionCoordinator()
@@ -1091,7 +1141,7 @@ class QwenAudioRealtimeMixin:
                 receive_task = asyncio.create_task(
                     self._qwen_audio_to_client_loop(
                         websocket, dash_ws, memory_session, resolved_voice,
-                        tool_session, recorder, interruption,
+                        tool_session, recorder, interruption, turn_detection_mode,
                     )
                 )
                 # FIRST_EXCEPTION never returns when a task finishes
