@@ -219,7 +219,7 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(settings["model"], "qwen-audio-3.0-realtime-plus")
 
-    def test_dashscope_settings_reject_qwen_audio_non_beijing_endpoint(self) -> None:
+    def test_dashscope_settings_accept_qwen_audio_singapore_workspace_endpoint(self) -> None:
         config = MagicMock()
         config.get_provider_settings.return_value = {
             "api_key": "test_key",
@@ -229,8 +229,8 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         }
         self.service.config = config
 
-        with self.assertRaisesRegex(RuntimeError, "北京地域"):
-            self.service._resolve_dashscope_settings(None)
+        settings = self.service._resolve_dashscope_settings(None)
+        self.assertEqual(settings["model"], "qwen-audio-3.0-realtime-plus")
 
     def test_qwen_audio_session_update_uses_server_vad_with_voiceprint(self) -> None:
         conversation = DashScopeAudioRealtimeConversation(

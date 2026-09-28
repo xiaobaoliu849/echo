@@ -39,6 +39,7 @@ import {
   OPENAI_REALTIME_VOICES,
   PERSONAPLEX_PROVIDER,
   PERSONAPLEX_REALTIME_VOICES,
+  QWEN_AUDIO_31_VOICES,
   QWEN_AUDIO_VOICES,
   QWEN_LIVETRANSLATE_VOICES,
   QWEN_OMNI_REALTIME_VOICES,
@@ -322,15 +323,18 @@ export default function useVoiceChat({
 
   useEffect(() => {
     if (voiceChatProvider === DASHSCOPE_PROVIDER) {
-      const validVoices = isQwenAudioModel(voiceChatModel)
-        ? QWEN_AUDIO_VOICES
+      const validVoices = isQwenAudio31Model(voiceChatModel)
+        ? QWEN_AUDIO_31_VOICES
+        : isQwenAudioModel(voiceChatModel)
+          ? QWEN_AUDIO_VOICES
         : isLiveTranslateModel(voiceChatProvider, voiceChatModel)
           ? QWEN_LIVETRANSLATE_VOICES
           : voiceChatModel.toLowerCase().startsWith("qwen3.8-omni-")
             ? QWEN_OMNI_38_REALTIME_VOICES
             : QWEN_OMNI_REALTIME_VOICES;
       if (!validVoices.some(v => v.value === voiceChatVoice)) {
-        setVoiceChatVoice(isQwenAudioModel(voiceChatModel) ? "longanqian" : "Tina");
+        setVoiceChatVoice(isQwenAudio31Model(voiceChatModel) ? "longanqian_v3.1"
+          : isQwenAudioModel(voiceChatModel) ? "longanqian" : "Tina");
       }
     } else if (voiceChatProvider === OPENAI_PROVIDER) {
       if (!OPENAI_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {

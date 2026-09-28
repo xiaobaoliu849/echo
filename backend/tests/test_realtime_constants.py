@@ -377,7 +377,7 @@ class QwenAudioGenerationTests(unittest.TestCase):
         )
 
     def test_31_accepts_inherited_and_new_voices(self):
-        for voice in ("longanqian", "cally_v3.1", "xunanchuan"):
+        for voice in ("longanqian", "cally_v3.1", "xunanchuan_v3.1"):
             self.assertIn(voice, QWEN_AUDIO_31_REALTIME_VOICES)
             self.assertEqual(
                 _normalize_dashscope_realtime_voice("qwen-audio-3.1-realtime-plus", voice),

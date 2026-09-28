@@ -23,7 +23,6 @@ from .realtime_constants import (
     _clean_transcript_text,
     _is_dashscope_audio_realtime_model,
     _merge_streaming_text,
-    _normalize_dashscope_realtime_voice,
 )
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
 from .realtime_memory_session import RealtimeMemorySession
@@ -38,6 +37,18 @@ logger = logging.getLogger(__name__)
 # dead air so users who start speaking right after the AI don't lose the first
 # words of their turn (previously 1.0s, which ate utterance onsets).
 POST_PLAYBACK_MUTE_SECONDS = 0.3
+
+
+def _provider_error_detail(event: dict[str, Any]) -> str:
+    """Preserve both typed Realtime errors and DashScope's untyped error envelopes."""
+    error = event.get("error")
+    if isinstance(error, dict):
+        message = str(error.get("message") or "").strip()
+        code = str(error.get("code") or "").strip()
+    else:
+        message = str(error or event.get("message") or "").strip()
+        code = str(event.get("code") or "").strip()
+    return f"{code}: {message}" if code and message else code or message or str(event)
 
 
 class QwenAudioRealtimeMixin:
@@ -758,12 +769,8 @@ class QwenAudioRealtimeMixin:
                 continue
             if gated_tool_turn_id and event_type in {"assistant_audio", "assistant_text", "turn_complete"}:
                 continue
-            if event_type == "error":
-                error_data = event.get("error")
-                if isinstance(error_data, dict):
-                    message = str(error_data.get("message", "")).strip() or str(event)
-                else:
-                    message = str(error_data or event).strip()
+            if event_type == "error" or (not event_type and (event.get("code") or event.get("message"))):
+                message = _provider_error_detail(event)
                 # Benign race conditions (e.g. our response.create / response.cancel
                 # colliding with the server's own turn management) must not kill the
                 # session - log them and keep listening.
@@ -1034,19 +1041,17 @@ class QwenAudioRealtimeMixin:
                     "session": session_config,
                 }))
 
-                # Wait for the server's session.created/session.updated handshake.
-                # Read events in a loop so a server-side `error` event (e.g. invalid
-                # voice/param, wrong workspace URL, model not enabled for the
-                # workspace) surfaces its real message instead of being swallowed,
-                # and a silent server produces an explicit timeout message instead
-                # of a bare empty TimeoutError.
+                # session.created confirms the socket, but not the voice/tools/VAD
+                # configuration. Wait for session.updated before the UI starts
+                # streaming microphone audio, or surface the provider rejection.
                 session_id = ""
+                configured = False
                 handshake_deadline = time.monotonic() + 15
-                while not session_id:
+                while not configured:
                     remaining = handshake_deadline - time.monotonic()
                     if remaining <= 0:
                         raise RuntimeError(
-                            "已连接 DashScope，但 15 秒内未收到 session.created 确认；"
+                            "已连接 DashScope，但 15 秒内未收到 session.updated 配置确认；"
                             "请检查业务空间 Realtime URL 是否属于已开通 "
                             f"{settings['model']} 的空间，以及 API Key 是否匹配该空间。"
                         )
@@ -1054,7 +1059,7 @@ class QwenAudioRealtimeMixin:
                         raw = await asyncio.wait_for(dash_ws.recv(), timeout=remaining)
                     except asyncio.TimeoutError:
                         raise RuntimeError(
-                            "已连接 DashScope，但等待 session.created 超时；"
+                            "已连接 DashScope，但等待 session.updated 超时；"
                             "请检查业务空间 Realtime URL 与 API Key 是否正确。"
                         ) from None
                     try:
@@ -1063,15 +1068,17 @@ class QwenAudioRealtimeMixin:
                         continue
                     event_type = str(event.get("type", "")).strip()
                     logger.info("qwen_audio_handshake event_type=%s", event_type or "<unknown>")
-                    if event_type == "error":
-                        error_data = event.get("error")
-                        if isinstance(error_data, dict):
-                            detail = str(error_data.get("message", "")).strip() or str(error_data)
-                        else:
-                            detail = str(error_data or event).strip()
-                        raise RuntimeError(f"DashScope 服务端拒绝会话: {detail}")
+                    if event_type == "error" or (not event_type and (event.get("code") or event.get("message"))):
+                        raise RuntimeError(f"DashScope 服务端拒绝会话: {_provider_error_detail(event)}")
                     if event_type in {"session.created", "session.updated"}:
-                        session_id = str((event.get("session") or {}).get("id", "") or "ok")
+                        session_id = str((event.get("session") or {}).get("id", "") or session_id)
+                        if event_type == "session.updated":
+                            confirmed_voice = str((event.get("session") or {}).get("voice", "")).strip()
+                            if confirmed_voice and confirmed_voice != resolved_voice:
+                                raise RuntimeError(
+                                    f"DashScope 返回的音色 {confirmed_voice} 与请求的 {resolved_voice} 不一致。"
+                                )
+                        configured = event_type == "session.updated"
 
                 await self._send_event(
                     websocket,
@@ -1079,7 +1086,7 @@ class QwenAudioRealtimeMixin:
                     provider="DashScope",
                     model=settings["model"],
                     voice=resolved_voice,
-                    session_id=recorder.session_id if recorder is not None else session_id,
+                    session_id=recorder.session_id if recorder is not None else session_id or "ok",
                 )
 
                 interruption = InterruptionDecisionCoordinator()

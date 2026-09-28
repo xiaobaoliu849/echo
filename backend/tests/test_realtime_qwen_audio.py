@@ -486,6 +486,7 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
 
         dash_ws = FakeDashWs([
             {"type": "session.created", "session": {"id": "sess-1"}},
+            {"type": "session.updated", "session": {"id": "sess-1"}},
         ])  # handshake succeeds; subsequent recv raises ConnectionError
 
         class _FakeConnect:
@@ -549,7 +550,8 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
         service._create_voice_session_recorder = AsyncMock(return_value=None)
 
         dash_ws = FakeDashWs([
-            {"type": "error", "error": {"message": "model not enabled for workspace"}},
+            {"type": "session.created", "session": {"id": "sess-1"}},
+            {"code": "AccessDenied", "message": "model not enabled for workspace"},
         ])
 
         class _FakeConnect:
@@ -579,6 +581,75 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
             any("model not enabled for workspace" in m for m in error_messages),
             f"Server error detail must reach the client. Events: {client_ws.events}",
         )
+
+    async def test_audio_session_waits_for_voice_configuration_before_open(self):
+        """session.created is not proof that the requested 3.1 voice was accepted."""
+        service = self.service
+        service._resolve_dashscope_settings = MagicMock(return_value={
+            "api_key": "sk-test",
+            "model": "qwen-audio-3.1-realtime-plus",
+            "realtime_base_url": "wss://ws-abc123.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime",
+        })
+        service._create_voice_session_recorder = AsyncMock(return_value=None)
+        dash_ws = FakeDashWs([
+            {"type": "session.created", "session": {"id": "sess-1"}},
+            {"type": "error", "error": {"code": "InvalidParameter", "message": "voice unsupported"}},
+        ])
+
+        class _FakeConnect:
+            def __call__(self, url, **kwargs):
+                return self
+
+            async def __aenter__(self):
+                return dash_ws
+
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch("services.realtime_qwen_audio_provider.websockets") as ws_module:
+            ws_module.connect = _FakeConnect()
+            client_ws = CollectingWebSocket()
+            await service.stream_dashscope_audio_session(
+                client_ws, model="qwen-audio-3.1-realtime-plus", voice="cally_v3.1",
+            )
+
+        self.assertNotIn("session_open", [event["type"] for event in client_ws.events])
+        self.assertIn("voice unsupported", client_ws.events[0]["message"])
+        session_update = dash_ws.sent_payloads()[0]["session"]
+        self.assertEqual(session_update["voice"], "cally_v3.1")
+
+    async def test_audio_session_rejects_a_provider_voice_fallback(self):
+        service = self.service
+        service._resolve_dashscope_settings = MagicMock(return_value={
+            "api_key": "sk-test",
+            "model": "qwen-audio-3.1-realtime-plus",
+            "realtime_base_url": "wss://ws-abc123.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime",
+        })
+        service._create_voice_session_recorder = AsyncMock(return_value=None)
+        dash_ws = FakeDashWs([
+            {"type": "session.created", "session": {"id": "sess-1"}},
+            {"type": "session.updated", "session": {"id": "sess-1", "voice": "longanqian_v3.1"}},
+        ])
+
+        class _FakeConnect:
+            def __call__(self, url, **kwargs):
+                return self
+
+            async def __aenter__(self):
+                return dash_ws
+
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch("services.realtime_qwen_audio_provider.websockets") as ws_module:
+            ws_module.connect = _FakeConnect()
+            client_ws = CollectingWebSocket()
+            await service.stream_dashscope_audio_session(
+                client_ws, model="qwen-audio-3.1-realtime-plus", voice="cally_v3.1",
+            )
+
+        self.assertNotIn("session_open", [event["type"] for event in client_ws.events])
+        self.assertIn("longanqian_v3.1", client_ws.events[0]["message"])
 
     async def test_audio_session_handshake_timeout_has_explicit_message(self):
         """A silent server must produce an explicit timeout error, not an empty one.
@@ -640,8 +711,8 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
             f"Error message must not be empty. Events: {client_ws.events}",
         )
         self.assertTrue(
-            any("session.created" in m for m in error_messages),
-            f"Timeout message should mention session.created. Events: {client_ws.events}",
+            any("session.updated" in m for m in error_messages),
+            f"Timeout message should mention session.updated. Events: {client_ws.events}",
         )
     # ---- 11: no manual response.create on transcription.completed -------------
 

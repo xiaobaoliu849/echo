@@ -350,10 +350,13 @@ class RealtimeVoiceService(
             )
         parsed_url = urlparse(realtime_base_url)
         endpoint_host = (parsed_url.hostname or "").lower()
-        if _is_dashscope_audio_realtime_model(resolved_model) and not endpoint_host.endswith(".cn-beijing.maas.aliyuncs.com"):
+        if _is_dashscope_audio_realtime_model(resolved_model) and not endpoint_host.endswith((
+            ".cn-beijing.maas.aliyuncs.com",
+            ".ap-southeast-1.maas.aliyuncs.com",
+        )):
             raise RuntimeError(
-                "qwen-audio 实时语音模型（3.1 / 3.0）仅支持北京地域业务空间 Realtime WebSocket URL，"
-                "格式如 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime。"
+                "qwen-audio 实时语音模型（3.1 / 3.0）需要北京或新加坡地域的业务空间 Realtime WebSocket URL，"
+                "并使用同地域 API Key。"
             )
         return {
             "api_key": api_key,

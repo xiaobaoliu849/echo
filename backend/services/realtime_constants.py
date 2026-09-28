@@ -117,7 +117,7 @@ DEFAULT_QWEN_AUDIO_REALTIME_VOICE = "longanqian"
 QWEN_AUDIO_31_REALTIME_VOICES = (
     "longanqian", "longanlingxin", "longanlingxi", "longanxiaoxin", "longanlufeng",
     "longanqian_v3.1", "longanhuan_v3.1", "longanlingxin_v3.1", "longanfengyue_v3.1",
-    "xunanchuan", "beth_v3.1", "betty_v3.1", "cally_v3.1",
+    "xunanchuan_v3.1", "beth_v3.1", "betty_v3.1", "cally_v3.1",
 )
 DEFAULT_QWEN_AUDIO_31_REALTIME_VOICE = "longanqian_v3.1"
 

@@ -677,6 +677,30 @@ describe("useVoiceChat", () => {
     await waitFor(() => expect(result.current.voiceChatVoice).toBe("longanqian"));
   });
 
+  it("keeps a selected Qwen Audio 3.1 voice instead of resetting it to the 3.0 default", async () => {
+    const { result } = renderHook(() =>
+      useVoiceChat({
+        formatErrorMessage: createFormatErrorMessageStub(),
+        providerOptions: ["DashScope"],
+        preferredProvider: "DashScope",
+        preferredModel: "qwen-audio-3.1-realtime-plus",
+        providerModelCatalog: {
+          DashScope: {
+            defaultModel: "qwen-audio-3.1-realtime-plus",
+            availableModels: ["qwen-audio-3.1-realtime-plus"],
+          },
+        },
+      })
+    );
+
+    expect(result.current.voiceChatVoice).toBe("longanqian_v3.1");
+    expect(result.current.voiceChatVoiceOptions.map((item) => item.value)).toContain("cally_v3.1");
+    act(() => result.current.onVoiceChange("cally_v3.1"));
+    await waitFor(() => expect(result.current.voiceChatVoice).toBe("cally_v3.1"));
+    await act(async () => { await result.current.onToggleRecording(); });
+    expect(new URL(FakeWebSocket.instances[0].url).searchParams.get("voice")).toBe("cally_v3.1");
+  });
+
   it("adds Live Translate target language parameters to the websocket URL", async () => {
     const formatErrorMessage = createFormatErrorMessageStub();
     ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-live-translate");
