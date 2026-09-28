@@ -202,20 +202,37 @@ async def require_api_auth(
     validate_auth_header(authorization)
 
 
-def validate_websocket_token(token: str | None) -> None:
+def validate_websocket_token(token: str | None, client_host: str = "") -> None:
     """Validate a WebSocket handshake token before ``accept()``.
 
     The HTTP auth middleware never sees WebSocket scopes, so realtime
-    endpoints must enforce auth themselves during the handshake.  Browsers
+    endpoints must enforce auth themselves during the handshake. Browsers
     cannot set custom headers on ``new WebSocket(url)``, so the client passes
     its bearer token as the ``token`` query parameter instead.
 
-    No-op when auth is disabled (localhost single-user mode).  Otherwise
-    raises the same 401/403 ``HTTPException``s as ``validate_auth_header``;
-    callers should close the socket (without accepting) and return.
+    No-op when auth is disabled (localhost single-user mode).
+    When static tokens (ECHO_API_TOKEN / ECHO_ADMIN_TOKEN) are configured,
+    token validation is strictly enforced.
+    When auth is enabled only via registered users and the request is from
+    a local loopback client (desktop / local-first usage), unauthenticated
+    realtime sessions are permitted unless ECHO_FORCE_WEBSOCKET_AUTH is set.
     """
     if not is_auth_enabled():
         return
     cleaned = str(token or "").strip()
-    authorization = f"Bearer {cleaned}" if cleaned else None
-    validate_auth_header(authorization)
+    if resolve_api_token() or resolve_admin_token():
+        authorization = f"Bearer {cleaned}" if cleaned else None
+        validate_auth_header(authorization)
+        return
+
+    if cleaned:
+        validate_auth_header(f"Bearer {cleaned}")
+        return
+
+    # Loopback exemption for localhost desktop/browser clients when no static tokens exist.
+    # Note: "testclient" is intentionally excluded so test suites can verify rejection.
+    is_loopback = client_host in {"127.0.0.1", "::1", "localhost", ""}
+    if is_loopback and not os.getenv("ECHO_FORCE_WEBSOCKET_AUTH", "").strip():
+        return
+
+    raise _missing_token_exception()

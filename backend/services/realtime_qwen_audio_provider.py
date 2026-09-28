@@ -977,6 +977,7 @@ class QwenAudioRealtimeMixin:
                 # forever because nothing notices the peer is gone.
                 ping_interval=30,
                 ping_timeout=20,
+                open_timeout=25,
             ) as dash_ws:
                 # ── session.update with tools + turn detection ──
                 # Default: server_vad with a moderate 2000ms silence window.

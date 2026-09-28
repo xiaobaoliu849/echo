@@ -209,8 +209,9 @@ async def voice_chat_ws(
     # The HTTP auth middleware does not cover WebSocket scopes; enforce auth
     # during the handshake itself. The browser passes the bearer token as the
     # ``token`` query parameter because custom headers are unavailable there.
+    client_host = websocket.client.host if websocket.client else ""
     try:
-        validate_websocket_token(token)
+        validate_websocket_token(token, client_host=client_host)
     except HTTPException:
         # Closing before accept() rejects the handshake (HTTP 403 upstream).
         await websocket.close(code=1008)

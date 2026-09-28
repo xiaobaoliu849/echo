@@ -1735,7 +1735,9 @@ export default function useVoiceChat({
         if (sessionEpochRef.current !== sessionEpoch) {
           return;
         }
-        setVoiceChatError(
+        // Do not overwrite a specific error already reported by the backend server event
+        setVoiceChatError((prev) =>
+          prev ||
           t(
             `实时语音连接失败。请确认后端正在运行，并且模型支持实时语音：${voiceChatProvider} / ${voiceChatModel || "默认模型"}。WebSocket: ${wsUrl}`,
             `Realtime voice connection failed. Confirm the backend is running and the model supports realtime voice: ${voiceChatProvider} / ${voiceChatModel || "default model"}. WebSocket: ${wsUrl}`
@@ -1751,7 +1753,10 @@ export default function useVoiceChat({
         const wasConnected = voiceChatConnectedRef.current;
         stopSessionResources();
         if (!wasConnected && event.code !== 1000) {
-          setVoiceChatError((prev) => prev || t(
+          const authMsg = event.code === 1008
+            ? t("实时语音认证失败：请在右上角登录账号或配置访问 Token 后重试。", "Realtime voice authentication failed: please login or provide an access token.")
+            : "";
+          setVoiceChatError((prev) => prev || authMsg || t(
             `实时语音连接已关闭（code=${event.code}${event.reason ? `, reason=${event.reason}` : ""}）。建议先选择 DashScope / ${DEFAULT_DASHSCOPE_MODEL} 重试。`,
             `Realtime voice connection closed (code=${event.code}${event.reason ? `, reason=${event.reason}` : ""}). Try DashScope / ${DEFAULT_DASHSCOPE_MODEL} first.`
           ));
