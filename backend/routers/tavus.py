@@ -15,6 +15,11 @@ class TavusCreateConversationRequest(BaseModel):
     pal_id: str | None = Field(default=None, min_length=1, max_length=256)
     conversation_name: str | None = Field(default=None, min_length=1, max_length=256)
     face_id: str | None = Field(default=None, min_length=1, max_length=256)
+    # Per-conversation overrides forwarded verbatim to Tavus, e.g.
+    # {"language": "multilingual"} or {"objectives_id": "..."}.
+    properties: dict[str, Any] | None = None
+    # Free conversations where the PAL never joins (setup validation).
+    test_mode: bool = False
 
 
 class TavusConversationResponse(BaseModel):
@@ -199,6 +204,8 @@ async def create_tavus_conversation(
             pal_id=pal_id,
             conversation_name=(payload.conversation_name or "").strip() or None,
             face_id=(payload.face_id or "").strip() or None,
+            properties=payload.properties or None,
+            test_mode=bool(payload.test_mode),
         )
     except TavusError as exc:
         raise _map_tavus_error(exc)

@@ -168,6 +168,70 @@ class ListTranslationProvidersTests(unittest.TestCase):
         dashscope = next(p for p in response.providers if p.id == "DashScope")
         self.assertEqual(dashscope.model, "qwen3.5-plus")
         self.assertTrue(dashscope.has_api_key)
+        self.assertIn("qwen3.5-plus", dashscope.models)
+
+    def test_resolves_enabled_models_when_default_is_empty_and_filters_non_chat(self) -> None:
+        """When default is "" (user configured API key + enabled models in Settings),
+        translation providers must pick the first valid text model from enabled/available
+        and filter out non-chat models (TTS, Realtime Audio, Live-Translate, etc.)."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = _write_config(
+                tmp_dir,
+                {
+                    "api_keys": {
+                        "google_api_key": "AIzaSy-test",
+                        "dashscope_api_key": "sk-test",
+                    },
+                    "default_models": {
+                        "Google": {
+                            "default": "",
+                            "enabled": [
+                                "gemini-3.7-flash",
+                                "gemini-3.5-transcribe-live",
+                                "gemini-3.5-live-translate-preview",
+                            ],
+                            "available": [
+                                "gemini-3.7-flash",
+                                "gemini-3.5-flash",
+                                "gemini-embedding-001",
+                                "veo-3.1-generate-preview",
+                            ],
+                        },
+                        "DashScope": {
+                            "default": "",
+                            "enabled": ["qwen-audio-3.0-realtime-flash", "qwen3-tts-flash"],
+                            "available": [
+                                "qwen3.7-max",
+                                "qwen3.7-plus",
+                                "qwen3-tts-flash",
+                                "qwen-audio-3.0-realtime-flash",
+                            ],
+                        },
+                    },
+                },
+            )
+            payload = TranscriptionService(config=BackendConfig(config_path)).list_translation_providers()
+
+        by_id = {p["id"]: p for p in payload["providers"]}
+        google = by_id["Google"]
+        dashscope = by_id["DashScope"]
+
+        # Google should resolve to gemini-3.7-flash (not stale gemini-2.5-flash)
+        self.assertEqual(google["model"], "gemini-3.7-flash")
+        self.assertIn("gemini-3.7-flash", google["models"])
+        self.assertIn("gemini-3.5-flash", google["models"])
+        # Non-chat models must be excluded
+        self.assertNotIn("gemini-3.5-transcribe-live", google["models"])
+        self.assertNotIn("gemini-3.5-live-translate-preview", google["models"])
+        self.assertNotIn("gemini-embedding-001", google["models"])
+        self.assertNotIn("veo-3.1-generate-preview", google["models"])
+
+        # DashScope should resolve to first valid available model (qwen3.7-max / qwen3.7-plus)
+        self.assertEqual(dashscope["model"], "qwen3.7-max")
+        self.assertIn("qwen3.7-max", dashscope["models"])
+        self.assertIn("qwen3.7-plus", dashscope["models"])
+        self.assertNotIn("qwen3-tts-flash", dashscope["models"])
+        self.assertNotIn("qwen-audio-3.0-realtime-flash", dashscope["models"])
 
 
 if __name__ == "__main__":

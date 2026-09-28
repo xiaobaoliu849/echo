@@ -2374,14 +2374,44 @@ class TranscriptionService:
             return None
 
     DEFAULT_TRANSLATION_MODELS = {
-        "DashScope": "qwen-plus",
-        "Google": "gemini-2.5-flash",
-        "DeepSeek": "deepseek-chat",
-        "OpenRouter": "deepseek/deepseek-chat",
+        "DashScope": "qwen3.7-plus",
+        "Google": "gemini-3.7-flash",
+        "DeepSeek": "deepseek-v4-flash",
+        "OpenRouter": "deepseek/deepseek-r1",
         "SiliconFlow": "deepseek-ai/DeepSeek-V3",
         "Groq": "llama-3.3-70b-versatile",
         "Ollama": "qwen2.5:7b",
     }
+
+    @staticmethod
+    def _is_chat_capable_model(model: str) -> bool:
+        """Filter out audio-only, TTS, video, image, embedding models for text translation."""
+        if not model or not isinstance(model, str):
+            return False
+        m = model.strip().lower()
+        if not m:
+            return False
+        non_chat_patterns = (
+            "tts",
+            "voiceclone",
+            "voicedesign",
+            "realtime",
+            "livetranslate",
+            "live-translate",
+            "transcribe",
+            "native-audio",
+            "embedding",
+            "image",
+            "veo",
+            "lyria",
+            "clip",
+            "banana",
+            "robotics",
+            "computer-use",
+            "aqa",
+            "dingtalk",
+        )
+        return not any(pat in m for pat in non_chat_patterns)
 
     # Chat-capable providers usable by subtitle translation. Must stay a subset
     # of llm_service.SUPPORTED_PROVIDERS (custom providers aside) — every entry
@@ -2400,10 +2430,9 @@ class TranscriptionService:
     def list_translation_providers(self) -> dict[str, Any]:
         """Build the translation-engine picker payload from live config.
 
-        The old frontend dropdown hardcoded brand labels + stale model names;
-        this returns each provider's *actually configured* default chat model
-        (default_models in config.json / fetch-models results) plus whether an
-        API key is present, so the UI never drifts from the backend again.
+        Extracts each provider's actually configured default chat model and all
+        available chat-capable models (from default_models in config.json), plus
+        whether an API key is present.
         Custom providers (custom_providers) are appended so users can translate
         through any OpenAI-compatible gateway they configured in Settings.
         """
@@ -2411,15 +2440,50 @@ class TranscriptionService:
         api_keys = config.get("api_keys", {}) if isinstance(config.get("api_keys"), dict) else {}
         default_models = config.get("default_models", {}) if isinstance(config.get("default_models"), dict) else {}
 
-        def _provider_default_model(provider: str) -> str:
-            value = default_models.get(provider)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-            if isinstance(value, dict):
-                default = value.get("default")
-                if isinstance(default, str) and default.strip():
-                    return default.strip()
-            return ""
+        def _resolve_provider_models(provider: str) -> tuple[str, list[str]]:
+            val = default_models.get(provider)
+            raw_default = ""
+            raw_enabled: list[str] = []
+            raw_available: list[str] = []
+            if isinstance(val, str) and val.strip():
+                raw_default = val.strip()
+            elif isinstance(val, dict):
+                raw_default = str(val.get("default", "")).strip()
+                if isinstance(val.get("enabled"), list):
+                    raw_enabled = [str(x).strip() for x in val["enabled"] if isinstance(x, str) and x.strip()]
+                if isinstance(val.get("available"), list):
+                    raw_available = [str(x).strip() for x in val["available"] if isinstance(x, str) and x.strip()]
+
+            # Filter candidates for genuine text/chat translation capability
+            valid_enabled = [m for m in raw_enabled if self._is_chat_capable_model(m)]
+            valid_available = [m for m in raw_available if self._is_chat_capable_model(m)]
+
+            candidates: list[str] = []
+            if raw_default and self._is_chat_capable_model(raw_default):
+                candidates.append(raw_default)
+            candidates.extend(valid_enabled)
+            candidates.extend(valid_available)
+
+            fallback_default = self.DEFAULT_TRANSLATION_MODELS.get(provider, "")
+            if not candidates and fallback_default:
+                candidates.append(fallback_default)
+
+            deduped = list(dict.fromkeys(candidates))
+
+            primary = ""
+            if raw_default and self._is_chat_capable_model(raw_default):
+                primary = raw_default
+            elif valid_enabled:
+                primary = valid_enabled[0]
+            elif deduped:
+                primary = deduped[0]
+            else:
+                primary = fallback_default
+
+            if primary and primary not in deduped:
+                deduped.insert(0, primary)
+
+            return primary, deduped
 
         providers: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -2428,12 +2492,13 @@ class TranscriptionService:
             # Ollama runs locally with no API key (llm_service fakes one), so it
             # is always usable — don't scare users with a "missing key" hint.
             has_key = provider_id == "Ollama" or bool(str(api_keys.get(key_field, "")).strip())
-            model = _provider_default_model(provider_id) or self.DEFAULT_TRANSLATION_MODELS.get(provider_id, "")
+            model, models = _resolve_provider_models(provider_id)
             providers.append({
                 "id": provider_id,
                 "label": label,
                 "note": note,
                 "model": model,
+                "models": models,
                 "has_api_key": has_key,
                 "custom": False,
             })
@@ -2445,11 +2510,17 @@ class TranscriptionService:
             cp_id = str(cp.get("id", "")).strip()
             if not cp_id or cp_id in seen:
                 continue
+            cp_default = str(cp.get("default_model", "")).strip()
+            cp_available = [str(x).strip() for x in cp.get("available_models", []) if isinstance(x, str) and x.strip()]
+            cp_enabled = [str(x).strip() for x in cp.get("enabled_models", []) if isinstance(x, str) and x.strip()]
+            cp_candidates = list(dict.fromkeys([m for m in ([cp_default] + cp_enabled + cp_available) if m]))
+            cp_model = cp_default or (cp_candidates[0] if cp_candidates else "")
             providers.append({
                 "id": cp_id,
                 "label": str(cp.get("name", "")).strip() or cp_id,
                 "note": "自定义 OpenAI 兼容渠道 (Custom provider)",
-                "model": str(cp.get("default_model", "")).strip(),
+                "model": cp_model,
+                "models": cp_candidates or ([cp_model] if cp_model else []),
                 "has_api_key": bool(str(cp.get("api_key", "")).strip()),
                 "custom": True,
             })

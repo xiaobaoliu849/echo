@@ -596,6 +596,10 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
               <span className="vsPalDuration">{conversation.formattedDuration}</span>
               <span className="vsPalBadgeDivider">·</span>
               <span className="vsPalStatusText">{t("通话中", "Live")}</span>
+              <span className="vsPalBadgeDivider">·</span>
+              <span className="vsPalStatusText">
+                {conversation.isPalSpeaking ? t("正在说话", "Speaking") : t("聆听中", "Listening")}
+              </span>
             </div>
 
             {/* Live Floating Subtitle Banner */}

@@ -204,6 +204,34 @@ class TavusRouterTests(unittest.TestCase):
         self.assertIsNone(response.json()["meeting_token"])
         self.assertEqual(TavusService.create_conversation.await_args.kwargs["face_id"], "face45")
 
+    def test_create_conversation_forwards_properties_and_test_mode(self) -> None:
+        self._patch_service(create_conversation=AsyncMock(return_value={
+            "conversation_id": "id", "conversation_url": "https://tavus.daily.co/test",
+        }))
+        response = self.client.post(
+            "/api/tavus/conversations",
+            json={"pal_id": "pal", "properties": {"language": "multilingual"}, "test_mode": True},
+            headers={"X-Tavus-Api-Key": "key"},
+        )
+        self.assertEqual(response.status_code, 200)
+        kwargs = TavusService.create_conversation.await_args.kwargs
+        self.assertEqual(kwargs["properties"], {"language": "multilingual"})
+        self.assertTrue(kwargs["test_mode"])
+
+    def test_create_conversation_defaults_to_no_properties_and_live_mode(self) -> None:
+        self._patch_service(create_conversation=AsyncMock(return_value={
+            "conversation_id": "id", "conversation_url": "https://tavus.daily.co/test",
+        }))
+        response = self.client.post(
+            "/api/tavus/conversations",
+            json={"pal_id": "pal", "properties": {}},
+            headers={"X-Tavus-Api-Key": "key"},
+        )
+        self.assertEqual(response.status_code, 200)
+        kwargs = TavusService.create_conversation.await_args.kwargs
+        self.assertIsNone(kwargs["properties"])
+        self.assertFalse(kwargs["test_mode"])
+
 
 if __name__ == "__main__":
     unittest.main()

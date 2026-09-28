@@ -80,6 +80,9 @@ describe("useTavusConversation", () => {
     expect(createTavusConversation).toHaveBeenCalledWith({
       palId: "pal-1",
       conversationName: undefined,
+      faceId: undefined,
+      properties: undefined,
+      testMode: undefined,
     });
     expect(dailyMocks.createFrame).toHaveBeenCalledWith(
       container,
@@ -409,5 +412,180 @@ describe("useTavusConversation", () => {
     expect(result.current.transcripts[0].speaker).toBe("pal");
     expect(result.current.transcripts[0].speakerName).toBe("Gloria");
     expect(result.current.transcripts[0].text).toBe("I am speaking via Daily transcription");
+  });
+
+  it("groups streaming utterances by turn_idx and seals a superseded turn", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-turns",
+      conversation_url: "https://tavus.daily.co/room?t=token",
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start({ palName: "Gloria" });
+    });
+    const appMessageHandler = getEventHandler(call, "app-message");
+
+    const streaming = (text: string, turnIdx: number, seq: number) => ({
+      data: {
+        event_type: "conversation.utterance.streaming",
+        properties: { role: "pal", text },
+        turn_idx: turnIdx,
+        seq,
+      },
+    });
+
+    act(() => appMessageHandler(streaming("Hello", 1, 1)));
+    act(() => appMessageHandler(streaming("Hello there", 1, 2)));
+    expect(result.current.transcripts.length).toBe(1);
+    expect(result.current.transcripts[0].text).toBe("Hello there");
+    expect(result.current.transcripts[0].isFinal).toBe(false);
+
+    // Same speaker but a new turn_idx: seal the previous turn, start fresh.
+    act(() => appMessageHandler(streaming("Next answer", 2, 3)));
+    expect(result.current.transcripts.length).toBe(2);
+    expect(result.current.transcripts[0].isFinal).toBe(true);
+    expect(result.current.transcripts[1].text).toBe("Next answer");
+    expect(result.current.transcripts[1].isFinal).toBe(false);
+  });
+
+  it("uses the interaction event timestamp instead of the local clock", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-ts",
+      conversation_url: "https://tavus.daily.co/room?t=token",
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start({ palName: "Gloria" });
+    });
+    const appMessageHandler = getEventHandler(call, "app-message");
+
+    act(() => {
+      appMessageHandler({
+        data: {
+          event_type: "conversation.utterance",
+          properties: { role: "pal", text: "timestamped" },
+          timestamp: 1759000000, // Unix epoch seconds, per Tavus docs
+        },
+      });
+    });
+
+    expect(result.current.transcripts[0].timestamp).toBe(1759000000 * 1000);
+  });
+
+  it("drops out-of-order utterance events by seq", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-seq",
+      conversation_url: "https://tavus.daily.co/room?t=token",
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start({ palName: "Gloria" });
+    });
+    const appMessageHandler = getEventHandler(call, "app-message");
+
+    const streaming = (text: string, seq: number) => ({
+      data: {
+        event_type: "conversation.utterance.streaming",
+        properties: { role: "pal", text },
+        turn_idx: 1,
+        seq,
+      },
+    });
+
+    act(() => appMessageHandler(streaming("newer words", 10)));
+    act(() => appMessageHandler(streaming("stale words", 5)));
+    expect(result.current.transcripts.length).toBe(1);
+    expect(result.current.transcripts[0].text).toBe("newer words");
+  });
+
+  it("tracks PAL speaking state and seals the turn on interruption", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-speaking",
+      conversation_url: "https://tavus.daily.co/room?t=token",
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start({ palName: "Gloria" });
+    });
+    const appMessageHandler = getEventHandler(call, "app-message");
+
+    // Legacy duplicate events say "replica" instead of "pal".
+    act(() => {
+      appMessageHandler({
+        data: { event_type: "conversation.started_speaking", properties: { role: "replica" }, seq: 1 },
+      });
+    });
+    expect(result.current.isPalSpeaking).toBe(true);
+
+    act(() => {
+      appMessageHandler({
+        data: {
+          event_type: "conversation.utterance.streaming",
+          properties: { role: "pal", text: "I was saying something" },
+          turn_idx: 1,
+          seq: 2,
+        },
+      });
+    });
+    expect(result.current.transcripts[0].isFinal).toBe(false);
+
+    act(() => {
+      appMessageHandler({
+        data: {
+          event_type: "conversation.stopped_speaking",
+          properties: { role: "pal", interrupted: true, duration: 1.2 },
+          seq: 3,
+        },
+      });
+    });
+    expect(result.current.isPalSpeaking).toBe(false);
+    expect(result.current.transcripts[0].isFinal).toBe(true);
+  });
+
+  it("auto-leaves on conversation.left and cancels when the PAL rejoins", async () => {
+    vi.useFakeTimers();
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-presence",
+      conversation_url: "https://tavus.daily.co/room?t=token",
+    });
+    const call = createCallMock();
+    dailyMocks.createFrame.mockReturnValue(call);
+
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start();
+    });
+    const appMessageHandler = getEventHandler(call, "app-message");
+
+    const presence = (eventType: string) => ({
+      data: { event_type: eventType, properties: { role: "pal" } },
+    });
+
+    // PAL leaves, then rejoins inside the grace period: no auto-leave.
+    act(() => appMessageHandler(presence("conversation.left")));
+    act(() => appMessageHandler(presence("conversation.joined")));
+    await act(async () => {
+      vi.advanceTimersByTime(1600);
+    });
+    expect(endTavusConversation).not.toHaveBeenCalled();
+
+    // PAL leaves for real: auto-leave after the grace period.
+    act(() => appMessageHandler(presence("conversation.left")));
+    await act(async () => {
+      vi.advanceTimersByTime(1600);
+    });
+    expect(endTavusConversation).toHaveBeenCalledWith("conv-presence");
   });
 });

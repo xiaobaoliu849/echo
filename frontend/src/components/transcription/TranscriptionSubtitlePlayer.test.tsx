@@ -224,4 +224,85 @@ describe("TranscriptionSubtitlePlayer", () => {
     fireEvent.change(input, { target: { value: "苹果" } });
     expect(screen.getByText("1/2")).toBeInTheDocument();
   });
+
+  it("opens AI translation modal, allows picking provider and model, and submits translation", async () => {
+    const api = await import("../../api");
+    const fetchProvidersSpy = vi.spyOn(api, "fetchTranslationProviders").mockResolvedValue({
+      recommended: "Google",
+      providers: [
+        {
+          id: "Google",
+          label: "Google (Gemini)",
+          note: "Gemini",
+          model: "gemini-3.7-flash",
+          models: ["gemini-3.7-flash", "gemini-3.5-flash"],
+          has_api_key: true,
+          custom: false,
+        },
+        {
+          id: "DashScope",
+          label: "DashScope (通义千问 Qwen)",
+          note: "Qwen",
+          model: "qwen3.7-plus",
+          models: ["qwen3.7-plus", "qwen3.5-plus"],
+          has_api_key: true,
+          custom: false,
+        },
+      ],
+    });
+
+    const translateSpy = vi.spyOn(api, "translateTranscriptionCues").mockResolvedValue({
+      job_id: "tx_1",
+      target_language: "zh-CN",
+      cues: [
+        { text: "第一句字幕。", start: 0, end: 2, translation: "First subtitle." },
+      ],
+    });
+
+    renderPlayer({ jobId: "tx_1" });
+
+    // Open AI translate modal
+    const translateBtn = screen.getByRole("button", { name: /AI 翻译/ });
+    fireEvent.click(translateBtn);
+
+    expect(screen.getByText("AI 一键全片双语翻译")).toBeInTheDocument();
+
+    // Verify provider select has recommended provider
+    await waitFor(() => {
+      const providerSelect = screen.getByRole("combobox", { name: "翻译服务商" }) as HTMLSelectElement;
+      expect(providerSelect.value).toBe("Google");
+    });
+
+    const providerSelect = screen.getByRole("combobox", { name: "翻译服务商" }) as HTMLSelectElement;
+    const modelSelect = screen.getByRole("combobox", { name: "翻译大模型" }) as HTMLSelectElement;
+
+    expect(modelSelect.value).toBe("gemini-3.7-flash");
+
+    // Change provider to DashScope
+    fireEvent.change(providerSelect, { target: { value: "DashScope" } });
+    expect(providerSelect.value).toBe("DashScope");
+    expect(modelSelect.value).toBe("qwen3.7-plus");
+
+    // Change model to qwen3.5-plus
+    fireEvent.change(modelSelect, { target: { value: "qwen3.5-plus" } });
+    expect(modelSelect.value).toBe("qwen3.5-plus");
+
+    // Click start translating
+    const startBtn = screen.getByRole("button", { name: "开始翻译" });
+    fireEvent.click(startBtn);
+
+    await waitFor(() => {
+      expect(translateSpy).toHaveBeenCalledWith(
+        "tx_1",
+        "zh-CN",
+        expect.any(Array),
+        "DashScope",
+        "qwen3.5-plus"
+      );
+    });
+
+    fetchProvidersSpy.mockRestore();
+    translateSpy.mockRestore();
+  });
 });
+

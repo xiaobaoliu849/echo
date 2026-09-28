@@ -89,19 +89,76 @@ const SUPPORTED_TRANSLATE_LANGUAGES = [
  * provider's actually configured default model.
  */
 const FALLBACK_TRANSLATION_PROVIDERS: TranslationProviderOption[] = [
-  { id: "DashScope", label: "DashScope (通义千问 Qwen)", note: "推荐 · 官方 Qwen 系列", model: "qwen-plus", has_api_key: false, custom: false },
-  { id: "Google", label: "Google (Gemini)", note: "Gemini 系列", model: "gemini-2.5-flash", has_api_key: false, custom: false },
-  { id: "DeepSeek", label: "DeepSeek", note: "V3 / R1 系列", model: "deepseek-chat", has_api_key: false, custom: false },
-  { id: "OpenRouter", label: "OpenRouter", note: "多厂商聚合网关", model: "deepseek/deepseek-chat", has_api_key: false, custom: false },
-  { id: "SiliconFlow", label: "SiliconFlow (硅基流动)", note: "开源模型聚合", model: "deepseek-ai/DeepSeek-V3", has_api_key: false, custom: false },
+  {
+    id: "DashScope",
+    label: "DashScope (通义千问 Qwen)",
+    note: "推荐 · 官方 Qwen 系列",
+    model: "qwen3.7-plus",
+    models: ["qwen3.7-plus", "qwen3.5-plus", "qwen-max", "qwen-plus"],
+    has_api_key: false,
+    custom: false,
+  },
+  {
+    id: "Google",
+    label: "Google (Gemini)",
+    note: "Gemini 系列",
+    model: "gemini-3.7-flash",
+    models: ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-2.5-flash"],
+    has_api_key: false,
+    custom: false,
+  },
+  {
+    id: "DeepSeek",
+    label: "DeepSeek",
+    note: "V3 / R1 系列",
+    model: "deepseek-v4-flash",
+    models: ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat"],
+    has_api_key: false,
+    custom: false,
+  },
+  {
+    id: "OpenRouter",
+    label: "OpenRouter",
+    note: "多厂商聚合网关",
+    model: "deepseek/deepseek-r1",
+    models: ["deepseek/deepseek-r1", "google/gemini-2.5-flash", "deepseek/deepseek-chat"],
+    has_api_key: false,
+    custom: false,
+  },
+  {
+    id: "SiliconFlow",
+    label: "SiliconFlow (硅基流动)",
+    note: "开源模型聚合",
+    model: "deepseek-ai/DeepSeek-V3",
+    models: ["deepseek-ai/DeepSeek-V3", "deepseek-ai/DeepSeek-R1"],
+    has_api_key: false,
+    custom: false,
+  },
+  {
+    id: "Groq",
+    label: "Groq",
+    note: "Llama 系列超低延迟",
+    model: "llama-3.3-70b-versatile",
+    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+    has_api_key: false,
+    custom: false,
+  },
+  {
+    id: "Ollama",
+    label: "Ollama (本地模型)",
+    note: "本地部署 · 离线可用",
+    model: "qwen2.5:7b",
+    models: ["qwen2.5:7b"],
+    has_api_key: true,
+    custom: false,
+  },
 ];
 
-/** Dropdown label: brand + the live configured model + key-missing hint. */
-function translationOptionLabel(opt: TranslationProviderOption, t: (zh: string, en: string) => string, showKeyHint: boolean): string {
+/** Dropdown label: brand + key-missing hint. */
+function translationProviderLabel(opt: TranslationProviderOption, t: (zh: string, en: string) => string, showKeyHint: boolean): string {
   const suffixes: string[] = [];
-  if (opt.model) suffixes.push(opt.model);
   if (showKeyHint && !opt.has_api_key) suffixes.push(t("未配置 Key", "no API key"));
-  const suffix = suffixes.length > 0 ? ` — ${suffixes.join(" · ")}` : "";
+  const suffix = suffixes.length > 0 ? ` (${suffixes.join(" · ")})` : "";
   return `${opt.label}${suffix}`;
 }
 
@@ -557,7 +614,8 @@ export default function TranscriptionSubtitlePlayer({
   const [langView, setLangView] = useState<"bilingual" | "source" | "target">("bilingual");
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [targetLang, setTargetLang] = useState("zh-CN");
-  const [translateModel, setTranslateModel] = useState(FALLBACK_TRANSLATION_PROVIDERS[0].id);
+  const [translateProvider, setTranslateProvider] = useState(FALLBACK_TRANSLATION_PROVIDERS[0].id);
+  const [translateModel, setTranslateModel] = useState(FALLBACK_TRANSLATION_PROVIDERS[0].model);
   const [translationProviders, setTranslationProviders] = useState<TranslationProviderOption[]>(FALLBACK_TRANSLATION_PROVIDERS);
   // The offline fallback list cannot know key status, so the "未配置 Key"
   // hint is only rendered once live backend data has arrived.
@@ -565,8 +623,10 @@ export default function TranscriptionSubtitlePlayer({
   const [isTranslating, setIsTranslating] = useState(false);
 
   // Live translation-engine catalog from the backend: fresh labels plus each
-  // provider's actually configured default chat model and API-key status.
+  // provider's actually configured default chat model, model candidates, and API-key status.
+  const translateProviderTouchedRef = useRef(false);
   const translateModelTouchedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     fetchTranslationProviders()
@@ -574,15 +634,18 @@ export default function TranscriptionSubtitlePlayer({
         if (cancelled || !res || !Array.isArray(res.providers) || res.providers.length === 0) return;
         setTranslationProviders(res.providers);
         setProvidersFromBackend(true);
-        setTranslateModel((current) => {
-          // Respect an explicit user pick; clamp if it vanished from the live list.
-          if (translateModelTouchedRef.current) {
-            return res.providers.some((p) => p.id === current) ? current : (res.providers[0].id || current);
-          }
-          // Otherwise land on the backend's recommendation (first provider
-          // with a configured API key) instead of a blind default.
-          return res.recommended || current;
-        });
+
+        const activeProvider = translateProviderTouchedRef.current
+          ? (res.providers.some((p) => p.id === translateProvider) ? translateProvider : (res.recommended || res.providers[0].id))
+          : (res.recommended || res.providers[0].id);
+
+        setTranslateProvider(activeProvider);
+
+        const pOpt = res.providers.find((p) => p.id === activeProvider);
+        const pDefaultModel = pOpt?.model || (pOpt?.models && pOpt.models[0]) || "";
+        if (!translateModelTouchedRef.current || !pOpt?.models?.includes(translateModel)) {
+          setTranslateModel(pDefaultModel);
+        }
       })
       .catch(() => {
         // Keep the offline fallback list; select stays functional.
@@ -591,6 +654,21 @@ export default function TranscriptionSubtitlePlayer({
       cancelled = true;
     };
   }, []);
+
+  const selectedProviderOpt = useMemo(() => {
+    return translationProviders.find((p) => p.id === translateProvider) || translationProviders[0];
+  }, [translationProviders, translateProvider]);
+
+  const availableModelsForProvider = useMemo(() => {
+    if (!selectedProviderOpt) return [];
+    if (Array.isArray(selectedProviderOpt.models) && selectedProviderOpt.models.length > 0) {
+      return selectedProviderOpt.models;
+    }
+    if (selectedProviderOpt.model) {
+      return [selectedProviderOpt.model];
+    }
+    return [];
+  }, [selectedProviderOpt]);
 
   // Inline Cue Editing
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -852,6 +930,7 @@ export default function TranscriptionSubtitlePlayer({
         jobId,
         targetLang,
         cues,
+        translateProvider,
         translateModel
       );
       if (res && res.cues) {
@@ -1286,6 +1365,7 @@ export default function TranscriptionSubtitlePlayer({
                       onChange={(e) => setTargetLang(e.target.value)}
                       className="vsSelect"
                       style={{ height: 38, borderRadius: 8, fontSize: 13 }}
+                      aria-label={t("目标语言", "Target Language")}
                     >
                       {SUPPORTED_TRANSLATE_LANGUAGES.map((l) => (
                         <option key={l.code} value={l.code}>{l.label}</option>
@@ -1293,8 +1373,33 @@ export default function TranscriptionSubtitlePlayer({
                     </select>
                   </div>
 
+                  <div style={{ flex: 1, minWidth: 170, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("翻译服务商", "Translation Provider")}</label>
+                    <select
+                      value={translateProvider}
+                      onChange={(e) => {
+                        translateProviderTouchedRef.current = true;
+                        const nextP = e.target.value;
+                        setTranslateProvider(nextP);
+                        const nextOpt = translationProviders.find((p) => p.id === nextP);
+                        const nextM = nextOpt?.model || (nextOpt?.models && nextOpt.models[0]) || "";
+                        setTranslateModel(nextM);
+                        translateModelTouchedRef.current = false;
+                      }}
+                      className="vsSelect"
+                      style={{ height: 38, borderRadius: 8, fontSize: 13 }}
+                      aria-label={t("翻译服务商", "Translation Provider")}
+                    >
+                      {translationProviders.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {translationProviderLabel(opt, t, providersFromBackend)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("翻译大模型", "Translation Engine")}</label>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{t("翻译大模型", "Translation Model")}</label>
                     <select
                       value={translateModel}
                       onChange={(e) => {
@@ -1303,12 +1408,15 @@ export default function TranscriptionSubtitlePlayer({
                       }}
                       className="vsSelect"
                       style={{ height: 38, borderRadius: 8, fontSize: 13 }}
+                      aria-label={t("翻译大模型", "Translation Model")}
                     >
-                      {translationProviders.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {translationOptionLabel(opt, t, providersFromBackend)}
-                        </option>
-                      ))}
+                      {availableModelsForProvider.length > 0 ? (
+                        availableModelsForProvider.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))
+                      ) : (
+                        <option value={translateModel}>{translateModel || t("默认模型", "Default model")}</option>
+                      )}
                     </select>
                   </div>
                 </div>

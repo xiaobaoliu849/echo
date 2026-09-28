@@ -1090,6 +1090,7 @@ class TranslationProviderOption(BaseModel):
     label: str
     note: str = ""
     model: str = ""
+    models: list[str] = Field(default_factory=list)
     has_api_key: bool = False
     custom: bool = False
 

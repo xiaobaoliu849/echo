@@ -347,6 +347,7 @@ export type TranslationProviderOption = {
   label: string;
   note: string;
   model: string;
+  models?: string[];
   has_api_key: boolean;
   custom: boolean;
 };

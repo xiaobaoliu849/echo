@@ -523,11 +523,21 @@ export async function listTavusFaces(): Promise<TavusFaceListResponse> {
 }
 
 export async function createTavusConversation(
-  params: { palId?: string; conversationName?: string; faceId?: string } = {}
+  params: {
+    palId?: string;
+    conversationName?: string;
+    faceId?: string;
+    properties?: Record<string, unknown>;
+    testMode?: boolean;
+  } = {}
 ): Promise<TavusConversationResponse> {
   const palId = (params.palId || "").trim();
   const conversationName = (params.conversationName || "").trim();
   const faceId = (params.faceId || "").trim();
+  const hasProperties =
+    params.properties !== undefined &&
+    params.properties !== null &&
+    Object.keys(params.properties).length > 0;
   const response = await apiFetch(`${API_BASE_URL}/api/tavus/conversations`, {
     method: "POST",
     headers: {
@@ -538,6 +548,8 @@ export async function createTavusConversation(
       ...(palId ? { pal_id: palId } : {}),
       ...(faceId ? { face_id: faceId } : {}),
       ...(conversationName ? { conversation_name: conversationName } : {}),
+      ...(hasProperties ? { properties: params.properties } : {}),
+      ...(params.testMode ? { test_mode: true } : {}),
     }),
   });
   if (!response.ok) {

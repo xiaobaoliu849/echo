@@ -13,6 +13,12 @@ export type SubtitleItem = {
   text: string;
   isFinal: boolean;
   timestamp: number;
+  // Receipt time on the local clock. The fallback merge window uses this —
+  // never `timestamp`, which comes from Tavus's clock and can be skewed.
+  receivedAt: number;
+  // Tavus turn_idx groups every event of one conversation turn; used to
+  // merge streaming utterances exactly instead of guessing by time window.
+  turnIdx?: number;
 };
 
 type StartParams = {
@@ -20,6 +26,10 @@ type StartParams = {
   palName?: string;
   conversationName?: string;
   faceId?: string;
+  // Per-conversation Tavus overrides, e.g. { language: "multilingual" }.
+  properties?: Record<string, unknown>;
+  // Free conversation where the PAL never joins (setup validation).
+  testMode?: boolean;
 };
 
 type Options = {
@@ -34,6 +44,7 @@ export type UseTavusConversationResult = {
   isMuted: boolean;
   isVideoOff: boolean;
   isSharingScreen: boolean;
+  isPalSpeaking: boolean;
   callDuration: number;
   formattedDuration: string;
   transcripts: SubtitleItem[];
@@ -50,15 +61,35 @@ export type UseTavusConversationResult = {
   clearError: () => void;
 };
 
-export function parseAppMessageSubtitle(
-  rawData: any,
-  localSessionId?: string
-): {
+function toFiniteNumber(value: any): number | undefined {
+  const num = typeof value === "string" ? Number(value) : value;
+  return typeof num === "number" && Number.isFinite(num) ? num : undefined;
+}
+
+// Interaction events carry `timestamp` as a Unix epoch float in seconds
+// (same unit as the transcript webhook); normalize to epoch milliseconds.
+function toEpochMs(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  return value < 1e12 ? Math.round(value * 1000) : Math.round(value);
+}
+
+export type ParsedTavusSpeech = {
   speaker: "user" | "pal";
   text: string;
   isFinal: boolean;
   speakerName?: string;
-} | null {
+  // Globally monotonic event sequence number (drop stale arrivals).
+  seq?: number;
+  // Groups all events belonging to one conversation turn.
+  turnIdx?: number;
+  // Event time in epoch milliseconds, normalized from Tavus seconds.
+  timestamp?: number;
+};
+
+export function parseAppMessageSubtitle(
+  rawData: any,
+  localSessionId?: string
+): ParsedTavusSpeech | null {
   if (!rawData) return null;
   let data = rawData;
   if (typeof rawData === "string") {
@@ -128,7 +159,6 @@ export function parseAppMessageSubtitle(
     props.participantId ||
     data.participant_id ||
     data.participantId ||
-    data.participantId ||
     ""
   ).toLowerCase();
 
@@ -185,11 +215,81 @@ export function parseAppMessageSubtitle(
     eventType.includes("final")
   );
 
-  return { speaker, text, isFinal, speakerName: participantName || undefined };
+  const seq = toFiniteNumber(data.seq ?? props.seq);
+  const turnIdx = toFiniteNumber(data.turn_idx ?? data.turnIdx ?? props.turn_idx ?? props.turnIdx);
+  const timestamp = toEpochMs(toFiniteNumber(data.timestamp ?? props.timestamp));
+
+  return {
+    speaker,
+    text,
+    isFinal,
+    speakerName: participantName || undefined,
+    ...(seq !== undefined ? { seq } : {}),
+    ...(turnIdx !== undefined ? { turnIdx } : {}),
+    ...(timestamp !== undefined ? { timestamp } : {}),
+  };
 }
 
-// Fires after the last remote participant (the PAL) leaves, so a stray
-// network blip does not kill a call that is about to resume.
+export type TavusControlEvent =
+  // conversation.started_speaking / conversation.stopped_speaking fire for
+  // both sides; `interrupted` marks a PAL turn cut short by the user.
+  | { type: "speaking"; speaker: "user" | "pal"; speaking: boolean; interrupted: boolean; seq?: number }
+  // conversation.joined / conversation.left fire when either side enters or
+  // leaves the room; more reliable than participant-left for PAL presence.
+  | { type: "presence"; speaker: "user" | "pal"; present: boolean; seq?: number };
+
+function normalizeTavusRole(role: string): "user" | "pal" | null {
+  // Tavus also broadcasts legacy duplicates that say "replica" for "pal".
+  if (["user", "me", "human", "client"].includes(role)) return "user";
+  if (["pal", "replica", "assistant"].includes(role)) return "pal";
+  return null;
+}
+
+export function parseAppMessageControlEvent(rawData: any): TavusControlEvent | null {
+  if (!rawData) return null;
+  let data = rawData;
+  if (typeof rawData === "string") {
+    try {
+      data = JSON.parse(rawData);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof data !== "object" || data === null) return null;
+
+  const eventType = String(
+    data.event_type || data.eventType || data.type || ""
+  ).toLowerCase();
+  const props =
+    typeof data.properties === "object" && data.properties !== null ? data.properties : data;
+  const seq = toFiniteNumber(data.seq ?? props.seq);
+  // Presence/speaking events identify the side explicitly; if the role is
+  // missing we return null rather than guess (a wrong guess could end a call).
+  const speaker = normalizeTavusRole(String(props.role ?? data.role ?? "").toLowerCase());
+  if (!speaker) return null;
+
+  if (eventType === "conversation.started_speaking" || eventType === "conversation.stopped_speaking") {
+    return {
+      type: "speaking",
+      speaker,
+      speaking: eventType === "conversation.started_speaking",
+      interrupted: Boolean(props.interrupted ?? data.interrupted),
+      ...(seq !== undefined ? { seq } : {}),
+    };
+  }
+  if (eventType === "conversation.joined" || eventType === "conversation.left") {
+    return {
+      type: "presence",
+      speaker,
+      present: eventType === "conversation.joined",
+      ...(seq !== undefined ? { seq } : {}),
+    };
+  }
+  return null;
+}
+
+// Grace period before ending a call the PAL has left, so a stray network
+// blip does not kill a call that is about to resume.
 const PAL_LEFT_LEAVE_DELAY_MS = 1500;
 
 export default function useTavusConversation({
@@ -206,12 +306,15 @@ export default function useTavusConversation({
   const autoLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeSubtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Highest interaction-event seq processed; older arrivals are stale.
+  const lastSeqRef = useRef<number>(-Infinity);
   const [status, setStatus] = useState<TavusConversationStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [isPalSpeaking, setIsPalSpeaking] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [transcripts, setTranscripts] = useState<SubtitleItem[]>([]);
   const [activeSubtitle, setActiveSubtitle] = useState<SubtitleItem | null>(null);
@@ -301,6 +404,7 @@ export default function useTavusConversation({
     setIsMuted(false);
     setIsVideoOff(false);
     setIsSharingScreen(false);
+    setIsPalSpeaking(false);
     setCallDuration(0);
     setActiveSubtitle(null);
   }, [clearAutoLeaveTimer, clearDurationTimer]);
@@ -323,6 +427,28 @@ export default function useTavusConversation({
     setStatus((prev) => (prev === "idle" ? prev : "ended"));
   }, [endConversationUpstream, teardownCall]);
 
+  // Fires after the last remote participant (the PAL) leaves, so a stray
+  // network blip does not kill a call that is about to resume. Shared by the
+  // Daily participant-left event and the Tavus conversation.left app-message.
+  const scheduleAutoLeaveWhenAlone = useCallback(() => {
+    const activeCall = callRef.current;
+    if (!activeCall) {
+      return;
+    }
+    const remaining = Object.entries(activeCall.participants() || {})
+      .filter(([id, participant]) => id !== "local" && !participant.local).length;
+    if (remaining > 0) {
+      return;
+    }
+    clearAutoLeaveTimer();
+    autoLeaveTimerRef.current = setTimeout(() => {
+      autoLeaveTimerRef.current = null;
+      if (Object.entries(callRef.current?.participants() || {})
+        .some(([id, participant]) => id !== "local" && !participant.local)) return;
+      leave();
+    }, PAL_LEFT_LEAVE_DELAY_MS);
+  }, [clearAutoLeaveTimer, leave]);
+
   const start = useCallback(async (params: StartParams = {}) => {
     if (callRef.current || startingRef.current) {
       return;
@@ -330,6 +456,8 @@ export default function useTavusConversation({
     startingRef.current = true;
     activePalNameRef.current = params.palName?.trim() || "";
     const generation = ++startGenerationRef.current;
+    lastSeqRef.current = -Infinity;
+    setIsPalSpeaking(false);
     setErrorMessage("");
     setStatus("creating");
     try {
@@ -337,6 +465,8 @@ export default function useTavusConversation({
         palId: params.palId,
         conversationName: params.conversationName,
         faceId: params.faceId,
+        properties: params.properties,
+        testMode: params.testMode,
       });
       if (generation !== startGenerationRef.current) {
         endConversationUpstream(conversation.conversation_id);
@@ -383,8 +513,13 @@ export default function useTavusConversation({
         const localSessionId = callRef.current?.participants()?.local?.session_id;
         const parsed = parseAppMessageSubtitle(rawEventData, localSessionId);
         if (!parsed) return;
+        // seq is globally monotonic; a lower-seq event arrived out of order.
+        if (parsed.seq !== undefined) {
+          if (parsed.seq < lastSeqRef.current) return;
+          lastSeqRef.current = parsed.seq;
+        }
 
-        const timestamp = Date.now();
+        const timestamp = parsed.timestamp ?? Date.now();
         const fallbackPalName = activePalNameRef.current || t("AI 分身", "AI PAL");
         const fallbackName = parsed.speaker === "user" ? t("你", "You") : fallbackPalName;
         const speakerName =
@@ -395,21 +530,36 @@ export default function useTavusConversation({
 
         setTranscripts((prev) => {
           const last = prev[prev.length - 1];
-          // If previous message was same speaker within 5s and not final, update it in place
-          if (last && last.speaker === parsed.speaker && !last.isFinal && timestamp - last.timestamp < 5000) {
+          // Exact turn grouping when both sides carry turn_idx; otherwise
+          // fall back to the legacy same-speaker-within-5s heuristic.
+          const sameTurn =
+            parsed.turnIdx !== undefined && last?.turnIdx !== undefined
+              ? last.turnIdx === parsed.turnIdx
+              : undefined;
+
+          const now = Date.now();
+          if (
+            last &&
+            last.speaker === parsed.speaker &&
+            !last.isFinal &&
+            (sameTurn === true || (sameTurn === undefined && now - last.receivedAt < 5000))
+          ) {
             const updatedItem: SubtitleItem = {
               ...last,
               text: parsed.text,
               isFinal: parsed.isFinal,
               timestamp,
+              receivedAt: now,
+              turnIdx: last.turnIdx ?? parsed.turnIdx,
             };
             setActiveSubtitle(updatedItem);
             return [...prev.slice(0, -1), updatedItem];
           }
 
-          // If speaker changed while previous turn was in-progress, seal previous turn as final
+          // Seal a dangling non-final turn: the speaker changed, or Tavus
+          // moved on to a new turn_idx (e.g. after an interruption).
           const basePrev =
-            last && !last.isFinal && last.speaker !== parsed.speaker
+            last && !last.isFinal && (last.speaker !== parsed.speaker || sameTurn === false)
               ? [...prev.slice(0, -1), { ...last, isFinal: true }]
               : prev;
 
@@ -420,6 +570,8 @@ export default function useTavusConversation({
             text: parsed.text,
             isFinal: parsed.isFinal,
             timestamp,
+            receivedAt: now,
+            ...(parsed.turnIdx !== undefined ? { turnIdx: parsed.turnIdx } : {}),
           };
           setActiveSubtitle(newItem);
           return [...basePrev, newItem];
@@ -431,6 +583,39 @@ export default function useTavusConversation({
         activeSubtitleTimerRef.current = setTimeout(() => {
           setActiveSubtitle(null);
         }, 4500);
+      };
+
+      const handleIncomingAppMessage = (rawEventData: any) => {
+        const control = parseAppMessageControlEvent(rawEventData);
+        if (!control) {
+          handleIncomingSubtitle(rawEventData);
+          return;
+        }
+        if (control.seq !== undefined) {
+          if (control.seq < lastSeqRef.current) return;
+          lastSeqRef.current = control.seq;
+        }
+        if (control.type === "speaking") {
+          if (control.speaker !== "pal") return;
+          setIsPalSpeaking(control.speaking);
+          // An interrupted PAL turn is over: seal its in-progress subtitle so
+          // the user's reply starts a fresh entry instead of merging into it.
+          if (!control.speaking && control.interrupted) {
+            setTranscripts((prev) => {
+              const last = prev[prev.length - 1];
+              if (!last || last.speaker !== "pal" || last.isFinal) return prev;
+              return [...prev.slice(0, -1), { ...last, isFinal: true }];
+            });
+          }
+          return;
+        }
+        if (control.speaker !== "pal") return;
+        if (control.present) {
+          // PAL (re)joined: cancel any pending auto-leave.
+          clearAutoLeaveTimer();
+        } else {
+          scheduleAutoLeaveWhenAlone();
+        }
       };
 
       frame.on("joined-meeting", () => {
@@ -457,7 +642,7 @@ export default function useTavusConversation({
         }
       });
       frame.on("app-message", (event: any) => {
-        handleIncomingSubtitle(event?.data ?? event?.message ?? event);
+        handleIncomingAppMessage(event?.data ?? event?.message ?? event);
       });
       frame.on("transcription-message" as any, (event: any) => {
         handleIncomingSubtitle(event);
@@ -477,22 +662,7 @@ export default function useTavusConversation({
       });
       frame.on("participant-left", () => {
         if (generation !== startGenerationRef.current) return;
-        const activeCall = callRef.current;
-        if (!activeCall) {
-          return;
-        }
-        const remaining = Object.entries(activeCall.participants() || {})
-          .filter(([id, participant]) => id !== "local" && !participant.local).length;
-        if (remaining > 0) {
-          return;
-        }
-        clearAutoLeaveTimer();
-        autoLeaveTimerRef.current = setTimeout(() => {
-          autoLeaveTimerRef.current = null;
-          if (Object.entries(callRef.current?.participants() || {})
-            .some(([id, participant]) => id !== "local" && !participant.local)) return;
-          leave();
-        }, PAL_LEFT_LEAVE_DELAY_MS);
+        scheduleAutoLeaveWhenAlone();
       });
 
       // Private rooms (require_auth) issue a meeting token that must be
@@ -522,7 +692,7 @@ export default function useTavusConversation({
     } finally {
       if (generation === startGenerationRef.current) startingRef.current = false;
     }
-  }, [clearAutoLeaveTimer, clearDurationTimer, endConversationUpstream, formatErrorMessage, leave, t, teardownCall]);
+  }, [clearAutoLeaveTimer, clearDurationTimer, endConversationUpstream, formatErrorMessage, leave, scheduleAutoLeaveWhenAlone, t, teardownCall]);
 
   const clearError = useCallback(() => {
     setErrorMessage("");
@@ -559,6 +729,7 @@ export default function useTavusConversation({
     isMuted,
     isVideoOff,
     isSharingScreen,
+    isPalSpeaking,
     callDuration,
     formattedDuration,
     transcripts,
