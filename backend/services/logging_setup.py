@@ -37,6 +37,11 @@ class _RedactWebSocketToken(logging.Filter):
                 self._token_pattern.sub(r"\1<redacted>", arg) if isinstance(arg, str) else arg
                 for arg in record.args
             )
+        elif isinstance(record.args, dict):
+            record.args = {
+                k: self._token_pattern.sub(r"\1<redacted>", v) if isinstance(v, str) else v
+                for k, v in record.args.items()
+            }
         return True
 
 

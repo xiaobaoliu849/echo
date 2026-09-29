@@ -127,7 +127,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 98px; /* 7 * 11px + 6 * 3px gap = 95px */
+  height: 95px; /* 7 * 11px + 6 * 3px gap = 95px */
   margin-right: 6px;
   font-size: 0.68rem;
   color: var(--text-soft);
@@ -205,7 +205,7 @@
 }
 
 .trajectory-tooltip {
-  position: absolute;
+  /* position is set to `fixed` by the component via inline style */
   background: var(--text-primary);
   color: var(--bg-primary);
   padding: 6px 10px;
