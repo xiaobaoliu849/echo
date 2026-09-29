@@ -48,6 +48,7 @@ class QwenAudioRealtimeMixin:
     def is_qwen_audio_model(model: str | None) -> bool:
         """Return True when *model* is a Qwen-Audio realtime model (supports native function calling)."""
         return bool(model and "qwen-audio" in str(model).lower())
+
     @staticmethod
     def _build_qwen_audio_instructions(memory_context: str = "") -> str:
         import datetime
@@ -1162,7 +1163,7 @@ class QwenAudioRealtimeMixin:
                                 raise RuntimeError(
                                     f"DashScope 返回的音色 {confirmed_voice} 与请求的 {resolved_voice} 不一致。"
                                 )
-                        configured = event_type == "session.updated"
+                            configured = True
 
                 await self._send_event(
                     websocket,

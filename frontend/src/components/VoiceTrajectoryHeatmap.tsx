@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Flame, Trophy, Clock, MessageSquare, Calendar, RefreshCw, X } from "lucide-react";
 import { fetchVoiceAgentTrajectory, type VoiceAgentTrajectoryResponse, type VoiceAgentTrajectoryDay } from "../api";
 import { useI18n } from "../i18n";
@@ -50,7 +50,7 @@ export default function VoiceTrajectoryHeatmap({ onClose, className = "", initia
     y: number;
   } | null>(null);
 
-  const loadData = async (range: number) => {
+  const loadData = useCallback(async (range: number) => {
     setLoading(true);
     setError(null);
     try {
@@ -61,11 +61,11 @@ export default function VoiceTrajectoryHeatmap({ onClose, className = "", initia
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData(daysRange);
-  }, [daysRange]);
+  }, [daysRange, loadData]);
 
   // Construct weeks and days matrix
   const weeks = useMemo(() => {
@@ -268,7 +268,25 @@ export default function VoiceTrajectoryHeatmap({ onClose, className = "", initia
       </div>
 
       {/* Heatmap Grid */}
-      <div className="trajectory-grid-wrapper">
+      <div className="trajectory-grid-wrapper" style={{ position: "relative" }}>
+        {loading && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              // Use background-color with alpha rather than opacity so the
+              // spinner child is not faded along with the scrim.
+              backgroundColor: "color-mix(in oklab, var(--bg-card) 80%, transparent)",
+              zIndex: 2,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            aria-label={isZh ? "加载中…" : "Loading…"}
+          >
+            <RefreshCw size={18} className="animate-spin" style={{ color: "var(--text-soft)" }} />
+          </div>
+        )}
         <div className="trajectory-grid">
           {/* Day of Week Labels */}
           <div className="trajectory-day-labels">

@@ -1018,25 +1018,60 @@ class VoiceAgentSessionRepository:
         """Calculates daily voice learning trajectory & activity streak statistics
         (GitHub contribution graph style).
         """
+        # Push the date window into SQL so we never scan the full history.
+        cutoff_ts: str | None = None
+        if days > 0:
+            cutoff_ts = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
         with self._connect() as conn:
-            cursor = conn.execute(
-                """
-                SELECT id, provider, model, voice, status, started_at, ended_at, meta_json
-                FROM voice_agent_sessions
-                ORDER BY started_at ASC
-                """
-            )
+            if cutoff_ts is not None:
+                cursor = conn.execute(
+                    """
+                    SELECT id, provider, model, voice, status, started_at, ended_at, meta_json
+                    FROM voice_agent_sessions
+                    WHERE date(started_at) >= ?
+                    ORDER BY started_at ASC
+                    """,
+                    (cutoff_ts,),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT id, provider, model, voice, status, started_at, ended_at, meta_json
+                    FROM voice_agent_sessions
+                    ORDER BY started_at ASC
+                    """
+                )
             sessions = [self._row_to_session(row) for row in cursor.fetchall() if row is not None]
 
-            turns_cursor = conn.execute(
-                """
-                SELECT session_id, started_at, completed_at,
-                       length(coalesce(user_text, '')) as user_len,
-                       length(coalesce(assistant_text, '')) as assistant_len
-                FROM voice_agent_turns
-                """
-            )
-            turns_rows = turns_cursor.fetchall()
+            if not sessions:
+                turns_rows = []
+            elif cutoff_ts is not None:
+                # Only fetch turns whose session is within the window.
+                # Filtering turns by session_id join avoids including turns
+                # from out-of-window sessions that happen to start after cutoff.
+                turns_cursor = conn.execute(
+                    """
+                    SELECT t.session_id, t.started_at, t.completed_at,
+                           length(coalesce(t.user_text, '')) as user_len,
+                           length(coalesce(t.assistant_text, '')) as assistant_len
+                    FROM voice_agent_turns t
+                    JOIN voice_agent_sessions s ON s.id = t.session_id
+                    WHERE date(s.started_at) >= ?
+                    """,
+                    (cutoff_ts,),
+                )
+                turns_rows = turns_cursor.fetchall()
+            else:
+                turns_cursor = conn.execute(
+                    """
+                    SELECT session_id, started_at, completed_at,
+                           length(coalesce(user_text, '')) as user_len,
+                           length(coalesce(assistant_text, '')) as assistant_len
+                    FROM voice_agent_turns
+                    """
+                )
+                turns_rows = turns_cursor.fetchall()
 
         turns_by_session: dict[str, list[dict[str, Any]]] = {}
         for r in turns_rows:
@@ -1055,10 +1090,6 @@ class VoiceAgentSessionRepository:
         total_turns = 0
         total_sessions = 0
 
-        cutoff_date = None
-        if days > 0:
-            cutoff_date = (datetime.now() - timedelta(days=days)).date()
-
         for s in sessions:
             if not s:
                 continue
@@ -1067,9 +1098,6 @@ class VoiceAgentSessionRepository:
                 continue
 
             session_date = started_dt.date()
-            if cutoff_date and session_date < cutoff_date:
-                continue
-
             date_str = session_date.strftime("%Y-%m-%d")
             ended_dt = self._parse_timestamp(s.get("ended_at"))
 
