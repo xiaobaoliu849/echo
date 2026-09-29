@@ -8,8 +8,16 @@ from services.tavus_service import TavusError, TavusService
 
 
 def _make_service(api_key: str = "tavus-key") -> TavusService:
-    service = TavusService(api_key=api_key)
-    return service
+    return TavusService(api_key=api_key)
+
+
+def _make_client_mock(**method_mocks) -> Mock:
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    client.__aexit__.return_value = None
+    for name, mocked in method_mocks.items():
+        setattr(client, name, mocked)
+    return client
 
 
 def _mock_response(status_code: int, json_data=None, text: str = "") -> Mock:
@@ -32,58 +40,64 @@ class TavusServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_create_conversation_sends_pal_id_and_api_key(self) -> None:
         service = _make_service("tavus-key")
 
-        resp = _mock_response(200, {
+        response = _mock_response(200, {
             "conversation_id": "conv-1",
             "conversation_url": "https://tavus.daily.co/room?t=token",
             "status": "started",
         })
-        service._client.request = AsyncMock(return_value=resp)
+        request = AsyncMock(return_value=response)
 
-        result = await service.create_conversation(pal_id="pal-123")
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            result = await service.create_conversation(pal_id="pal-123")
 
         self.assertEqual(result["conversation_id"], "conv-1")
-        _, kwargs = service._client.request.call_args
+        _, kwargs = request.call_args
         self.assertEqual(kwargs["url"], "https://tavusapi.com/v2/conversations")
         self.assertEqual(kwargs["json"]["pal_id"], "pal-123")
         self.assertEqual(kwargs["headers"]["x-api-key"], "tavus-key")
 
     async def test_create_conversation_rejects_missing_conversation_url(self) -> None:
         service = _make_service()
-        resp = _mock_response(200, {"conversation_id": "conv-1"})
-        service._client.request = AsyncMock(return_value=resp)
+        response = _mock_response(200, {"conversation_id": "conv-1"})
+        request = AsyncMock(return_value=response)
 
-        with self.assertRaises(TavusError) as ctx:
-            await service.create_conversation(pal_id="pal-123")
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            with self.assertRaises(TavusError) as ctx:
+                await service.create_conversation(pal_id="pal-123")
 
         self.assertEqual(ctx.exception.code, "TAVUS_RESPONSE_INVALID")
 
     async def test_create_conversation_maps_upstream_error(self) -> None:
         service = _make_service()
-        resp = _mock_response(401, text="invalid api key")
-        service._client.request = AsyncMock(return_value=resp)
+        response = _mock_response(401, text="invalid api key")
+        request = AsyncMock(return_value=response)
 
-        with self.assertRaises(TavusError) as ctx:
-            await service.create_conversation(pal_id="pal-123")
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            with self.assertRaises(TavusError) as ctx:
+                await service.create_conversation(pal_id="pal-123")
 
         self.assertEqual(ctx.exception.code, "TAVUS_UPSTREAM_ERROR")
         self.assertEqual(ctx.exception.upstream_status, 401)
 
     async def test_list_pals_returns_items_from_payload(self) -> None:
         service = _make_service()
-        resp = _mock_response(200, {
-            "pals": [{"pal_id": "pal-1", "pal_name": "Mia"}]
-        })
-        service._client.request = AsyncMock(return_value=resp)
+        response = _mock_response(200, {"pals": [{"pal_id": "pal-1", "pal_name": "Mia"}]})
+        request = AsyncMock(return_value=response)
 
-        pals = await service.list_pals()
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            pals = await service.list_pals()
 
         self.assertEqual(pals, [{"pal_id": "pal-1", "pal_name": "Mia"}])
-        _, kwargs = service._client.request.call_args
+        _, kwargs = request.call_args
         self.assertEqual(kwargs["url"], "https://tavusapi.com/v2/pals?limit=100&page=1")
 
     async def test_list_faces_returns_face_items(self) -> None:
         service = _make_service()
-        resp = _mock_response(200, {
+        response = _mock_response(200, {
             "data": [
                 {
                     "face_id": "rc9cff32ceba",
@@ -93,23 +107,27 @@ class TavusServiceTests(unittest.IsolatedAsyncioTestCase):
                 }
             ]
         })
-        service._client.request = AsyncMock(return_value=resp)
+        request = AsyncMock(return_value=response)
 
-        faces = await service.list_faces()
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            faces = await service.list_faces()
 
         self.assertEqual(faces[0]["face_id"], "rc9cff32ceba")
         self.assertEqual(faces[0]["model_name"], "phoenix-4.5")
-        _, kwargs = service._client.request.call_args
+        _, kwargs = request.call_args
         self.assertEqual(kwargs["url"], "https://tavusapi.com/v2/faces?limit=100&page=1")
 
     async def test_end_conversation_treats_404_as_already_ended(self) -> None:
         service = _make_service()
         gone = _mock_response(404, text="not found")
-        service._client.request = AsyncMock(return_value=gone)
+        request = AsyncMock(return_value=gone)
 
-        await service.end_conversation("conv-gone")
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            await service.end_conversation("conv-gone")
 
-        _, kwargs = service._client.request.call_args
+        _, kwargs = request.call_args
         self.assertEqual(kwargs["method"], "POST")
         self.assertEqual(kwargs["url"], "https://tavusapi.com/v2/conversations/conv-gone/end")
 
@@ -154,19 +172,22 @@ class TavusServiceTests(unittest.IsolatedAsyncioTestCase):
                     await service.create_conversation(pal_id="pal")
 
     async def test_end_accepts_empty_success_response(self) -> None:
-        service = _make_service()
-        service._client.request = AsyncMock(return_value=_mock_response(200, text=""))
-        await service.end_conversation("conv")
-        _, kwargs = service._client.request.call_args
-        self.assertEqual(kwargs["method"], "POST")
-        self.assertTrue(kwargs["url"].endswith("/conv/end"))
+        request = AsyncMock(return_value=_mock_response(200, text=""))
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            await _make_service().end_conversation("conv")
+        self.assertEqual(request.await_args.kwargs["method"], "POST")
+        self.assertTrue(request.await_args.kwargs["url"].endswith("/conv/end"))
 
     async def test_end_conversation_raises_on_upstream_failure(self) -> None:
         service = _make_service()
-        service._client.request = AsyncMock(return_value=_mock_response(500, text="boom"))
+        response = _mock_response(500, text="boom")
+        request = AsyncMock(return_value=response)
 
-        with self.assertRaises(TavusError) as ctx:
-            await service.end_conversation("conv-1")
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            with self.assertRaises(TavusError) as ctx:
+                await service.end_conversation("conv-1")
 
         self.assertEqual(ctx.exception.upstream_status, 500)
 
@@ -175,24 +196,28 @@ class TavusServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_list_pals_uses_cache_on_second_call(self) -> None:
         service = _make_service()
         resp = _mock_response(200, {"pals": [{"pal_id": "p1", "pal_name": "A"}]})
-        service._client.request = AsyncMock(return_value=resp)
+        request = AsyncMock(return_value=resp)
 
-        first = await service.list_pals()
-        second = await service.list_pals()
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            first = await service.list_pals()
+            second = await service.list_pals()
 
-        # Network should only have been called once.
-        service._client.request.assert_awaited_once()
+        # Network should only have been called once; second result from cache.
+        request.assert_awaited_once()
         self.assertEqual(first, second)
 
     async def test_list_faces_uses_cache_on_second_call(self) -> None:
         service = _make_service()
         resp = _mock_response(200, {"data": [{"face_id": "f1", "face_name": "R"}]})
-        service._client.request = AsyncMock(return_value=resp)
+        request = AsyncMock(return_value=resp)
 
-        first = await service.list_faces()
-        second = await service.list_faces()
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=request)
+            first = await service.list_faces()
+            second = await service.list_faces()
 
-        service._client.request.assert_awaited_once()
+        request.assert_awaited_once()
         self.assertEqual(first, second)
 
     async def test_cache_is_keyed_per_api_key(self) -> None:
@@ -200,11 +225,16 @@ class TavusServiceTests(unittest.IsolatedAsyncioTestCase):
         svc_b = _make_service("key-b")
         resp_a = _mock_response(200, {"pals": [{"pal_id": "a"}]})
         resp_b = _mock_response(200, {"pals": [{"pal_id": "b"}]})
-        svc_a._client.request = AsyncMock(return_value=resp_a)
-        svc_b._client.request = AsyncMock(return_value=resp_b)
+        req_a = AsyncMock(return_value=resp_a)
+        req_b = AsyncMock(return_value=resp_b)
 
-        pals_a = await svc_a.list_pals()
-        pals_b = await svc_b.list_pals()
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=req_a)
+            pals_a = await svc_a.list_pals()
+
+        with patch("services.tavus_service.httpx.AsyncClient") as client_cls:
+            client_cls.return_value = _make_client_mock(request=req_b)
+            pals_b = await svc_b.list_pals()
 
         self.assertEqual(pals_a[0]["pal_id"], "a")
         self.assertEqual(pals_b[0]["pal_id"], "b")

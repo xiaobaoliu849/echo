@@ -42,10 +42,6 @@ class TavusService:
     def __init__(self, api_key: str, api_url: str = DEFAULT_TAVUS_API_URL) -> None:
         self.api_key = api_key
         self.api_url = (api_url or DEFAULT_TAVUS_API_URL).rstrip("/")
-        # Shared client reuses TCP/TLS connections across requests made during
-        # the same FastAPI request handling, which saves a full TLS handshake
-        # on every list_pals / list_faces / create_conversation call.
-        self._client = httpx.AsyncClient(timeout=30.0)
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -143,11 +139,12 @@ class TavusService:
     async def end_conversation(self, conversation_id: str) -> None:
         """End a live conversation. Ending an already-ended call is a no-op."""
         try:
-            resp = await self._client.request(
-                method="POST",
-                url=f"{self.api_url}/v2/conversations/{conversation_id}/end",
-                headers=self._headers(),
-            )
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.request(
+                    method="POST",
+                    url=f"{self.api_url}/v2/conversations/{conversation_id}/end",
+                    headers=self._headers(),
+                )
         except httpx.HTTPError as exc:
             raise TavusError(
                 "TAVUS_UPSTREAM_UNREACHABLE",
@@ -169,12 +166,13 @@ class TavusService:
         json_payload: dict[str, Any] | None = None,
     ) -> Any:
         try:
-            resp = await self._client.request(
-                method=method,
-                url=f"{self.api_url}{path}",
-                headers=self._headers(),
-                json=json_payload,
-            )
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.request(
+                    method=method,
+                    url=f"{self.api_url}{path}",
+                    headers=self._headers(),
+                    json=json_payload,
+                )
         except httpx.HTTPError as exc:
             raise TavusError(
                 "TAVUS_UPSTREAM_UNREACHABLE",
