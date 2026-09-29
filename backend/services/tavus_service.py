@@ -11,11 +11,21 @@ backend attaches it here.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+# How long (seconds) to cache PAL/face list responses per API key.
+# These catalogs change rarely; caching them eliminates repeated Tavus round
+# trips on every PalPage mount, which noticeably speeds up the first render
+# and means the face grid is available before the user clicks "Start".
+_LIST_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+# module-level cache: {cache_key: (expires_at, items)}
+_list_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 DEFAULT_TAVUS_API_URL = "https://tavusapi.com"
 
@@ -32,6 +42,10 @@ class TavusService:
     def __init__(self, api_key: str, api_url: str = DEFAULT_TAVUS_API_URL) -> None:
         self.api_key = api_key
         self.api_url = (api_url or DEFAULT_TAVUS_API_URL).rstrip("/")
+        # Shared client reuses TCP/TLS connections across requests made during
+        # the same FastAPI request handling, which saves a full TLS handshake
+        # on every list_pals / list_faces / create_conversation call.
+        self._client = httpx.AsyncClient(timeout=30.0)
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -40,8 +54,20 @@ class TavusService:
         }
 
     async def list_pals(self) -> list[dict[str, Any]]:
-        """Return all PAL pages, accepting legacy response envelopes too."""
-        return await self._list_items("/v2/pals", ("pals", "personas"))
+        """Return all PAL pages, accepting legacy response envelopes too.
+
+        Results are cached per API key for _LIST_CACHE_TTL_SECONDS so that
+        repeated PalPage mounts do not trigger a fresh Tavus network call on
+        every navigation.
+        """
+        cache_key = f"pals:{self.api_key}:{self.api_url}"
+        now = time.monotonic()
+        cached = _list_cache.get(cache_key)
+        if cached and now < cached[0]:
+            return list(cached[1])
+        items = await self._list_items("/v2/pals", ("pals", "personas"))
+        _list_cache[cache_key] = (now + _LIST_CACHE_TTL_SECONDS, items)
+        return items
 
     async def create_conversation(
         self,
@@ -82,8 +108,18 @@ class TavusService:
         return data
 
     async def list_faces(self) -> list[dict[str, Any]]:
-        """Return the account's faces (Phoenix-trained video personas, e.g. phoenix-4.5)."""
-        return await self._list_items("/v2/faces", ("faces", "replicas"))
+        """Return the account's faces (Phoenix-trained video personas, e.g. phoenix-4.5).
+
+        Results are cached per API key for _LIST_CACHE_TTL_SECONDS.
+        """
+        cache_key = f"faces:{self.api_key}:{self.api_url}"
+        now = time.monotonic()
+        cached = _list_cache.get(cache_key)
+        if cached and now < cached[0]:
+            return list(cached[1])
+        items = await self._list_items("/v2/faces", ("faces", "replicas"))
+        _list_cache[cache_key] = (now + _LIST_CACHE_TTL_SECONDS, items)
+        return items
 
     async def _list_items(self, path: str, aliases: tuple[str, ...]) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
@@ -107,12 +143,11 @@ class TavusService:
     async def end_conversation(self, conversation_id: str) -> None:
         """End a live conversation. Ending an already-ended call is a no-op."""
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.request(
-                    method="POST",
-                    url=f"{self.api_url}/v2/conversations/{conversation_id}/end",
-                    headers=self._headers(),
-                )
+            resp = await self._client.request(
+                method="POST",
+                url=f"{self.api_url}/v2/conversations/{conversation_id}/end",
+                headers=self._headers(),
+            )
         except httpx.HTTPError as exc:
             raise TavusError(
                 "TAVUS_UPSTREAM_UNREACHABLE",
@@ -134,13 +169,12 @@ class TavusService:
         json_payload: dict[str, Any] | None = None,
     ) -> Any:
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.request(
-                    method=method,
-                    url=f"{self.api_url}{path}",
-                    headers=self._headers(),
-                    json=json_payload,
-                )
+            resp = await self._client.request(
+                method=method,
+                url=f"{self.api_url}{path}",
+                headers=self._headers(),
+                json=json_payload,
+            )
         except httpx.HTTPError as exc:
             raise TavusError(
                 "TAVUS_UPSTREAM_UNREACHABLE",

@@ -166,6 +166,14 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext }: Pro
   const [copied, setCopied] = useState(false);
   const [summaryDismissed, setSummaryDismissed] = useState(false);
 
+  // Prefetch daily-js in the background as soon as an API key is present so
+  // the dynamic import in useTavusConversation is already cached by the time
+  // the user clicks "Start", removing that latency from the hot path.
+  useEffect(() => {
+    if (!apiKey) return;
+    void import("@daily-co/daily-js").catch(() => {});
+  }, [apiKey]);
+
   useEffect(() => {
     let disposed = false;
     setPals([]);
