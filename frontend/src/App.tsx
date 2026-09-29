@@ -31,6 +31,7 @@ const PalPage = lazyWithRetry(() => import("./pages/PalPage"));
 const VoiceCenterPage = lazyWithRetry(() => import("./pages/VoiceCenterPage"));
 import { I18nProvider, createInlineTranslator, localizeText, type UiLanguage } from "./i18n";
 import { formatErrorMessage } from "./utils/errorFormatting";
+import type { SubtitleItem } from "./hooks/useTavusConversation";
 
 type ConversationArchiveEntry = {
   id: string;
@@ -415,6 +416,33 @@ export default function App() {
     });
   }
 
+  function handlePalConversationEnded(transcripts: SubtitleItem[], palName?: string) {
+    if (transcripts.length === 0) return;
+    // Convert Tavus transcript items to ChatMessage[] for the sidebar history.
+    // Only use final entries to avoid storing interim streamed fragments.
+    const finalTranscripts = transcripts.filter((item) => item.isFinal);
+    if (finalTranscripts.length === 0) return;
+    const voiceMessages: ChatMessage[] = finalTranscripts.map((item) => ({
+      role: item.speaker === "user" ? "user" : "assistant",
+      content: item.text,
+    }));
+    const prefix = palName
+      ? createInlineTranslator(uiLanguage)(`[视频 ${palName}]`, `[Video ${palName}]`)
+      : createInlineTranslator(uiLanguage)("[视频PAL]", "[Video PAL]");
+    const firstUserText = finalTranscripts.find((item) => item.speaker === "user")?.text || finalTranscripts[0].text;
+    const preview = firstUserText.length > 30 ? `${firstUserText.slice(0, 30)}...` : firstUserText;
+    const entry: ConversationArchiveEntry = {
+      id: createLocalArchiveId(),
+      content: `${prefix} ${preview}`,
+      chatMessages: [],
+      voiceMessages,
+      chatGroupId: "",
+      voiceGroupId: "",
+      updatedAt: Date.now(),
+    };
+    pushConversationHistory(entry);
+  }
+
   async function handleAuthLogin(email: string, password: string) {
     setAuthRuntime(await loginAuthUser(email, password));
   }
@@ -442,6 +470,13 @@ export default function App() {
     setSettingsInitialCategory("provider");
     setIsSettingsOpen(true);
   }, []);
+
+  const palConversationEndedRef = useRef(handlePalConversationEnded);
+  palConversationEndedRef.current = handlePalConversationEnded;
+  const stablePalConversationEnded = useCallback(
+    (transcripts: SubtitleItem[], palName?: string) => palConversationEndedRef.current(transcripts, palName),
+    []
+  );
 
   const sidebarHistoryItems = useMemo(
     () => normalizedConversationHistory.map((item) => ({ id: item.id, content: item.content })),
@@ -515,6 +550,7 @@ export default function App() {
                   <PalPage
                     formatErrorMessage={formatErrorMessage}
                     errorRuntimeContext={errorRuntimeContext}
+                    onConversationEnded={stablePalConversationEnded}
                   />
                 ) : null}
 
