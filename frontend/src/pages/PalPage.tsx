@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -11,6 +11,8 @@ import {
   PhoneOff,
   Play,
   RotateCcw,
+  SlidersHorizontal,
+  Speaker,
   Subtitles,
   Video,
   VideoOff,
@@ -150,6 +152,64 @@ export function getRollingSubtitleText(text: string, latinMax = 120, cjkMax = 60
   return `… ${rawTail.trimStart()}`;
 }
 
+// Renders a single MediaStreamTrack into a <video> element. Each track gets
+// its own MediaStream; re-binding happens when the track object changes
+// (device switch, remote track replacement after reconnection...).
+// `muted` is only for local previews so the mic never feeds back.
+function TrackVideo({ track, className, mirrored = false }: {
+  track: MediaStreamTrack;
+  className?: string;
+  mirrored?: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = new MediaStream([track]);
+    const playback = video.play();
+    if (playback && typeof playback.catch === "function") void playback.catch(() => {});
+    return () => {
+      video.srcObject = null;
+    };
+  }, [track]);
+
+  return (
+    <video
+      ref={videoRef}
+      className={`${className ?? ""}${mirrored ? " isMirrored" : ""}`}
+      autoPlay
+      playsInline
+      muted={mirrored}
+    />
+  );
+}
+
+// Audio has its own element so replacing a video tile never interrupts sound.
+// Route the element itself: Daily's output-device setting does not select the
+// sink for media elements rendered by the app.
+function TrackAudio({ track, speakerId, onPlaybackBlocked }: {
+  track: MediaStreamTrack;
+  speakerId: string;
+  onPlaybackBlocked: () => void;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.srcObject = new MediaStream([track]);
+    const playback = audio.play();
+    if (playback && typeof playback.catch === "function") void playback.catch(onPlaybackBlocked);
+    return () => { audio.srcObject = null; };
+  }, [track, onPlaybackBlocked]);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !('setSinkId' in audio)) return;
+    void audio.setSinkId(speakerId || "default").catch(() => {});
+  }, [speakerId]);
+  return <audio ref={audioRef} autoPlay />;
+}
+
 export default function PalPage({ formatErrorMessage, errorRuntimeContext, onConversationEnded }: Props) {
   const { t, language } = useI18n();
   const conversation = useTavusConversation({ formatErrorMessage, language });
@@ -166,6 +226,22 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
   const [showDrawer, setShowDrawer] = useState(false);
   const [copied, setCopied] = useState(false);
   const [summaryDismissed, setSummaryDismissed] = useState(false);
+  const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false);
+  const remoteAudioRef = useRef<HTMLDivElement>(null);
+  const handleAudioPlaybackBlocked = useCallback(() => setAudioPlaybackBlocked(true), []);
+  const resumeRemoteAudio = useCallback(() => {
+    const elements = remoteAudioRef.current?.querySelectorAll("audio") ?? [];
+    void Promise.all(Array.from(elements, (audio) => audio.play())).then(
+      () => setAudioPlaybackBlocked(false),
+      () => setAudioPlaybackBlocked(true),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (conversation.status === "idle" || conversation.status === "ended" || conversation.status === "creating") {
+      setAudioPlaybackBlocked(false);
+    }
+  }, [conversation.status]);
 
   // Prefetch daily-js in the background as soon as an API key is present so
   // the dynamic import in useTavusConversation is already cached by the time
@@ -261,6 +337,13 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
   const showPostCallSummary =
     conversation.status === "ended" && conversation.transcripts.length > 0 && !summaryDismissed;
   const isPending = conversation.status === "creating" || conversation.status === "joining";
+  const showPrejoinPanel = conversation.status === "prejoin";
+  // Local PiP mirrors the camera (not screen share) and hides when video is off.
+  const localStageTrack = conversation.isSharingScreen
+    ? conversation.localScreenTrack
+    : conversation.isVideoOff
+      ? null
+      : conversation.localVideoTrack;
 
   useEffect(() => {
     if (!showPostCallSummary) return;
@@ -312,7 +395,36 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
   return (
     <section className="vsPalPage">
       <div className="vsPalStage">
-        <div ref={conversation.attachVideoContainer} className="vsPalVideoHost" data-testid="pal-video-host" />
+        <div className="vsPalVideoHost" data-testid="pal-video-host">
+          <div className="vsPalAudioHost" ref={remoteAudioRef}>
+            {conversation.remoteAudioTrack ? (
+              <TrackAudio track={conversation.remoteAudioTrack} speakerId={conversation.selectedSpeakerId} onPlaybackBlocked={handleAudioPlaybackBlocked} />
+            ) : null}
+            {conversation.remoteScreenAudioTrack ? (
+              <TrackAudio track={conversation.remoteScreenAudioTrack} speakerId={conversation.selectedSpeakerId} onPlaybackBlocked={handleAudioPlaybackBlocked} />
+            ) : null}
+          </div>
+          {audioPlaybackBlocked && conversation.status === "connected" ? (
+            <button type="button" className="vsPalAudioResume" onClick={resumeRemoteAudio} data-testid="pal-resume-audio-button">
+              <Speaker size={16} /> {t("点击开启通话声音", "Click to enable call audio")}
+            </button>
+          ) : null}
+          {conversation.remoteVideoTrack ? (
+            <TrackVideo track={conversation.remoteVideoTrack} className="vsPalRemoteVideo" />
+          ) : (
+            <div className="vsPalRemotePlaceholder" role="status">
+              <Video size={28} />
+              <span>{t("正在等待对方画面...", "Waiting for the remote video...")}</span>
+            </div>
+          )}
+          {localStageTrack ? (
+            <TrackVideo
+              track={localStageTrack}
+              className="vsPalLocalVideo"
+              mirrored={!conversation.isSharingScreen}
+            />
+          ) : null}
+        </div>
 
         {showConfigPanel ? (
           <div className="vsPalOverlay">
@@ -525,6 +637,116 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
           </div>
         ) : null}
 
+        {showPrejoinPanel ? (
+          <div className="vsPalOverlay">
+            <div className="vsPalPrejoinCard" data-testid="pal-prejoin-panel">
+              <div className="vsPalPrejoinHead">
+                <span className="vsPalConfigIcon" aria-hidden="true"><SlidersHorizontal size={22} /></span>
+                <div>
+                  <h2>{t("通话前检查", "Before you join")}</h2>
+                  <p>{t("确认摄像头、麦克风和扬声器，再加入视频对话。", "Check your camera, microphone and speakers before joining.")}</p>
+                </div>
+              </div>
+              <div className="vsPalPrejoinBody">
+                <div className="vsPalPrejoinPreview">
+                  {conversation.localVideoTrack && !conversation.isVideoOff && !conversation.cameraError ? (
+                    <TrackVideo track={conversation.localVideoTrack} className="vsPalPrejoinVideo" mirrored />
+                  ) : (
+                    <div className="vsPalPrejoinNoVideo">
+                      <VideoOff size={30} />
+                      <span>{conversation.cameraError
+                        ? t("摄像头不可用", "Camera unavailable")
+                        : t("摄像头画面未就绪", "Camera preview unavailable")}</span>
+                    </div>
+                  )}
+                  <span className="vsPalPrejoinPreviewLabel">{t("我的画面", "My preview")}</span>
+                </div>
+                <div className="vsPalPrejoinDevices">
+                  <label className="vsPalField">
+                    <span><Video size={16} /> {t("摄像头", "Camera")}</span>
+                    <select
+                      value={conversation.selectedCameraId}
+                      onChange={(event) => void conversation.selectCamera(event.target.value)}
+                      disabled={conversation.cameras.length === 0 || conversation.isCheckingDevices}
+                      data-testid="pal-camera-select"
+                    >
+                      <option value="">{t("系统默认摄像头", "Default camera")}</option>
+                      {conversation.cameras.filter((device) => device.deviceId).map((device, index) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || t(`摄像头 ${index + 1}`, `Camera ${index + 1}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="vsPalField">
+                    <span><Mic size={16} /> {t("麦克风", "Microphone")}</span>
+                    <select
+                      value={conversation.selectedMicrophoneId}
+                      onChange={(event) => void conversation.selectMicrophone(event.target.value)}
+                      disabled={conversation.microphones.length === 0 || conversation.isCheckingDevices}
+                      data-testid="pal-microphone-select"
+                    >
+                      <option value="">{t("系统默认麦克风", "Default microphone")}</option>
+                      {conversation.microphones.filter((device) => device.deviceId).map((device, index) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || t(`麦克风 ${index + 1}`, `Microphone ${index + 1}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {conversation.speakers.length > 0 ? (
+                    <label className="vsPalField">
+                      <span><Speaker size={16} /> {t("扬声器", "Speakers")}</span>
+                      <select
+                        value={conversation.selectedSpeakerId}
+                        onChange={(event) => void conversation.selectSpeaker(event.target.value)}
+                        disabled={conversation.isCheckingDevices}
+                        data-testid="pal-speaker-select"
+                      >
+                        <option value="">{t("系统默认扬声器", "Default speakers")}</option>
+                        {conversation.speakers.filter((device) => device.deviceId).map((device, index) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label || t(`扬声器 ${index + 1}`, `Speaker ${index + 1}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <p className="vsPalPrejoinHint">
+                      {t("扬声器选择由浏览器或系统控制。", "Speaker selection is managed by your browser or system.")}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {conversation.cameraError ? (
+                <div className="vsPalCameraError" role="alert">
+                  <span>{conversation.cameraError}</span>
+                  <button type="button" className="vsPalGhostBtn" disabled={conversation.isCheckingDevices} onClick={() => void conversation.retryCamera()} data-testid="pal-retry-camera-button">
+                    <RotateCcw size={14} /> {t("重试摄像头", "Retry camera")}
+                  </button>
+                </div>
+              ) : null}
+              <div className="vsPalPrejoinActions">
+                <button type="button" className="vsPalGhostBtn" onClick={conversation.cancelPrejoin} data-testid="pal-cancel-prejoin-button">
+                  {t("取消", "Cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="vsPalStartBtn"
+                  onClick={() => void conversation.join({ videoOff: Boolean(conversation.cameraError) })}
+                  disabled={conversation.isCheckingDevices}
+                  data-testid="pal-join-button"
+                >
+                  {conversation.cameraError ? <VideoOff size={16} /> : <Video size={16} />}
+                  <span>{conversation.cameraError
+                    ? t("不使用摄像头加入", "Join without camera")
+                    : t("加入通话", "Join call")}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {showPostCallSummary ? (
           <div
             className="vsPalOverlay"
@@ -600,6 +822,9 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
             <div className="vsPalPendingCard" role="status">
               <span className="vsPalSpinner" aria-hidden="true" />
               <span>{pendingLabel}</span>
+              <button type="button" className="vsPalGhostBtn" onClick={conversation.cancelPrejoin}>
+                {t("取消", "Cancel")}
+              </button>
             </div>
           </div>
         ) : null}

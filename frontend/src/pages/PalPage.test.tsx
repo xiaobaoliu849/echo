@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Daily from "@daily-co/daily-js";
 import PalPage, { getRollingSubtitleText } from "./PalPage";
@@ -11,7 +11,7 @@ import {
 } from "../api";
 
 const dailyMocks = vi.hoisted(() => ({
-  createFrame: vi.fn()
+  createCallObject: vi.fn()
 }));
 
 vi.mock("../api", () => ({
@@ -27,7 +27,7 @@ vi.mock("../api", () => ({
 
 vi.mock("@daily-co/daily-js", () => ({
   default: {
-    createFrame: dailyMocks.createFrame
+    createCallObject: dailyMocks.createCallObject
   }
 }));
 
@@ -37,7 +37,13 @@ function createCallMock() {
     leave: vi.fn().mockResolvedValue(undefined),
     destroy: vi.fn(),
     on: vi.fn(),
-    participants: vi.fn(() => ({}))
+    participants: vi.fn(() => ({})),
+    startCamera: vi.fn().mockResolvedValue({}),
+    enumerateDevices: vi.fn().mockResolvedValue({ devices: [] }),
+    setInputDevicesAsync: vi.fn().mockResolvedValue({}),
+    setOutputDeviceAsync: vi.fn().mockResolvedValue({}),
+    startLocalAudioLevelObserver: vi.fn().mockResolvedValue(undefined),
+    stopLocalAudioLevelObserver: vi.fn(),
   };
 }
 
@@ -54,7 +60,7 @@ describe("PalPage", () => {
   beforeEach(() => {
     // Resolve the SDK mock before starting any asynchronous call. Otherwise a
     // cold dynamic import can outlive an API-only test and cross its cleanup.
-    expect(Daily.createFrame).toBe(dailyMocks.createFrame);
+    expect(Daily.createCallObject).toBe(dailyMocks.createCallObject);
     vi.mocked(getPersistedTavusPalId).mockReturnValue("");
     vi.mocked(listTavusPals).mockReset();
     vi.mocked(listTavusPals).mockResolvedValue({ pals: [] });
@@ -63,7 +69,7 @@ describe("PalPage", () => {
     vi.mocked(createTavusConversation).mockReset();
     vi.mocked(endTavusConversation).mockReset();
     vi.mocked(endTavusConversation).mockResolvedValue(undefined);
-    dailyMocks.createFrame.mockReset();
+    dailyMocks.createCallObject.mockReset();
   });
 
   it("renders the configuration panel", () => {
@@ -85,7 +91,7 @@ describe("PalPage", () => {
     vi.mocked(createTavusConversation).mockResolvedValue({
       conversation_id: "new-model", conversation_url: "https://tavus.daily.co/room",
     });
-    dailyMocks.createFrame.mockReturnValue(createCallMock());
+    dailyMocks.createCallObject.mockReturnValue(createCallMock());
     renderPage();
     const brooke = await screen.findByRole("radio", { name: /Brooke/ });
     expect(screen.getByRole("radio", { name: /Old/ })).toBeInTheDocument();
@@ -107,7 +113,7 @@ describe("PalPage", () => {
     vi.mocked(createTavusConversation).mockResolvedValue({
       conversation_id: "manual", conversation_url: "https://tavus.daily.co/room",
     });
-    dailyMocks.createFrame.mockReturnValue(createCallMock());
+    dailyMocks.createCallObject.mockReturnValue(createCallMock());
     renderPage();
     await screen.findByRole("alert");
     fireEvent.click(screen.getByTestId("pal-face-manual"));
@@ -138,7 +144,7 @@ describe("PalPage", () => {
       { face_id: "face45", face_name: "Brooke", model_name: "phoenix-4.5", status: "completed" },
     ] });
     vi.mocked(createTavusConversation).mockResolvedValue({ conversation_id: "default", conversation_url: "https://tavus.daily.co/room" });
-    dailyMocks.createFrame.mockReturnValue(createCallMock());
+    dailyMocks.createCallObject.mockReturnValue(createCallMock());
     renderPage();
     await waitFor(() => expect(screen.getByTestId("pal-face-default").querySelector("img"))
       .toHaveAttribute("src", "https://cdn.tavus.io/thumbs/gloria.jpg"));
@@ -158,7 +164,7 @@ describe("PalPage", () => {
       { face_id: "selected-face", face_name: "Selected", model_name: model, status: "completed" },
     ] });
     vi.mocked(createTavusConversation).mockResolvedValue({ conversation_id: "id", conversation_url: "https://tavus.daily.co/room" });
-    dailyMocks.createFrame.mockReturnValue(createCallMock());
+    dailyMocks.createCallObject.mockReturnValue(createCallMock());
     renderPage();
     fireEvent.click(await screen.findByRole("radio", { name: new RegExp(`Selected.*${model.replace("phoenix-", "Phoenix ")}`) }));
     expect(screen.getByRole("radio", { name: /Selected/ })).toHaveAttribute("aria-checked", "true");
@@ -202,13 +208,133 @@ describe("PalPage", () => {
     expect(screen.queryByText("该形象尚未就绪，请选择其他形象。")).not.toBeInTheDocument();
   });
 
+  it("shows a Chinese camera-in-use explanation and joins without video", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "busy-camera", conversation_url: "https://tavus.daily.co/busy",
+    });
+    const call = createCallMock();
+    call.startCamera.mockImplementation(async () => {
+      const handler = call.on.mock.calls.find(([name]) => name === "camera-error")?.[1];
+      handler?.({ error: { type: "cam-in-use" }, errorMsg: { videoOk: false } });
+      return {};
+    });
+    dailyMocks.createCallObject.mockReturnValue(call);
+    renderPage();
+    fireEvent.click(screen.getByTestId("pal-start-button"));
+    expect(await screen.findByTestId("pal-prejoin-panel")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("摄像头");
+    fireEvent.click(screen.getByTestId("pal-join-button"));
+    await waitFor(() => expect(call.join).toHaveBeenCalledWith(expect.objectContaining({ startVideoOff: true })));
+  });
+
+  it("retries the camera on the Chinese device-check screen", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "retry", conversation_url: "https://tavus.daily.co/retry",
+    });
+    const call = createCallMock();
+    call.startCamera.mockImplementationOnce(async () => {
+      const handler = call.on.mock.calls.find(([name]) => name === "camera-error")?.[1];
+      handler?.({ error: { type: "cam-in-use" }, errorMsg: { videoOk: false } });
+      return {};
+    });
+    dailyMocks.createCallObject.mockReturnValue(call);
+    renderPage();
+    fireEvent.click(screen.getByTestId("pal-start-button"));
+    fireEvent.click(await screen.findByTestId("pal-retry-camera-button"));
+    await waitFor(() => expect(call.startCamera).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByTestId("pal-retry-camera-button")).not.toBeInTheDocument());
+    expect(screen.getByTestId("pal-join-button")).toBeEnabled();
+  });
+
+  it("cancels the device-check screen and releases the room", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "cancelled", conversation_url: "https://tavus.daily.co/cancelled",
+    });
+    const call = createCallMock();
+    dailyMocks.createCallObject.mockReturnValue(call);
+    renderPage();
+    fireEvent.click(screen.getByTestId("pal-start-button"));
+    expect(await screen.findByTestId("pal-prejoin-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("pal-camera-select")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("pal-cancel-prejoin-button"));
+    expect(screen.getByTestId("pal-start-button")).toBeInTheDocument();
+    expect(call.destroy).toHaveBeenCalled();
+    expect(endTavusConversation).toHaveBeenCalledWith("cancelled");
+    expect(call.join).not.toHaveBeenCalled();
+  });
+
+  it("renders the PAL audio track with a dedicated media element", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "media-room", conversation_url: "https://tavus.daily.co/media-room",
+    });
+    const call = createCallMock();
+    dailyMocks.createCallObject.mockReturnValue(call);
+    const previousMediaStream = globalThis.MediaStream;
+    const mediaStream = vi.fn(function (this: object, tracks: MediaStreamTrack[]) {
+      Object.assign(this, { tracks });
+    });
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.stubGlobal("MediaStream", mediaStream);
+    try {
+      const { container } = renderPage();
+      fireEvent.click(screen.getByTestId("pal-start-button"));
+      fireEvent.click(await screen.findByTestId("pal-join-button"));
+      await screen.findByTestId("pal-leave-button");
+      const audioTrack = { kind: "audio" } as MediaStreamTrack;
+      call.participants.mockReturnValue({
+        local: { local: true },
+        pal: { local: false, tracks: { audio: { track: audioTrack } } },
+      });
+      const trackStarted = call.on.mock.calls.find(([name]) => name === "track-started")?.[1];
+      act(() => { trackStarted?.(); });
+      expect(container.querySelector(".vsPalVideoHost audio")).toBeInTheDocument();
+      expect(mediaStream).toHaveBeenCalledWith([audioTrack]);
+    } finally {
+      play.mockRestore();
+      vi.stubGlobal("MediaStream", previousMediaStream);
+    }
+  });
+
+  it("offers a button when PAL audio autoplay is blocked", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "autoplay", conversation_url: "https://tavus.daily.co/autoplay",
+    });
+    const call = createCallMock();
+    dailyMocks.createCallObject.mockReturnValue(call);
+    const previousMediaStream = globalThis.MediaStream;
+    vi.stubGlobal("MediaStream", vi.fn(function (this: object, tracks: MediaStreamTrack[]) {
+      Object.assign(this, { tracks });
+    }));
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play")
+      .mockRejectedValueOnce(new DOMException("Not allowed", "NotAllowedError"))
+      .mockResolvedValue(undefined);
+    try {
+      renderPage();
+      fireEvent.click(screen.getByTestId("pal-start-button"));
+      fireEvent.click(await screen.findByTestId("pal-join-button"));
+      await screen.findByTestId("pal-leave-button");
+      call.participants.mockReturnValue({
+        local: { local: true },
+        pal: { local: false, tracks: { audio: { track: { kind: "audio" } as MediaStreamTrack } } },
+      });
+      const trackStarted = call.on.mock.calls.find(([name]) => name === "track-started")?.[1];
+      act(() => { trackStarted?.(); });
+      const resume = await screen.findByTestId("pal-resume-audio-button");
+      fireEvent.click(resume);
+      await waitFor(() => expect(screen.queryByTestId("pal-resume-audio-button")).not.toBeInTheDocument());
+    } finally {
+      play.mockRestore();
+      vi.stubGlobal("MediaStream", previousMediaStream);
+    }
+  });
+
   it("starts a conversation with the entered API key and PAL id", async () => {
     vi.mocked(listTavusPals).mockRejectedValue(new Error("not configured"));
     vi.mocked(createTavusConversation).mockResolvedValue({
       conversation_id: "conv-1",
       conversation_url: "https://tavus.daily.co/room?t=token"
     });
-    dailyMocks.createFrame.mockReturnValue(createCallMock());
+    dailyMocks.createCallObject.mockReturnValue(createCallMock());
 
     renderPage();
 
@@ -220,6 +346,8 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
+    await screen.findByTestId("pal-join-button");
+    fireEvent.click(screen.getByTestId("pal-join-button"));
     await waitFor(
       () => {
         expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
@@ -267,7 +395,7 @@ describe("PalPage", () => {
       conversation_id: "conv-2",
       conversation_url: "https://tavus.daily.co/room?t=token"
     });
-    dailyMocks.createFrame.mockReturnValue(createCallMock());
+    dailyMocks.createCallObject.mockReturnValue(createCallMock());
 
     renderPage();
 
@@ -302,7 +430,7 @@ describe("PalPage", () => {
       conversation_id: "conv-3",
       conversation_url: "https://tavus.daily.co/room?t=token"
     });
-    dailyMocks.createFrame.mockReturnValue(createCallMock());
+    dailyMocks.createCallObject.mockReturnValue(createCallMock());
 
     renderPage();
 
@@ -311,6 +439,8 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
+    await screen.findByTestId("pal-join-button");
+    fireEvent.click(screen.getByTestId("pal-join-button"));
     await waitFor(
       () => {
         expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
@@ -335,7 +465,7 @@ describe("PalPage", () => {
       conversation_url: "https://tavus.daily.co/room?t=token"
     });
     const call = createCallMock();
-    dailyMocks.createFrame.mockReturnValue(call);
+    dailyMocks.createCallObject.mockReturnValue(call);
 
     renderPage();
 
@@ -344,6 +474,8 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
+    await screen.findByTestId("pal-join-button");
+    fireEvent.click(screen.getByTestId("pal-join-button"));
     await waitFor(() => {
       expect(screen.getByTestId("pal-toggle-subtitles-button")).toBeInTheDocument();
     });
@@ -366,7 +498,7 @@ describe("PalPage", () => {
       conversation_url: "https://tavus.daily.co/room?t=token"
     });
     const call = createCallMock();
-    dailyMocks.createFrame.mockReturnValue(call);
+    dailyMocks.createCallObject.mockReturnValue(call);
 
     renderPage();
 
@@ -375,6 +507,8 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
+    await screen.findByTestId("pal-join-button");
+    fireEvent.click(screen.getByTestId("pal-join-button"));
     await waitFor(
       () => {
         expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
@@ -427,7 +561,7 @@ describe("PalPage", () => {
       conversation_url: "https://tavus.daily.co/room?t=token"
     });
     const call = createCallMock();
-    dailyMocks.createFrame.mockReturnValue(call);
+    dailyMocks.createCallObject.mockReturnValue(call);
 
     renderPage();
 
@@ -436,6 +570,8 @@ describe("PalPage", () => {
     });
     fireEvent.click(screen.getByTestId("pal-start-button"));
 
+    await screen.findByTestId("pal-join-button");
+    fireEvent.click(screen.getByTestId("pal-join-button"));
     await waitFor(
       () => {
         expect(screen.getByTestId("pal-leave-button")).toBeInTheDocument();
