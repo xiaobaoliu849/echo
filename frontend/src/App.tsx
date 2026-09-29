@@ -419,17 +419,19 @@ export default function App() {
   function handlePalConversationEnded(transcripts: SubtitleItem[], palName?: string) {
     if (transcripts.length === 0) return;
     // Convert Tavus transcript items to ChatMessage[] for the sidebar history.
-    // Only use final entries to avoid storing interim streamed fragments.
-    const finalTranscripts = transcripts.filter((item) => item.isFinal);
-    if (finalTranscripts.length === 0) return;
-    const voiceMessages: ChatMessage[] = finalTranscripts.map((item) => ({
+    // The call is over, so include the trailing non-final item too: a PAL turn
+    // is only sealed isFinal when the next turn arrives, which never happens
+    // for the last message of a call (teardownCall doesn't seal it either).
+    const nonEmpty = transcripts.filter((item) => item.text.trim());
+    if (nonEmpty.length === 0) return;
+    const voiceMessages: ChatMessage[] = nonEmpty.map((item) => ({
       role: item.speaker === "user" ? "user" : "assistant",
       content: item.text,
     }));
     const prefix = palName
       ? createInlineTranslator(uiLanguage)(`[视频 ${palName}]`, `[Video ${palName}]`)
       : createInlineTranslator(uiLanguage)("[视频PAL]", "[Video PAL]");
-    const firstUserText = finalTranscripts.find((item) => item.speaker === "user")?.text || finalTranscripts[0].text;
+    const firstUserText = nonEmpty.find((item) => item.speaker === "user")?.text || nonEmpty[0].text;
     const preview = firstUserText.length > 30 ? `${firstUserText.slice(0, 30)}...` : firstUserText;
     const entry: ConversationArchiveEntry = {
       id: createLocalArchiveId(),
