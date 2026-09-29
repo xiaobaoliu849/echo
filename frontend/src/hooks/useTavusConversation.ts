@@ -4,7 +4,13 @@ import { createInlineTranslator, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 import { createTavusConversation, endTavusConversation } from "../api";
 
-export type TavusConversationStatus = "idle" | "creating" | "joining" | "connected" | "ended";
+export type TavusConversationStatus =
+  | "idle"
+  | "creating"
+  | "prejoin"
+  | "joining"
+  | "connected"
+  | "ended";
 
 export type SubtitleItem = {
   id: string;
@@ -37,6 +43,36 @@ type Options = {
   language?: UiLanguage;
 };
 
+// Selected device preferences survive restarts so a working setup does not
+// need to be picked again before every call.
+const DEVICE_PREFS_STORAGE_KEY = "vs_pal_device_prefs";
+
+type DevicePrefs = {
+  camera?: string;
+  microphone?: string;
+  speaker?: string;
+};
+
+function loadDevicePrefs(): DevicePrefs {
+  try {
+    const raw = localStorage.getItem(DEVICE_PREFS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveDevicePrefs(patch: Partial<DevicePrefs>): void {
+  try {
+    const next = { ...loadDevicePrefs(), ...patch };
+    localStorage.setItem(DEVICE_PREFS_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
+}
+
 export type UseTavusConversationResult = {
   status: TavusConversationStatus;
   errorMessage: string;
@@ -55,8 +91,28 @@ export type UseTavusConversationResult = {
   toggleMute: () => void;
   toggleVideo: () => void;
   toggleScreenShare: () => Promise<void>;
-  attachVideoContainer: (node: HTMLDivElement | null) => void;
+  // Media tracks for self-rendered <video> elements (headless callObject mode).
+  localVideoTrack: MediaStreamTrack | null;
+  localScreenTrack: MediaStreamTrack | null;
+  remoteVideoTrack: MediaStreamTrack | null;
+  remoteAudioTrack: MediaStreamTrack | null;
+  remoteScreenAudioTrack: MediaStreamTrack | null;
+  // Device selection for the Chinese prejoin screen.
+  cameras: MediaDeviceInfo[];
+  microphones: MediaDeviceInfo[];
+  speakers: MediaDeviceInfo[];
+  selectedCameraId: string;
+  selectedMicrophoneId: string;
+  selectedSpeakerId: string;
+  cameraError: string;
+  isCheckingDevices: boolean;
+  retryCamera: () => Promise<void>;
+  selectCamera: (deviceId: string) => Promise<void>;
+  selectMicrophone: (deviceId: string) => Promise<void>;
+  selectSpeaker: (deviceId: string) => Promise<void>;
   start: (params?: StartParams) => Promise<void>;
+  join: (options?: { videoOff?: boolean }) => Promise<void>;
+  cancelPrejoin: () => void;
   leave: () => void;
   clearError: () => void;
 };
@@ -298,18 +354,32 @@ export default function useTavusConversation({
 }: Options): UseTavusConversationResult {
   const t = createInlineTranslator(language);
   const callRef = useRef<DailyCall | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const joinedRef = useRef(false);
   const conversationIdRef = useRef<string>("");
+  const roomUrlRef = useRef<string>("");
+  const meetingTokenRef = useRef<string>("");
   const activePalNameRef = useRef<string>("");
   const startGenerationRef = useRef(0);
   const startingRef = useRef(false);
+  const joiningRef = useRef(false);
+  // False once camera acquisition failed; join() then passes startVideoOff so
+  // a busy camera (Zoom, NVIDIA Broadcast…) cannot block the call.
+  const cameraAvailableRef = useRef(true);
+  const deviceOperationRef = useRef(false);
+  const [isCheckingDevices, setIsCheckingDevices] = useState(false);
   const autoLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeSubtitleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Highest interaction-event seq processed; older arrivals are stale.
   const lastSeqRef = useRef<number>(-Infinity);
+  const statusRef = useRef<TavusConversationStatus>("idle");
   const [status, setStatus] = useState<TavusConversationStatus>("idle");
+  const updateStatus = useCallback((next: TavusConversationStatus) => {
+    statusRef.current = next;
+    setStatus(next);
+  }, []);
   const [errorMessage, setErrorMessage] = useState("");
+  const [cameraError, setCameraError] = useState("");
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -319,6 +389,72 @@ export default function useTavusConversation({
   const [transcripts, setTranscripts] = useState<SubtitleItem[]>([]);
   const [activeSubtitle, setActiveSubtitle] = useState<SubtitleItem | null>(null);
   const [showSubtitles, setShowSubtitles] = useState(true);
+  const [localVideoTrack, setLocalVideoTrack] = useState<MediaStreamTrack | null>(null);
+  const [localScreenTrack, setLocalScreenTrack] = useState<MediaStreamTrack | null>(null);
+  const [remoteVideoTrack, setRemoteVideoTrack] = useState<MediaStreamTrack | null>(null);
+  const [remoteAudioTrack, setRemoteAudioTrack] = useState<MediaStreamTrack | null>(null);
+  const [remoteScreenAudioTrack, setRemoteScreenAudioTrack] = useState<MediaStreamTrack | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
+  const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState("");
+  const [selectedMicrophoneId, setSelectedMicrophoneId] = useState("");
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+
+  // Re-read participants() and mirror the track states we render ourselves.
+  // Runs on every track/participant lifecycle event.
+  const syncTracks = useCallback(() => {
+    const call = callRef.current;
+    if (!call || typeof call.participants !== "function") return;
+    let participants: Record<string, any> = {};
+    try {
+      participants = (call.participants() as Record<string, any>) || {};
+    } catch {
+      return;
+    }
+    const values = Object.values(participants);
+    const local = participants.local ?? values.find((participant) => participant?.local);
+    const remote = values.find((participant) => participant && !participant.local);
+    const visibleTrack = (state: { state?: string; track?: MediaStreamTrack; persistentTrack?: MediaStreamTrack } | undefined, localTrack = false) =>
+      state && (!state.state || state.state === "playable" || (localTrack && state.state === "sendable"))
+        ? state.track ?? state.persistentTrack ?? null
+        : null;
+    setLocalVideoTrack(visibleTrack(local?.tracks?.video, true));
+    setLocalScreenTrack(visibleTrack(local?.tracks?.screenVideo, true));
+    setRemoteVideoTrack(visibleTrack(remote?.tracks?.video));
+    setRemoteAudioTrack(visibleTrack(remote?.tracks?.audio));
+    setRemoteScreenAudioTrack(visibleTrack(remote?.tracks?.screenAudio));
+  }, []);
+
+  // Returns the enumerated lists so callers can act on them immediately —
+  // the state updates above are not committed synchronously.
+  const refreshDevices = useCallback(async (): Promise<{
+    cameras: MediaDeviceInfo[];
+    microphones: MediaDeviceInfo[];
+    speakers: MediaDeviceInfo[];
+  } | null> => {
+    const call = callRef.current;
+    if (!call || typeof call.enumerateDevices !== "function") return null;
+    try {
+      const result = await call.enumerateDevices();
+      if (callRef.current !== call) return null;
+      const list: MediaDeviceInfo[] = Array.isArray(result?.devices) ? result.devices : [];
+      const nextCameras = list.filter((device) => device.kind === "videoinput");
+      const nextMicrophones = list.filter((device) => device.kind === "audioinput");
+      const nextSpeakers = list.filter((device) => device.kind === "audiooutput");
+      setCameras(nextCameras);
+      setMicrophones(nextMicrophones);
+      setSpeakers(nextSpeakers);
+      // Drop selections whose device disappeared (unplugged camera etc.).
+      setSelectedCameraId((prev) => (prev && nextCameras.some((d) => d.deviceId === prev) ? prev : ""));
+      setSelectedMicrophoneId((prev) => (prev && nextMicrophones.some((d) => d.deviceId === prev) ? prev : ""));
+      setSelectedSpeakerId((prev) => (prev && nextSpeakers.some((d) => d.deviceId === prev) ? prev : ""));
+      return { cameras: nextCameras, microphones: nextMicrophones, speakers: nextSpeakers };
+    } catch {
+      // Device enumeration is best-effort; the selects stay empty.
+      return null;
+    }
+  }, []);
 
   const toggleMute = useCallback(() => {
     const call = callRef.current;
@@ -356,10 +492,6 @@ export default function useTavusConversation({
     }
   }, [isSharingScreen]);
 
-  const attachVideoContainer = useCallback((node: HTMLDivElement | null) => {
-    containerRef.current = node;
-  }, []);
-
   const clearAutoLeaveTimer = useCallback(() => {
     if (autoLeaveTimerRef.current) {
       clearTimeout(autoLeaveTimerRef.current);
@@ -392,14 +524,20 @@ export default function useTavusConversation({
     }
     const call = callRef.current;
     callRef.current = null;
-    if (!call) {
-      return;
+    if (call) {
+      try {
+        call.stopLocalAudioLevelObserver();
+      } catch {}
+      try {
+        void Promise.resolve(call.destroy()).catch(() => {});
+      } catch {
+        // The call may already be gone during page teardown.
+      }
     }
-    try {
-      void Promise.resolve(call.destroy()).catch(() => {});
-    } catch {
-      // The frame may already be gone with the unmounted container.
-    }
+    cameraAvailableRef.current = true;
+    deviceOperationRef.current = false;
+    setIsCheckingDevices(false);
+    joinedRef.current = false;
     setLocalAudioLevel(0);
     setIsMuted(false);
     setIsVideoOff(false);
@@ -407,15 +545,24 @@ export default function useTavusConversation({
     setIsPalSpeaking(false);
     setCallDuration(0);
     setActiveSubtitle(null);
+    setLocalVideoTrack(null);
+    setLocalScreenTrack(null);
+    setRemoteVideoTrack(null);
+    setRemoteAudioTrack(null);
+    setRemoteScreenAudioTrack(null);
+    setCameraError("");
   }, [clearAutoLeaveTimer, clearDurationTimer]);
 
   const leave = useCallback(() => {
     startGenerationRef.current += 1;
     startingRef.current = false;
+    joiningRef.current = false;
     const call = callRef.current;
     const conversationId = conversationIdRef.current;
     conversationIdRef.current = "";
-    if (call) {
+    roomUrlRef.current = "";
+    meetingTokenRef.current = "";
+    if (call && joinedRef.current) {
       try {
         void Promise.resolve(call.leave()).catch(() => {});
       } catch {
@@ -424,8 +571,23 @@ export default function useTavusConversation({
     }
     teardownCall();
     endConversationUpstream(conversationId);
-    setStatus((prev) => (prev === "idle" ? prev : "ended"));
-  }, [endConversationUpstream, teardownCall]);
+    const wasActive = statusRef.current !== "idle";
+    updateStatus(wasActive ? "ended" : "idle");
+  }, [endConversationUpstream, teardownCall, updateStatus]);
+
+  // Back out of the prejoin screen without starting a call.
+  const cancelPrejoin = useCallback(() => {
+    startGenerationRef.current += 1;
+    startingRef.current = false;
+    joiningRef.current = false;
+    const conversationId = conversationIdRef.current;
+    conversationIdRef.current = "";
+    roomUrlRef.current = "";
+    meetingTokenRef.current = "";
+    teardownCall();
+    endConversationUpstream(conversationId);
+    updateStatus("idle");
+  }, [endConversationUpstream, teardownCall, updateStatus]);
 
   // Fires after the last remote participant (the PAL) leaves, so a stray
   // network blip does not kill a call that is about to resume. Shared by the
@@ -457,9 +619,13 @@ export default function useTavusConversation({
     activePalNameRef.current = params.palName?.trim() || "";
     const generation = ++startGenerationRef.current;
     lastSeqRef.current = -Infinity;
+    joinedRef.current = false;
+    setCallDuration(0);
     setIsPalSpeaking(false);
+    setActiveSubtitle(null);
     setErrorMessage("");
-    setStatus("creating");
+    setCameraError("");
+    updateStatus("creating");
     try {
       const conversation = await createTavusConversation({
         palId: params.palId,
@@ -473,41 +639,17 @@ export default function useTavusConversation({
         return;
       }
       conversationIdRef.current = conversation.conversation_id;
-      setStatus("joining");
+      roomUrlRef.current = conversation.conversation_url;
+      meetingTokenRef.current = conversation.meeting_token?.trim() || "";
 
-      // Dynamic import keeps daily-js (and its WebRTC stack) out of the
-      // main bundle; the video page is lazy-loaded on its own. The frame
-      // is sized by the .vsPalVideoHost iframe CSS rules.
+      // Headless mode: no Daily iframe, so no English prebuilt UI. We render
+      // the video ourselves and show our own Chinese device-check screen.
+      // Dynamic import keeps daily-js (and its WebRTC stack) out of the main
+      // bundle; the video page is lazy-loaded on its own.
       const Daily = (await import("@daily-co/daily-js")).default;
       if (generation !== startGenerationRef.current) return;
-      const parent = containerRef.current ?? undefined;
-      const frame = parent
-        ? Daily.createFrame(parent, {
-            showLeaveButton: false,
-            showFullscreenButton: false,
-            showUserNameChangeUI: false,
-            theme: {
-              colors: {
-                accent: "#6366f1",
-                accentText: "#ffffff",
-                background: "#0f172a",
-                backgroundAccent: "#1e293b",
-                baseText: "#f8fafc",
-                border: "#334155",
-                mainAreaBg: "#0b0f19",
-                mainAreaBgAccent: "#0f172a",
-                mainAreaText: "#f8fafc",
-                supportiveText: "#94a3b8",
-              },
-            },
-            iframeStyle: {
-              width: "100%",
-              height: "100%",
-              border: "0",
-            },
-          })
-        : Daily.createFrame();
-      callRef.current = frame;
+      const call = Daily.createCallObject();
+      callRef.current = call;
 
       const handleIncomingSubtitle = (rawEventData: any) => {
         const localSessionId = callRef.current?.participants()?.local?.session_id;
@@ -618,36 +760,76 @@ export default function useTavusConversation({
         }
       };
 
-      frame.on("joined-meeting", () => {
+      call.on("joined-meeting", () => {
         if (generation !== startGenerationRef.current) return;
-        setStatus("connected");
-        setCallDuration(0);
+        joinedRef.current = true;
+        updateStatus("connected");
         clearDurationTimer();
         durationTimerRef.current = setInterval(() => {
           setCallDuration((prev) => prev + 1);
         }, 1000);
       });
-      frame.on("left-meeting", () => {
+      call.on("left-meeting", () => {
         if (generation === startGenerationRef.current) leave();
       });
-      frame.on("error", (event: DailyEventObject) => {
-        const message = (event as { errorMsg?: string }).errorMsg || "";
-        if (message) {
-          setErrorMessage(message);
-        }
+      call.on("error", (event: DailyEventObject) => {
+        if (generation !== startGenerationRef.current) return;
+        const message = (event as { error?: { msg?: string }; errorMsg?: string }).error?.msg ||
+          (event as { errorMsg?: string }).errorMsg || "";
+        if (message) setErrorMessage(message);
       });
-      frame.on("local-audio-level" as any, (event: any) => {
-        if (typeof event?.audioLevel === "number") {
+      call.on("camera-error", (event: any) => {
+        if (generation !== startGenerationRef.current) return;
+        const info = event?.errorMsg || {};
+        const blockedMedia: string[] = event?.error?.blockedMedia || [];
+        const missingMedia: string[] = event?.error?.missingMedia || [];
+        const failureType = String(event?.error?.type || "");
+        const videoFailed = info.videoOk === false ||
+          blockedMedia.includes("video") || missingMedia.includes("video") ||
+          /cam|video/i.test(failureType) ||
+          /camera|video/i.test(String(info.errorMsg || ""));
+        if (info.audioOk === false || blockedMedia.includes("audio") || missingMedia.includes("audio") || /mic/i.test(failureType)) {
+          setErrorMessage(t("无法访问麦克风，请检查系统权限或关闭占用麦克风的应用。", "Could not access the microphone. Check permissions or close other apps using it."));
+        }
+        if (!videoFailed) return;
+        cameraAvailableRef.current = false;
+        setCameraError(
+          t(
+            "无法访问摄像头。它可能正被其他应用（如 Zoom、Teams 或 NVIDIA Broadcast）占用。你可以关闭那些应用后重试，或不使用摄像头加入。",
+            "Could not access the camera. It may be in use by another app (e.g. Zoom, Teams, or NVIDIA Broadcast). Close those apps and retry, or join without the camera."
+          )
+        );
+      });
+      call.on("started-camera", () => {
+        if (generation !== startGenerationRef.current) return;
+        const video = call.participants()?.local?.tracks?.video;
+        if (video?.state === "blocked" || (!video?.track && !video?.persistentTrack)) return;
+        cameraAvailableRef.current = true;
+        setCameraError("");
+        syncTracks();
+        void refreshDevices();
+      });
+      call.on("available-devices-updated", () => {
+        if (generation === startGenerationRef.current) void refreshDevices();
+      });
+      call.on("local-audio-level" as any, (event: any) => {
+        if (generation === startGenerationRef.current && typeof event?.audioLevel === "number") {
           setLocalAudioLevel(event.audioLevel);
         }
       });
-      frame.on("app-message", (event: any) => {
-        handleIncomingAppMessage(event?.data ?? event?.message ?? event);
+      call.on("app-message", (event: any) => {
+        if (generation === startGenerationRef.current) {
+          handleIncomingAppMessage(event?.data ?? event?.message ?? event);
+        }
       });
-      frame.on("transcription-message" as any, (event: any) => {
-        handleIncomingSubtitle(event);
+      call.on("transcription-message" as any, (event: any) => {
+        if (generation === startGenerationRef.current) handleIncomingSubtitle(event);
       });
-      frame.on("participant-updated", (event: any) => {
+      call.on("participant-joined", () => {
+        if (generation === startGenerationRef.current) syncTracks();
+      });
+      call.on("participant-updated", (event: any) => {
+        if (generation !== startGenerationRef.current) return;
         if (event?.participant?.local) {
           if (typeof event.participant.audio === "boolean") {
             setIsMuted(!event.participant.audio);
@@ -659,40 +841,256 @@ export default function useTavusConversation({
             setIsSharingScreen(event.participant.screen);
           }
         }
+        syncTracks();
       });
-      frame.on("participant-left", () => {
+      call.on("track-started", () => {
+        if (generation === startGenerationRef.current) syncTracks();
+      });
+      call.on("track-stopped", () => {
+        if (generation === startGenerationRef.current) syncTracks();
+      });
+      call.on("participant-left", () => {
         if (generation !== startGenerationRef.current) return;
+        syncTracks();
         scheduleAutoLeaveWhenAlone();
       });
 
-      // Private rooms (require_auth) issue a meeting token that must be
-      // passed as the join token; public rooms join by URL alone.
-      const meetingToken = conversation.meeting_token?.trim();
-      const joinParams: Record<string, any> = {
-        url: conversation.conversation_url,
-        userName: "Echo User",
-      };
-      if (meetingToken) {
-        joinParams.token = meetingToken;
+      // Check camera and microphone before showing the join button, so the
+      // user cannot join while permission or a device switch is pending.
+      try {
+        await call.startCamera();
+      } catch {
+        // The camera-error event carries specifics; if it never fired, fall
+        // back to a generic message so the user can still join audio-only.
+        if (generation === startGenerationRef.current && cameraAvailableRef.current) {
+          cameraAvailableRef.current = false;
+          setCameraError(
+            t(
+              "无法打开摄像头或麦克风，请检查系统权限设置。你也可以不使用摄像头加入。",
+              "Could not open the camera or microphone. Check system permissions, or join without the camera."
+            )
+          );
+        }
       }
-      await frame.join(joinParams);
-      if (generation === startGenerationRef.current) setStatus("connected");
+      if (generation !== startGenerationRef.current) return;
+      const deviceLists = await refreshDevices();
+      if (generation !== startGenerationRef.current) return;
+      // Some browser/device failures do not reject startCamera. Read the
+      // participant's track status as a fallback for camera-error events.
+      const localCamera = call.participants()?.local?.tracks?.video;
+      if (localCamera?.state === "blocked" && !localCamera.track && !localCamera.persistentTrack && cameraAvailableRef.current) {
+        cameraAvailableRef.current = false;
+        setCameraError(t("摄像头不可用。请检查权限、关闭占用摄像头的应用，或不使用摄像头加入。", "Camera unavailable. Check permissions, close other apps using it, or join without camera."));
+      }
+      syncTracks();
+      const prefs = loadDevicePrefs();
+      if (deviceLists) {
+        const inputSelection: { videoDeviceId?: string; audioDeviceId?: string } = {};
+        if (prefs.camera && deviceLists.cameras.some((d) => d.deviceId === prefs.camera)) {
+          inputSelection.videoDeviceId = prefs.camera;
+          setSelectedCameraId(prefs.camera);
+        }
+        if (prefs.microphone && deviceLists.microphones.some((d) => d.deviceId === prefs.microphone)) {
+          inputSelection.audioDeviceId = prefs.microphone;
+          setSelectedMicrophoneId(prefs.microphone);
+        }
+        if (Object.keys(inputSelection).length > 0) {
+          try {
+            await call.setInputDevicesAsync(inputSelection);
+          } catch {
+            // The device may have become unavailable between enumeration and selection.
+          }
+        }
+        if (prefs.speaker && deviceLists.speakers.some((d) => d.deviceId === prefs.speaker)) {
+          try {
+            await call.setOutputDeviceAsync({ outputDeviceId: prefs.speaker });
+            setSelectedSpeakerId(prefs.speaker);
+          } catch {
+            // Keep the system default output when a saved speaker disappeared.
+          }
+        }
+      }
+      if (generation !== startGenerationRef.current) return;
+      syncTracks();
+      updateStatus("prejoin");
     } catch (error) {
       if (generation !== startGenerationRef.current) return;
       // Billing starts when the conversation is created, so a conversation
       // that was created but never joined must be ended upstream as well.
       const orphanedConversationId = conversationIdRef.current;
       conversationIdRef.current = "";
+      roomUrlRef.current = "";
+      meetingTokenRef.current = "";
       teardownCall();
       endConversationUpstream(orphanedConversationId);
-      setStatus("idle");
+      updateStatus("idle");
       setErrorMessage(
         formatErrorMessage(error, t("无法开始视频通话。", "Could not start the video conversation."))
       );
     } finally {
       if (generation === startGenerationRef.current) startingRef.current = false;
     }
-  }, [clearAutoLeaveTimer, clearDurationTimer, endConversationUpstream, formatErrorMessage, leave, scheduleAutoLeaveWhenAlone, t, teardownCall]);
+  }, [clearAutoLeaveTimer, clearDurationTimer, endConversationUpstream, formatErrorMessage, leave, scheduleAutoLeaveWhenAlone, t, teardownCall, updateStatus]);
+
+  const join = useCallback(async (options: { videoOff?: boolean } = {}) => {
+    const call = callRef.current;
+    if (!call || statusRef.current !== "prejoin" || joiningRef.current || joinedRef.current || deviceOperationRef.current) {
+      return;
+    }
+    const url = roomUrlRef.current;
+    if (!url) {
+      return;
+    }
+    joiningRef.current = true;
+    const generation = startGenerationRef.current;
+    setErrorMessage("");
+    updateStatus("joining");
+    try {
+      const joinParams: Record<string, any> = {
+        url,
+        userName: "Echo User",
+      };
+      if (meetingTokenRef.current) {
+        joinParams.token = meetingTokenRef.current;
+      }
+      if (options.videoOff || !cameraAvailableRef.current) {
+        joinParams.startVideoOff = true;
+      }
+      await call.startLocalAudioLevelObserver(100).catch(() => {});
+      await call.join(joinParams);
+      if (generation === startGenerationRef.current) {
+        joinedRef.current = true;
+        updateStatus("connected");
+      }
+    } catch (error) {
+      if (generation !== startGenerationRef.current) return;
+      const orphanedConversationId = conversationIdRef.current;
+      conversationIdRef.current = "";
+      roomUrlRef.current = "";
+      meetingTokenRef.current = "";
+      teardownCall();
+      endConversationUpstream(orphanedConversationId);
+      updateStatus("idle");
+      setErrorMessage(
+        formatErrorMessage(error, t("无法接入视频通话。", "Could not join the video conversation."))
+      );
+    } finally {
+      joiningRef.current = false;
+    }
+  }, [endConversationUpstream, formatErrorMessage, t, teardownCall, updateStatus]);
+
+  const retryCamera = useCallback(async () => {
+    const call = callRef.current;
+    if (!call || statusRef.current !== "prejoin" || deviceOperationRef.current) return;
+    const generation = startGenerationRef.current;
+    deviceOperationRef.current = true;
+    setIsCheckingDevices(true);
+    cameraAvailableRef.current = true;
+    try {
+      await call.startCamera();
+      if (generation !== startGenerationRef.current) return;
+      const video = call.participants()?.local?.tracks?.video;
+      if (video?.state === "blocked" || !cameraAvailableRef.current) {
+        cameraAvailableRef.current = false;
+        setCameraError(t("摄像头仍不可用，请检查权限或关闭占用它的应用。", "Camera is still unavailable. Check permissions or close the app using it."));
+      } else if (video && !video.track && !video.persistentTrack) {
+        cameraAvailableRef.current = false;
+        setCameraError(t("摄像头画面未就绪。请重试，或不使用摄像头加入。", "Camera preview is not ready. Retry or join without camera."));
+      } else {
+        cameraAvailableRef.current = true;
+        setCameraError("");
+      }
+      syncTracks();
+      await refreshDevices();
+    } catch {
+      if (generation === startGenerationRef.current) {
+        cameraAvailableRef.current = false;
+        setCameraError(t("摄像头仍不可用，请检查权限或关闭占用它的应用。", "Camera is still unavailable. Check permissions or close the app using it."));
+      }
+    } finally {
+      if (generation === startGenerationRef.current) {
+        deviceOperationRef.current = false;
+        setIsCheckingDevices(false);
+      }
+    }
+  }, [refreshDevices, syncTracks, t]);
+
+  const selectCamera = useCallback(async (deviceId: string) => {
+    const call = callRef.current;
+    if (!call || statusRef.current !== "prejoin" || deviceOperationRef.current) return;
+    const generation = startGenerationRef.current;
+    deviceOperationRef.current = true;
+    setIsCheckingDevices(true);
+    cameraAvailableRef.current = true;
+    try {
+      await call.setInputDevicesAsync({ videoDeviceId: deviceId || null });
+      if (generation !== startGenerationRef.current) return;
+      const video = call.participants()?.local?.tracks?.video;
+      if (video?.state === "blocked" || (video && !video.track && !video.persistentTrack) || !cameraAvailableRef.current) throw new Error("Camera blocked");
+      setSelectedCameraId(deviceId);
+      saveDevicePrefs({ camera: deviceId });
+      cameraAvailableRef.current = true;
+      setCameraError("");
+      syncTracks();
+    } catch {
+      if (generation === startGenerationRef.current) {
+        cameraAvailableRef.current = false;
+        setCameraError(t("无法切换到所选摄像头，请尝试其他设备。", "Could not switch to the selected camera. Try another device."));
+      }
+    } finally {
+      if (generation === startGenerationRef.current) {
+        deviceOperationRef.current = false;
+        setIsCheckingDevices(false);
+      }
+    }
+  }, [syncTracks, t]);
+
+  const selectMicrophone = useCallback(async (deviceId: string) => {
+    const call = callRef.current;
+    if (!call || statusRef.current !== "prejoin" || deviceOperationRef.current) return;
+    const generation = startGenerationRef.current;
+    deviceOperationRef.current = true;
+    setIsCheckingDevices(true);
+    try {
+      await call.setInputDevicesAsync({ audioDeviceId: deviceId || null });
+      if (generation !== startGenerationRef.current) return;
+      setSelectedMicrophoneId(deviceId);
+      saveDevicePrefs({ microphone: deviceId });
+      syncTracks();
+    } catch {
+      if (generation === startGenerationRef.current) {
+        setErrorMessage(t("无法切换到所选麦克风，请尝试其他设备。", "Could not switch to the selected microphone. Try another device."));
+      }
+    } finally {
+      if (generation === startGenerationRef.current) {
+        deviceOperationRef.current = false;
+        setIsCheckingDevices(false);
+      }
+    }
+  }, [syncTracks, t]);
+
+  const selectSpeaker = useCallback(async (deviceId: string) => {
+    const call = callRef.current;
+    if (!call || statusRef.current !== "prejoin" || deviceOperationRef.current) return;
+    const generation = startGenerationRef.current;
+    deviceOperationRef.current = true;
+    setIsCheckingDevices(true);
+    try {
+      await call.setOutputDeviceAsync({ outputDeviceId: deviceId || "default" });
+      if (generation !== startGenerationRef.current) return;
+      setSelectedSpeakerId(deviceId);
+      saveDevicePrefs({ speaker: deviceId });
+    } catch {
+      if (generation === startGenerationRef.current) {
+        setErrorMessage(t("无法切换到所选扬声器，请尝试其他设备。", "Could not switch to the selected speaker. Try another device."));
+      }
+    } finally {
+      if (generation === startGenerationRef.current) {
+        deviceOperationRef.current = false;
+        setIsCheckingDevices(false);
+      }
+    }
+  }, [t]);
 
   const clearError = useCallback(() => {
     setErrorMessage("");
@@ -711,6 +1109,7 @@ export default function useTavusConversation({
     return () => {
       startGenerationRef.current += 1;
       startingRef.current = false;
+      joiningRef.current = false;
       const conversationId = conversationIdRef.current;
       conversationIdRef.current = "";
       teardownCall();
@@ -740,8 +1139,26 @@ export default function useTavusConversation({
     toggleMute,
     toggleVideo,
     toggleScreenShare,
-    attachVideoContainer,
+    localVideoTrack,
+    localScreenTrack,
+    remoteVideoTrack,
+    remoteAudioTrack,
+    remoteScreenAudioTrack,
+    cameras,
+    microphones,
+    speakers,
+    selectedCameraId,
+    selectedMicrophoneId,
+    selectedSpeakerId,
+    cameraError,
+    isCheckingDevices,
+    retryCamera,
+    selectCamera,
+    selectMicrophone,
+    selectSpeaker,
     start,
+    join,
+    cancelPrejoin,
     leave,
     clearError,
   };
