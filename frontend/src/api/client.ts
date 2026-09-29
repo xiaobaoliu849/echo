@@ -438,6 +438,15 @@ export async function ensureEverMemConversationGroupId(
 const TAVUS_API_KEY_STORAGE_KEY = "tavus_api_key";
 const TAVUS_PAL_ID_STORAGE_KEY = "tavus_pal_id";
 
+// In-memory catalog cache for PAL/face lists. The face grid can be large
+// (100+ entries with thumbnail URLs); caching it avoids a Tavus round-trip
+// on every PalPage mount and lets the face picker render immediately on
+// re-visits within the same session.
+const TAVUS_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+type CatalogCacheEntry<T> = { expiresAt: number; data: T };
+const _tavusPalsCache = new Map<string, CatalogCacheEntry<TavusPalListResponse>>();
+const _tavusFacesCache = new Map<string, CatalogCacheEntry<TavusFaceListResponse>>();
+
 export function getPersistedTavusApiKey(): string {
   return safeStorageGet(TAVUS_API_KEY_STORAGE_KEY).trim();
 }
@@ -481,6 +490,11 @@ function buildTavusHeaders(): Record<string, string> {
 }
 
 export async function listTavusPals(): Promise<TavusPalListResponse> {
+  const cacheKey = getPersistedTavusApiKey();
+  const cached = _tavusPalsCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.data;
+  }
   const response = await apiFetch(`${API_BASE_URL}/api/tavus/pals`, {
     headers: buildTavusHeaders(),
   });
@@ -489,7 +503,7 @@ export async function listTavusPals(): Promise<TavusPalListResponse> {
   }
   const payload = (await response.json()) as Partial<TavusPalListResponse>;
   const pals = Array.isArray(payload.pals) ? payload.pals : [];
-  return {
+  const result: TavusPalListResponse = {
     pals: pals
       .filter((item): item is TavusPalSummary => Boolean(item && item.pal_id))
       .map((item) => ({
@@ -498,9 +512,16 @@ export async function listTavusPals(): Promise<TavusPalListResponse> {
         default_face_id: item.default_face_id || null,
       })),
   };
+  _tavusPalsCache.set(cacheKey, { expiresAt: Date.now() + TAVUS_CATALOG_CACHE_TTL_MS, data: result });
+  return result;
 }
 
 export async function listTavusFaces(): Promise<TavusFaceListResponse> {
+  const cacheKey = getPersistedTavusApiKey();
+  const cached = _tavusFacesCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.data;
+  }
   const response = await apiFetch(`${API_BASE_URL}/api/tavus/faces`, {
     headers: buildTavusHeaders(),
   });
@@ -509,7 +530,7 @@ export async function listTavusFaces(): Promise<TavusFaceListResponse> {
   }
   const payload = (await response.json()) as Partial<TavusFaceListResponse>;
   const faces = Array.isArray(payload.faces) ? payload.faces : [];
-  return {
+  const result: TavusFaceListResponse = {
     faces: faces
       .filter((item): item is TavusFaceSummary => Boolean(item && item.face_id))
       .map((item) => ({
@@ -521,6 +542,8 @@ export async function listTavusFaces(): Promise<TavusFaceListResponse> {
         thumbnail_video_url: item.thumbnail_video_url || null,
       })),
   };
+  _tavusFacesCache.set(cacheKey, { expiresAt: Date.now() + TAVUS_CATALOG_CACHE_TTL_MS, data: result });
+  return result;
 }
 
 export async function createTavusConversation(

@@ -11,11 +11,21 @@ backend attaches it here.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+# How long (seconds) to cache PAL/face list responses per API key.
+# These catalogs change rarely; caching them eliminates repeated Tavus round
+# trips on every PalPage mount, which noticeably speeds up the first render
+# and means the face grid is available before the user clicks "Start".
+_LIST_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+# module-level cache: {cache_key: (expires_at, items)}
+_list_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 DEFAULT_TAVUS_API_URL = "https://tavusapi.com"
 
@@ -40,8 +50,20 @@ class TavusService:
         }
 
     async def list_pals(self) -> list[dict[str, Any]]:
-        """Return all PAL pages, accepting legacy response envelopes too."""
-        return await self._list_items("/v2/pals", ("pals", "personas"))
+        """Return all PAL pages, accepting legacy response envelopes too.
+
+        Results are cached per API key for _LIST_CACHE_TTL_SECONDS so that
+        repeated PalPage mounts do not trigger a fresh Tavus network call on
+        every navigation.
+        """
+        cache_key = f"pals:{self.api_key}:{self.api_url}"
+        now = time.monotonic()
+        cached = _list_cache.get(cache_key)
+        if cached and now < cached[0]:
+            return list(cached[1])
+        items = await self._list_items("/v2/pals", ("pals", "personas"))
+        _list_cache[cache_key] = (now + _LIST_CACHE_TTL_SECONDS, items)
+        return items
 
     async def create_conversation(
         self,
@@ -82,8 +104,18 @@ class TavusService:
         return data
 
     async def list_faces(self) -> list[dict[str, Any]]:
-        """Return the account's faces (Phoenix-trained video personas, e.g. phoenix-4.5)."""
-        return await self._list_items("/v2/faces", ("faces", "replicas"))
+        """Return the account's faces (Phoenix-trained video personas, e.g. phoenix-4.5).
+
+        Results are cached per API key for _LIST_CACHE_TTL_SECONDS.
+        """
+        cache_key = f"faces:{self.api_key}:{self.api_url}"
+        now = time.monotonic()
+        cached = _list_cache.get(cache_key)
+        if cached and now < cached[0]:
+            return list(cached[1])
+        items = await self._list_items("/v2/faces", ("faces", "replicas"))
+        _list_cache[cache_key] = (now + _LIST_CACHE_TTL_SECONDS, items)
+        return items
 
     async def _list_items(self, path: str, aliases: tuple[str, ...]) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
