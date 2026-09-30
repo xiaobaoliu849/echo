@@ -299,6 +299,36 @@ describe("useTavusConversation", () => {
     expect(call.setOutputDeviceAsync).toHaveBeenCalledWith({ outputDeviceId: "speaker-2" });
   });
 
+  it.each(["leave", "unmount"])("archives the latest transcript exactly once on %s", async (endMode) => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "archive-call", conversation_url: "https://tavus.daily.co/archive-call",
+    });
+    const call = createCallMock();
+    const onConversationEnded = vi.fn();
+    dailyMocks.createCallObject.mockReturnValue(call);
+    const { result, unmount } = renderHook(() => useTavusConversation({
+      formatErrorMessage: formatErrorStub, onConversationEnded,
+    }));
+    await act(async () => { await result.current.start({ palName: "Mia" }); await result.current.join(); });
+    act(() => {
+      getEventHandler(call, "app-message")({ data: {
+        event_type: "conversation.utterance.streaming", properties: { role: "pal", text: "Final unfinished reply" },
+      } });
+      // End in the same batch, before React has rendered the last text update.
+      if (endMode === "leave") result.current.leave();
+      else unmount();
+    });
+    expect(onConversationEnded).toHaveBeenCalledOnce();
+    expect(onConversationEnded).toHaveBeenCalledWith(
+      [expect.objectContaining({ text: "Final unfinished reply", isFinal: false })], "Mia", "archive-call",
+    );
+    if (endMode === "leave") {
+      act(() => { result.current.leave(); });
+      unmount();
+      expect(onConversationEnded).toHaveBeenCalledOnce();
+    }
+  });
+
   it("does not join while the prejoin camera check is pending", async () => {
     vi.mocked(createTavusConversation).mockResolvedValue({
       conversation_id: "pending-camera",

@@ -29,29 +29,22 @@ const AudioOverviewPage = lazyWithRetry(() => import("./pages/AudioOverviewPage"
 const ChatPage = lazyWithRetry(() => import("./pages/ChatPage"));
 const PalPage = lazyWithRetry(() => import("./pages/PalPage"));
 const VoiceCenterPage = lazyWithRetry(() => import("./pages/VoiceCenterPage"));
-import { I18nProvider, createInlineTranslator, localizeText, type UiLanguage } from "./i18n";
+import { I18nProvider, createInlineTranslator } from "./i18n";
 import { formatErrorMessage } from "./utils/errorFormatting";
 import type { SubtitleItem } from "./hooks/useTavusConversation";
 
-type ConversationArchiveEntry = {
-  id: string;
-  content: string;
-  chatMessages: ChatMessage[];
-  voiceMessages: ChatMessage[];
-  chatGroupId: string;
-  voiceGroupId: string;
-  updatedAt: number;
-};
+import {
+  areArchiveEntriesEquivalent,
+  areArchiveEntriesSameConversationContent,
+  areArchiveTitlesDuplicate,
+  areMessageListsEqual,
+  buildConversationHistoryEntry,
+  normalizeConversationHistory,
+  preserveConversationArchive,
+  type ConversationArchiveEntry,
+} from "./utils/conversationHistory";
 
 const CONVERSATION_HISTORY_STORAGE_KEY = "vs_conversation_history";
-const MAX_CONVERSATION_HISTORY = 30;
-
-function createLocalArchiveId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 function loadConversationHistory(): ConversationArchiveEntry[] {
   try {
@@ -72,107 +65,6 @@ function saveConversationHistory(entries: ConversationArchiveEntry[]): void {
   } catch {
     // Ignore storage failures in browser-restricted contexts.
   }
-}
-
-function firstMeaningfulMessage(messages: ChatMessage[]): string {
-  const preferred = messages.find((item) => item.role === "user" && item.content.trim());
-  if (preferred) {
-    return preferred.content.trim();
-  }
-  const fallback = messages.find((item) => item.content.trim());
-  return fallback ? fallback.content.trim() : "";
-}
-
-function buildConversationHistoryEntry(params: {
-  chatMessages: ChatMessage[];
-  voiceMessages: ChatMessage[];
-  chatGroupId: string;
-  voiceGroupId: string;
-  language: UiLanguage;
-}): ConversationArchiveEntry | null {
-  const chatMessages = Array.isArray(params.chatMessages) ? params.chatMessages : [];
-  const voiceMessages = Array.isArray(params.voiceMessages) ? params.voiceMessages : [];
-  if (chatMessages.length === 0 && voiceMessages.length === 0) {
-    return null;
-  }
-
-  const baseText = firstMeaningfulMessage(chatMessages) || firstMeaningfulMessage(voiceMessages);
-  const preview = baseText.length > 30
-    ? `${baseText.slice(0, 30)}...`
-    : baseText || localizeText(params.language, "未命名会话", "Untitled Conversation");
-  const isVoiceOnly = chatMessages.length === 0 && voiceMessages.length > 0;
-  const label = isVoiceOnly
-    ? `${createInlineTranslator(params.language)("[语音]", "[Voice]")} ${preview}`
-    : preview;
-
-  return {
-    id: createLocalArchiveId(),
-    content: label,
-    chatMessages: chatMessages.map((item) => ({ ...item })),
-    voiceMessages: voiceMessages.map((item) => ({ ...item })),
-    chatGroupId: params.chatGroupId.trim(),
-    voiceGroupId: params.voiceGroupId.trim(),
-    updatedAt: Date.now(),
-  };
-}
-
-function areMessageListsEqual(left: ChatMessage[], right: ChatMessage[]): boolean {
-  if (left === right) return true;
-  if (left.length !== right.length) return false;
-  if (left.length === 0) return true;
-  // Fast path: compare last message (changes most often during streaming)
-  // and first message (cheap identity check) before falling back to full compare.
-  const lastL = left[left.length - 1];
-  const lastR = right[right.length - 1];
-  if (lastL.content !== lastR.content || lastL.role !== lastR.role) return false;
-  if (left.length === 1) return true;
-  const firstL = left[0];
-  const firstR = right[0];
-  if (firstL.content !== firstR.content || firstL.role !== firstR.role) return false;
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function areArchiveEntriesEquivalent(
-  left: ConversationArchiveEntry | null,
-  right: ConversationArchiveEntry | null
-): boolean {
-  if (!left || !right) {
-    return false;
-  }
-  return (
-    left.chatGroupId === right.chatGroupId &&
-    left.voiceGroupId === right.voiceGroupId &&
-    areMessageListsEqual(left.chatMessages, right.chatMessages) &&
-    areMessageListsEqual(left.voiceMessages, right.voiceMessages)
-  );
-}
-
-function areArchiveEntriesSameConversationContent(
-  left: ConversationArchiveEntry | null,
-  right: ConversationArchiveEntry | null
-): boolean {
-  if (!left || !right) {
-    return false;
-  }
-  return (
-    areMessageListsEqual(left.chatMessages, right.chatMessages) &&
-    areMessageListsEqual(left.voiceMessages, right.voiceMessages)
-  );
-}
-
-function normalizeConversationHistory(entries: ConversationArchiveEntry[]): ConversationArchiveEntry[] {
-  const normalized: ConversationArchiveEntry[] = [];
-  for (const entry of entries) {
-    const hasDuplicate = normalized.some((item) => (
-      item.content === entry.content ||
-      areArchiveEntriesEquivalent(item, entry) ||
-      areArchiveEntriesSameConversationContent(item, entry)
-    ));
-    if (!hasDuplicate) {
-      normalized.push(entry);
-    }
-  }
-  return normalized.slice(0, MAX_CONVERSATION_HISTORY);
 }
 
 function resolveVoiceCenterTab(activeTab: ActiveTab): "tts" | "design" | "clone" | "transcribe" {
@@ -199,7 +91,13 @@ export default function App() {
   const [conversationHistory, setConversationHistory] = useState<ConversationArchiveEntry[]>(
     () => normalizeConversationHistory(loadConversationHistory())
   );
+  const conversationHistoryRef = useRef(conversationHistory);
+  useEffect(() => {
+    saveConversationHistory(conversationHistory);
+  }, [conversationHistory]);
   const currentArchiveBaselineRef = useRef<ConversationArchiveEntry | null>(null);
+  const activeArchiveDeletedRef = useRef(false);
+  const archiveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDesktopEmbedded = typeof window !== "undefined" &&
     (window.isElectron === true || Object.prototype.hasOwnProperty.call(window, "pywebview"));
   const settings = useSettings({ formatErrorMessage });
@@ -311,35 +209,47 @@ export default function App() {
     return () => window.removeEventListener(AUTH_REJECTED_EVENT, handleAuthRejected);
   }, []);
 
+  function updateConversationHistory(update: (prev: ConversationArchiveEntry[]) => ConversationArchiveEntry[]) {
+    // Apply changes synchronously so a queued save cannot adopt a newly selected session.
+    const next = update(conversationHistoryRef.current);
+    conversationHistoryRef.current = next;
+    saveConversationHistory(next);
+    setConversationHistory(next);
+  }
+
+  function cancelPendingArchive() {
+    if (archiveTimerRef.current) {
+      clearTimeout(archiveTimerRef.current);
+      archiveTimerRef.current = null;
+    }
+  }
+
   function pushConversationHistory(entry: ConversationArchiveEntry | null) {
-    if (!entry) {
+    if (!entry || activeArchiveDeletedRef.current) return;
+    const baseline = currentArchiveBaselineRef.current;
+    const candidate = preserveConversationArchive(entry, baseline);
+    if (baseline && areArchiveEntriesEquivalent(candidate, baseline) && candidate.content === baseline.content) {
       return;
     }
-    setConversationHistory((prev) => {
-      const baseline = currentArchiveBaselineRef.current;
-      if (baseline && areArchiveEntriesEquivalent(entry, baseline)) {
-        return prev;
-      }
+    updateConversationHistory((prev) => {
       const duplicate = prev.find((item) => (
-        areArchiveEntriesEquivalent(item, entry) ||
-        areArchiveEntriesSameConversationContent(item, entry) ||
-        item.content === entry.content
+        areArchiveEntriesEquivalent(item, candidate) ||
+        areArchiveEntriesSameConversationContent(item, candidate) ||
+        areArchiveTitlesDuplicate(item, candidate)
       ));
       const nextEntry = baseline
-        ? { ...entry, id: baseline.id }
+        ? candidate
         : duplicate
-          ? { ...entry, id: duplicate.id }
-          : entry;
+          ? preserveConversationArchive(candidate, duplicate)
+          : candidate;
       const filtered = prev.filter((item) => (
         item.id !== nextEntry.id &&
         !areArchiveEntriesEquivalent(item, nextEntry) &&
         !areArchiveEntriesSameConversationContent(item, nextEntry) &&
-        item.content !== nextEntry.content
+        !areArchiveTitlesDuplicate(item, nextEntry)
       ));
-      const next = normalizeConversationHistory([nextEntry, ...filtered]);
-      saveConversationHistory(next);
       currentArchiveBaselineRef.current = nextEntry;
-      return next;
+      return normalizeConversationHistory([nextEntry, ...filtered]);
     });
   }
 
@@ -355,17 +265,14 @@ export default function App() {
     );
   }
 
-  const archiveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     // Debounce archiving to avoid per-delta localStorage writes during streaming.
-    if (archiveTimerRef.current) clearTimeout(archiveTimerRef.current);
+    cancelPendingArchive();
     archiveTimerRef.current = setTimeout(() => {
       archiveTimerRef.current = null;
       archiveActiveConversation();
     }, 500);
-    return () => {
-      if (archiveTimerRef.current) clearTimeout(archiveTimerRef.current);
-    };
+    return cancelPendingArchive;
   }, [
     chat.chatMessages,
     voiceChat.voiceChatArchiveMessages,
@@ -375,19 +282,23 @@ export default function App() {
   ]);
 
   function handleNewChatSession() {
+    cancelPendingArchive();
     archiveActiveConversation();
     currentArchiveBaselineRef.current = null;
+    activeArchiveDeletedRef.current = false;
     chat.onNewSession();
     voiceChat.onResetSession();
     setActiveTab("chat");
   }
 
   function handleHistorySelect(id: string) {
-    const target = normalizedConversationHistory.find((item) => item.id === id);
+    const target = conversationHistoryRef.current.find((item) => item.id === id);
     if (!target) {
       return;
     }
+    cancelPendingArchive();
     const sameAsCurrent =
+      currentArchiveBaselineRef.current?.id === target.id &&
       target.chatGroupId === chat.chatMemoryGroupId &&
       target.voiceGroupId === voiceChat.voiceChatMemoryGroupId &&
       areMessageListsEqual(target.chatMessages, chat.chatMessages) &&
@@ -396,32 +307,33 @@ export default function App() {
       archiveActiveConversation();
     }
     currentArchiveBaselineRef.current = target;
+    activeArchiveDeletedRef.current = false;
     setActiveTab("chat");
     chat.replaceSession(target.chatMessages, target.chatGroupId);
     voiceChat.replaceSession(target.voiceMessages, target.voiceGroupId);
   }
   function handleDeleteConversationHistoryItem(id: string) {
-    setConversationHistory((prev) => {
-      const next = prev.filter((item) => item.id !== id);
-      saveConversationHistory(next);
-      return next;
-    });
+    if (currentArchiveBaselineRef.current?.id === id) {
+      cancelPendingArchive();
+      activeArchiveDeletedRef.current = true;
+    }
+    updateConversationHistory((prev) => prev.filter((item) => item.id !== id));
   }
 
   function handleRenameConversationHistoryItem(id: string, newName: string) {
-    setConversationHistory((prev) => {
-      const next = prev.map((item) => item.id === id ? { ...item, content: newName } : item);
-      saveConversationHistory(next);
-      return next;
-    });
+    if (currentArchiveBaselineRef.current?.id === id) {
+      currentArchiveBaselineRef.current = {
+        ...currentArchiveBaselineRef.current, content: newName, titleCustomized: true,
+      };
+    }
+    updateConversationHistory((prev) => prev.map((item) => (
+      item.id === id ? { ...item, content: newName, titleCustomized: true } : item
+    )));
   }
 
-  function handlePalConversationEnded(transcripts: SubtitleItem[], palName?: string) {
-    if (transcripts.length === 0) return;
-    // Convert Tavus transcript items to ChatMessage[] for the sidebar history.
-    // The call is over, so include the trailing non-final item too: a PAL turn
-    // is only sealed isFinal when the next turn arrives, which never happens
-    // for the last message of a call (teardownCall doesn't seal it either).
+  function handlePalConversationEnded(transcripts: SubtitleItem[], palName: string, conversationId: string) {
+    if (!conversationId || transcripts.length === 0) return;
+    // Include the trailing non-final turn when the call ends.
     const nonEmpty = transcripts.filter((item) => item.text.trim());
     if (nonEmpty.length === 0) return;
     const voiceMessages: ChatMessage[] = nonEmpty.map((item) => ({
@@ -434,15 +346,19 @@ export default function App() {
     const firstUserText = nonEmpty.find((item) => item.speaker === "user")?.text || nonEmpty[0].text;
     const preview = firstUserText.length > 30 ? `${firstUserText.slice(0, 30)}...` : firstUserText;
     const entry: ConversationArchiveEntry = {
-      id: createLocalArchiveId(),
+      id: `pal-${conversationId}`,
       content: `${prefix} ${preview}`,
       chatMessages: [],
       voiceMessages,
       chatGroupId: "",
       voiceGroupId: "",
+      kind: "video",
+      palConversationId: conversationId,
       updatedAt: Date.now(),
     };
-    pushConversationHistory(entry);
+    updateConversationHistory((prev) => normalizeConversationHistory([
+      entry, ...prev.filter((item) => item.id !== entry.id),
+    ]));
   }
 
   async function handleAuthLogin(email: string, password: string) {
@@ -476,7 +392,7 @@ export default function App() {
   const palConversationEndedRef = useRef(handlePalConversationEnded);
   palConversationEndedRef.current = handlePalConversationEnded;
   const stablePalConversationEnded = useCallback(
-    (transcripts: SubtitleItem[], palName?: string) => palConversationEndedRef.current(transcripts, palName),
+    (transcripts: SubtitleItem[], palName: string, conversationId: string) => palConversationEndedRef.current(transcripts, palName, conversationId),
     []
   );
 
