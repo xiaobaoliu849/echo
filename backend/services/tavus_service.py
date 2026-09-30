@@ -23,9 +23,19 @@ logger = logging.getLogger(__name__)
 # trips on every PalPage mount, which noticeably speeds up the first render
 # and means the face grid is available before the user clicks "Start".
 _LIST_CACHE_TTL_SECONDS = 300  # 5 minutes
+_LIST_CACHE_MAX_ENTRIES = 64
 
 # module-level cache: {cache_key: (expires_at, items)}
 _list_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+
+
+def _prune_list_cache(now: float) -> None:
+    for key, (expires_at, _) in list(_list_cache.items()):
+        if now >= expires_at:
+            del _list_cache[key]
+    while len(_list_cache) > _LIST_CACHE_MAX_ENTRIES:
+        del _list_cache[next(iter(_list_cache))]
+
 
 DEFAULT_TAVUS_API_URL = "https://tavusapi.com"
 
@@ -58,11 +68,13 @@ class TavusService:
         """
         cache_key = f"pals:{self.api_key}:{self.api_url}"
         now = time.monotonic()
+        _prune_list_cache(now)
         cached = _list_cache.get(cache_key)
-        if cached and now < cached[0]:
+        if cached:
             return list(cached[1])
         items = await self._list_items("/v2/pals", ("pals", "personas"))
-        _list_cache[cache_key] = (now + _LIST_CACHE_TTL_SECONDS, items)
+        _list_cache[cache_key] = (time.monotonic() + _LIST_CACHE_TTL_SECONDS, items)
+        _prune_list_cache(time.monotonic())
         return items
 
     async def create_conversation(
@@ -110,11 +122,13 @@ class TavusService:
         """
         cache_key = f"faces:{self.api_key}:{self.api_url}"
         now = time.monotonic()
+        _prune_list_cache(now)
         cached = _list_cache.get(cache_key)
-        if cached and now < cached[0]:
+        if cached:
             return list(cached[1])
         items = await self._list_items("/v2/faces", ("faces", "replicas"))
-        _list_cache[cache_key] = (now + _LIST_CACHE_TTL_SECONDS, items)
+        _list_cache[cache_key] = (time.monotonic() + _LIST_CACHE_TTL_SECONDS, items)
+        _prune_list_cache(time.monotonic())
         return items
 
     async def _list_items(self, path: str, aliases: tuple[str, ...]) -> list[dict[str, Any]]:
