@@ -28,6 +28,8 @@ type CallMock = {
   enumerateDevices: ReturnType<typeof vi.fn>;
   setInputDevicesAsync: ReturnType<typeof vi.fn>;
   setOutputDeviceAsync: ReturnType<typeof vi.fn>;
+  startScreenShare: ReturnType<typeof vi.fn>;
+  stopScreenShare: ReturnType<typeof vi.fn>;
   startLocalAudioLevelObserver: ReturnType<typeof vi.fn>;
   stopLocalAudioLevelObserver: ReturnType<typeof vi.fn>;
 };
@@ -43,6 +45,8 @@ function createCallMock(): CallMock {
     enumerateDevices: vi.fn().mockResolvedValue({ devices: [] }),
     setInputDevicesAsync: vi.fn().mockResolvedValue({}),
     setOutputDeviceAsync: vi.fn().mockResolvedValue({}),
+    startScreenShare: vi.fn(),
+    stopScreenShare: vi.fn(),
     startLocalAudioLevelObserver: vi.fn().mockResolvedValue(undefined),
     stopLocalAudioLevelObserver: vi.fn(),
   };
@@ -62,6 +66,7 @@ describe("useTavusConversation", () => {
     error instanceof Error ? error.message : fallback;
 
   beforeEach(() => {
+    localStorage.removeItem("vs_pal_device_prefs");
     vi.mocked(createTavusConversation).mockReset();
     vi.mocked(endTavusConversation).mockReset();
     vi.mocked(endTavusConversation).mockResolvedValue(undefined);
@@ -297,6 +302,92 @@ describe("useTavusConversation", () => {
     expect(call.setInputDevicesAsync).toHaveBeenCalledWith({ videoDeviceId: "camera-2" });
     expect(call.setInputDevicesAsync).toHaveBeenCalledWith({ audioDeviceId: "mic-2" });
     expect(call.setOutputDeviceAsync).toHaveBeenCalledWith({ outputDeviceId: "speaker-2" });
+  });
+
+  it("switches back to the default inputs after selecting external devices", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "default-devices", conversation_url: "https://tavus.daily.co/default-devices",
+    });
+    const call = createCallMock();
+    call.enumerateDevices.mockResolvedValue({ devices: [
+      { kind: "videoinput", deviceId: "built-in-camera", label: "Default Camera" },
+      { kind: "videoinput", deviceId: "external-camera", label: "External Camera" },
+      { kind: "audioinput", deviceId: "default", label: "Default Microphone" },
+      { kind: "audioinput", deviceId: "external-mic", label: "External Microphone" },
+    ] });
+    let activeCamera = "built-in-camera";
+    let activeMicrophone = "default";
+    call.setInputDevicesAsync.mockImplementation(async ({ videoDeviceId, audioDeviceId }) => {
+      // Match Daily: falsy IDs query the current devices without switching them.
+      if (videoDeviceId) activeCamera = videoDeviceId;
+      if (audioDeviceId) activeMicrophone = audioDeviceId;
+      return {};
+    });
+    dailyMocks.createCallObject.mockReturnValue(call);
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => { await result.current.start(); });
+    await act(async () => {
+      await result.current.selectCamera("external-camera");
+      await result.current.selectMicrophone("external-mic");
+    });
+    expect(activeCamera).toBe("external-camera");
+    expect(activeMicrophone).toBe("external-mic");
+    await act(async () => {
+      await result.current.selectCamera("");
+      await result.current.selectMicrophone("");
+    });
+    expect(activeCamera).toBe("built-in-camera");
+    expect(activeMicrophone).toBe("default");
+    expect(result.current.selectedCameraId).toBe("");
+    expect(result.current.selectedMicrophoneId).toBe("");
+  });
+
+  it.each(["throw", "reject", "undefined"])("joins when the optional audio meter returns %s", async (mode) => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "optional-meter", conversation_url: "https://tavus.daily.co/optional-meter",
+    });
+    const call = createCallMock();
+    call.startLocalAudioLevelObserver.mockImplementation(() => {
+      if (mode === "throw") throw new Error("AudioWorklet unavailable");
+      if (mode === "reject") return Promise.reject(new Error("Observer unavailable"));
+      return undefined;
+    });
+    dailyMocks.createCallObject.mockReturnValue(call);
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => { await result.current.start(); await result.current.join(); });
+    expect(result.current.status).toBe("connected");
+    expect(call.join).toHaveBeenCalledOnce();
+    expect(endTavusConversation).not.toHaveBeenCalled();
+  });
+
+  it("keeps camera preview available after cancelling the screen picker", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "screen-picker", conversation_url: "https://tavus.daily.co/screen-picker",
+    });
+    const call = createCallMock();
+    const cameraTrack = { kind: "video" } as MediaStreamTrack;
+    call.participants.mockReturnValue({ local: { local: true, tracks: { video: { track: cameraTrack } } } });
+    dailyMocks.createCallObject.mockReturnValue(call);
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => { await result.current.start(); await result.current.join(); });
+    await act(async () => { await result.current.toggleScreenShare(); });
+    expect(call.startScreenShare).toHaveBeenCalledOnce();
+    expect(result.current.isSharingScreen).toBe(false);
+    act(() => { getEventHandler(call, "local-screen-share-canceled")(); });
+    expect(result.current.isSharingScreen).toBe(false);
+    expect(result.current.localVideoTrack).toBe(cameraTrack);
+    const screenTrack = { kind: "video" } as MediaStreamTrack;
+    call.participants.mockReturnValue({ local: { local: true, tracks: {
+      video: { track: cameraTrack }, screenVideo: { track: screenTrack },
+    } } });
+    act(() => { getEventHandler(call, "local-screen-share-started")(); });
+    expect(result.current.isSharingScreen).toBe(true);
+    expect(result.current.localScreenTrack).toBe(screenTrack);
+    act(() => { getEventHandler(call, "local-screen-share-stopped")(); });
+    expect(result.current.isSharingScreen).toBe(false);
+    call.startScreenShare.mockRejectedValueOnce(new Error("Screen share unavailable"));
+    await act(async () => { await result.current.toggleScreenShare(); });
+    expect(result.current.isSharingScreen).toBe(false);
   });
 
   it.each(["leave", "unmount"])("archives the latest transcript exactly once on %s", async (endMode) => {

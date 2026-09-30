@@ -501,7 +501,7 @@ export default function useTavusConversation({
         setIsSharingScreen(false);
       } else {
         await call.startScreenShare();
-        setIsSharingScreen(true);
+        // Daily reports success or picker cancellation through events.
       }
     } catch {
       // User cancelled screen picker or permission denied
@@ -844,6 +844,18 @@ export default function useTavusConversation({
       call.on("transcription-message" as any, (event: any) => {
         if (generation === startGenerationRef.current) handleIncomingSubtitle(event);
       });
+      call.on("local-screen-share-started", () => {
+        if (generation !== startGenerationRef.current) return;
+        setIsSharingScreen(true);
+        syncTracks();
+      });
+      const handleScreenShareStopped = () => {
+        if (generation !== startGenerationRef.current) return;
+        setIsSharingScreen(false);
+        syncTracks();
+      };
+      call.on("local-screen-share-stopped", handleScreenShareStopped);
+      call.on("local-screen-share-canceled", handleScreenShareStopped);
       call.on("participant-joined", () => {
         if (generation === startGenerationRef.current) syncTracks();
       });
@@ -975,7 +987,12 @@ export default function useTavusConversation({
       if (options.videoOff || !cameraAvailableRef.current) {
         joinParams.startVideoOff = true;
       }
-      await call.startLocalAudioLevelObserver(100).catch(() => {});
+      try {
+        await call.startLocalAudioLevelObserver(100);
+      } catch {
+        // The level meter is optional, including on browsers without AudioWorklet.
+      }
+      if (generation !== startGenerationRef.current) return;
       await call.join(joinParams);
       if (generation === startGenerationRef.current) {
         joinedRef.current = true;
@@ -1042,7 +1059,9 @@ export default function useTavusConversation({
     setIsCheckingDevices(true);
     cameraAvailableRef.current = true;
     try {
-      await call.setInputDevicesAsync({ videoDeviceId: deviceId || null });
+      const targetDeviceId = deviceId || cameras[0]?.deviceId;
+      if (!targetDeviceId) throw new Error("No default camera available");
+      await call.setInputDevicesAsync({ videoDeviceId: targetDeviceId });
       if (generation !== startGenerationRef.current) return;
       const video = call.participants()?.local?.tracks?.video;
       if (video?.state === "blocked" || (video && !video.track && !video.persistentTrack) || !cameraAvailableRef.current) throw new Error("Camera blocked");
@@ -1062,7 +1081,7 @@ export default function useTavusConversation({
         setIsCheckingDevices(false);
       }
     }
-  }, [syncTracks, t]);
+  }, [cameras, syncTracks, t]);
 
   const selectMicrophone = useCallback(async (deviceId: string) => {
     const call = callRef.current;
@@ -1071,7 +1090,7 @@ export default function useTavusConversation({
     deviceOperationRef.current = true;
     setIsCheckingDevices(true);
     try {
-      await call.setInputDevicesAsync({ audioDeviceId: deviceId || null });
+      await call.setInputDevicesAsync({ audioDeviceId: deviceId || "default" });
       if (generation !== startGenerationRef.current) return;
       setSelectedMicrophoneId(deviceId);
       saveDevicePrefs({ microphone: deviceId });
