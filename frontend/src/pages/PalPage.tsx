@@ -37,7 +37,7 @@ import type { ErrorRuntimeContext } from "../types/ui";
 type Props = {
   formatErrorMessage: FormatErrorMessage;
   errorRuntimeContext: ErrorRuntimeContext;
-  onConversationEnded?: (transcripts: SubtitleItem[], palName?: string) => void;
+  onConversationEnded?: (transcripts: SubtitleItem[], palName: string, conversationId: string) => void;
 };
 
 const MANUAL_PAL_VALUE = "__manual__";
@@ -212,7 +212,7 @@ function TrackAudio({ track, speakerId, onPlaybackBlocked }: {
 
 export default function PalPage({ formatErrorMessage, errorRuntimeContext, onConversationEnded }: Props) {
   const { t, language } = useI18n();
-  const conversation = useTavusConversation({ formatErrorMessage, language });
+  const conversation = useTavusConversation({ formatErrorMessage, language, onConversationEnded });
   const [apiKey, setApiKey] = useState(() => getPersistedTavusApiKey());
   const [palIdInput, setPalIdInput] = useState(() => getPersistedTavusPalId());
   const [pals, setPals] = useState<TavusPalSummary[]>([]);
@@ -250,9 +250,6 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
     if (!apiKey) return;
     void import("@daily-co/daily-js").catch(() => {});
   }, [apiKey]);
-
-  const onConversationEndedRef = useRef(onConversationEnded);
-  onConversationEndedRef.current = onConversationEnded;
 
   useEffect(() => {
     let disposed = false;
@@ -315,16 +312,6 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
       : faces;
   }, [faces, faceSearch]);
   const selectedPal = pals.find((pal) => pal.pal_id === resolvedPalId);
-
-  // Archive the transcript into the sidebar history when a call ends.
-  const prevStatusRef = useRef(conversation.status);
-  useEffect(() => {
-    const prev = prevStatusRef.current;
-    prevStatusRef.current = conversation.status;
-    if (prev !== "ended" && conversation.status === "ended") {
-      onConversationEndedRef.current?.(conversation.transcripts, selectedPal?.pal_name);
-    }
-  }, [conversation.status, conversation.transcripts, selectedPal?.pal_name]);
 
   const defaultFace = faces.find((face) => face.face_id === selectedPal?.default_face_id);
   const effectiveFaceId = resolvedFaceId || selectedPal?.default_face_id;

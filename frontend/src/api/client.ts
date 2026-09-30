@@ -443,9 +443,21 @@ const TAVUS_PAL_ID_STORAGE_KEY = "tavus_pal_id";
 // on every PalPage mount and lets the face picker render immediately on
 // re-visits within the same session.
 const TAVUS_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const TAVUS_CATALOG_CACHE_MAX_ENTRIES = 32;
 type CatalogCacheEntry<T> = { expiresAt: number; data: T };
 const _tavusPalsCache = new Map<string, CatalogCacheEntry<TavusPalListResponse>>();
 const _tavusFacesCache = new Map<string, CatalogCacheEntry<TavusFaceListResponse>>();
+
+function pruneTavusCatalogCache<T>(cache: Map<string, CatalogCacheEntry<T>>, now: number): void {
+  for (const [key, entry] of cache) {
+    if (now >= entry.expiresAt) cache.delete(key);
+  }
+  while (cache.size > TAVUS_CATALOG_CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) break;
+    cache.delete(oldestKey);
+  }
+}
 
 export function getPersistedTavusApiKey(): string {
   return safeStorageGet(TAVUS_API_KEY_STORAGE_KEY).trim();
@@ -491,8 +503,9 @@ function buildTavusHeaders(): Record<string, string> {
 
 export async function listTavusPals(): Promise<TavusPalListResponse> {
   const cacheKey = getPersistedTavusApiKey();
+  pruneTavusCatalogCache(_tavusPalsCache, Date.now());
   const cached = _tavusPalsCache.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) {
+  if (cached) {
     return cached.data;
   }
   const response = await apiFetch(`${API_BASE_URL}/api/tavus/pals`, {
@@ -513,13 +526,15 @@ export async function listTavusPals(): Promise<TavusPalListResponse> {
       })),
   };
   _tavusPalsCache.set(cacheKey, { expiresAt: Date.now() + TAVUS_CATALOG_CACHE_TTL_MS, data: result });
+  pruneTavusCatalogCache(_tavusPalsCache, Date.now());
   return result;
 }
 
 export async function listTavusFaces(): Promise<TavusFaceListResponse> {
   const cacheKey = getPersistedTavusApiKey();
+  pruneTavusCatalogCache(_tavusFacesCache, Date.now());
   const cached = _tavusFacesCache.get(cacheKey);
-  if (cached && Date.now() < cached.expiresAt) {
+  if (cached) {
     return cached.data;
   }
   const response = await apiFetch(`${API_BASE_URL}/api/tavus/faces`, {
@@ -543,6 +558,7 @@ export async function listTavusFaces(): Promise<TavusFaceListResponse> {
       })),
   };
   _tavusFacesCache.set(cacheKey, { expiresAt: Date.now() + TAVUS_CATALOG_CACHE_TTL_MS, data: result });
+  pruneTavusCatalogCache(_tavusFacesCache, Date.now());
   return result;
 }
 

@@ -41,6 +41,7 @@ type StartParams = {
 type Options = {
   formatErrorMessage: FormatErrorMessage;
   language?: UiLanguage;
+  onConversationEnded?: (transcripts: SubtitleItem[], palName: string, conversationId: string) => void;
 };
 
 // Selected device preferences survive restarts so a working setup does not
@@ -351,8 +352,13 @@ const PAL_LEFT_LEAVE_DELAY_MS = 1500;
 export default function useTavusConversation({
   formatErrorMessage,
   language = "zh-CN",
+  onConversationEnded,
 }: Options): UseTavusConversationResult {
   const t = createInlineTranslator(language);
+  const onConversationEndedRef = useRef(onConversationEnded);
+  onConversationEndedRef.current = onConversationEnded;
+  const transcriptsRef = useRef<SubtitleItem[]>([]);
+  const endedConversationRef = useRef("");
   const callRef = useRef<DailyCall | null>(null);
   const joinedRef = useRef(false);
   const conversationIdRef = useRef<string>("");
@@ -387,6 +393,16 @@ export default function useTavusConversation({
   const [isPalSpeaking, setIsPalSpeaking] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [transcripts, setTranscripts] = useState<SubtitleItem[]>([]);
+  const updateTranscripts = useCallback((update: (prev: SubtitleItem[]) => SubtitleItem[]) => {
+    const next = update(transcriptsRef.current);
+    transcriptsRef.current = next;
+    setTranscripts(next);
+  }, []);
+  const notifyConversationEnded = useCallback((conversationId: string) => {
+    if (!conversationId || endedConversationRef.current === conversationId) return;
+    endedConversationRef.current = conversationId;
+    onConversationEndedRef.current?.(transcriptsRef.current, activePalNameRef.current, conversationId);
+  }, []);
   const [activeSubtitle, setActiveSubtitle] = useState<SubtitleItem | null>(null);
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [localVideoTrack, setLocalVideoTrack] = useState<MediaStreamTrack | null>(null);
@@ -485,7 +501,7 @@ export default function useTavusConversation({
         setIsSharingScreen(false);
       } else {
         await call.startScreenShare();
-        setIsSharingScreen(true);
+        // Daily reports success or picker cancellation through events.
       }
     } catch {
       // User cancelled screen picker or permission denied
@@ -571,9 +587,10 @@ export default function useTavusConversation({
     }
     teardownCall();
     endConversationUpstream(conversationId);
+    notifyConversationEnded(conversationId);
     const wasActive = statusRef.current !== "idle";
     updateStatus(wasActive ? "ended" : "idle");
-  }, [endConversationUpstream, teardownCall, updateStatus]);
+  }, [endConversationUpstream, notifyConversationEnded, teardownCall, updateStatus]);
 
   // Back out of the prejoin screen without starting a call.
   const cancelPrejoin = useCallback(() => {
@@ -617,6 +634,8 @@ export default function useTavusConversation({
     }
     startingRef.current = true;
     activePalNameRef.current = params.palName?.trim() || "";
+    endedConversationRef.current = "";
+    updateTranscripts(() => []);
     const generation = ++startGenerationRef.current;
     lastSeqRef.current = -Infinity;
     joinedRef.current = false;
@@ -670,7 +689,7 @@ export default function useTavusConversation({
             ? parsed.speakerName
             : fallbackName;
 
-        setTranscripts((prev) => {
+        updateTranscripts((prev) => {
           const last = prev[prev.length - 1];
           // Exact turn grouping when both sides carry turn_idx; otherwise
           // fall back to the legacy same-speaker-within-5s heuristic.
@@ -743,7 +762,7 @@ export default function useTavusConversation({
           // An interrupted PAL turn is over: seal its in-progress subtitle so
           // the user's reply starts a fresh entry instead of merging into it.
           if (!control.speaking && control.interrupted) {
-            setTranscripts((prev) => {
+            updateTranscripts((prev) => {
               const last = prev[prev.length - 1];
               if (!last || last.speaker !== "pal" || last.isFinal) return prev;
               return [...prev.slice(0, -1), { ...last, isFinal: true }];
@@ -825,6 +844,18 @@ export default function useTavusConversation({
       call.on("transcription-message" as any, (event: any) => {
         if (generation === startGenerationRef.current) handleIncomingSubtitle(event);
       });
+      call.on("local-screen-share-started", () => {
+        if (generation !== startGenerationRef.current) return;
+        setIsSharingScreen(true);
+        syncTracks();
+      });
+      const handleScreenShareStopped = () => {
+        if (generation !== startGenerationRef.current) return;
+        setIsSharingScreen(false);
+        syncTracks();
+      };
+      call.on("local-screen-share-stopped", handleScreenShareStopped);
+      call.on("local-screen-share-canceled", handleScreenShareStopped);
       call.on("participant-joined", () => {
         if (generation === startGenerationRef.current) syncTracks();
       });
@@ -930,7 +961,7 @@ export default function useTavusConversation({
     } finally {
       if (generation === startGenerationRef.current) startingRef.current = false;
     }
-  }, [clearAutoLeaveTimer, clearDurationTimer, endConversationUpstream, formatErrorMessage, leave, scheduleAutoLeaveWhenAlone, t, teardownCall, updateStatus]);
+  }, [clearAutoLeaveTimer, clearDurationTimer, endConversationUpstream, formatErrorMessage, leave, scheduleAutoLeaveWhenAlone, t, teardownCall, updateStatus, updateTranscripts]);
 
   const join = useCallback(async (options: { videoOff?: boolean } = {}) => {
     const call = callRef.current;
@@ -956,7 +987,12 @@ export default function useTavusConversation({
       if (options.videoOff || !cameraAvailableRef.current) {
         joinParams.startVideoOff = true;
       }
-      await call.startLocalAudioLevelObserver(100).catch(() => {});
+      try {
+        await call.startLocalAudioLevelObserver(100);
+      } catch {
+        // The level meter is optional, including on browsers without AudioWorklet.
+      }
+      if (generation !== startGenerationRef.current) return;
       await call.join(joinParams);
       if (generation === startGenerationRef.current) {
         joinedRef.current = true;
@@ -1023,7 +1059,9 @@ export default function useTavusConversation({
     setIsCheckingDevices(true);
     cameraAvailableRef.current = true;
     try {
-      await call.setInputDevicesAsync({ videoDeviceId: deviceId || null });
+      const targetDeviceId = deviceId || cameras[0]?.deviceId;
+      if (!targetDeviceId) throw new Error("No default camera available");
+      await call.setInputDevicesAsync({ videoDeviceId: targetDeviceId });
       if (generation !== startGenerationRef.current) return;
       const video = call.participants()?.local?.tracks?.video;
       if (video?.state === "blocked" || (video && !video.track && !video.persistentTrack) || !cameraAvailableRef.current) throw new Error("Camera blocked");
@@ -1043,7 +1081,7 @@ export default function useTavusConversation({
         setIsCheckingDevices(false);
       }
     }
-  }, [syncTracks, t]);
+  }, [cameras, syncTracks, t]);
 
   const selectMicrophone = useCallback(async (deviceId: string) => {
     const call = callRef.current;
@@ -1052,7 +1090,7 @@ export default function useTavusConversation({
     deviceOperationRef.current = true;
     setIsCheckingDevices(true);
     try {
-      await call.setInputDevicesAsync({ audioDeviceId: deviceId || null });
+      await call.setInputDevicesAsync({ audioDeviceId: deviceId || "default" });
       if (generation !== startGenerationRef.current) return;
       setSelectedMicrophoneId(deviceId);
       saveDevicePrefs({ microphone: deviceId });
@@ -1101,9 +1139,9 @@ export default function useTavusConversation({
   }, []);
 
   const clearTranscripts = useCallback(() => {
-    setTranscripts([]);
+    updateTranscripts(() => []);
     setActiveSubtitle(null);
-  }, []);
+  }, [updateTranscripts]);
 
   useEffect(() => {
     return () => {
@@ -1114,8 +1152,9 @@ export default function useTavusConversation({
       conversationIdRef.current = "";
       teardownCall();
       endConversationUpstream(conversationId);
+      notifyConversationEnded(conversationId);
     };
-  }, [endConversationUpstream, teardownCall]);
+  }, [endConversationUpstream, notifyConversationEnded, teardownCall]);
 
   const formattedDuration = `${Math.floor(callDuration / 60)
     .toString()

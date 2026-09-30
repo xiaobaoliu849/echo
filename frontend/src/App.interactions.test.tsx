@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import * as api from "./api";
@@ -33,9 +33,34 @@ vi.mock("./api", async () => {
     listAudioAgentRunEvents: vi.fn(),
     listVoiceAgentSessions: vi.fn(),
     fetchVoiceAgentMetricsSummary: vi.fn(),
-    fetchVoiceAgentSession: vi.fn()
+    fetchVoiceAgentSession: vi.fn(),
+    listTavusPals: vi.fn(),
+    listTavusFaces: vi.fn(),
+    createTavusConversation: vi.fn(),
+    endTavusConversation: vi.fn()
   };
 });
+
+const dailyMocks = vi.hoisted(() => ({ createCallObject: vi.fn() }));
+vi.mock("@daily-co/daily-js", () => ({
+  default: { createCallObject: dailyMocks.createCallObject }
+}));
+
+function createPalCallMock() {
+  return {
+    join: vi.fn().mockResolvedValue({}),
+    leave: vi.fn().mockResolvedValue(undefined),
+    destroy: vi.fn(),
+    on: vi.fn(),
+    participants: vi.fn(() => ({})),
+    startCamera: vi.fn().mockResolvedValue({}),
+    enumerateDevices: vi.fn().mockResolvedValue({ devices: [] }),
+    setInputDevicesAsync: vi.fn().mockResolvedValue({}),
+    setOutputDeviceAsync: vi.fn().mockResolvedValue({}),
+    startLocalAudioLevelObserver: vi.fn().mockResolvedValue(undefined),
+    stopLocalAudioLevelObserver: vi.fn(),
+  };
+}
 
 const mockedFetchApiRuntimeInfo = vi.mocked(api.fetchApiRuntimeInfo);
 const mockedFetchVoices = vi.mocked(api.fetchVoices);
@@ -96,6 +121,12 @@ function setClipboardWriteText(writeText: (value: string) => Promise<void>) {
 describe("App interactions", () => {
   beforeEach(() => {
     localStorage.clear();
+    dailyMocks.createCallObject.mockReset();
+    vi.mocked(api.listTavusPals).mockResolvedValue({ pals: [{ pal_id: "mia", pal_name: "Mia" }] });
+    vi.mocked(api.listTavusFaces).mockResolvedValue({ faces: [] });
+    vi.mocked(api.createTavusConversation).mockReset();
+    vi.mocked(api.endTavusConversation).mockReset();
+    vi.mocked(api.endTavusConversation).mockResolvedValue(undefined);
     mockedFetchApiRuntimeInfo.mockResolvedValue({
       status: "ok",
       phase: "B",
@@ -380,6 +411,118 @@ describe("App interactions", () => {
       ).toBe(true);
     });
   });
+
+  it("preserves chat and separate PAL calls across navigation, autosave, and reload", async () => {
+    const calls = [createPalCallMock(), createPalCallMock(), createPalCallMock()];
+    for (let index = 0; index < calls.length; index += 1) {
+      dailyMocks.createCallObject.mockReturnValueOnce(calls[index]);
+      vi.mocked(api.createTavusConversation).mockResolvedValueOnce({
+        conversation_id: `pal-call-${index}`, conversation_url: `https://tavus.daily.co/call-${index}`,
+      });
+    }
+    const readHistory = () => JSON.parse(localStorage.getItem("vs_conversation_history") || "[]") as Array<{
+      id: string;
+      content: string;
+      chatMessages: api.ChatMessage[];
+      voiceMessages: api.ChatMessage[];
+    }>;
+    const settingsResponse = await mockedFetchSettings();
+    mockedFetchSettings.mockResolvedValue({ ...settingsResponse, providers: [...settingsResponse.providers, "Tavus"] });
+    const { unmount } = render(<App />);
+    const textarea = await screen.findByPlaceholderText(/输入聊天内容/, {}, { timeout: 10000 });
+    fireEvent.change(textarea, { target: { value: "Keep this chat" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(readHistory()).toHaveLength(1));
+    const originalChatId = readHistory()[0].id;
+    fireEvent.click(screen.getByTitle("通话设置"));
+    fireEvent.mouseEnter(screen.getByText("Tavus"));
+    fireEvent.click(screen.getByText("打开视频分身"));
+    await waitFor(() => expect(screen.getByTestId("pal-select")).toHaveValue("mia"));
+
+    for (let index = 0; index < calls.length; index += 1) {
+      fireEvent.click(await screen.findByTestId("pal-start-button"));
+      fireEvent.click(await screen.findByTestId("pal-join-button"));
+      await screen.findByTestId("pal-leave-button");
+      const incoming = calls[index].on.mock.calls.find(([name]) => name === "app-message")?.[1];
+      expect(incoming).toBeDefined();
+      act(() => {
+        incoming?.({ data: {
+          event_type: "conversation.utterance.streaming", properties: { role: "user", text: "Same opening phrase" },
+        } });
+        incoming?.({ data: {
+          event_type: "conversation.utterance.streaming", properties: { role: "pal", text: "Same final reply" },
+        } });
+        // Two calls have identical content; distinct calls must still survive.
+        if (index < 2) fireEvent.click(screen.getByTestId("pal-leave-button"));
+        else fireEvent.click(screen.getByTestId("nav-tts"));
+      });
+      await waitFor(() => expect(readHistory()).toHaveLength(index + 2));
+      if (index < 2) fireEvent.click(screen.getByTestId("pal-dismiss-summary-button"));
+    }
+    expect(vi.mocked(api.endTavusConversation)).toHaveBeenCalledWith("pal-call-2");
+    expect(readHistory().find((entry) => entry.id === originalChatId)?.chatMessages[0].content).toBe("Keep this chat");
+    expect(new Set(readHistory().map((entry) => entry.id)).size).toBe(4);
+    const historyChat = Array.from(document.querySelectorAll(".vsHistoryText"))
+      .find((item) => item.textContent === "Keep this chat");
+    expect(historyChat).toBeDefined();
+    fireEvent.click(historyChat!);
+    fireEvent.click(await screen.findByRole("button", { name: "新建对话" }));
+    expect(readHistory()).toHaveLength(4);
+    expect(readHistory().find((entry) => entry.id === originalChatId)?.chatMessages[0].content).toBe("Keep this chat");
+    const palHistory = Array.from(document.querySelectorAll(".vsHistoryText"))
+      .find((item) => item.textContent === "[视频 Mia] Same opening phrase");
+    expect(palHistory).toBeDefined();
+    fireEvent.click(palHistory!);
+    // Restoring a PAL archive must not strip its call identity during autosave.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 550)); });
+    expect(readHistory()).toHaveLength(4);
+    expect(readHistory().filter((entry) => entry.id !== originalChatId).map((entry) => entry.content))
+      .toEqual(Array(3).fill("[视频 Mia] Same opening phrase"));
+    unmount();
+    render(<App />);
+    expect(document.querySelectorAll(".vsHistoryRow")).toHaveLength(4);
+  }, 15000);
+
+  it.each(["[视频 Mia] Meeting", "[Video Mia] Meeting"])(
+    "keeps legacy video title %s after restoring, renaming, and deleting", async (content) => {
+      const legacy = {
+        id: "legacy-pal", content, chatMessages: [],
+        voiceMessages: [{ role: "user", content: "Meeting" }, { role: "assistant", content: "Last reply" }],
+        chatGroupId: "", voiceGroupId: "", updatedAt: 1,
+      };
+      const textChat = {
+        id: "other-chat", content: "Other chat", chatMessages: [{ role: "user", content: "Other chat" }],
+        voiceMessages: [], chatGroupId: "", voiceGroupId: "", updatedAt: 2,
+      };
+      localStorage.setItem("vs_conversation_history", JSON.stringify([legacy, textChat]));
+      const readHistory = () => JSON.parse(localStorage.getItem("vs_conversation_history") || "[]") as Array<{
+        id: string; content: string; kind?: string; titleCustomized?: boolean;
+      }>;
+      render(<App />);
+      await screen.findByPlaceholderText(/输入聊天内容/, {}, { timeout: 10000 });
+      fireEvent.click(screen.getByText(content));
+      // New session flushes the restored messages synchronously before clearing them.
+      fireEvent.click(screen.getByRole("button", { name: "新建对话" }));
+      expect(readHistory().find((entry) => entry.id === legacy.id))
+        .toMatchObject({ content, kind: "video" });
+      fireEvent.click(screen.getByText(content));
+      fireEvent.click(screen.getByTestId(`history-more-${legacy.id}`));
+      fireEvent.click(screen.getByRole("menuitem", { name: /重命名/ }));
+      const renameInput = screen.getByDisplayValue(content);
+      fireEvent.change(renameInput, { target: { value: "My video meeting" } });
+      fireEvent.keyDown(renameInput, { key: "Enter" });
+      fireEvent.click(screen.getByText("Other chat"));
+      expect(readHistory().find((entry) => entry.id === legacy.id))
+        .toMatchObject({ content: "My video meeting", kind: "video", titleCustomized: true });
+      fireEvent.click(screen.getByText("My video meeting"));
+      fireEvent.click(screen.getByTestId(`history-more-${legacy.id}`));
+      fireEvent.click(screen.getByRole("menuitem", { name: /删除历史/ }));
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 550)); });
+      fireEvent.click(screen.getByRole("button", { name: "新建对话" }));
+      expect(readHistory().find((entry) => entry.id === legacy.id)).toBeUndefined();
+      expect(readHistory()).toHaveLength(1);
+    },
+  );
 
   it("does not duplicate a restored conversation when starting a new chat", async () => {
     render(<App />);

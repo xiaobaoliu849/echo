@@ -239,6 +239,33 @@ class TavusServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pals_a[0]["pal_id"], "a")
         self.assertEqual(pals_b[0]["pal_id"], "b")
 
+    async def test_expired_catalogs_are_removed_on_next_lookup(self) -> None:
+        first = _make_service("old-key")
+        second = _make_service("new-key")
+        with patch("services.tavus_service.time.monotonic", return_value=100):
+            with patch.object(first, "_request_json", AsyncMock(return_value={"pals": [{"pal_id": "old"}]})):
+                await first.list_pals()
+            with patch.object(first, "_request_json", AsyncMock(return_value={"faces": [{"face_id": "old-face"}]})):
+                await first.list_faces()
+        with patch("services.tavus_service.time.monotonic", return_value=401):
+            with patch.object(second, "_request_json", AsyncMock(return_value={"pals": [{"pal_id": "new"}]})):
+                await second.list_pals()
+
+        self.assertEqual(list(tavus_module._list_cache), [f"pals:{second.api_key}:{second.api_url}"])
+
+    async def test_catalog_cache_evicts_oldest_key_at_capacity(self) -> None:
+        services = [_make_service(f"key-{index}") for index in range(3)]
+        with patch.object(tavus_module, "_LIST_CACHE_MAX_ENTRIES", 2):
+            for service in services:
+                with patch.object(service, "_request_json", AsyncMock(return_value={"pals": []})):
+                    await service.list_pals()
+            self.assertEqual(len(tavus_module._list_cache), 2)
+            self.assertNotIn(f"pals:{services[0].api_key}:{services[0].api_url}", tavus_module._list_cache)
+            with patch.object(services[0], "_request_json", AsyncMock(return_value={"pals": [{"pal_id": "fetched-again"}]})) as request:
+                self.assertEqual((await services[0].list_pals())[0]["pal_id"], "fetched-again")
+                request.assert_awaited_once()
+            self.assertEqual(len(tavus_module._list_cache), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
