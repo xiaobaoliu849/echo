@@ -68,6 +68,7 @@ export const VERCEL_PROVIDER = "Vercel";
 export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_3_8_LIVE_MODEL = "gemini-3.8-live";
 export const GOOGLE_3_8_LIVE_THINKING_MODEL = "gemini-3.8-live-extended-thinking";
+export const GOOGLE_3_8_LIVE_AVATAR_MODEL = "gemini-3.8-live-avatar";
 export const VERCEL_GEMINI_3_8_LIVE = "google/gemini-3.8-live";
 export const VERCEL_GEMINI_3_8_LIVE_THINKING = "google/gemini-3.8-live-extended-thinking";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
@@ -104,7 +105,23 @@ export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
   "live",
   "realtime",
   "flash-exp",
+  "avatar",
 ];
+
+export function isAvatarModel(provider?: string, model?: string): boolean {
+  const normProv = (provider || "").trim().toLowerCase();
+  const normModel = (model || "").trim().toLowerCase();
+  if (normProv === "tavus" || normModel.includes("tavus")) {
+    return true;
+  }
+  return (
+    (normProv === "agentplatform" || normProv === "google" || normProv === "vertexai") &&
+    (normModel.includes("avatar") || normModel === GOOGLE_3_8_LIVE_AVATAR_MODEL)
+  );
+}
+
+
+
 
 // Prebuilt voices supported by Google Gemini Multimodal Live API (30 prebuilt voices).
 export const GOOGLE_REALTIME_VOICES = [
@@ -907,6 +924,7 @@ export function resolveRealtimeModelOptions(
     ? [
         "gemini-3.8-live",
         "gemini-3.8-live-extended-thinking",
+        "gemini-3.8-live-avatar",
         "gemini-3.1-flash-live-preview",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",
@@ -917,6 +935,7 @@ export function resolveRealtimeModelOptions(
     ? [
         "gemini-3.8-live",
         "gemini-3.8-live-extended-thinking",
+        "gemini-3.8-live-avatar",
         "gemini-live-2.5-flash-native-audio",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",

@@ -12,6 +12,7 @@ import {
   getProviderBadge,
   getProviderDisplayName,
   getProviderSortOrder,
+  isAvatarModel,
   isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
 import { useLocalVoiceStatus } from "../hooks/useLocalVoiceStatus";
@@ -256,7 +257,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   function handleModelSelect(provider: string, model: string) {
     setHoveredModel(model);
     commitProviderModel(provider, model);
-    if (provider === TAVUS_PROVIDER) {
+    if (provider === TAVUS_PROVIDER || isAvatarModel(provider, model)) {
       closePopover();
       onOpenPal?.();
       return;

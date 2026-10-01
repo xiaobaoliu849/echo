@@ -261,8 +261,11 @@ class GoogleRealtimeMixin:
         voice_lookup = {v.lower(): v for v in GOOGLE_REALTIME_VOICES}
         safe_voice = voice_lookup.get((voice or "").strip().lower(), DEFAULT_GOOGLE_REALTIME_VOICE)
 
+        is_avatar = "avatar" in str(model or "").lower()
+        response_mods = ["VIDEO"] if is_avatar else ["AUDIO"]
+
         live_kwargs: dict[str, Any] = {
-            "response_modalities": ["AUDIO"],
+            "response_modalities": response_mods,
             "system_instruction": system_inst,
             "input_audio_transcription": types.AudioTranscriptionConfig(),
             "output_audio_transcription": types.AudioTranscriptionConfig(),
@@ -285,6 +288,9 @@ class GoogleRealtimeMixin:
         }
         if is_thinking and hasattr(types, "ThinkingConfig"):
             live_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="low")
+
+        if is_avatar and hasattr(types, "AvatarConfig"):
+            live_kwargs["avatar_config"] = types.AvatarConfig(avatar_name="Ben")
 
         return types.LiveConnectConfig(**live_kwargs)
     @staticmethod
@@ -953,6 +959,21 @@ class GoogleRealtimeMixin:
                     if not server_content:
                         continue
 
+                    if hasattr(server_content, "model_turn") and server_content.model_turn:
+                        for part in getattr(server_content.model_turn, "parts", []):
+                            inline = getattr(part, "inline_data", None)
+                            if inline is not None:
+                                mime = str(getattr(inline, "mime_type", "") or "").lower()
+                                inline_bytes = getattr(inline, "data", None)
+                                if inline_bytes and (mime.startswith("video/") or mime.startswith("image/")):
+                                    b64_data = base64.b64encode(inline_bytes).decode("ascii") if isinstance(inline_bytes, (bytes, bytearray)) else str(inline_bytes)
+                                    await self._send_event(
+                                        websocket,
+                                        "assistant_video_frame",
+                                        mime_type=mime,
+                                        data=b64_data,
+                                    )
+
                     user_transcript_fields = ("input_transcription", "input_audio_transcription", "transcription")
                     input_transcription_value: Any = None
                     for transcript_field in user_transcript_fields:
@@ -1305,6 +1326,11 @@ class GoogleRealtimeMixin:
         )
 
         live_model = settings["model"]
+        if "avatar" in live_model.lower():
+            if live_model.endswith("-avatar"):
+                live_model = live_model[:-7]
+            elif "gemini-3.8-live-avatar" in live_model:
+                live_model = live_model.replace("gemini-3.8-live-avatar", "gemini-3.8-live")
         if is_vertex:
             if live_model.startswith("endpoints/"):
                 gcp_project = (

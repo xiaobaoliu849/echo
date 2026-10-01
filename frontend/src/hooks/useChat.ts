@@ -117,6 +117,9 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
   if (normalized.includes("extended-thinking")) {
     return t("Gemini 3.8 深度思考实时", "Gemini 3.8 Extended Thinking");
   }
+  if (normalized.includes("avatar")) {
+    return t("Gemini 3.8 实时视频分身", "Gemini 3.8 Live Avatar");
+  }
   if (normalized.includes("3.8-live") || normalized.includes("3.8_live")) {
     return t("Gemini 3.8 极速实时", "Gemini 3.8 Live");
   }

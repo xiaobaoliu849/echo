@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { extractPdfText } from "../../api";
 import VoiceCallSettingsPopover from "../VoiceCallSettingsPopover";
 import { isVoiceRealtimeModel } from "../../hooks/useChat";
-import { formatVoiceChatSecondaryLabel, isRealtimeVoiceModel } from "../../hooks/useVoiceChatHelpers";
+import { formatVoiceChatSecondaryLabel, isAvatarModel, isRealtimeVoiceModel } from "../../hooks/useVoiceChatHelpers";
 import type { UseChatResult } from "../../hooks/useChat";
 import type { UseVoiceChatResult } from "../../hooks/useVoiceChat";
 import { useI18n } from "../../i18n";
@@ -614,7 +614,9 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
                 // time would clobber a voice-popover pick (e.g. Agent Platform
                 // live-translate) with the chat model (e.g. DashScope), and
                 // the same-tick startSession would use stale state anyway.
-                if ((chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus") {
+                const activeProv = chat ? chat.chatProvider : voiceChat.voiceChatProvider;
+                const activeMod = chat ? chat.chatModel : voiceChat.voiceChatModel;
+                if (activeProv === "Tavus" || isAvatarModel(activeProv, activeMod)) {
                   if (onOpenPal) {
                     onOpenPal();
                   } else {

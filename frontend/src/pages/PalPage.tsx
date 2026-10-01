@@ -38,6 +38,7 @@ type Props = {
   formatErrorMessage: FormatErrorMessage;
   errorRuntimeContext: ErrorRuntimeContext;
   onConversationEnded?: (transcripts: SubtitleItem[], palName: string, conversationId: string) => void;
+  onClose?: () => void;
 };
 
 const MANUAL_PAL_VALUE = "__manual__";
@@ -210,7 +211,7 @@ function TrackAudio({ track, speakerId, onPlaybackBlocked }: {
   return <audio ref={audioRef} autoPlay />;
 }
 
-export default function PalPage({ formatErrorMessage, errorRuntimeContext, onConversationEnded }: Props) {
+export default function PalPage({ formatErrorMessage, errorRuntimeContext, onConversationEnded, onClose }: Props) {
   const { t, language } = useI18n();
   const conversation = useTavusConversation({ formatErrorMessage, language, onConversationEnded });
   const [apiKey, setApiKey] = useState(() => getPersistedTavusApiKey());
@@ -427,10 +428,22 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
                 <span className="vsPalConfigIcon" aria-hidden="true">
                   <Video size={22} />
                 </span>
-                <div>
+                <div style={{ flex: 1 }}>
                   <h2>{t("AI 视频分身", "AI Video PAL")}</h2>
                   <p>{t("PAL 决定角色与对话方式；Face 决定视频形象及 Phoenix 渲染版本。", "PAL sets the role and conversation behavior; Face sets the appearance and Phoenix rendering version.")}</p>
                 </div>
+                {onClose ? (
+                  <button
+                    type="button"
+                    className="vsPalCloseBtn"
+                    onClick={onClose}
+                    title={t("返回对话", "Back to Chat")}
+                    aria-label={t("返回对话", "Back to Chat")}
+                    data-testid="pal-back-button"
+                  >
+                    <X size={18} strokeWidth={2.25} />
+                  </button>
+                ) : null}
               </div>
 
               {conversation.status === "ended" ? (

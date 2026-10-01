@@ -471,6 +471,7 @@ export default function App() {
                     formatErrorMessage={formatErrorMessage}
                     errorRuntimeContext={errorRuntimeContext}
                     onConversationEnded={stablePalConversationEnded}
+                    onClose={() => setActiveTab("chat")}
                   />
                 ) : null}
 

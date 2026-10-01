@@ -385,7 +385,7 @@ def _is_google_thinking_realtime_model(model: str | None) -> bool:
 def _is_google_realtime_model(model: str | None) -> bool:
     m = str(model or "").strip().lower()
     return (
-        any(pat in m for pat in ("native-audio", "live", "realtime", "flash-exp"))
+        any(pat in m for pat in ("native-audio", "live", "realtime", "flash-exp", "avatar"))
         or m.startswith("projects/")
         or m.startswith("endpoints/")
         or bool(re.match(r"^\d{10,24}$", m))
