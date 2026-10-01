@@ -88,13 +88,15 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialCategory, setSettingsInitialCategory] = useState<"provider" | "desktop">("provider");
   const [authRuntime, setAuthRuntime] = useState<AuthRuntimeConfig>(() => getAuthRuntimeConfig());
-  const [conversationHistory, setConversationHistory] = useState<ConversationArchiveEntry[]>(
-    () => normalizeConversationHistory(loadConversationHistory())
-  );
+  const [conversationHistory, setConversationHistory] = useState<ConversationArchiveEntry[]>(() => {
+    // Persist the normalized form once at startup so legacy entries (no kind,
+    // title-only video markers) are upgraded in storage; later writes all go
+    // through updateConversationHistory, which saves synchronously.
+    const loaded = normalizeConversationHistory(loadConversationHistory());
+    saveConversationHistory(loaded);
+    return loaded;
+  });
   const conversationHistoryRef = useRef(conversationHistory);
-  useEffect(() => {
-    saveConversationHistory(conversationHistory);
-  }, [conversationHistory]);
   const currentArchiveBaselineRef = useRef<ConversationArchiveEntry | null>(null);
   const activeArchiveDeletedRef = useRef(false);
   const archiveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

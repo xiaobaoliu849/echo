@@ -349,6 +349,18 @@ export function parseAppMessageControlEvent(rawData: any): TavusControlEvent | n
 // blip does not kill a call that is about to resume.
 const PAL_LEFT_LEAVE_DELAY_MS = 1500;
 
+// Returns null when the participant list cannot be read (e.g. the call
+// object is mid-teardown); callers then stay conservative and keep the call.
+function countRemoteParticipants(call: DailyCall | null): number | null {
+  if (!call) return 0;
+  try {
+    return Object.entries(call.participants() || {})
+      .filter(([id, participant]) => id !== "local" && !participant.local).length;
+  } catch {
+    return null;
+  }
+}
+
 export default function useTavusConversation({
   formatErrorMessage,
   language = "zh-CN",
@@ -614,16 +626,15 @@ export default function useTavusConversation({
     if (!activeCall) {
       return;
     }
-    const remaining = Object.entries(activeCall.participants() || {})
-      .filter(([id, participant]) => id !== "local" && !participant.local).length;
-    if (remaining > 0) {
+    const remaining = countRemoteParticipants(activeCall);
+    if (remaining === null || remaining > 0) {
       return;
     }
     clearAutoLeaveTimer();
     autoLeaveTimerRef.current = setTimeout(() => {
       autoLeaveTimerRef.current = null;
-      if (Object.entries(callRef.current?.participants() || {})
-        .some(([id, participant]) => id !== "local" && !participant.local)) return;
+      const remotesNow = countRemoteParticipants(callRef.current);
+      if (remotesNow === null || remotesNow > 0) return;
       leave();
     }, PAL_LEFT_LEAVE_DELAY_MS);
   }, [clearAutoLeaveTimer, leave]);
@@ -812,12 +823,16 @@ export default function useTavusConversation({
         }
         if (!videoFailed) return;
         cameraAvailableRef.current = false;
-        setCameraError(
-          t(
-            "无法访问摄像头。它可能正被其他应用（如 Zoom、Teams 或 NVIDIA Broadcast）占用。你可以关闭那些应用后重试，或不使用摄像头加入。",
-            "Could not access the camera. It may be in use by another app (e.g. Zoom, Teams, or NVIDIA Broadcast). Close those apps and retry, or join without the camera."
-          )
+        const videoMessage = t(
+          "无法访问摄像头。它可能正被其他应用（如 Zoom、Teams 或 NVIDIA Broadcast）占用。你可以关闭那些应用后重试，或不使用摄像头加入。",
+          "Could not access the camera. It may be in use by another app (e.g. Zoom, Teams, or NVIDIA Broadcast). Close those apps and retry, or join without the camera."
         );
+        setCameraError(videoMessage);
+        // The prejoin panel renders cameraError; once in the call it is gone,
+        // so surface the failure through the in-call error notice instead.
+        if (statusRef.current === "connected") {
+          setErrorMessage(videoMessage);
+        }
       });
       call.on("started-camera", () => {
         if (generation !== startGenerationRef.current) return;
