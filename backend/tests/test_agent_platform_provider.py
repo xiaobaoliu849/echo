@@ -254,6 +254,18 @@ class AgentPlatformProviderTests(unittest.IsolatedAsyncioTestCase):
         inst4 = service._build_realtime_instructions()
         self.assertIn("Memory & Tool Calling Rules", inst4)
 
+    def test_agent_platform_gemini_3_8_and_endpoints_model_recognition(self):
+        from services.realtime_constants import _is_google_realtime_model
+
+        self.assertTrue(_is_google_realtime_model("gemini-3.8-live"))
+        self.assertTrue(_is_google_realtime_model("gemini-3.8-live-extended-thinking"))
+        self.assertTrue(
+            _is_google_realtime_model(
+                "projects/my-proj/locations/us-central1/endpoints/123456789"
+            )
+        )
+        self.assertTrue(_is_google_realtime_model("endpoints/123456789"))
+
 
 if __name__ == "__main__":
     unittest.main()

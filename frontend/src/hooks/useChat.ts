@@ -111,6 +111,15 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
     return t("NVIDIA 全双工陪练", "NVIDIA duplex call");
   }
   const normalized = model.toLowerCase();
+  if (normalized.startsWith("projects/") || normalized.startsWith("endpoints/")) {
+    return t("专属自部署 Endpoint", "Self-deployed Endpoint");
+  }
+  if (normalized.includes("extended-thinking")) {
+    return t("Gemini 3.8 深度思考实时", "Gemini 3.8 Extended Thinking");
+  }
+  if (normalized.includes("3.8-live") || normalized.includes("3.8_live")) {
+    return t("Gemini 3.8 极速实时", "Gemini 3.8 Live");
+  }
   if (normalized.includes("live-translate") || normalized.includes("livetranslate")) {
     return t("实时翻译", "Live translate");
   }
@@ -204,10 +213,6 @@ function resolveModelOptions(
   let availableModels = enabledModels.length > 0 ? enabledModels : rawAvailable;
   if (preferredDefault && !availableModels.includes(preferredDefault)) {
     availableModels = [preferredDefault, ...availableModels];
-  }
-
-  if (availableModels.length > 0) {
-    return [...new Set(availableModels.map((item) => item.trim()).filter(Boolean))];
   }
 
   const realtimeModels = resolveRealtimeModelOptions(provider, providerModelCatalog || {});

@@ -32,7 +32,7 @@ describe("Gemini 3.8 Live models", () => {
     expect(models).toContain("gemini-3.8-live-extended-thinking");
   });
 
-  it("excludes gemini-3.8-live from AgentPlatform builtIns", () => {
+  it("includes gemini-3.8-live in AgentPlatform builtIns", () => {
     const models = resolveRealtimeModelOptions(AGENT_PLATFORM_PROVIDER, {
       [AGENT_PLATFORM_PROVIDER]: {
         defaultModel: "gemini-live-2.5-flash-native-audio",
@@ -41,8 +41,18 @@ describe("Gemini 3.8 Live models", () => {
       },
     });
 
-    expect(models).not.toContain("gemini-3.8-live");
-    expect(models).not.toContain("gemini-3.8-live-extended-thinking");
+    expect(models).toContain("gemini-3.8-live");
+    expect(models).toContain("gemini-3.8-live-extended-thinking");
     expect(models).toContain("gemini-live-2.5-flash-native-audio");
+  });
+
+  it("recognizes self-deployed endpoints as realtime models under AgentPlatform", () => {
+    expect(
+      isRealtimeVoiceModel(
+        AGENT_PLATFORM_PROVIDER,
+        "projects/12345/locations/us-central1/endpoints/67890"
+      )
+    ).toBe(true);
+    expect(isRealtimeVoiceModel(AGENT_PLATFORM_PROVIDER, "endpoints/67890")).toBe(true);
   });
 });

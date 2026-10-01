@@ -809,7 +809,11 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   if (normalizedProvider === GOOGLE_PROVIDER.toLowerCase() ||
       normalizedProvider === AGENT_PLATFORM_PROVIDER.toLowerCase() ||
       normalizedProvider === "vertexai") {
-    return SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS.some((item) => normalizedModel.includes(item));
+    return (
+      SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS.some((item) => normalizedModel.includes(item)) ||
+      normalizedModel.startsWith("projects/") ||
+      normalizedModel.startsWith("endpoints/")
+    );
   }
   if (normalizedProvider === OPENAI_PROVIDER.toLowerCase()) {
     return normalizedModel.includes("realtime") || normalizedModel.includes("gpt-realtime");
@@ -910,6 +914,8 @@ export function resolveRealtimeModelOptions(
     : [];
   const agentPlatformBuiltIns = provider === AGENT_PLATFORM_PROVIDER
     ? [
+        "gemini-3.8-live",
+        "gemini-3.8-live-extended-thinking",
         "gemini-live-2.5-flash-native-audio",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",

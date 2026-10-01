@@ -1306,9 +1306,18 @@ class GoogleRealtimeMixin:
 
         live_model = settings["model"]
         if is_vertex:
-            # If authenticated via express API key, Google Cloud Vertex live API requires the full resource name
-            # projects/{project}/locations/{location}/publishers/google/models/{model}
-            if not has_sa and api_key and not live_model.startswith("projects/"):
+            if live_model.startswith("endpoints/"):
+                gcp_project = (
+                    settings.get("project_id", "").strip()
+                    or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                    or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                    or "gen-lang-client-0313108616"
+                )
+                live_model = f"projects/{gcp_project}/locations/{location}/{live_model}"
+                logger.info("agent_platform_live_model: expanded endpoint resource to %s", live_model)
+            elif not has_sa and api_key and not live_model.startswith("projects/"):
+                # If authenticated via express API key, Google Cloud Vertex live API requires the full resource name
+                # projects/{project}/locations/{location}/publishers/google/models/{model}
                 gcp_project = (
                     settings.get("project_id", "").strip()
                     or os.environ.get("VERTEX_PROJECT_ID", "").strip()
@@ -1371,9 +1380,9 @@ class GoogleRealtimeMixin:
                 )
             elif "1008" in error_text and "Publisher model" in error_text:
                 error_msg = (
-                    f"Google 实时会话启动失败：Google Agent Platform 暂不支持模型「{settings['model']}」。"
-                    "Agent Platform 官方支持的实时语音模型为「gemini-live-2.5-flash-native-audio」；"
-                    "如需体验 preview/exp 等实验模型，请将供应商选择为「Google」(AI Studio)。"
+                    f"Google 实时会话启动失败：Google Agent Platform 暂不支持直接以「{settings['model']}」作为公共模型调用。"
+                    "如果该模型在 Model Garden 中属于自部署（Self-deployed）模式，请在模型选择/输入中填入您部署成功的 Endpoint 资源名称（如 projects/.../locations/.../endpoints/...）；"
+                    "如需使用开箱即用的实时语音模型，请选择「gemini-live-2.5-flash-native-audio」或将供应商切换为「Google」(AI Studio)。"
                 )
             elif "translation_config parameter is only supported" in error_text:
                 error_msg = (

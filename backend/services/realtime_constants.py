@@ -384,7 +384,11 @@ def _is_google_thinking_realtime_model(model: str | None) -> bool:
 
 def _is_google_realtime_model(model: str | None) -> bool:
     m = str(model or "").strip().lower()
-    return any(pat in m for pat in ("native-audio", "live", "realtime", "flash-exp"))
+    return (
+        any(pat in m for pat in ("native-audio", "live", "realtime", "flash-exp"))
+        or m.startswith("projects/")
+        or m.startswith("endpoints/")
+    )
 
 
 def _is_dashscope_audio_realtime_model(model: str | None) -> bool:

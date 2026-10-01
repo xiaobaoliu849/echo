@@ -56,6 +56,7 @@ export function getDefaultText(t: TranslatePair): string {
 export function getSidebarItems(t: TranslatePair): SidebarItem[] {
   return [
     { tab: "chat", label: t("聊天", "Chat"), icon: "Bot", tooltip: t("AI 助理聊天", "AI assistant chat") },
+    { tab: "pal", label: t("数字人分身", "AI Avatar"), icon: "Video", tooltip: t("AI 视频数字人分身", "AI Video Avatar") },
     { tab: "voice_center", label: t("语音中心", "Voice Center"), icon: "Mic2", tooltip: t("统一语音工作台", "Voice workspace") },
     { tab: "audio_overview", label: t("播客", "Podcast"), icon: "FileAudio", tooltip: t("播客与多人对白", "Podcast & mixed dialogue") }
   ];
