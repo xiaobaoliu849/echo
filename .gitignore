@@ -110,3 +110,7 @@ node_modules/
 echo.db
 echo.log
 
+
+# Promo video project (local only) and its stats export
+film-echo/
+/timeline.json
