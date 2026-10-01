@@ -986,6 +986,10 @@ export default function useTavusConversation({
       }
       if (options.videoOff || !cameraAvailableRef.current) {
         joinParams.startVideoOff = true;
+        // Mirror the join state immediately: the camera toggle cannot rely on
+        // a participant-updated event for the initial state, and an
+        // out-of-sync toggle swallows the user's first click.
+        setIsVideoOff(true);
       }
       try {
         await call.startLocalAudioLevelObserver(100);

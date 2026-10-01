@@ -156,6 +156,9 @@ describe("useTavusConversation", () => {
     await act(async () => { await result.current.join({ videoOff: true }); });
     expect(call.join).toHaveBeenCalledWith(expect.objectContaining({ startVideoOff: true }));
     expect(result.current.status).toBe("connected");
+    // The camera toggle must reflect the video-off join without waiting for a
+    // participant-updated event.
+    expect(result.current.isVideoOff).toBe(true);
   });
 
   it("retries an unavailable camera and enables video when it recovers", async () => {
