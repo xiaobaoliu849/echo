@@ -215,6 +215,10 @@ function resolveModelOptions(
     availableModels = [preferredDefault, ...availableModels];
   }
 
+  if (availableModels.length > 0) {
+    return [...new Set(availableModels.map((item) => item.trim()).filter(Boolean))];
+  }
+
   const realtimeModels = resolveRealtimeModelOptions(provider, providerModelCatalog || {});
   const combined = [...availableModels, ...realtimeModels]
     .map((item) => item.trim())

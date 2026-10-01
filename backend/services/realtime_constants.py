@@ -388,6 +388,7 @@ def _is_google_realtime_model(model: str | None) -> bool:
         any(pat in m for pat in ("native-audio", "live", "realtime", "flash-exp"))
         or m.startswith("projects/")
         or m.startswith("endpoints/")
+        or bool(re.match(r"^\d{10,24}$", m))
     )
 
 

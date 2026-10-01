@@ -54,5 +54,6 @@ describe("Gemini 3.8 Live models", () => {
       )
     ).toBe(true);
     expect(isRealtimeVoiceModel(AGENT_PLATFORM_PROVIDER, "endpoints/67890")).toBe(true);
+    expect(isRealtimeVoiceModel(AGENT_PLATFORM_PROVIDER, "8349281749281948291")).toBe(true);
   });
 });

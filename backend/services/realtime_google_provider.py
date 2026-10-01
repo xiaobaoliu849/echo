@@ -1315,6 +1315,15 @@ class GoogleRealtimeMixin:
                 )
                 live_model = f"projects/{gcp_project}/locations/{location}/{live_model}"
                 logger.info("agent_platform_live_model: expanded endpoint resource to %s", live_model)
+            elif re.match(r"^\d{10,24}$", live_model.strip()):
+                gcp_project = (
+                    settings.get("project_id", "").strip()
+                    or os.environ.get("VERTEX_PROJECT_ID", "").strip()
+                    or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+                    or "gen-lang-client-0313108616"
+                )
+                live_model = f"projects/{gcp_project}/locations/{location}/endpoints/{live_model.strip()}"
+                logger.info("agent_platform_live_model: expanded numeric endpoint ID to %s", live_model)
             elif not has_sa and api_key and not live_model.startswith("projects/"):
                 # If authenticated via express API key, Google Cloud Vertex live API requires the full resource name
                 # projects/{project}/locations/{location}/publishers/google/models/{model}

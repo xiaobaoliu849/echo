@@ -812,7 +812,8 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
     return (
       SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS.some((item) => normalizedModel.includes(item)) ||
       normalizedModel.startsWith("projects/") ||
-      normalizedModel.startsWith("endpoints/")
+      normalizedModel.startsWith("endpoints/") ||
+      /^\d{10,24}$/.test(normalizedModel)
     );
   }
   if (normalizedProvider === OPENAI_PROVIDER.toLowerCase()) {

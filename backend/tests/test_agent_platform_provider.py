@@ -265,6 +265,7 @@ class AgentPlatformProviderTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertTrue(_is_google_realtime_model("endpoints/123456789"))
+        self.assertTrue(_is_google_realtime_model("8349281749281948291"))
 
 
 if __name__ == "__main__":
