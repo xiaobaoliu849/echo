@@ -161,6 +161,53 @@ describe("useTavusConversation", () => {
     expect(result.current.isVideoOff).toBe(true);
   });
 
+  it("surfaces a camera failure that happens during the call", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "in-call-camera-fail",
+      conversation_url: "https://tavus.daily.co/in-call-camera-fail",
+    });
+    const call = createCallMock();
+    dailyMocks.createCallObject.mockReturnValue(call);
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start();
+      await result.current.join();
+    });
+    expect(result.current.status).toBe("connected");
+    act(() => {
+      result.current.toggleVideo();
+      getEventHandler(call, "camera-error")({
+        error: { type: "cam-in-use" },
+        errorMsg: { videoOk: false, audioOk: true },
+      });
+    });
+    // In-call there is no prejoin panel, so the failure must reach the
+    // error notice as well as cameraError.
+    expect(result.current.cameraError).toContain("摄像头");
+    expect(result.current.errorMessage).toContain("摄像头");
+  });
+
+  it("keeps a prejoin camera failure out of the in-call error notice", async () => {
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "prejoin-camera-fail",
+      conversation_url: "https://tavus.daily.co/prejoin-camera-fail",
+    });
+    const call = createCallMock();
+    call.startCamera.mockImplementation(async () => {
+      getEventHandler(call, "camera-error")({
+        error: { type: "cam-in-use" },
+        errorMsg: { videoOk: false, audioOk: true },
+      });
+      return {};
+    });
+    dailyMocks.createCallObject.mockReturnValue(call);
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => { await result.current.start(); });
+    expect(result.current.status).toBe("prejoin");
+    expect(result.current.cameraError).toContain("摄像头");
+    expect(result.current.errorMessage).toBe("");
+  });
+
   it("retries an unavailable camera and enables video when it recovers", async () => {
     vi.mocked(createTavusConversation).mockResolvedValue({
       conversation_id: "retry-camera",
@@ -558,6 +605,34 @@ describe("useTavusConversation", () => {
     });
 
     expect(endTavusConversation).not.toHaveBeenCalled();
+  });
+
+  it("keeps the call alive when the participant list cannot be read", async () => {
+    vi.useFakeTimers();
+    vi.mocked(createTavusConversation).mockResolvedValue({
+      conversation_id: "conv-unreadable",
+      conversation_url: "https://tavus.daily.co/room?t=token",
+    });
+    const call = createCallMock();
+    dailyMocks.createCallObject.mockReturnValue(call);
+
+    const { result } = renderHook(() => useTavusConversation({ formatErrorMessage: formatErrorStub }));
+    await act(async () => {
+      await result.current.start();
+      await result.current.join();
+    });
+    // The call machine breaks only after the join, so participant-left
+    // handling hits an unreadable participant list.
+    call.participants.mockImplementation(() => { throw new Error("call machine destroyed"); });
+
+    act(() => { getEventHandler(call, "participant-left")(); });
+    await act(async () => {
+      vi.advanceTimersByTime(1600);
+    });
+
+    // A broken participant lookup must not throw nor kill a live call.
+    expect(endTavusConversation).not.toHaveBeenCalled();
+    expect(result.current.status).toBe("connected");
   });
 
   it("ends a late-created room after unmount and prevents duplicate starts", async () => {
