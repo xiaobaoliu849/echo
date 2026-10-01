@@ -82,6 +82,60 @@ class GoogleRealtimeMixin:
     """Google Gemini Live provider methods for RealtimeVoiceService."""
 
     @staticmethod
+    def _extract_google_pcm(response: Any) -> bytes | None:
+        model_turn = getattr(getattr(response, "server_content", None), "model_turn", None)
+        if model_turn is None:
+            return getattr(response, "data", None)
+        # SDK response.data joins every inline part, including MP4 video.
+        # Only PCM belongs in the existing audio playback contract.
+        chunks = []
+        for part in getattr(model_turn, "parts", None) or []:
+            inline = getattr(part, "inline_data", None)
+            if inline is not None and str(inline.mime_type or "").lower().startswith("audio/pcm") and isinstance(inline.data, bytes):
+                chunks.append(inline.data)
+        return b"".join(chunks) or None
+
+    @staticmethod
+    def _create_agent_platform_client(settings: dict, *, avatar: bool, live_translate: bool):
+        """Keep Cloud OAuth credentials and regional routing on the backend."""
+        location = "global" if live_translate else settings.get("location", "").strip() or "us-central1"
+        if avatar and location not in {"us-central1", "us", "eu"}:
+            raise ValueError("Live Avatar region must be us-central1, us, or eu. 请在设置中选择支持的区域。")
+        configured_file = settings.get("sa_file", "").strip()
+        if configured_file and not Path(configured_file).is_file():
+            raise ValueError("The configured service-account JSON file does not exist on the backend computer. 服务账号文件路径不存在。")
+        sa_file = resolve_agent_platform_service_account_file(configured_file)
+        api_key = settings.get("api_key", "").strip()
+        if api_key and not sa_file and not avatar:
+            return genai.Client(vertexai=True, api_key=api_key), settings.get("project_id", ""), location
+        try:
+            if sa_file:
+                from google.oauth2 import service_account
+                credentials = service_account.Credentials.from_service_account_file(
+                    sa_file, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+                credential_project = credentials.project_id
+            else:
+                import google.auth
+                credentials, credential_project = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+        except Exception as exc:
+            raise RuntimeError(
+                "Google Cloud OAuth credentials are required. Run gcloud auth application-default login "
+                "or configure a service-account JSON path in Settings → Google Agent Platform. "
+                "Live Avatar cannot use a Google AI Studio API key. "
+                "需要 Google Cloud 凭据，请配置服务账号 JSON 或执行 ADC 登录。"
+            ) from exc
+        project_id = settings.get("project_id", "").strip() or credential_project
+        if not project_id:
+            raise ValueError("Configure your Google Cloud project ID in Settings → Google Agent Platform. 请填写项目 ID。")
+        return genai.Client(
+            vertexai=True, project=project_id, location=location, credentials=credentials,
+            http_options={"api_version": "v1"} if avatar else None,
+        ), project_id, location
+
+    @staticmethod
     def _build_google_memory_prefill_turns(memory_context: str) -> list[dict[str, Any]]:
         if not memory_context.strip():
             return []
@@ -230,6 +284,7 @@ class GoogleRealtimeMixin:
         voice: str = DEFAULT_GOOGLE_REALTIME_VOICE,
         instructions: str | None = None,
         model: str | None = None,
+        avatar_name: str | None = None,
     ):
         is_transcribe = "transcribe" in str(model or "").lower()
         if is_transcribe:
@@ -261,7 +316,7 @@ class GoogleRealtimeMixin:
         voice_lookup = {v.lower(): v for v in GOOGLE_REALTIME_VOICES}
         safe_voice = voice_lookup.get((voice or "").strip().lower(), DEFAULT_GOOGLE_REALTIME_VOICE)
 
-        is_avatar = "avatar" in str(model or "").lower()
+        is_avatar = bool(avatar_name)
         response_mods = ["VIDEO"] if is_avatar else ["AUDIO"]
 
         live_kwargs: dict[str, Any] = {
@@ -289,8 +344,10 @@ class GoogleRealtimeMixin:
         if is_thinking and hasattr(types, "ThinkingConfig"):
             live_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="low")
 
-        if is_avatar and hasattr(types, "AvatarConfig"):
-            live_kwargs["avatar_config"] = types.AvatarConfig(avatar_name="Ben")
+        if is_avatar:
+            if not hasattr(types, "AvatarConfig"):
+                raise RuntimeError("Live Avatar requires a google-genai SDK with AvatarConfig support. 请更新 google-genai。")
+            live_kwargs["avatar_config"] = types.AvatarConfig(avatar_name=avatar_name)
 
         return types.LiveConnectConfig(**live_kwargs)
     @staticmethod
@@ -774,7 +831,7 @@ class GoogleRealtimeMixin:
                                     websocket, "user_transcript",
                                     text=pending_google_user_transcript, turn_id="",
                                 )
-                    audio_data = getattr(response, "data", None)
+                    audio_data = self._extract_google_pcm(response)
                     if audio_data and not suppress_interrupted_google_response:
                         if is_live_translate:
                             last_activity_time = time.time()
@@ -959,21 +1016,6 @@ class GoogleRealtimeMixin:
                     if not server_content:
                         continue
 
-                    if hasattr(server_content, "model_turn") and server_content.model_turn:
-                        for part in getattr(server_content.model_turn, "parts", []):
-                            inline = getattr(part, "inline_data", None)
-                            if inline is not None:
-                                mime = str(getattr(inline, "mime_type", "") or "").lower()
-                                inline_bytes = getattr(inline, "data", None)
-                                if inline_bytes and (mime.startswith("video/") or mime.startswith("image/")):
-                                    b64_data = base64.b64encode(inline_bytes).decode("ascii") if isinstance(inline_bytes, (bytes, bytearray)) else str(inline_bytes)
-                                    await self._send_event(
-                                        websocket,
-                                        "assistant_video_frame",
-                                        mime_type=mime,
-                                        data=b64_data,
-                                    )
-
                     user_transcript_fields = ("input_transcription", "input_audio_transcription", "transcription")
                     input_transcription_value: Any = None
                     for transcript_field in user_transcript_fields:
@@ -1079,6 +1121,20 @@ class GoogleRealtimeMixin:
 
                     if is_live_translate:
                         await complete_live_translate_turn_if_needed()
+
+                    if getattr(server_content, "model_turn", None) and not suppress_interrupted_google_response and not getattr(server_content, "interrupted", False):
+                        for part in server_content.model_turn.parts or []:
+                            inline = getattr(part, "inline_data", None)
+                            if inline is None or not inline.data:
+                                continue
+                            mime = str(inline.mime_type or "").lower()
+                            if mime.startswith(("video/", "image/")):
+                                data = base64.b64encode(inline.data).decode("ascii") if isinstance(inline.data, (bytes, bytearray)) else str(inline.data)
+                                await self._emit_assistant_output(
+                                    websocket, interruption,
+                                    {"type": "assistant_video_frame", "mime_type": mime, "data": data},
+                                    memory_session=memory_session, recorder=recorder, record_memory=False,
+                                )
 
                     turn_complete_flag = bool(getattr(server_content, "turn_complete", False))
                     if turn_complete_flag and consume_next_google_terminal:
@@ -1187,8 +1243,19 @@ class GoogleRealtimeMixin:
         source_language_code: str = "zh-Hans",
         target_language_code: str = "en",
         echo_target_language: bool = True,
+        avatar_name: str | None = None,
     ) -> None:
         settings = self._resolve_google_settings(model, provider=provider)
+        # The legacy UI alias is migrated only on the Cloud route.
+        if settings["model"] == "gemini-3.8-live-avatar":
+            avatar_name = avatar_name or "Ben"
+            settings["model"] = "gemini-3.8-live"
+        if avatar_name is not None:
+            avatar_name = avatar_name.strip()
+            if settings["provider"] != "AgentPlatform" or settings["model"].split("/")[-1] != "gemini-3.8-live":
+                raise ValueError("Live Avatar requires Google Agent Platform / gemini-3.8-live. 请切换至 Google Agent Platform。")
+            if not avatar_name or len(avatar_name) > 80:
+                raise ValueError("Enter a prebuilt avatar name from Google Cloud Studio. 请填写预置分身名称。")
         # requested vs resolved makes a silent model fallback visible in the log
         # instead of only surfacing as a confusing upstream 1008 error.
         logger.info(
@@ -1204,11 +1271,6 @@ class GoogleRealtimeMixin:
         if memory_session._config.get_service() is None and not memory_session._explicitly_configured:
             memory_session.configure_from_server()
         tool_session = VoiceAgentToolSession(default_provider=provider, memory_session=memory_session)
-        recorder = await self._create_voice_session_recorder(
-            provider=provider,
-            model=settings["model"],
-            voice=voice,
-        )
         http_options: dict[str, str] = {"api_version": "v1beta"}
         if settings["base_url"]:
             http_options["base_url"] = settings["base_url"]
@@ -1216,64 +1278,15 @@ class GoogleRealtimeMixin:
         api_key = settings["api_key"].strip()
         base_url = settings.get("base_url", "").strip()
         is_live_translate = _is_google_live_translate_model(settings["model"])
-        is_vertex = provider in {"AgentPlatform", "VertexAI"}
+        is_vertex = settings["provider"] == "AgentPlatform"
 
         sa_file = resolve_agent_platform_service_account_file(settings.get("sa_file", ""))
 
         if is_vertex:
-            # For Gemini Live Translate models on Vertex AI / Agent Platform, official docs specify location="global".
-            default_location = "global" if is_live_translate else "us-central1"
-            location = settings.get("location", "").strip() or default_location
-            if is_live_translate and location != "global":
-                logger.info("agent_platform_live_translate: overriding location %s to global as required by Google Cloud", location)
-                location = "global"
-
-            has_sa = bool(sa_file and os.path.exists(sa_file))
-            if has_sa:
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath(sa_file)
-                sa_project = ""
-                try:
-                    with open(sa_file, "r", encoding="utf-8") as f:
-                        sa_data = json.load(f)
-                        sa_project = str(sa_data.get("project_id", "")).strip()
-                except Exception:
-                    pass
-
-                configured_proj = settings.get("project_id", "").strip()
-                if configured_proj and configured_proj != "my-gcp-project":
-                    project_id = configured_proj
-                else:
-                    project_id = sa_project or os.environ.get("VERTEX_PROJECT_ID", "").strip() or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip() or "gen-lang-client-0313108616"
-                client = genai.Client(
-                    vertexai=True,
-                    project=project_id,
-                    location=location,
-                )
-                logger.info(
-                    "agent_platform_client: auth=service_account project=%s location=%s sa_file=%s",
-                    project_id, location, sa_file,
-                )
-            elif api_key:
-                # Vertex AI Express Mode with API Key (no ADC required)
-                client = genai.Client(
-                    vertexai=True,
-                    api_key=api_key,
-                )
-                logger.info("agent_platform_client: auth=express_api_key")
-            else:
-                project_id = (
-                    settings.get("project_id", "").strip()
-                    or os.environ.get("VERTEX_PROJECT_ID", "").strip()
-                    or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
-                    or "gen-lang-client-0313108616"
-                )
-                client = genai.Client(
-                    vertexai=True,
-                    project=project_id,
-                    location=location,
-                )
-                logger.info("agent_platform_client: auth=adc project=%s location=%s", project_id, location)
-
+            client, project_id, location = self._create_agent_platform_client(
+                settings, avatar=bool(avatar_name), live_translate=is_live_translate,
+            )
+            has_sa = bool(sa_file)
         else:
             client_http_opts = http_options if http_options.get("base_url") else None
             client = genai.Client(api_key=api_key, http_options=client_http_opts)
@@ -1322,22 +1335,17 @@ class GoogleRealtimeMixin:
                 echo_target_language,
             )
             if is_live_translate
-            else self._build_live_config(voice, instructions, model=settings["model"])
+            else self._build_live_config(voice, instructions, model=settings["model"], avatar_name=avatar_name)
         )
 
         live_model = settings["model"]
-        if "avatar" in live_model.lower():
-            if live_model.endswith("-avatar"):
-                live_model = live_model[:-7]
-            elif "gemini-3.8-live-avatar" in live_model:
-                live_model = live_model.replace("gemini-3.8-live-avatar", "gemini-3.8-live")
         if is_vertex:
             if live_model.startswith("endpoints/"):
                 gcp_project = (
                     settings.get("project_id", "").strip()
                     or os.environ.get("VERTEX_PROJECT_ID", "").strip()
                     or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
-                    or "gen-lang-client-0313108616"
+                    or project_id
                 )
                 live_model = f"projects/{gcp_project}/locations/{location}/{live_model}"
                 logger.info("agent_platform_live_model: expanded endpoint resource to %s", live_model)
@@ -1346,7 +1354,7 @@ class GoogleRealtimeMixin:
                     settings.get("project_id", "").strip()
                     or os.environ.get("VERTEX_PROJECT_ID", "").strip()
                     or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
-                    or "gen-lang-client-0313108616"
+                    or project_id
                 )
                 live_model = f"projects/{gcp_project}/locations/{location}/endpoints/{live_model.strip()}"
                 logger.info("agent_platform_live_model: expanded numeric endpoint ID to %s", live_model)
@@ -1357,11 +1365,16 @@ class GoogleRealtimeMixin:
                     settings.get("project_id", "").strip()
                     or os.environ.get("VERTEX_PROJECT_ID", "").strip()
                     or os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
-                    or "gen-lang-client-0313108616"
+                    or project_id
                 )
                 live_model = f"projects/{gcp_project}/locations/{location}/publishers/google/models/{live_model}"
                 logger.info("agent_platform_live_model: expanded to full resource name %s", live_model)
 
+        recorder = await self._create_voice_session_recorder(
+            provider=provider,
+            model=settings["model"],
+            voice=voice,
+        )
         try:
             async with client.aio.live.connect(model=live_model, config=live_config) as session:
                 await self._send_event(
@@ -1371,7 +1384,8 @@ class GoogleRealtimeMixin:
                     model=settings["model"],
                     voice=voice,
                     session_id=recorder.session_id if recorder is not None else "",
-                    mode="live_translate" if is_live_translate else "realtime_chat",
+                    mode="live_avatar" if avatar_name else "live_translate" if is_live_translate else "realtime_chat",
+                    avatar_name=avatar_name or "",
                     translation_mode=translation_mode if is_live_translate else "",
                     source_language_code=source_language_code if is_live_translate else "",
                     target_language_code=target_language_code if is_live_translate else "",
@@ -1407,7 +1421,14 @@ class GoogleRealtimeMixin:
         except Exception as e:
             logger.exception("Google realtime session failed: %s", e)
             error_text = str(e)
-            if "API keys are not supported by this API" in error_text or ("1008" in error_text and "OAuth2" in error_text):
+            if avatar_name:
+                error_msg = (
+                    "Live Avatar session failed. Check Cloud billing, Agent Platform API, IAM access, "
+                    "project/region, and the prebuilt avatar name in Google Cloud Studio → Stream realtime. "
+                    "Custom avatars require access from your Google Cloud account team. "
+                    "请检查项目权限、区域及预置分身名称。 " + error_text
+                )
+            elif "API keys are not supported by this API" in error_text or ("1008" in error_text and "OAuth2" in error_text):
                 error_msg = (
                     "Google 实时会话启动失败：Google Agent Platform 实时语音接口仅支持 OAuth2 访问令牌或服务账号凭据（不支持普通 API Key）。"
                     "如果您使用的是 Google AI Studio API Key，请将供应商直接选择为「Google」即可畅快通话；"
@@ -1438,3 +1459,4 @@ class GoogleRealtimeMixin:
             await tool_session.drain(cancel=True)
             if recorder is not None:
                 await recorder.finish()
+            await client.aio.aclose()

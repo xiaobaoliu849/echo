@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { extractPdfText } from "../../api";
 import VoiceCallSettingsPopover from "../VoiceCallSettingsPopover";
 import { isVoiceRealtimeModel } from "../../hooks/useChat";
-import { formatVoiceChatSecondaryLabel, isAvatarModel, isRealtimeVoiceModel } from "../../hooks/useVoiceChatHelpers";
+import { formatVoiceChatSecondaryLabel, isRealtimeVoiceModel } from "../../hooks/useVoiceChatHelpers";
 import type { UseChatResult } from "../../hooks/useChat";
 import type { UseVoiceChatResult } from "../../hooks/useVoiceChat";
 import { useI18n } from "../../i18n";
+import LiveAvatarPlayer from "../LiveAvatarPlayer";
 
 type Props = {
   chat: UseChatResult;
@@ -389,6 +390,27 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
   return (
     <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""}`}>
+      {voiceChat.voiceChatAvatarSupported && (
+        <div className="vsLiveAvatarSettings">
+          <label>
+            <input type="checkbox" checked={voiceChat.voiceChatLiveAvatar} disabled={isVoiceActive || voiceChat.voiceChatBusy}
+              onChange={(e) => voiceChat.onAvatarEnabledChange(e.target.checked)} />
+            {t("实时视频分身 · Live Avatar", "Live Avatar")}
+          </label>
+          {voiceChat.voiceChatLiveAvatar && <label>
+            {t("预置分身名称", "Prebuilt avatar name")}
+            <input className="vsInput" value={voiceChat.voiceChatAvatarName} maxLength={80}
+              disabled={isVoiceActive || voiceChat.voiceChatBusy} onChange={(e) => voiceChat.onAvatarNameChange(e.target.value)} />
+          </label>}
+          {voiceChat.voiceChatLiveAvatar && <span className="vsFieldHint">
+            {t("默认 Ben；可填写 Cloud Studio 分身列表中的名称。语音在左侧选择，点击通话按钮开始。", "Ben is the default. Enter another name from Cloud Studio’s Avatar list. Choose a voice on the left, then click the call button.")}
+          </span>}
+          {voiceChat.voiceChatLiveAvatar && <a href="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api/configure-live-avatars" target="_blank" rel="noreferrer">
+            {t("获取 Google Cloud 接入权限", "Google Cloud access and setup")}
+          </a>}
+        </div>
+      )}
+      {voiceChat.voiceChatLiveAvatar && <LiveAvatarPlayer stream={voiceChat.voiceChatVideoStream} />}
       {/* ── Live Voice Dynamic Call Capsule Banner ── */}
       {isVoiceActive && (
         <div className="vsLiveVoiceStatusBanner">
@@ -615,8 +637,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
                 // live-translate) with the chat model (e.g. DashScope), and
                 // the same-tick startSession would use stale state anyway.
                 const activeProv = chat ? chat.chatProvider : voiceChat.voiceChatProvider;
-                const activeMod = chat ? chat.chatModel : voiceChat.voiceChatModel;
-                if (activeProv === "Tavus" || isAvatarModel(activeProv, activeMod)) {
+                if (activeProv === "Tavus") {
                   if (onOpenPal) {
                     onOpenPal();
                   } else {

@@ -330,8 +330,8 @@ def resolve_agent_platform_service_account_file(sa_file: str = "") -> str:
     from pathlib import Path
 
     candidate = (
-        os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-        or str(sa_file or "").strip()
+        str(sa_file or "").strip()
+        or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     )
     if candidate and os.path.exists(candidate):
         return str(Path(candidate).resolve())

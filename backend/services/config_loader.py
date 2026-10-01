@@ -382,6 +382,7 @@ class BackendConfig:
             "model": selected_model,
         }
         if provider == AGENT_PLATFORM_PROVIDER:
+            res["sa_file"] = str(api_keys.get("vertex_sa_file", "") or self._config.get("vertex_sa_file", "")).strip()
             res["project_id"] = (
                 str(api_keys.get("vertex_project_id", "")).strip()
                 or str(self._config.get("vertex_project_id", "")).strip()

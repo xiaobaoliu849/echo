@@ -68,7 +68,12 @@ export const VERCEL_PROVIDER = "Vercel";
 export const TAVUS_PROVIDER = "Tavus";
 export const GOOGLE_3_8_LIVE_MODEL = "gemini-3.8-live";
 export const GOOGLE_3_8_LIVE_THINKING_MODEL = "gemini-3.8-live-extended-thinking";
+// Legacy UI alias; never send this as a Google model ID.
 export const GOOGLE_3_8_LIVE_AVATAR_MODEL = "gemini-3.8-live-avatar";
+export function supportsLiveAvatar(provider: string, model: string): boolean {
+  return ["agentplatform", "vertexai"].includes(provider.toLowerCase()) &&
+    model.split("/").pop() === GOOGLE_3_8_LIVE_MODEL;
+}
 export const VERCEL_GEMINI_3_8_LIVE = "google/gemini-3.8-live";
 export const VERCEL_GEMINI_3_8_LIVE_THINKING = "google/gemini-3.8-live-extended-thinking";
 export const GOOGLE_FLASH_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
@@ -115,7 +120,7 @@ export function isAvatarModel(provider?: string, model?: string): boolean {
     return true;
   }
   return (
-    (normProv === "agentplatform" || normProv === "google" || normProv === "vertexai") &&
+    (normProv === "agentplatform" || normProv === "vertexai") &&
     (normModel.includes("avatar") || normModel === GOOGLE_3_8_LIVE_AVATAR_MODEL)
   );
 }
@@ -913,9 +918,9 @@ export function resolveRealtimeModelOptions(
     : [];
 
   const configuredModels = enabledModels.length > 0 ? enabledModels : rawAvailable;
-  const realtimeModels = configuredModels.filter((item) => isRealtimeVoiceModel(provider, item));
+  const realtimeModels = configuredModels.filter((item) => item !== GOOGLE_3_8_LIVE_AVATAR_MODEL && isRealtimeVoiceModel(provider, item));
   const preferredDefault = (providerMeta?.defaultModel || "").trim();
-  const isPreferredValid = enabledModels.length === 0 || enabledModels.includes(preferredDefault);
+  const isPreferredValid = preferredDefault !== GOOGLE_3_8_LIVE_AVATAR_MODEL && (enabledModels.length === 0 || enabledModels.includes(preferredDefault));
 
   const fallbackModel = (isPreferredValid && isRealtimeVoiceModel(provider, preferredDefault))
     ? preferredDefault
@@ -924,7 +929,6 @@ export function resolveRealtimeModelOptions(
     ? [
         "gemini-3.8-live",
         "gemini-3.8-live-extended-thinking",
-        "gemini-3.8-live-avatar",
         "gemini-3.1-flash-live-preview",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",
@@ -935,7 +939,6 @@ export function resolveRealtimeModelOptions(
     ? [
         "gemini-3.8-live",
         "gemini-3.8-live-extended-thinking",
-        "gemini-3.8-live-avatar",
         "gemini-live-2.5-flash-native-audio",
         "gemini-3.5-live-translate-preview",
         "gemini-3.5-transcribe-live",

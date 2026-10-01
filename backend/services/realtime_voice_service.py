@@ -307,7 +307,7 @@ class RealtimeVoiceService(
             base_url = ""
         if _is_google_public_rest_base_url(base_url):
             base_url = ""
-        if not api_key and not (provider == "AgentPlatform" and os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")):
+        if not api_key and provider != "AgentPlatform":
             raise RuntimeError(f"{provider} API Key 未配置，无法启动实时语音会话。")
         if genai is None or types is None:
             raise RuntimeError("google-genai 依赖未安装，无法启动实时语音会话。")
@@ -318,6 +318,7 @@ class RealtimeVoiceService(
             "model": resolved_model,
         }
         if provider == "AgentPlatform":
+            res["sa_file"] = provider_settings.get("sa_file", "")
             res["project_id"] = provider_settings.get("project_id", "")
             res["location"] = provider_settings.get("location", "us-central1")
         return res
@@ -460,6 +461,10 @@ class RealtimeVoiceService(
             if first_audio_ms is not None:
                 payload["first_audio_ms"] = first_audio_ms
             await self._send_event(websocket, "assistant_audio", **payload)
+            return
+        if event_type == "assistant_video_frame":
+            await self._send_event(websocket, "assistant_video_frame",
+                                   mime_type=event["mime_type"], data=event["data"])
 
     async def _emit_assistant_output(
         self,

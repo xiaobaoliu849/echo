@@ -168,6 +168,23 @@ describe('useSettings', () => {
         );
     });
 
+    it('persists Cloud project, region, and service-account path with no API key', async () => {
+        vi.mocked(updateSettings).mockClear();
+        const { result } = renderHook(() => useSettings({ formatErrorMessage: createFormatErrorMessageStub() }));
+        await waitFor(() => expect(result.current.settingsBusy).toBe(false));
+        act(() => result.current.onProviderChange('AgentPlatform'));
+        act(() => {
+            result.current.onApiKeyChange('');
+            result.current.onCloudProjectIdChange('my-project');
+            result.current.onCloudLocationChange('eu');
+            result.current.onCloudSaFileChange('C:/credentials/cloud.json');
+        });
+        await act(async () => { await result.current.onSubmit({ preventDefault: vi.fn() } as never); });
+        expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ api_keys: {
+            vertex_api_key: '', vertex_project_id: 'my-project', vertex_location: 'eu', vertex_sa_file: 'C:/credentials/cloud.json',
+        } }));
+    });
+
     it('persists Doubao provider settings without key mapping error', async () => {
         const updateSettingsMock = vi.mocked(updateSettings);
         updateSettingsMock.mockClear();

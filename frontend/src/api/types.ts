@@ -714,7 +714,8 @@ export type VoiceChatServerEvent =
       model: string;
       voice: string;
       session_id?: string;
-      mode?: "realtime_chat" | "live_translate";
+      mode?: "realtime_chat" | "live_translate" | "live_avatar";
+      avatar_name?: string;
       target_language_code?: string;
       echo_target_language?: boolean;
     }
@@ -752,6 +753,7 @@ export type VoiceChatServerEvent =
       first_audio_ms?: number;
     }
   | { type: "assistant_playback_stop" }
+  | { type: "assistant_video_frame"; mime_type: string; data: string }
   | {
       type: "interruption_pending";
       candidate_id: string;

@@ -232,6 +232,7 @@ async def voice_chat_ws(
     provider: str = "DashScope",
     model: str | None = None,
     voice: str | None = None,
+    avatar_name: str | None = None,
     voiceprint_audio_urls: list[str] | None = Query(default=None),
     translation_mode: str = "bidirectional",
     source_language_code: str = "zh-Hans",
@@ -322,7 +323,10 @@ async def voice_chat_ws(
         # working service-account setup is rejected here as "missing key".
         from services.realtime_constants import resolve_agent_platform_service_account_file
         _sa = resolve_agent_platform_service_account_file(_cfg.get_setting("vertex_sa_file") or "")
-        if not _cfg.get_setting("vertex_api_key") and not _sa:
+        # A configured Cloud project can use gcloud application-default login;
+        # ADC is validated by the SDK when constructing the regional client.
+        _project = _cfg.get_provider_settings("AgentPlatform").get("project_id", "")
+        if not _cfg.get_setting("vertex_api_key") and not _sa and not _project:
             _missing.append("Google Agent Platform API Key 或服务账号 JSON")
         else:
             logger.info(
@@ -444,6 +448,7 @@ async def voice_chat_ws(
                 source_language_code=(source_language_code or "zh-Hans").strip(),
                 target_language_code=(target_language_code or "en").strip(),
                 echo_target_language=bool(echo_target_language),
+                avatar_name=avatar_name,
             )
     except WebSocketDisconnect:
         pass

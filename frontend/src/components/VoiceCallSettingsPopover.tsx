@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
+  supportsLiveAvatar,
   DASHSCOPE_PROVIDER,
   DEFAULT_TAVUS_MODEL,
   GLM4VOICE_PROVIDER,
@@ -12,7 +13,6 @@ import {
   getProviderBadge,
   getProviderDisplayName,
   getProviderSortOrder,
-  isAvatarModel,
   isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
 import { useLocalVoiceStatus } from "../hooks/useLocalVoiceStatus";
@@ -34,6 +34,7 @@ type ModelChoiceItem = {
   model: string;
   value: string;
   isRealtime: boolean;
+  avatar?: boolean;
 };
 
 type ProviderGroup = {
@@ -54,6 +55,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const [activeCategory, setActiveCategory] = useState<"voice" | "translation" | "">("");
   // Level 2: Hovered Model ("" = fallback to active model)
   const [hoveredModel, setHoveredModel] = useState<string>("");
+  const [hoveredAvatar, setHoveredAvatar] = useState<boolean | undefined>();
 
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -128,9 +130,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
     return Array.from(map.entries())
       .map(([provider, modelMap]) => {
-        let models = provider === TAVUS_PROVIDER
+        let models: ModelChoiceItem[] = provider === TAVUS_PROVIDER
           ? [{ model: DEFAULT_TAVUS_MODEL, value: buildModelChoiceValue(provider, DEFAULT_TAVUS_MODEL), isRealtime: true }]
-          : Array.from(modelMap.values());
+          : Array.from(modelMap.values()).filter((item) => item.model !== "gemini-3.8-live-avatar");
         // Deduplicate dated snapshot models when the unversioned alias exists
         // (e.g. qwen3.5-omni-plus-realtime vs qwen3.5-omni-plus-realtime-2026-03-15).
         // Generic over every omni realtime family — keying this on
@@ -151,6 +153,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
             models = models.filter((m) => !hidden.has(m.model));
           }
         }
+        models = models.flatMap((item) => supportsLiveAvatar(provider, item.model)
+          ? [item, { ...item, value: `${item.value}\u001favatar`, avatar: true }]
+          : [item]);
         return {
           provider,
           models,
@@ -230,7 +235,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const canShowTranslationCategory = isDashScopeLiveTranslate;
   const canShowVoiceCategory = Boolean(previewModel);
 
-  function commitProviderModel(provider: string, model: string) {
+  function commitProviderModel(provider: string, model: string, avatar?: boolean) {
     traceSelection("popoverPick", `${provider}/${model}`);
     if (chat) {
       chat.onModelChoiceChange(buildModelChoiceValue(provider, model));
@@ -246,6 +251,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     if (isVoiceRealtimeModel(provider, model)) {
       voiceChat.onModelChange(model);
     }
+    if (avatar !== undefined) {
+      voiceChat.onAvatarEnabledChange(avatar && supportsLiveAvatar(provider, model));
+    }
   }
 
   function commitCurrentTranslateModel() {
@@ -254,12 +262,16 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     }
   }
 
-  function handleModelSelect(provider: string, model: string) {
+  function handleModelSelect(provider: string, model: string, avatar = false) {
     setHoveredModel(model);
-    commitProviderModel(provider, model);
-    if (provider === TAVUS_PROVIDER || isAvatarModel(provider, model)) {
+    commitProviderModel(provider, model, avatar);
+    if (provider === TAVUS_PROVIDER) {
       closePopover();
       onOpenPal?.();
+      return;
+    }
+    if (supportsLiveAvatar(provider, model)) {
+      closePopover();
       return;
     }
 
@@ -285,6 +297,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     setActiveProvider("");
     setActiveCategory("");
     setHoveredModel("");
+    setHoveredAvatar(undefined);
   }
 
   function handleToggle() {
@@ -295,6 +308,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       setActiveProvider("");
       setActiveCategory("");
       setHoveredModel("");
+      setHoveredAvatar(undefined);
       setOpen(true);
     } else {
       closePopover();
@@ -413,6 +427,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   const summaryText = currentProviderName === TAVUS_PROVIDER
     ? t("Tavus · 视频分身", "Tavus · Video PAL")
+    : voiceChat.voiceChatLiveAvatar && currentProviderName === committedProvider && currentModelName === committedModel
+    ? `Gemini 3.8 Live · Avatar · ${voiceChat.voiceChatAvatarName}`
     : isCurrentModelRealtime
     ? `${currentModelName} · ${secondaryLabel}`
     : currentModelName.trim()
@@ -469,11 +485,13 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       setActiveProvider(group.provider);
                       setActiveCategory("");
                       setHoveredModel("");
+                      setHoveredAvatar(undefined);
                     }}
                     onClick={() => {
                       setActiveProvider(group.provider);
                       setActiveCategory("");
                       setHoveredModel("");
+                      setHoveredAvatar(undefined);
                     }}
                   >
                     <span className="vsVoiceSettingsProviderCheck" aria-hidden="true">
@@ -516,7 +534,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                 style={{ flex: 1, justifyContent: "center", fontWeight: 600 }}
                 onClick={() => {
                   if (currentProviderName && currentModelName) {
-                    commitProviderModel(currentProviderName, currentModelName);
+                    commitProviderModel(currentProviderName, currentModelName, hoveredAvatar);
                   }
                   closePopover();
                 }}
@@ -536,19 +554,23 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
               <div className="vsVoiceSettingsList">
                 {currentProviderGroup.models.map((item) => {
                   const isSelectedModel =
-                    currentProviderGroup.provider === (chat ? chat.chatProvider : voiceChat.voiceChatProvider) &&
-                    item.model === (chat ? chat.chatModel : voiceChat.voiceChatModel);
-                  const hint = formatModelHint(currentProviderGroup.provider, item.model, t);
+                    currentProviderGroup.provider === committedProvider &&
+                    item.model === committedModel &&
+                    Boolean(item.avatar) === Boolean(voiceChat.voiceChatLiveAvatar);
+                  const hint = item.avatar
+                    ? t("实时视频分身 · 默认形象 Ben", "Live video avatar · Default face Ben")
+                    : formatModelHint(currentProviderGroup.provider, item.model, t);
                   return (
                     <button
                       key={item.value}
                       type="button"
                       className={`vsVoiceSettingsRow${isSelectedModel ? " selected" : ""}`}
                       aria-current={isSelectedModel ? "true" : undefined}
-                      title={item.model}
+                      title={item.avatar ? "Gemini 3.8 Live · Avatar" : item.model}
                       onMouseEnter={() => {
                         setHoveredModel(item.model);
-                        if (currentProviderGroup.provider === TAVUS_PROVIDER) {
+                        setHoveredAvatar(Boolean(item.avatar));
+                        if (item.avatar || currentProviderGroup.provider === TAVUS_PROVIDER) {
                           setActiveCategory("");
                         } else if (isLiveTranslateModelHelper(currentProviderGroup.provider, item.model)) {
                           setActiveCategory("translation");
@@ -556,15 +578,15 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                           setActiveCategory("voice");
                         }
                       }}
-                      onClick={() => handleModelSelect(currentProviderGroup.provider, item.model)}
+                      onClick={() => handleModelSelect(currentProviderGroup.provider, item.model, item.avatar)}
                     >
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                        <span className="vsVoiceSettingsRowLabel" title={item.model}>
+                        <span className="vsVoiceSettingsRowLabel" title={item.avatar ? "Gemini 3.8 Live · Avatar" : item.model}>
                           {currentProviderGroup.provider === TAVUS_PROVIDER
                             ? t("打开视频分身", "Open Video PAL")
-                            : item.model}
+                            : item.avatar ? "Gemini 3.8 Live · Avatar" : item.model}
                         </span>
-                        {item.isRealtime ? (
+                        {item.isRealtime && !item.avatar ? (
                           <span className="vsVoiceSettingsProviderChevron" aria-hidden="true" style={{ fontSize: 12, opacity: 0.6 }}>
                             ›
                           </span>

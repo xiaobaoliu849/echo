@@ -209,12 +209,13 @@ class AgentPlatformProviderTests(unittest.IsolatedAsyncioTestCase):
                 resolved = resolve_agent_platform_service_account_file(str(explicit))
                 self.assertEqual(Path(resolved), explicit.resolve())
 
-            # GOOGLE_APPLICATION_CREDENTIALS wins over the config setting.
+            # An explicit user-selected file wins over ambient credentials.
             with _patch.dict(
                 os.environ, {"GOOGLE_APPLICATION_CREDENTIALS": str(from_env)}, clear=False
             ):
                 resolved = resolve_agent_platform_service_account_file(str(explicit))
-                self.assertEqual(Path(resolved), from_env.resolve())
+                self.assertEqual(Path(resolved), explicit.resolve())
+                self.assertEqual(Path(resolve_agent_platform_service_account_file()), from_env.resolve())
 
             # A path that does not exist must not be returned as-is; it falls
             # through to discovery (which may legitimately find nothing).

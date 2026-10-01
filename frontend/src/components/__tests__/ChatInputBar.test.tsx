@@ -1,9 +1,58 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChatInputBar from "../chat/ChatInputBar";
+import useVoiceChat from "../../hooks/useVoiceChat";
 import { createChatController, createVoiceChatController } from "../../test/factories";
 
 describe("ChatInputBar", () => {
+  it("selects Cloud Avatar through the real voice hook, displays Ben and the player, and returns to audio", () => {
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+    const providerOptions = ["Google", "AgentPlatform"];
+    const providerModelCatalog = {
+      Google: { availableModels: ["gemini-3.8-live"], enabledModels: ["gemini-3.8-live"], defaultModel: "gemini-3.8-live" },
+      AgentPlatform: { availableModels: ["gemini-3.8-live"], enabledModels: ["gemini-3.8-live"], defaultModel: "gemini-3.8-live" },
+    };
+    const chat = createChatController({ chatProvider: "Google", chatModel: "gemini-3.8-live" });
+    const onOpenPal = vi.fn();
+    function Composer() {
+      const voiceChat = useVoiceChat({
+        providerOptions, providerModelCatalog, preferredProvider: "Google", preferredModel: "gemini-3.8-live",
+        formatErrorMessage: (error) => String(error),
+      });
+      return <ChatInputBar chat={chat} voiceChat={voiceChat} onOpenPal={onOpenPal} />;
+    }
+    render(<Composer />);
+    fireEvent.click(screen.getByTitle("通话设置"));
+    fireEvent.click(screen.getByText("Agent Platform"));
+    fireEvent.click(screen.getByText("Gemini 3.8 Live · Avatar"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTitle("通话设置")).toHaveTextContent("Gemini 3.8 Live · Avatar · Ben");
+    expect(screen.getByRole("checkbox", { name: /Live Avatar/ })).toBeChecked();
+    expect(screen.getByDisplayValue("Ben")).toBeInTheDocument();
+    expect(document.querySelector(".vsLiveAvatarPlayer video")).toBeInTheDocument();
+    expect(chat.onModelChoiceChange).toHaveBeenCalledWith("AgentPlatform\u001fgemini-3.8-live");
+    expect(onOpenPal).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTitle("通话设置"));
+    expect(screen.getByText("Gemini 3.8 Live · Avatar").closest("button")).toHaveAttribute("aria-current", "true");
+    fireEvent.click(screen.getByText("gemini-3.8-live"));
+    expect(screen.getByRole("checkbox", { name: /Live Avatar/ })).not.toBeChecked();
+    expect(document.querySelector(".vsLiveAvatarPlayer")).toBeNull();
+    expect(screen.getByTitle("通话设置")).not.toHaveTextContent("Avatar");
+  });
+  it("starts Gemini Avatar in Chat without opening the Tavus face page", () => {
+    const voiceChat = createVoiceChatController({
+      voiceChatProvider: "AgentPlatform", voiceChatModel: "gemini-3.8-live",
+      voiceChatAvatarSupported: true, voiceChatLiveAvatar: true,
+    });
+    const onOpenPal = vi.fn();
+    render(<ChatInputBar chat={createChatController({ chatProvider: "AgentPlatform", chatModel: "gemini-3.8-live" })} voiceChat={voiceChat} onOpenPal={onOpenPal} />);
+    fireEvent.change(screen.getByDisplayValue("Ben"), { target: { value: "FaceFromCloud" } });
+    expect(voiceChat.onAvatarNameChange).toHaveBeenCalledWith("FaceFromCloud");
+    fireEvent.click(screen.getByLabelText("实时通话"));
+    expect(voiceChat.onToggleRecording).toHaveBeenCalledOnce();
+    expect(onOpenPal).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
   });

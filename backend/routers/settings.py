@@ -283,6 +283,8 @@ VERCEL_TTS_MODEL_LIST_SUPPLEMENTS = [
     "google/gemini-3.8-flash-lite-tts",
 ]
 AGENT_PLATFORM_MODEL_LIST_SUPPLEMENTS = [
+    "gemini-3.8-live",
+    "gemini-3.8-live-extended-thinking",
     # Mainline and frontier text/multimodal models
     "gemini-3.8-flash",
     "gemini-3.7-flash",

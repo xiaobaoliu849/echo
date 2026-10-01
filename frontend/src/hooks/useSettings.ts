@@ -107,6 +107,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
   const [settingsData, setSettingsData] = useState<AppSettings | null>(null);
   const [settingsProvider, setSettingsProvider] = useState("DashScope");
   const [settingsApiKey, setSettingsApiKey] = useState("");
+  const [settingsCloudProjectId, setSettingsCloudProjectId] = useState("");
+  const [settingsCloudLocation, setSettingsCloudLocation] = useState("us-central1");
+  const [settingsCloudSaFile, setSettingsCloudSaFile] = useState("");
   const [settingsApiUrl, setSettingsApiUrl] = useState("");
   const [settingsRealtimeApiUrl, setSettingsRealtimeApiUrl] = useState("");
   const [settingsDoubaoAppId, setSettingsDoubaoAppId] = useState("");
@@ -272,6 +275,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
     };
   }, [
     settingsApiKey,
+    settingsCloudProjectId,
+    settingsCloudLocation,
+    settingsCloudSaFile,
     settingsApiUrl,
     settingsAvailableModels,
     settingsEnabledModels,
@@ -538,6 +544,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
       const { defaultModel, availableModels, enabledModels, ttsDefaultModel, ttsAvailableModels, ttsEnabledModels } = parseModelValue(modelValue);
 
       setSettingsApiKey(apiKey);
+      setSettingsCloudProjectId(settingsData.api_keys?.vertex_project_id || "");
+      setSettingsCloudLocation(settingsData.api_keys?.vertex_location || "us-central1");
+      setSettingsCloudSaFile(settingsData.api_keys?.vertex_sa_file || "");
       setSettingsApiUrl(apiUrl);
       setSettingsRealtimeApiUrl(settingsData.realtime_api_urls?.[settingsProvider] || "");
       setSettingsDoubaoAppId(settingsData.api_keys?.doubao_app_id || "");
@@ -871,6 +880,14 @@ export default function useSettings({ formatErrorMessage }: Options) {
             [keyField]: settingsApiKey.trim()
           };
         }
+        if (settingsProvider === "AgentPlatform") {
+          patch.api_keys = {
+            ...(patch.api_keys || {}),
+            vertex_project_id: settingsCloudProjectId.trim(),
+            vertex_location: settingsCloudLocation.trim(),
+            vertex_sa_file: settingsCloudSaFile.trim(),
+          };
+        }
         if (settingsProvider === "Doubao") {
           patch.api_keys = {
             ...(patch.api_keys || {}),
@@ -996,6 +1013,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
     settingsConfigPath,
     settingsProvider,
     settingsApiKey,
+    settingsCloudProjectId,
+    settingsCloudLocation,
+    settingsCloudSaFile,
     settingsApiUrl,
     settingsRealtimeApiUrl,
     settingsDoubaoAppId,
@@ -1054,6 +1074,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
     onReload: loadSettings,
     onProviderChange: setSettingsProvider,
     onApiKeyChange: setSettingsApiKey,
+    onCloudProjectIdChange: setSettingsCloudProjectId,
+    onCloudLocationChange: setSettingsCloudLocation,
+    onCloudSaFileChange: setSettingsCloudSaFile,
     onApiUrlChange: setSettingsApiUrl,
     onRealtimeApiUrlChange: setSettingsRealtimeApiUrl,
     onDoubaoAppIdChange: setSettingsDoubaoAppId,

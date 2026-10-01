@@ -53,6 +53,20 @@ class GoogleNativeInterruptionTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ReplayComplete):
                 await task
 
+    async def test_avatar_video_is_delivered_but_canceled_fragments_are_discarded(self):
+        def video(data, **extra):
+            return SimpleNamespace(server_content=SimpleNamespace(
+                model_turn=SimpleNamespace(parts=[SimpleNamespace(inline_data=SimpleNamespace(mime_type="video/mp4", data=data))]),
+                **extra,
+            ))
+        await self.replay([
+            video(b"init"), video(b"stale", interrupted=True), video(b"late"),
+            google_response(turn_complete=True), video(b"new"),
+        ])
+        delivered = [base64.b64decode(e["data"]) for e in self.ws.events if e["type"] == "assistant_video_frame"]
+        self.assertEqual(delivered, [b"init", b"new"])
+        self.assertFalse(any(e["type"] == "assistant_audio" for e in self.ws.events))
+
     async def test_mixed_event_and_late_audio_are_discarded_new_turn_survives(self):
         await self.replay([
             SimpleNamespace(data=b"stale", text="stale", server_content=SimpleNamespace(

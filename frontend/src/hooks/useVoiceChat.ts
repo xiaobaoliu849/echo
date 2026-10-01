@@ -56,6 +56,7 @@ import {
   isQwenAudio31Model,
   isQwenAudioModel,
   isRealtimeVoiceModel,
+  supportsLiveAvatar,
   isTranscriptContinuation,
   appendAssistantDelta,
   mergeAssistantText,
@@ -107,6 +108,11 @@ export default function useVoiceChat({
   const initialModel = resolveDefaultModel(initialProvider, providerModelCatalog);
   const [voiceChatProvider, setVoiceChatProvider] = useState(initialProvider);
   const [voiceChatModel, setVoiceChatModel] = useState(initialModel);
+  const [voiceChatAvatarEnabled, setVoiceChatAvatarEnabled] = useState(false);
+  const [voiceChatAvatarName, setVoiceChatAvatarName] = useState("Ben");
+  const voiceChatVideoStream = useMemo(() => new EventTarget(), []);
+  const voiceChatAvatarSupported = supportsLiveAvatar(voiceChatProvider, voiceChatModel);
+  const voiceChatLiveAvatar = voiceChatAvatarSupported && voiceChatAvatarEnabled;
   const [voiceChatVoice, setVoiceChatVoice] = useState(
     initialProvider === DASHSCOPE_PROVIDER
       ? (isQwenAudio31Model(initialModel) ? "longanqian_v3.1"
@@ -271,6 +277,14 @@ export default function useVoiceChat({
     lastPreferredProviderRef.current = preferredProvider;
     const preferredModelChanged = lastPreferredModelRef.current !== preferredModel;
     lastPreferredModelRef.current = preferredModel;
+    if (!hasExplicitVoiceSelectionRef.current && preferredModel === "gemini-3.8-live-avatar") {
+      // Recover persisted choices from the old fictitious AI Studio model.
+      hasExplicitVoiceSelectionRef.current = true;
+      setVoiceChatProvider(AGENT_PLATFORM_PROVIDER);
+      setVoiceChatModel("gemini-3.8-live");
+      setVoiceChatAvatarEnabled(true);
+      return;
+    }
 
     // Adopt the chat-side selection ONLY when it is itself a realtime voice
     // selection (realtime-capable provider + realtime model) AND the user has
@@ -439,6 +453,7 @@ export default function useVoiceChat({
   }
 
   function stopSessionResources() {
+    voiceChatVideoStream.dispatchEvent(new Event("reset"));
     clearUserTranscriptPreview();
     if (liveTranslateFinishTimerRef.current !== null) {
       clearTimeout(liveTranslateFinishTimerRef.current);
@@ -853,6 +868,9 @@ export default function useVoiceChat({
 
   function handleRealtimeEvent(event: VoiceChatServerEvent) {
     switch (event.type) {
+      case "assistant_video_frame":
+        voiceChatVideoStream.dispatchEvent(new MessageEvent("frame", { data: { mimeType: event.mime_type, data: event.data } }));
+        return;
       case "session_open":
         voiceChatConnectedRef.current = true;
         setVoiceChatConnected(true);
@@ -1163,6 +1181,7 @@ export default function useVoiceChat({
         });
         return;
       case "assistant_playback_stop":
+        voiceChatVideoStream.dispatchEvent(new Event("interrupt"));
         stopAssistantPlayback();
         return;
       case "interruption_pending":
@@ -1246,6 +1265,7 @@ export default function useVoiceChat({
         return;
       }
       case "interrupted":
+        voiceChatVideoStream.dispatchEvent(new Event("interrupt"));
         if (event.candidate_id && finalizedInterruptionCandidatesRef.current.has(event.candidate_id)) {
           return;
         }
@@ -1620,7 +1640,13 @@ export default function useVoiceChat({
       return;
     }
 
+    if (voiceChatLiveAvatar && !voiceChatAvatarName.trim()) {
+      setVoiceChatBusy(false);
+      setVoiceChatError(t("请填写 Google Cloud 中的预置分身名称。", "Enter a prebuilt avatar name from Google Cloud Studio."));
+      return;
+    }
     try {
+      voiceChatVideoStream.dispatchEvent(new Event("reset"));
       const sessionEpoch = markNewSessionEpoch();
       setVoiceChatStatus(t("正在连接实时语音会话…", "Connecting to the realtime voice session…"));
       let memoryGroupId = "";
@@ -1709,6 +1735,7 @@ export default function useVoiceChat({
         provider: voiceChatProvider,
         model: effectiveModel || undefined,
         voice: voiceChatVoice,
+        avatarName: voiceChatLiveAvatar ? voiceChatAvatarName : undefined,
         translationMode: voiceChatLiveTranslate ? voiceChatTranslationMode : undefined,
         sourceLanguageCode: voiceChatLiveTranslate ? voiceChatSourceLanguageCode : undefined,
         targetLanguageCode: voiceChatLiveTranslate ? voiceChatTargetLanguageCode : undefined,
@@ -2161,6 +2188,12 @@ export default function useVoiceChat({
   }
 
   return {
+    voiceChatAvatarSupported,
+    voiceChatLiveAvatar,
+    voiceChatAvatarName,
+    voiceChatVideoStream,
+    onAvatarEnabledChange: setVoiceChatAvatarEnabled,
+    onAvatarNameChange: setVoiceChatAvatarName,
     voiceChatProvider,
     voiceChatProviderOptions: resolvedProviders,
     voiceChatModel,

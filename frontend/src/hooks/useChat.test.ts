@@ -23,6 +23,22 @@ import useChat from './useChat';
 import { createFormatErrorMessageStub } from '../test/factories';
 
 describe('useChat', () => {
+    it.each(['Google', 'AgentPlatform'])('keeps disabled Gemini models out of the %s chat picker', (provider) => {
+        const { result } = renderHook(() => useChat({
+            formatErrorMessage: createFormatErrorMessageStub(),
+            providerOptions: [provider],
+            preferredProvider: provider,
+            providerModelCatalog: {
+                [provider]: {
+                    defaultModel: 'gemini-3.8-live',
+                    availableModels: ['gemini-3.8-live', 'gemini-3.8-live-extended-thinking', 'gemini-2.5-flash'],
+                    enabledModels: ['gemini-3.8-live'],
+                },
+            },
+        }));
+        expect(result.current.chatModelOptions).toEqual(['gemini-3.8-live']);
+        expect(result.current.chatModelChoices.map((choice) => choice.label)).toEqual([`${provider} / gemini-3.8-live`]);
+    });
     afterEach(() => {
         localStorage.clear();
         ensureEverMemConversationGroupIdMock.mockReset();

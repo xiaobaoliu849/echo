@@ -6,9 +6,18 @@ import {
   AGENT_PLATFORM_PROVIDER,
   GOOGLE_3_8_LIVE_MODEL,
   GOOGLE_3_8_LIVE_THINKING_MODEL,
+  supportsLiveAvatar,
 } from "./useVoiceChatHelpers";
 
 describe("Gemini 3.8 Live models", () => {
+  it("offers avatars as a Cloud mode rather than a fictitious model", () => {
+    expect(supportsLiveAvatar("AgentPlatform", "gemini-3.8-live")).toBe(true);
+    expect(supportsLiveAvatar("Google", "gemini-3.8-live")).toBe(false);
+    expect(supportsLiveAvatar("AgentPlatform", "gemini-3.8-live-extended-thinking")).toBe(false);
+    for (const provider of [GOOGLE_PROVIDER, AGENT_PLATFORM_PROVIDER]) {
+      expect(resolveRealtimeModelOptions(provider, {})).not.toContain("gemini-3.8-live-avatar");
+    }
+  });
   it("recognizes gemini-3.8-live and extended thinking as realtime models", () => {
     expect(GOOGLE_3_8_LIVE_MODEL).toBe("gemini-3.8-live");
     expect(GOOGLE_3_8_LIVE_THINKING_MODEL).toBe("gemini-3.8-live-extended-thinking");

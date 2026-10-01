@@ -38,6 +38,43 @@ function openPanel() {
 }
 
 describe("VoiceCallSettingsPopover", () => {
+  it("closes the model menu after picking Cloud Gemini Live instead of navigating to faces", () => {
+    const onOpenPal = vi.fn();
+    const voiceChat = createVoiceChatController({
+      voiceChatProvider: "AgentPlatform", voiceChatModel: "gemini-3.8-live",
+      voiceChatRealtimeChoicesByProvider: [{ provider: "AgentPlatform", models: ["gemini-3.8-live"] }],
+    });
+    render(<VoiceCallSettingsPopover voiceChat={voiceChat} t={t} onOpenPal={onOpenPal} />);
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("Agent Platform"));
+    fireEvent.click(screen.getAllByText("gemini-3.8-live").at(-1)!);
+    expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-3.8-live");
+    expect(voiceChat.onAvatarEnabledChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onOpenPal).not.toHaveBeenCalled();
+  });
+  it("shows an explicit Cloud Avatar choice and enables video without opening a voice or face panel", () => {
+    const onOpenPal = vi.fn();
+    const voiceChat = createVoiceChatController({
+      voiceChatProvider: "Google", voiceChatModel: "gemini-3.8-live",
+      voiceChatRealtimeChoicesByProvider: [
+        { provider: "Google", models: ["gemini-3.8-live"] },
+        { provider: "AgentPlatform", models: ["gemini-3.8-live"] },
+      ],
+    });
+    render(<VoiceCallSettingsPopover voiceChat={voiceChat} t={t} onOpenPal={onOpenPal} />);
+    openPanel();
+    expect(screen.queryByText("Gemini 3.8 Live · Avatar")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Agent Platform"));
+    fireEvent.mouseEnter(screen.getByText("Gemini 3.8 Live · Avatar"));
+    expect(document.querySelector(".vsVoiceLevel3Flyout")).toBeNull();
+    fireEvent.click(screen.getByText("Gemini 3.8 Live · Avatar"));
+    expect(voiceChat.onProviderChange).toHaveBeenCalledWith("AgentPlatform");
+    expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-3.8-live");
+    expect(voiceChat.onAvatarEnabledChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onOpenPal).not.toHaveBeenCalled();
+  });
   it("shows the current model and voice in the summary button", () => {
     renderPopover();
     const summary = screen.getByTitle("通话设置");

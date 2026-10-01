@@ -291,10 +291,26 @@ export default function ProviderSettingsSection({ settings }: Props) {
           )}
 
           {settings.settingsProvider === "AgentPlatform" && (
+            <>
+            <label className="vsField">
+              <span className="vsFieldLabel">{t("Google Cloud 项目 ID", "Google Cloud project ID")}</span>
+              <input className="vsInput" value={settings.settingsCloudProjectId} onChange={(e) => settings.onCloudProjectIdChange(e.target.value)} placeholder="my-cloud-project" />
+            </label>
+            <label className="vsField">
+              <span className="vsFieldLabel">{t("Google Cloud 区域", "Google Cloud region")}</span>
+              <input className="vsInput" value={settings.settingsCloudLocation} onChange={(e) => settings.onCloudLocationChange(e.target.value)} placeholder="us-central1" />
+            </label>
+            <label className="vsField">
+              <span className="vsFieldLabel">{t("服务账号 JSON 文件路径（可选）", "Service-account JSON file path (optional)")}</span>
+              <input className="vsInput" value={settings.settingsCloudSaFile} onChange={(e) => settings.onCloudSaFileChange(e.target.value)} placeholder="C:\\credentials\\service-account.json" />
+              <span className="vsFieldHint">{t("填写后端电脑上的文件路径；留空使用 gcloud auth application-default login 登录的 ADC。", "Use a file path on the backend computer, or leave empty to use ADC from gcloud auth application-default login.")}</span>
+            </label>
             <div className="vsProviderInfoCallout">
               <div><strong>{t("Google Agent Platform（企业云专区）", "Google Agent Platform (Enterprise Cloud)")}</strong></div>
-              <div style={{ marginTop: 4 }}>• {t("填入 Agent Platform API Key（控制台 Get Agent Platform API key 获取）或服务账号凭据，用于文字对话、高并发推理及实时全双工语音通话，直接消耗您的 Google Cloud 项目配额/赠金！", "Enter your Agent Platform API key (from 'Get Agent Platform API key' in console) or service account credentials for chat reasoning and realtime voice calls, billed to your Google Cloud credits!")}</div>
+              <div style={{ marginTop: 4 }}>{t("Live Avatar 需要 Google Cloud OAuth/ADC 或服务账号，不能使用 AI Studio API Key。区域选择 us-central1、us 或 eu，并启用项目 API、结算和 IAM 权限。选择 gemini-3.8-live 后，在聊天输入框开启 Live Avatar。自定义人脸需向 Google Cloud 客户团队申请。", "Live Avatar requires Cloud OAuth/ADC or a service account. An AI Studio API key cannot enable it. Use us-central1, us, or eu with project API, billing, and IAM access enabled. Select gemini-3.8-live, then enable Live Avatar in Chat. Request custom-face access from your Google Cloud account team.")}</div>
+              <a href="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api/configure-live-avatars" target="_blank" rel="noreferrer">{t("Google 官方接入说明", "Google setup documentation")}</a>
             </div>
+            </>
           )}
 
           {settings.settingsProvider === "DashScope" && (

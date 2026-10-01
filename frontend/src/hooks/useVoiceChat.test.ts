@@ -1863,6 +1863,45 @@ describe("useVoiceChat", () => {
     }
   });
 
+  it("sends the real Cloud model with avatar mode and delivers every video packet in order", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["AgentPlatform"],
+      preferredProvider: "AgentPlatform", preferredModel: "gemini-3.8-live",
+      providerModelCatalog: { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } },
+    }));
+    act(() => { result.current.onAvatarEnabledChange(true); result.current.onAvatarNameChange("Ben"); });
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    expect(new URL(socket.url).searchParams.get("model")).toBe("gemini-3.8-live");
+    expect(new URL(socket.url).searchParams.get("avatar_name")).toBe("Ben");
+    const packets: string[] = [];
+    const reset = vi.fn();
+    result.current.voiceChatVideoStream.addEventListener("frame", (e) => packets.push((e as MessageEvent).data.data));
+    result.current.voiceChatVideoStream.addEventListener("reset", reset);
+    result.current.voiceChatVideoStream.addEventListener("interrupt", reset);
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({ type: "session_open", provider: "AgentPlatform", model: "gemini-3.8-live", voice: "Puck", mode: "live_avatar" });
+      socket.emitMessage({ type: "assistant_video_frame", mime_type: "video/mp4", data: "first" });
+      socket.emitMessage({ type: "assistant_video_frame", mime_type: "video/mp4", data: "second" });
+      socket.emitMessage({ type: "interrupted" });
+    });
+    expect(packets).toEqual(["first", "second"]);
+    expect(reset).toHaveBeenCalled();
+    await act(async () => { await result.current.onToggleRecording(); });
+    expect(reset.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("recovers a persisted AI Studio avatar alias onto Cloud avatar mode", () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["Google", "AgentPlatform"],
+      preferredProvider: "Google", preferredModel: "gemini-3.8-live-avatar",
+    }));
+    expect(result.current.voiceChatProvider).toBe("AgentPlatform");
+    expect(result.current.voiceChatModel).toBe("gemini-3.8-live");
+    expect(result.current.voiceChatLiveAvatar).toBe(true);
+  });
+
   it("ducks on a candidate, resumes backchannels, and archives confirmed interruptions", async () => {
     ensureEverMemConversationGroupIdMock.mockResolvedValue("voice-group-interruption");
     const { result } = renderHook(() =>
