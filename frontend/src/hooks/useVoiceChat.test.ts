@@ -118,6 +118,7 @@ class FakeWebSocket {
   static CLOSED = 3;
 
   readyState = FakeWebSocket.CONNECTING;
+  bufferedAmount = 0;
   binaryType = "";
   sent: Array<string | ArrayBuffer> = [];
   onopen: (() => void) | null = null;
@@ -153,6 +154,54 @@ class FakeWebSocket {
 }
 
 describe("useVoiceChat", () => {
+  it("keeps Vercel realtime choices available without claiming screen-share support", () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["Vercel"],
+      preferredProvider: "Vercel", preferredModel: "google/gemini-3.8-live",
+      providerModelCatalog: { Vercel: { defaultModel: "google/gemini-3.8-live", availableModels: ["google/gemini-3.8-live"] } },
+    }));
+    expect(result.current.voiceChatProvider).toBe("Vercel");
+    expect(result.current.voiceChatProviderOptions).toContain("Vercel");
+    expect(result.current.voiceChatScreenShareSupported).toBe(false);
+  });
+
+  it.each(["hangup", "disconnect", "history", "rejection"])("releases avatar screen capture immediately on %s", async (action) => {
+    const displayTrack = Object.assign(new EventTarget(), { label: "Lesson", readyState: "live", stop: vi.fn() });
+    const displayStream = { getTracks: () => [displayTrack], getVideoTracks: () => [displayTrack] } as unknown as MediaStream;
+    Object.assign(navigator.mediaDevices, { getDisplayMedia: vi.fn().mockResolvedValue(displayStream) });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLVideoElement.prototype, "videoWidth", "get").mockReturnValue(768);
+    vi.spyOn(HTMLVideoElement.prototype, "videoHeight", "get").mockReturnValue(432);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/jpeg;base64,/9j/2Q==");
+    const { result, unmount } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["AgentPlatform"],
+      preferredProvider: "AgentPlatform", preferredModel: "gemini-3.8-live",
+      providerModelCatalog: { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } },
+    }));
+    act(() => result.current.onAvatarEnabledChange(true));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    act(() => { socket.emitOpen(); socket.emitMessage({ type: "session_open", model: "gemini-3.8-live", mode: "live_avatar" }); });
+    await act(async () => { await result.current.voiceChatScreenShare.start(); });
+    expect(result.current.voiceChatScreenShare.sharing).toBe(true);
+    expect(socket.sent.some(item => typeof item === "string" && JSON.parse(item).type === "screen_frame")).toBe(true);
+    await act(async () => {
+      if (action === "hangup") await result.current.onToggleRecording();
+      else if (action === "disconnect") socket.emitClose();
+      else if (action === "rejection") socket.emitMessage({ type: "input_rejected", input_type: "screen", message: "Invalid screen frame" });
+      else result.current.replaceSession([]);
+    });
+    expect(displayTrack.stop).toHaveBeenCalled();
+    expect(result.current.voiceChatScreenShare.sharing).toBe(false);
+    if (action === "rejection") {
+      expect(result.current.voiceChatConnected).toBe(true);
+      expect(result.current.voiceChatScreenShare.error).toBe("Invalid screen frame");
+    }
+    unmount();
+  });
+
   async function startTranscriptTestSession() {
     const hook = renderHook(() => useVoiceChat({
       formatErrorMessage: createFormatErrorMessageStub(),

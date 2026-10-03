@@ -4,6 +4,7 @@ edge-tts>=7.2.7
 httpx>=0.28.1
 python-multipart>=0.0.9
 google-genai>=2.8.0,<3
+pillow>=12.2.0,<13
 dashscope>=1.26.5,<2
 pypdf>=5.0.0
 pydub>=0.25.1

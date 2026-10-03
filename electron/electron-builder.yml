@@ -18,6 +18,10 @@ files:
   - main.js
   - backend-runtime.js
   - update-controller.js
+  - screen-sharing.js
+  - screen-sharing-preload.js
+  - screen-sharing-picker.html
+  - screen-sharing-picker.js
   - preload.js
   - package.json
   - node_modules/**

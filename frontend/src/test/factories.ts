@@ -118,6 +118,8 @@ export function createVoiceChatController(
   return {
     voiceChatProvider: "Google",
     voiceChatAvatarSupported: false,
+    voiceChatScreenShareSupported: false,
+    voiceChatScreenShare: { sharing: false, pending: false, error: "", stream: null, source: "", supported: true, start: vi.fn(), stop: vi.fn(), reject: vi.fn() },
     voiceChatLiveAvatar: false,
     voiceChatAvatarName: "Ben",
     voiceChatAccent: "",

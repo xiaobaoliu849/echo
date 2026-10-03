@@ -7,6 +7,7 @@ import type { UseChatResult } from "../../hooks/useChat";
 import type { UseVoiceChatResult } from "../../hooks/useVoiceChat";
 import { useI18n } from "../../i18n";
 import { formatAvatarCallLabel } from "../../utils/geminiLivePreferences";
+import ScreenShareControl from "./ScreenShareControl";
 
 type Props = {
   chat: UseChatResult;
@@ -479,6 +480,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       )}
 
       {/* ── Input Box (Always active) ── */}
+      {isVoiceActive && <ScreenShareControl voiceChat={voiceChat} />}
       <textarea
         rows={1}
         value={chat.chatInput}

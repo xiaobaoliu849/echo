@@ -223,10 +223,18 @@ class VercelRealtimeMixin:
             if text_data:
                 try:
                     payload = json.loads(text_data)
+                    if not isinstance(payload, dict):
+                        raise ValueError("Expected an object")
                 except Exception:
                     await self._send_event(websocket, "error", message="无效的实时语音消息。")
                     continue
                 command_type = str(payload.get("type", "")).strip()
+                if command_type == "screen_frame" or (command_type == "media_input" and payload.get("data")):
+                    await self._send_event(
+                        websocket, "input_rejected", input_type="screen" if command_type == "screen_frame" else "image",
+                        message="Vercel realtime does not support image or screen input. Choose Google Gemini API or Google Agent Platform / Vercel 实时通话不支持图像或屏幕输入，请选择 Google Gemini API 或 Google Agent Platform。",
+                    )
+                    continue
                 if command_type == "speech_activity_started":
                     # Automatic server VAD owns turn taking for realtime models on Vercel Gateway.
                     # Local RMS energy hints must not duck/buffer output.

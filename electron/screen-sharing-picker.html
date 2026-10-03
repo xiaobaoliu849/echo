@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:;">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>共享屏幕 / Share screen</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px 'Segoe UI', 'Microsoft YaHei', sans-serif; color: #353631; background: #f2efe6; }
+  main { display: flex; flex-direction: column; height: 100vh; padding: 24px; gap: 14px; }
+  h1 { font-size: 20px; margin: 0; }
+  p { font-size: 12px; color: #65665d; margin: 0; line-height: 1.7; }
+  #sources { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: start; padding: 4px; }
+  .source { border: 1px solid #bdbdaf; background: #faf9f3; border-radius: 12px; padding: 8px; cursor: pointer; color: inherit; text-align: left; }
+  .source:hover { border-color: #727553; background: #fff; }
+  button:focus-visible { outline: 3px solid #737b4e; outline-offset: 2px; }
+  .source img { display: block; width: 100%; height: 130px; object-fit: contain; background: #e6e4da; border-radius: 6px; }
+  .source span { display: block; padding-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  footer { display: flex; justify-content: flex-end; }
+  #cancel { border: 1px solid #aaa; border-radius: 8px; background: #faf9f3; padding: 8px 18px; cursor: pointer; }
+  @media (prefers-color-scheme: dark) { body { background: #262923; color: #ededdf; } p { color: #b7b9ac; } .source, #cancel { background: #353a30; color: #ededdf; border-color: #68705d; } .source:hover { background: #424939; } .source img { background: #20231d; } }
+</style>
+<main>
+  <h1>共享屏幕 / Share screen</h1>
+  <p>选择要向模型共享的屏幕或窗口。 / Choose a screen or window to share with the model.<br>不包含系统音频，可随时停止共享。 / System audio is excluded. You can stop sharing at any time.</p>
+  <div id="sources" aria-label="屏幕和窗口 / Screens and windows"></div>
+  <footer><button id="cancel" type="button">取消 / Cancel</button></footer>
+</main>
+<script src="screen-sharing-picker.js"></script>
+</html>

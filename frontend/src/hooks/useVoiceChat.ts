@@ -45,6 +45,7 @@ import {
   QWEN_OMNI_REALTIME_VOICES,
   QWEN_OMNI_38_REALTIME_VOICES,
   TAVUS_PROVIDER,
+  VERCEL_PROVIDER,
   buildToolMeta,
   decodeBase64Pcm,
   encodePcm16k,
@@ -73,6 +74,8 @@ import {
 } from "./useVoiceChatHelpers";
 import { serializeSelectionTrace, traceSelection } from "./voiceSelectionTrace";
 import { GEMINI_LIVE_ACCENTS, supportsGeminiAccent } from "../utils/geminiLivePreferences";
+import useLiveScreenShare from "./useLiveScreenShare";
+import { supportsLiveScreenShare } from "../utils/liveScreenShare";
 
 export type VoiceChatCanvasData = {
   code: string;
@@ -95,6 +98,7 @@ export default function useVoiceChat({
       GOOGLE_PROVIDER,
       AGENT_PLATFORM_PROVIDER,
       TAVUS_PROVIDER,
+      VERCEL_PROVIDER,
       DOUBAO_PROVIDER,
       CARTESIA_PROVIDER,
       GRADIUM_PROVIDER,
@@ -204,6 +208,13 @@ export default function useVoiceChat({
   const nextPlaybackTimeRef = useRef(0);
   const audioInputReadyRef = useRef(false);
   const voiceChatConnectedRef = useRef(false);
+  const getScreenShareConnection = useCallback(() => voiceChatConnectedRef.current ? websocketRef.current : null, []);
+  const voiceChatScreenShareSupported = supportsLiveScreenShare(voiceChatProvider, voiceChatModel);
+  const voiceChatScreenShare = useLiveScreenShare({
+    enabled: voiceChatConnected && voiceChatScreenShareSupported,
+    getConnection: getScreenShareConnection,
+    language,
+  });
   const currentUserTurnRef = useRef("");
   // Captions may arrive before the previous assistant turn ends. Keep them out
   // of the canonical turn so interruption/terminal events cannot save them
@@ -469,6 +480,7 @@ export default function useVoiceChat({
   }
 
   function stopSessionResources() {
+    voiceChatScreenShare.stop();
     voiceChatVideoStream.dispatchEvent(new Event("reset"));
     clearUserTranscriptPreview();
     if (liveTranslateFinishTimerRef.current !== null) {
@@ -884,6 +896,10 @@ export default function useVoiceChat({
 
   function handleRealtimeEvent(event: VoiceChatServerEvent) {
     switch (event.type) {
+      case "input_rejected":
+        if (event.input_type === "screen") voiceChatScreenShare.reject(event.message);
+        else setVoiceChatError(event.message);
+        return;
       case "assistant_video_frame":
         voiceChatVideoStream.dispatchEvent(new MessageEvent("frame", { data: { mimeType: event.mime_type, data: event.data } }));
         return;
@@ -2211,6 +2227,8 @@ export default function useVoiceChat({
 
   return {
     voiceChatAvatarSupported,
+    voiceChatScreenShareSupported,
+    voiceChatScreenShare,
     voiceChatLiveAvatar,
     voiceChatAvatarName,
     voiceChatAccent,
