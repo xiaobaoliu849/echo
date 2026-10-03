@@ -3,7 +3,7 @@ import { Monitor, Square } from "lucide-react";
 import type { UseVoiceChatResult } from "../../hooks/useVoiceChat";
 import { useI18n } from "../../i18n";
 
-export default function ScreenShareControl({ voiceChat }: { voiceChat: UseVoiceChatResult }) {
+export default function ScreenShareControl({ voiceChat, compact = false }: { voiceChat: UseVoiceChatResult; compact?: boolean }) {
   const { t } = useI18n();
   const preview = useRef<HTMLVideoElement>(null);
   const capture = voiceChat.voiceChatScreenShare;
@@ -25,17 +25,17 @@ export default function ScreenShareControl({ voiceChat }: { voiceChat: UseVoiceC
   const title = capture.sharing
     ? t("正在向模型共享屏幕", "Sharing your screen with the model")
     : capture.pending ? t("选择要共享的画面", "Choose what to share") : t("让模型看到您的屏幕", "Let the model see your screen");
-  return <div className={`vsScreenShareControl ${capture.sharing ? "is-sharing" : ""}`}>
+  return <div className={`vsScreenShareControl ${compact ? "is-compact" : ""} ${capture.sharing ? "is-sharing" : ""}`}>
     {capture.sharing && <video ref={preview} muted playsInline aria-label={t("共享屏幕预览", "Shared screen preview")} />}
     {!capture.sharing && <div className="vsScreenShareIcon" aria-hidden="true"><Monitor size={20} /></div>}
-    <div className="vsScreenShareDescription">
+    {(!compact || capture.sharing || capture.pending || !capture.supported) && <div className="vsScreenShareDescription">
       <span className="vsScreenShareTitle">
         {capture.sharing && <span className="vsScreenShareDot" aria-hidden="true" />}
         {title}
       </span>
-      {capture.sharing ? <small title={sourceLabel}>{sourceLabel}</small> : capture.supported && <small>{t("选择屏幕或窗口，随时可以停止", "Choose a screen or window. Stop at any time.")}</small>}
+      {capture.sharing ? <small title={sourceLabel}>{sourceLabel}</small> : capture.supported && !compact && <small>{t("选择屏幕或窗口，随时可以停止", "Choose a screen or window. Stop at any time.")}</small>}
       {!capture.supported && <small>{t("请使用 Chrome、Edge 或 Electron 桌面版", "Use Chrome, Edge, or the Electron desktop app")}</small>}
-    </div>
+    </div>}
     <button type="button" className="vsScreenShareButton" aria-pressed={capture.sharing}
       disabled={!capture.sharing && !capture.pending && (!voiceChat.voiceChatConnected || !capture.supported)}
       onClick={() => capture.sharing || capture.pending ? capture.stop() : void capture.start()}>

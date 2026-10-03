@@ -404,7 +404,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       : t("输入聊天内容，或者点击右侧麦克风语音转写...", "Type to chat, or click the microphone on the right to dictate...");
 
   return (
-    <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""}`}>
+    <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""} ${isVoiceActive && voiceChat.voiceChatLiveAvatar ? "is-avatar-composer" : ""}`}>
       {/* ── Live Voice Dynamic Call Capsule Banner ── */}
       {isVoiceActive && !voiceChat.voiceChatLiveAvatar && (
         <div className="vsLiveVoiceStatusBanner">
@@ -480,8 +480,9 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       )}
 
       {/* ── Input Box (Always active) ── */}
-      {isVoiceActive && <ScreenShareControl voiceChat={voiceChat} />}
+      {isVoiceActive && !voiceChat.voiceChatLiveAvatar && <ScreenShareControl voiceChat={voiceChat} />}
       <textarea
+        aria-label={t("消息", "Message")}
         rows={1}
         value={chat.chatInput}
         onChange={(e) => chat.onInputChange(e.target.value)}

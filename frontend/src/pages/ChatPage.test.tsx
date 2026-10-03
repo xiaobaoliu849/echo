@@ -4,6 +4,25 @@ import ChatPage from './ChatPage';
 import { createChatController, createVoiceChatController } from '../test/factories';
 
 describe('ChatPage', () => {
+    it('keeps sharing outside the compact composer and available through history mode', () => {
+        const voiceChat = createVoiceChatController({
+            voiceChatConnected: true, voiceChatLiveAvatar: true, voiceChatScreenShareSupported: true,
+        });
+        const { container, rerender } = render(<ChatPage chat={createChatController()} voiceChat={voiceChat} errorRuntimeContext={{}} />);
+        const portrait = container.querySelector('.vsLiveAvatarPlayer video');
+        expect(container.querySelector('.vsComposer .vsScreenShareControl')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '共享屏幕' }));
+        expect(voiceChat.voiceChatScreenShare.start).toHaveBeenCalledOnce();
+        rerender(<ChatPage chat={createChatController()} voiceChat={{ ...voiceChat,
+            voiceChatScreenShare: { ...voiceChat.voiceChatScreenShare, sharing: true, source: 'Lesson' },
+        }} errorRuntimeContext={{}} />);
+        expect(screen.getByText('Lesson')).toBeInTheDocument();
+        expect(container.querySelector('.vsLiveAvatarPlayer video')).toBe(portrait);
+        fireEvent.click(screen.getByRole('button', { name: '对话记录' }));
+        fireEvent.click(screen.getByRole('button', { name: '停止共享' }));
+        expect(voiceChat.voiceChatScreenShare.stop).toHaveBeenCalledOnce();
+        expect(container.querySelector('.vsLiveAvatarPlayer video')).toBe(portrait);
+    });
     it('uses one transcript surface and keeps playback mounted through history and hangup', () => {
         vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
         const chat = createChatController();

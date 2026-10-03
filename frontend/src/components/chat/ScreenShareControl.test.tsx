@@ -5,6 +5,19 @@ import { createVoiceChatController } from "../../test/factories";
 
 afterEach(cleanup);
 describe("Screen-share controls", () => {
+  it("keeps cancellation, source and runtime errors readable in compact mode", () => {
+    const voiceChat = createVoiceChatController({ voiceChatScreenShareSupported: true, voiceChatConnected: true });
+    const { rerender } = render(<ScreenShareControl voiceChat={voiceChat} compact />);
+    expect(screen.queryByText("让模型看到您的屏幕")).toBeNull();
+    expect(screen.getByRole("button", { name: "共享屏幕" })).toBeEnabled();
+    rerender(<ScreenShareControl voiceChat={{ ...voiceChat, voiceChatScreenShare: { ...voiceChat.voiceChatScreenShare, pending: true } }} compact />);
+    expect(screen.getByText("选择要共享的画面")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "取消共享" }));
+    expect(voiceChat.voiceChatScreenShare.stop).toHaveBeenCalledOnce();
+    rerender(<ScreenShareControl voiceChat={{ ...voiceChat, voiceChatScreenShare: { ...voiceChat.voiceChatScreenShare, supported: false, error: "Capture unavailable" } }} compact />);
+    expect(screen.getByText("请使用 Chrome、Edge 或 Electron 桌面版")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Capture unavailable");
+  });
   it.each([false, true])("starts and stops sharing with avatar mode %s", avatar => {
     const voiceChat = createVoiceChatController({ voiceChatLiveAvatar: avatar, voiceChatScreenShareSupported: true, voiceChatConnected: true });
     const { rerender } = render(<ScreenShareControl voiceChat={voiceChat} />);

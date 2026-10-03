@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchSpeakAudio, translateText, type ChatMessage, type TtsEngine } from "../api";
 import ErrorNotice from "../components/ErrorNotice";
 import ChatInputBar from "../components/chat/ChatInputBar";
+import ScreenShareControl from "../components/chat/ScreenShareControl";
 import LiveAvatarPlayer from "../components/LiveAvatarPlayer";
 import AvatarTranscriptPanel from "../components/AvatarTranscriptPanel";
 import MarkdownContent from "../components/chat/MarkdownContent";
@@ -894,13 +895,16 @@ export default function ChatPage({
           <div className={`vsAvatarCallView ${showAvatarHistory ? "is-history" : ""}`}>
             <div className="vsAvatarCallToolbar">
               <span>{t("实时分身通话", "Live avatar call")}</span>
-              <button type="button" className="vsAvatarHistoryButton"
-                aria-pressed={showAvatarHistory}
-                onClick={() => setAvatarView(showAvatarHistory ? "stage" : "pip")}>
-                {showAvatarHistory ? t("返回分身", "Back to avatar") : t("对话记录", "Conversation history")}
-              </button>
+              <div className="vsAvatarCallActions">
+                <ScreenShareControl voiceChat={voiceChat} compact />
+                <button type="button" className="vsAvatarHistoryButton"
+                  aria-pressed={showAvatarHistory}
+                  onClick={() => setAvatarView(showAvatarHistory ? "stage" : "pip")}>
+                  {showAvatarHistory ? t("返回分身", "Back to avatar") : t("对话记录", "Conversation history")}
+                </button>
+              </div>
             </div>
-            <div className="vsAvatarCallLayout">
+            <div className="vsAvatarCallLayout vsCallWorkspace">
               <div className="vsAvatarMediaPane">
                 <LiveAvatarPlayer
                   stream={voiceChat.voiceChatVideoStream}
