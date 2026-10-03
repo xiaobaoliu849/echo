@@ -224,7 +224,13 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
   const [faceSearch, setFaceSearch] = useState("");
   const [previewFaceId, setPreviewFaceId] = useState("");
   const [catalogError, setCatalogError] = useState("");
-  const [showDrawer, setShowDrawer] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(true);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const followTranscriptRef = useRef(true);
+  useEffect(() => {
+    const pane = transcriptRef.current;
+    if (pane && followTranscriptRef.current) pane.scrollTop = pane.scrollHeight;
+  }, [conversation.transcripts, showDrawer]);
   const [copied, setCopied] = useState(false);
   const [summaryDismissed, setSummaryDismissed] = useState(false);
   const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false);
@@ -360,7 +366,8 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
 
   function handleStart() {
     setSummaryDismissed(false);
-    setShowDrawer(false);
+    setShowDrawer(true);
+    followTranscriptRef.current = true;
     conversation.clearTranscripts();
     void conversation.start({
       palId: resolvedPalId || undefined,
@@ -382,7 +389,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
 
   return (
     <section className="vsPalPage">
-      <div className="vsPalStage">
+      <div className={`vsPalStage ${conversation.status === "connected" ? `is-live vsCallWorkspace ${showDrawer ? "has-transcript" : ""}` : ""}`}>
         <div className="vsPalVideoHost" data-testid="pal-video-host">
           <div className="vsPalAudioHost" ref={remoteAudioRef}>
             {conversation.remoteAudioTrack ? (
@@ -851,7 +858,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
             </div>
 
             {/* Live Floating Subtitle Banner */}
-            {conversation.showSubtitles && conversation.activeSubtitle ? (
+            {!showDrawer && conversation.showSubtitles && conversation.activeSubtitle ? (
               <div className={`vsPalFloatingSubtitle ${conversation.activeSubtitle.speaker}`} role="status">
                 <span className="vsPalSubSpeaker">{conversation.activeSubtitle.speakerName}:</span>
                 <span className="vsPalSubText">{getRollingSubtitleText(conversation.activeSubtitle.text)}</span>
@@ -860,15 +867,16 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
 
             {/* Side Transcript Drawer */}
             {showDrawer ? (
-              <aside className="vsPalTranscriptDrawer" aria-label={t("实时对话记录", "Live conversation transcript")}>
-                <div className="vsPalDrawerHead">
-                  <h3>{t("实时速记", "Live Transcript")} ({conversation.transcripts.length})</h3>
+              <aside className="vsPalTranscriptDrawer vsCallTranscript" aria-label={t("实时对话记录", "Live conversation transcript")}>
+                <div className="vsPalDrawerHead vsCallTranscriptHeading">
+                  <h3>{t("实时转写", "Live transcript")} ({conversation.transcripts.length})</h3>
                   <div className="vsPalDrawerActions">
                     <button
                       type="button"
                       className="vsPalDrawerIconBtn"
                       onClick={handleCopyTranscript}
                       title={t("复制对话全文", "Copy full transcript")}
+                      aria-label={t("复制对话全文", "Copy full transcript")}
                     >
                       {copied ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
                     </button>
@@ -877,20 +885,26 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
                       className="vsPalDrawerIconBtn"
                       onClick={() => setShowDrawer(false)}
                       title={t("关闭速记", "Close drawer")}
+                      aria-label={t("关闭转写", "Close transcript")}
                     >
                       <X size={15} />
                     </button>
                   </div>
                 </div>
 
-                <div className="vsPalDrawerBody">
+                <div ref={transcriptRef} className="vsPalDrawerBody vsCallTranscriptScroll" tabIndex={0}
+                  aria-label={t("滚动查看通话转写", "Scroll call transcript")}
+                  onScroll={() => {
+                    const pane = transcriptRef.current;
+                    if (pane) followTranscriptRef.current = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 48;
+                  }}>
                   {conversation.transcripts.length === 0 ? (
                     <div className="vsPalDrawerEmpty">{t("对话开始后，发言将实时显示在此...", "Speech will appear here in realtime...")}</div>
                   ) : (
                     conversation.transcripts.map((item) => (
                       <div key={item.id} className={`vsPalTranscriptRow ${item.speaker}`}>
                         <div className="vsPalTranscriptMeta">
-                          <span className="vsPalTranscriptName">{item.speaker === "user" ? "🗣️" : "🤖"} {item.speakerName}</span>
+                          <span className="vsPalTranscriptName">{item.speakerName}</span>
                           <span className="vsPalTranscriptTime">{new Date(item.timestamp).toLocaleTimeString([], { minute: "2-digit", second: "2-digit" })}</span>
                         </div>
                         <div className="vsPalTranscriptBubble">{item.text}</div>
@@ -941,11 +955,13 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
                 title={conversation.isSharingScreen ? t("停止共享屏幕", "Stop screen sharing") : t("共享屏幕", "Share screen")}
                 data-testid="pal-toggle-screen-button"
                 aria-label={conversation.isSharingScreen ? t("停止共享", "Stop sharing") : t("共享屏幕", "Share screen")}
+                aria-pressed={conversation.isSharingScreen}
               >
                 {conversation.isSharingScreen ? <MonitorOff size={18} /> : <Monitor size={18} />}
+                <span className="vsPalShareLabel">{conversation.isSharingScreen ? t("停止共享", "Stop sharing") : t("共享屏幕", "Share screen")}</span>
               </button>
 
-              <button
+              {!showDrawer && <button
                 type="button"
                 className={`vsPalDockBtn ${conversation.showSubtitles ? "isActive" : ""}`}
                 onClick={conversation.toggleSubtitles}
@@ -954,7 +970,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
                 aria-label={conversation.showSubtitles ? t("隐藏字幕", "Hide subtitles") : t("开启字幕", "Show subtitles")}
               >
                 <Subtitles size={18} />
-              </button>
+              </button>}
 
               <button
                 type="button"
@@ -963,6 +979,7 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
                 title={showDrawer ? t("收起速记面板", "Close transcript panel") : t("展开对话速记", "Open transcript panel")}
                 data-testid="pal-toggle-drawer-button"
                 aria-label={showDrawer ? t("收起速记", "Close transcript") : t("展开速记", "Open transcript")}
+                aria-pressed={showDrawer}
               >
                 <MessageSquareText size={18} />
                 {conversation.transcripts.length > 0 && (

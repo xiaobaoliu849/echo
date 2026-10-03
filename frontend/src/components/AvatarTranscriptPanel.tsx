@@ -40,9 +40,9 @@ export default function AvatarTranscriptPanel({ messages, userTranscript, interi
     </div>
   );
   return (
-    <section className="vsAvatarTranscriptPanel" aria-label={t("通话转写", "Call transcript")}>
-      <div className="vsAvatarTranscriptHeading">{t("实时转写", "Live transcript")}</div>
-      <div ref={scrollRef} className="vsAvatarTranscriptScroll" tabIndex={0}
+    <section className="vsAvatarTranscriptPanel vsCallTranscript" aria-label={t("通话转写", "Call transcript")}>
+      <div className="vsAvatarTranscriptHeading vsCallTranscriptHeading">{t("实时转写", "Live transcript")}</div>
+      <div ref={scrollRef} className="vsAvatarTranscriptScroll vsCallTranscriptScroll" tabIndex={0}
         aria-label={t("滚动查看通话转写", "Scroll call transcript")}
         onScroll={() => {
           const pane = scrollRef.current;

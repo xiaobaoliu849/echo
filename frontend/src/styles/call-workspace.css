@@ -1,0 +1,182 @@
+/* Shared live conversation proportions, transcript surface and compact input. */
+.vsCallWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 20px;
+  min-height: 0;
+  min-width: 0;
+}
+.vsCallTranscript {
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+.vsCallTranscriptHeading {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.vsCallTranscriptScroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 16px;
+}
+.vsCallTranscriptScroll:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -3px;
+}
+.vsAvatarCallActions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.vsAvatarCallToolbar { flex-wrap: wrap; margin-bottom: 0; }
+.vsAvatarCallView.is-history { position: sticky; top: 0; z-index: 20; background: var(--bg-card); padding: 4px 0; }
+.vsAvatarHistoryButton { min-height: 36px; font-size: 12px; white-space: nowrap; }
+.vsAvatarMediaPane { justify-content: center; }
+.vsAvatarMediaPane .vsAvatarControlLabel { display: inline; }
+.vsAvatarMediaPane .is-compact-stage .vsAvatarControlLabel { display: none; }
+
+/* Sharing is a call action. Only active sharing gets a small source preview. */
+.vsScreenShareControl.is-compact {
+  width: auto;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.vsScreenShareControl.is-compact:not(.is-sharing) { grid-template-columns: minmax(0, auto) auto; }
+.vsScreenShareControl.is-compact .vsScreenShareIcon { display: none; }
+.vsScreenShareControl.is-compact video { width: 64px; height: 36px; }
+.vsScreenShareControl.is-compact .vsScreenShareButton { grid-column: auto; }
+.vsScreenShareControl.is-compact .vsScreenShareDescription { max-width: 220px; }
+.vsScreenShareControl.is-compact .vsScreenShareTitle { font-size: 12px; }
+.vsScreenShareControl.is-compact .vsScreenShareDescription small { font-size: 11px; }
+.vsScreenShareControl.is-compact .vsScreenShareError { max-width: 420px; }
+
+.vsComposerWrap.avatarCall { width: calc(100% - 32px); max-width: 1280px; margin-bottom: 12px; }
+.vsComposerWrap.avatarCall .vsComposer.is-avatar-composer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 18px;
+}
+.vsComposer.is-avatar-composer .vsComposerToolbar { display: contents; }
+.vsComposer.is-avatar-composer .vsComposerToolbarLeft { grid-column: 1; grid-row: 1; }
+.vsComposer.is-avatar-composer .vsComposerToolbarRight { grid-column: 3; grid-row: 1; }
+.vsComposerWrap.avatarCall .vsComposer.is-avatar-composer textarea {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 36px;
+  height: 36px;
+  max-height: 100px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 30px;
+}
+.vsComposer.is-avatar-composer .vsComposerAttachments,
+.vsComposer.is-avatar-composer .vsComposerInlineHint { grid-column: 1 / -1; }
+.vsComposer.is-avatar-composer .vsComposerAttachments { max-height: 100px; overflow-y: auto; }
+
+/* Tavus uses the same bounded panes; controls occupy their own row. */
+.vsPalPage { container-type: inline-size; container-name: pal-pane; }
+.vsPalStage.is-live {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.vsPalStage.is-live.has-transcript { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); }
+.vsPalStage.is-live .vsPalVideoHost {
+  position: relative;
+  inset: auto;
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 18px;
+}
+.vsPalStage.is-live .vsPalRemoteVideo { position: absolute; inset: 0; }
+.vsPalStage.is-live .vsPalLocalVideo { right: 12px; bottom: 12px; width: min(28%, 160px); }
+.vsPalStage.is-live .vsPalTranscriptDrawer {
+  position: relative;
+  inset: auto;
+  grid-column: 2;
+  grid-row: 1;
+  width: auto;
+  max-width: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  animation: none;
+}
+.vsPalStage.is-live .vsPalDrawerHead h3 { color: var(--muted); font-size: 13px; }
+.vsPalStage.is-live .vsPalDrawerIconBtn { background: var(--surface); border-color: var(--line); color: var(--text-primary); }
+.vsPalStage.is-live .vsPalDrawerEmpty { color: var(--muted); margin: 0; text-align: left; line-height: 1.7; }
+.vsPalStage.is-live .vsPalTranscriptName { color: var(--brand-dark); }
+.vsPalStage.is-live .vsPalTranscriptTime { color: var(--muted); }
+.vsPalStage.is-live .vsPalTranscriptBubble { background: transparent; border: 0; padding: 4px 0; color: var(--text-primary); font-size: 16px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.vsPalStage.is-live .vsPalControlDock {
+  position: relative;
+  inset: auto;
+  transform: none;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.vsPalStage.is-live .vsPalDockBtn { min-width: 38px; width: auto; height: 38px; padding: 0 10px; gap: 6px; }
+.vsPalShareLabel { font-size: 12px; white-space: nowrap; }
+.vsPalStage.is-live .vsPalHangupBtn { height: 38px; padding: 0 14px; font-size: 12px; }
+.vsPalStage.is-live.has-transcript .vsPalCallStatus { left: calc((100% - 20px) * 0.275); }
+.vsPalStage.is-live .vsPalFloatingSubtitle { bottom: 80px; }
+.vsPalControlDock button:focus-visible,
+.vsPalDrawerIconBtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+
+/* Leave the history/share toolbar reachable above PiP in short windows. */
+@media (max-height: 600px) {
+  .vsLiveAvatarPlayer.is-pip { width: min(128px, calc(100vw - 16px)); }
+  .vsLiveAvatarPlayer.is-pip .vsAvatarVideoContainer {
+    height: clamp(80px, calc(100dvh - 280px), 180px);
+    aspect-ratio: auto;
+  }
+}
+
+/* Keep the tall portrait visible even in short, narrow chat windows. */
+@container chat-pane (max-width: 560px) {
+  .vsAvatarCallLayout.vsCallWorkspace { grid-template-columns: minmax(0, 0.43fr) minmax(0, 0.57fr); gap: 12px; }
+  .vsAvatarMediaPane .vsAvatarControlLabel { display: none; }
+  .vsAvatarTranscriptTurn p { font-size: 14px; line-height: 1.6; }
+  .vsAvatarCallToolbar > span { display: none; }
+  .vsAvatarCallActions { flex: 1; justify-content: space-between; }
+  .vsScreenShareControl.is-compact .vsScreenShareDescription { max-width: 150px; }
+  .vsScreenShareControl.is-compact video { display: none; }
+  .vsScreenShareControl.is-compact.is-sharing { grid-template-columns: minmax(0, 1fr) auto; }
+}
+/* Tavus also accepts landscape video, so a stacked layout fits narrow panes. */
+@container pal-pane (max-width: 560px) {
+  .vsPalStage.is-live.has-transcript { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 12px; }
+  .vsPalStage.is-live .vsPalTranscriptDrawer { grid-column: 1; grid-row: 2; }
+  .vsPalStage.is-live.has-transcript .vsPalControlDock { grid-row: 3; }
+  .vsPalStage.is-live.has-transcript .vsPalCallStatus { left: 50%; font-size: 11px; padding: 0 10px; gap: 5px; }
+  .vsPalStage.is-live .vsPalTranscriptBubble { font-size: 14px; line-height: 1.6; }
+  .vsPalStage.is-live .vsPalControlDock { gap: 4px; }
+  .vsPalStage.is-live .vsPalHangupBtn span { display: none; }
+}

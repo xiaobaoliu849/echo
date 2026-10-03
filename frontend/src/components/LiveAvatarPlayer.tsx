@@ -200,6 +200,7 @@ export default function LiveAvatarPlayer({
     if (activeCaption) setLastCaption(activeCaption);
   }, [userCaption, assistantCaption, userTranscriptInterim, isUserSpeaking]);
   const showCaptions = captionsEnabled && captionsVisible && caption;
+  const compactStage = viewMode !== "pip" && stageHeight != null && stageHeight < 320;
   useEffect(() => {
     const text = captionRef.current;
     if (text) text.scrollTop = text.scrollHeight;
@@ -212,7 +213,7 @@ export default function LiveAvatarPlayer({
       style={{ ...floating.style, "--avatar-aspect": aspectRatio,
         ...(stageHeight != null ? { "--avatar-video-height": `${stageHeight}px` } : {}) } as CSSProperties}
       {...floating.pointerProps}
-      className={`vsLiveAvatarPlayer ${stateClass} ${viewMode === "pip" ? "is-pip" : ""} ${className}`}
+      className={`vsLiveAvatarPlayer ${stateClass} ${viewMode === "pip" ? "is-pip" : ""} ${compactStage ? "is-compact-stage" : ""} ${className}`}
     >
       {/* Top Floating Header with Live Status & State Badge */}
       <div className="vsAvatarHeaderBar">
@@ -319,7 +320,7 @@ export default function LiveAvatarPlayer({
             <div>
               <div className="vsAvatarConnectingText">
                 {isVoiceActive
-                  ? t("正在接入 Gemini 3.8 实时视频分身...", "Connecting Gemini 3.8 Live Avatar...")
+                  ? t("正在连接分身…", "Connecting avatar…")
                   : t("分身舞台待命中", "Avatar Stage Standby")}
               </div>
               <div className="vsAvatarConnectingSubtext">

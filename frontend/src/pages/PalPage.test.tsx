@@ -458,7 +458,7 @@ describe("PalPage", () => {
     expect(screen.getByText("上一场通话已结束。")).toBeInTheDocument();
   });
 
-  it("supports subtitles toggle and opening the transcript drawer during a call", async () => {
+  it("opens with a readable transcript and keeps media mounted when hiding and restoring it", async () => {
     vi.mocked(listTavusPals).mockRejectedValue(new Error("not configured"));
     vi.mocked(createTavusConversation).mockResolvedValue({
       conversation_id: "conv-live",
@@ -477,18 +477,39 @@ describe("PalPage", () => {
     await screen.findByTestId("pal-join-button");
     fireEvent.click(screen.getByTestId("pal-join-button"));
     await waitFor(() => {
-      expect(screen.getByTestId("pal-toggle-subtitles-button")).toBeInTheDocument();
+      expect(screen.getByTestId("pal-toggle-drawer-button")).toBeInTheDocument();
     });
 
-    // Toggle subtitles button
-    fireEvent.click(screen.getByTestId("pal-toggle-subtitles-button"));
-    expect(screen.getByTestId("pal-toggle-subtitles-button")).toHaveAttribute("aria-label", "开启字幕");
-
-    // Open transcript drawer
+    const host = screen.getByTestId("pal-video-host");
+    expect(screen.getByRole("complementary", { name: "实时对话记录" })).toBeInTheDocument();
+    expect(screen.getByText(/实时转写/)).toBeInTheDocument();
+    const pane = screen.getByLabelText("滚动查看通话转写");
+    Object.defineProperties(pane, {
+      scrollHeight: { value: 400, configurable: true },
+      clientHeight: { value: 100, configurable: true },
+    });
+    pane.scrollTop = 20;
+    fireEvent.scroll(pane);
+    const receiveSpeech = call.on.mock.calls.find(([name]) => name === "app-message")?.[1];
+    const answer = "A complete answer. ".repeat(100);
+    act(() => receiveSpeech?.({ data: { event_type: "conversation.utterance", properties: { text: answer, role: "assistant", is_final: true } } }));
+    expect(pane.scrollTop).toBe(20);
+    expect(screen.getAllByText(answer.trim())).toHaveLength(1);
+    pane.scrollTop = 300;
+    fireEvent.scroll(pane);
+    act(() => receiveSpeech?.({ data: { event_type: "conversation.utterance", properties: { text: "Next question", role: "user", is_final: true } } }));
+    expect(pane.scrollTop).toBe(400);
     expect(screen.getByTestId("pal-toggle-drawer-button")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("pal-toggle-drawer-button"));
-
-    expect(screen.getByText(/实时速记/)).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "实时对话记录" })).toBeNull();
+    expect(screen.getByTestId("pal-video-host")).toBe(host);
+    // Captions are available when the transcript is hidden, keeping one text surface.
+    fireEvent.click(screen.getByTestId("pal-toggle-subtitles-button"));
+    expect(screen.getByTestId("pal-toggle-subtitles-button")).toHaveAttribute("aria-label", "开启字幕");
+    fireEvent.click(screen.getByTestId("pal-toggle-drawer-button"));
+    expect(screen.getByText(/实时转写/)).toBeInTheDocument();
+    expect(screen.getByTestId("pal-video-host")).toBe(host);
+    expect(screen.queryByTestId("pal-toggle-subtitles-button")).toBeNull();
   });
 
   it("shows post-call summary and allows dismissing via Back to Setup and Close buttons", async () => {
