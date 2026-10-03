@@ -109,7 +109,21 @@ export default function useVoiceChat({
   const [voiceChatProvider, setVoiceChatProvider] = useState(initialProvider);
   const [voiceChatModel, setVoiceChatModel] = useState(initialModel);
   const [voiceChatAvatarEnabled, setVoiceChatAvatarEnabled] = useState(false);
-  const [voiceChatAvatarName, setVoiceChatAvatarName] = useState("Ben");
+  const [voiceChatAvatarName, setVoiceChatAvatarName] = useState(() => {
+    try {
+      return localStorage.getItem("vs_live_avatar_name") || "Ben";
+    } catch {
+      return "Ben";
+    }
+  });
+  const handleAvatarNameChange = useCallback((name: string) => {
+    setVoiceChatAvatarName(name);
+    try {
+      localStorage.setItem("vs_live_avatar_name", name);
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+  }, []);
   const voiceChatVideoStream = useMemo(() => new EventTarget(), []);
   const voiceChatAvatarSupported = supportsLiveAvatar(voiceChatProvider, voiceChatModel);
   const voiceChatLiveAvatar = voiceChatAvatarSupported && voiceChatAvatarEnabled;
@@ -2193,7 +2207,7 @@ export default function useVoiceChat({
     voiceChatAvatarName,
     voiceChatVideoStream,
     onAvatarEnabledChange: setVoiceChatAvatarEnabled,
-    onAvatarNameChange: setVoiceChatAvatarName,
+    onAvatarNameChange: handleAvatarNameChange,
     voiceChatProvider,
     voiceChatProviderOptions: resolvedProviders,
     voiceChatModel,
