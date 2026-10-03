@@ -614,6 +614,8 @@ class GoogleRealtimeMixin:
                 memory_session.note_user_transcript(user_text)
                 if recorder is not None:
                     voice_turn_id = await recorder.note_user_transcript(user_text)
+                # Publish confirmed words before potentially slow memory retrieval.
+                await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
                 retrieval = await memory_session.retrieve_memory_context()
                 memory_context = str(retrieval.get("context", ""))
                 memory_count = int(retrieval.get("memories_retrieved", 0))
@@ -637,7 +639,6 @@ class GoogleRealtimeMixin:
                         cloud_count,
                     )
                     pending_prefill_context = memory_context
-            await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
 
         send_tool_event = self._tool_event_sender(websocket, recorder)
 
@@ -831,7 +832,7 @@ class GoogleRealtimeMixin:
                             else:
                                 await self._send_event(
                                     websocket, "user_transcript",
-                                    text=pending_google_user_transcript, turn_id="",
+                                    text=pending_google_user_transcript, turn_id="", interim=True, cumulative=True,
                                 )
                     audio_data = self._extract_google_pcm(response)
                     if audio_data and not suppress_interrupted_google_response:
@@ -1057,12 +1058,17 @@ class GoogleRealtimeMixin:
                             pending_google_user_transcript,
                             user_text_chunk,
                         )
-                        if (
-                            not google_user_transcript_waiting_for_boundary
-                            and InterruptionClassifier.classify_interruption(pending_google_user_transcript) != InterruptionIntent.NOISE_OR_SILENCE
-                        ):
-                            current_tid = recorder.current_turn_id if recorder is not None else ""
-                            await self._send_event(websocket, "user_transcript", text=pending_google_user_transcript, turn_id=current_tid)
+                        if InterruptionClassifier.classify_interruption(pending_google_user_transcript) != InterruptionIntent.NOISE_OR_SILENCE:
+                            if is_live_translate:
+                                current_tid = recorder.current_turn_id if recorder is not None else ""
+                                await self._send_event(websocket, "user_transcript", text=pending_google_user_transcript, turn_id=current_tid)
+                            else:
+                                # A display-only snapshot can arrive before native interruption.
+                                # It must not claim the old turn or mutate canonical history.
+                                await self._send_event(
+                                    websocket, "user_transcript", text=pending_google_user_transcript,
+                                    turn_id="", interim=True, cumulative=True,
+                                )
                     supports_finished_marker = (
                         input_transcription_value is not None
                         and hasattr(input_transcription_value, "finished")

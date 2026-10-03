@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type CSSProperties } from "react";
 import {
   Bot,
   Captions,
   CaptionsOff,
+  GripHorizontal,
   Maximize2,
   Mic,
   MicOff,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../i18n";
 import { LiveAvatarPlayback, type AvatarFrame } from "../utils/liveAvatarPlayback";
+import { useFloatingAvatar } from "../hooks/useFloatingAvatar";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -44,6 +46,10 @@ export interface LiveAvatarPlayerProps {
   userTranscript?: string;
   userTranscriptInterim?: boolean;
   assistantReply?: string;
+  viewMode?: "stage" | "pip";
+  onViewModeChange?: (mode: "stage" | "pip") => void;
+  captionsEnabled?: boolean;
+  showCaptionControl?: boolean;
   className?: string;
 }
 
@@ -61,16 +67,43 @@ export default function LiveAvatarPlayer({
   userTranscript = "",
   userTranscriptInterim = false,
   assistantReply = "",
+  viewMode: controlledViewMode,
+  onViewModeChange,
+  captionsEnabled = true,
+  showCaptionControl = true,
   className = "",
 }: LiveAvatarPlayerProps) {
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const captionRef = useRef<HTMLSpanElement>(null);
   const [status, setStatus] = useState<"waiting" | "playing" | "error">("waiting");
   const [image, setImage] = useState("");
-  const [viewMode, setViewMode] = useState<"stage" | "pip">("stage");
+  const [localViewMode, setLocalViewMode] = useState<"stage" | "pip">("stage");
+  const viewMode = controlledViewMode ?? localViewMode;
+  const floating = useFloatingAvatar(viewMode === "pip");
+  const [aspectRatio, setAspectRatio] = useState(9 / 16);
+  const [stageHeight, setStageHeight] = useState<number | null>(null);
+  const [lastCaption, setLastCaption] = useState<{ text: string; user: boolean; interim: boolean } | null>(null);
   const [lastSnapshot, setLastSnapshot] = useState("");
   const [isInterrupted, setIsInterrupted] = useState(false);
   const [captionsVisible, setCaptionsVisible] = useState(true);
+
+  useEffect(() => {
+    const player = floating.ref.current;
+    const pane = player?.closest<HTMLElement>(".vsAvatarMediaPane");
+    if (!player || !pane || viewMode === "pip" || typeof ResizeObserver === "undefined") return;
+    const controls = player.querySelector<HTMLElement>(".vsAvatarControlsBar");
+    const fitStage = () => {
+      // Only the pane and controls determine portrait size, never transcript lines.
+      const controlsHeight = (controls?.offsetHeight ?? 52) + 16;
+      setStageHeight(Math.max(80, Math.floor(pane.clientHeight - controlsHeight)));
+    };
+    const observer = new ResizeObserver(fitStage);
+    observer.observe(pane);
+    if (controls) observer.observe(controls);
+    fitStage();
+    return () => observer.disconnect();
+  }, [viewMode, floating.ref]);
 
   // Playback engine initialization and event wiring
   useEffect(() => {
@@ -82,6 +115,7 @@ export default function LiveAvatarPlayer({
     const reset = () => {
       setIsInterrupted(false);
       setLastSnapshot("");
+      setLastCaption(null);
       player.reset();
       setImage("");
       setStatus("waiting");
@@ -104,6 +138,7 @@ export default function LiveAvatarPlayer({
         // Ignore canvas export failures (e.g. cross-origin/empty frames)
       }
       setIsInterrupted(true);
+      setLastCaption(null);
       player.reset(true);
       setImage("");
       setStatus("waiting");
@@ -155,15 +190,33 @@ export default function LiveAvatarPlayer({
 
   const userCaption = captionTail(userTranscript);
   const assistantCaption = captionTail(assistantReply);
-  const showCaptions = captionsVisible && viewMode === "stage" && (assistantCaption || userCaption);
+  const activeCaption = (userTranscriptInterim || isUserSpeaking) && userCaption
+    ? { text: userCaption, user: true, interim: userTranscriptInterim }
+    : assistantCaption
+    ? { text: assistantCaption, user: false, interim: false }
+    : userCaption ? { text: userCaption, user: true, interim: userTranscriptInterim } : null;
+  const caption = activeCaption ?? lastCaption;
+  useEffect(() => {
+    if (activeCaption) setLastCaption(activeCaption);
+  }, [userCaption, assistantCaption, userTranscriptInterim, isUserSpeaking]);
+  const showCaptions = captionsEnabled && captionsVisible && caption;
+  useEffect(() => {
+    const text = captionRef.current;
+    if (text) text.scrollTop = text.scrollHeight;
+  }, [caption?.text, captionsEnabled, captionsVisible]);
 
   return (
     <div
+      ref={floating.ref}
+      popover={viewMode === "pip" ? "manual" : undefined}
+      style={{ ...floating.style, "--avatar-aspect": aspectRatio,
+        ...(stageHeight != null ? { "--avatar-video-height": `${stageHeight}px` } : {}) } as CSSProperties}
+      {...floating.pointerProps}
       className={`vsLiveAvatarPlayer ${stateClass} ${viewMode === "pip" ? "is-pip" : ""} ${className}`}
     >
       {/* Top Floating Header with Live Status & State Badge */}
       <div className="vsAvatarHeaderBar">
-        <div className="vsAvatarHeaderPill">
+        <div className="vsAvatarHeaderPill" title={avatarName || "Ben"}>
           <span
             className={`vsAvatarLiveDot ${
               isVoiceActive && status === "playing" ? "live" : "connecting"
@@ -172,6 +225,13 @@ export default function LiveAvatarPlayer({
           <span>{avatarName || "Ben"}</span>
           <span className="vsAvatarModelLabel">Gemini 3.8 Live</span>
         </div>
+        {viewMode === "pip" && (
+          <button type="button" className="vsAvatarDragHandle" onKeyDown={floating.onKeyDown}
+            aria-label={t("移动分身窗口", "Move avatar window")}
+            title={t("拖动移动，或用方向键调整位置", "Drag to move, or use arrow keys")}>
+            <GripHorizontal size={18} />
+          </button>
+        )}
 
         {duration != null && duration > 0 && (
           <div className="vsAvatarDurationBadge" title={t("通话时长", "Call Duration")}>
@@ -222,6 +282,10 @@ export default function LiveAvatarPlayer({
           ref={videoRef}
           autoPlay
           playsInline
+          onLoadedMetadata={(event) => {
+            const video = event.currentTarget;
+            if (video.videoWidth && video.videoHeight) setAspectRatio(video.videoWidth / video.videoHeight);
+          }}
           hidden={Boolean(image)}
           aria-label={t("Gemini 实时视频分身", "Gemini Live Avatar")}
           onError={() => setStatus("error")}
@@ -232,7 +296,11 @@ export default function LiveAvatarPlayer({
           <img
             src={image}
             alt={t("Gemini 实时视频分身", "Gemini Live Avatar")}
-
+            draggable={false}
+            onLoad={(event) => {
+              const img = event.currentTarget;
+              if (img.naturalWidth && img.naturalHeight) setAspectRatio(img.naturalWidth / img.naturalHeight);
+            }}
           />
         )}
 
@@ -281,7 +349,8 @@ export default function LiveAvatarPlayer({
           </div>
         )}
 
-        {/* Floating Live Captions — realtime transcription layered over the video.
+      </div>
+        {/* Live captions use a single area below the portrait.
             No aria-live: token-streamed text would flood screen readers, and the
             chat transcript already serves as the accessible record. */}
         {showCaptions && (
@@ -289,33 +358,13 @@ export default function LiveAvatarPlayer({
             {/* The user's live interim wins during barge-in: voiceChatReply
                 lingers until turn finalize, so an active interim transcript is
                 the only reliable signal that the user is speaking right now. */}
-            {userTranscriptInterim && userCaption ? (
-              <div className="vsAvatarCaptionLine user interim" key="user">
-                <span className="vsAvatarCaptionSpeaker">
-                  <Mic size={11} />
-                  {t("你", "You")}
-                </span>
-                <span className="vsAvatarCaptionText">{userCaption}</span>
-              </div>
-            ) : isAssistantSpeaking && assistantCaption ? (
-              <div className="vsAvatarCaptionLine assistant" key="assistant">
-                <span className="vsAvatarCaptionSpeaker">{avatarName || "Ben"}</span>
-                <span className="vsAvatarCaptionText">{assistantCaption}</span>
-              </div>
-            ) : userCaption ? (
-              <div className="vsAvatarCaptionLine user" key="user">
-                <span className="vsAvatarCaptionSpeaker">
-                  <Mic size={11} />
-                  {t("你", "You")}
-                </span>
-                <span className="vsAvatarCaptionText">{userCaption}</span>
-              </div>
-            ) : (
-              <div className="vsAvatarCaptionLine assistant" key="assistant">
-                <span className="vsAvatarCaptionSpeaker">{avatarName || "Ben"}</span>
-                <span className="vsAvatarCaptionText">{assistantCaption}</span>
-              </div>
-            )}
+            <div className={`vsAvatarCaptionLine ${caption.user ? "user" : "assistant"} ${caption.interim ? "interim" : ""}`}>
+              <span className="vsAvatarCaptionSpeaker">
+                {caption.user ? t("你", "You") : avatarName || "Ben"}
+              </span>
+              <span ref={captionRef} className="vsAvatarCaptionText" tabIndex={0}
+                aria-label={t("实时转写", "Live transcript")}>{caption.text}</span>
+            </div>
           </div>
         )}
 
@@ -333,22 +382,27 @@ export default function LiveAvatarPlayer({
             </button>
           )}
 
-          <button
+          {showCaptionControl && <button
             type="button"
             className={`vsAvatarControlBtn ${captionsVisible ? "active" : ""}`}
+            disabled={!captionsEnabled}
+            aria-pressed={captionsVisible && captionsEnabled}
             onClick={() => setCaptionsVisible((v) => !v)}
-            title={captionsVisible ? t("隐藏实时字幕", "Hide live captions") : t("显示实时字幕", "Show live captions")}
+            title={!captionsEnabled ? t("字幕显示在对话记录中", "Captions are shown in conversation history") : captionsVisible ? t("隐藏实时字幕", "Hide live captions") : t("显示实时字幕", "Show live captions")}
             aria-label={t("实时字幕", "Live captions")}
-            aria-pressed={captionsVisible}
           >
             {captionsVisible ? <Captions size={15} /> : <CaptionsOff size={15} />}
             <span className="vsAvatarControlLabel">{t("字幕", "CC")}</span>
-          </button>
+          </button>}
 
           <button
             type="button"
             className={`vsAvatarControlBtn ${viewMode === "pip" ? "active" : ""}`}
-            onClick={() => setViewMode((v) => (v === "pip" ? "stage" : "pip"))}
+            onClick={() => {
+              const next = viewMode === "pip" ? "stage" : "pip";
+              setLocalViewMode(next);
+              onViewModeChange?.(next);
+            }}
             title={viewMode === "pip" ? t("还原舞台", "Restore stage") : t("画中画悬浮", "Picture in picture")}
           >
             {viewMode === "pip" ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
@@ -369,8 +423,6 @@ export default function LiveAvatarPlayer({
             </button>
           )}
         </div>
-      </div>
-
       {/* Hidden status text for backwards-compatible test assertions */}
       {status !== "playing" && (
         <p role="status" style={{ display: "none" }}>

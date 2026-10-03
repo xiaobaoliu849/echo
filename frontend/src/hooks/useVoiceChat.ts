@@ -1035,12 +1035,13 @@ export default function useVoiceChat({
         ) {
           return;
         }
+        const sameConfirmedTurn = Boolean(event.turn_id && event.turn_id === currentTurnIdRef.current);
         const startsNewUserTurn = Boolean(
           (event.turn_id && currentTurnIdRef.current && event.turn_id !== currentTurnIdRef.current) ||
-          (hadInterimPreview && (currentUserTurnRef.current.trim() || currentAssistantTurnRef.current.trim()))
+          (hadInterimPreview && !sameConfirmedTurn && (currentUserTurnRef.current.trim() || currentAssistantTurnRef.current.trim()))
         );
         if (
-          !startsNewUserTurn &&
+          !startsNewUserTurn && !hadInterimPreview &&
           event.turn_id &&
           currentUserTurnRef.current.trim() &&
           (currentUserTurnRef.current.trim().endsWith(trimmedIncoming) ||
@@ -1051,7 +1052,7 @@ export default function useVoiceChat({
         }
         if (
           currentUserTurnRef.current.trim() &&
-          (startsNewUserTurn || !isTranscriptContinuation(currentUserTurnRef.current, event.text))
+          (startsNewUserTurn || (!sameConfirmedTurn && !isTranscriptContinuation(currentUserTurnRef.current, event.text)))
         ) {
           if (
             voiceChatLiveTranslate &&

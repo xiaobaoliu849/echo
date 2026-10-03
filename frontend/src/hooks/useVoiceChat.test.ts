@@ -187,6 +187,22 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Please book a flight to Boston.", "When?"]);
   });
 
+  it("keeps repeated Gemini previews and corrected confirmations in one canonical turn", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Book Austin", interim: true, cumulative: true });
+      socket.emitMessage({ type: "user_transcript", text: "Book Austin", turn_id: "same" });
+      socket.emitMessage({ type: "assistant_text", text: "Which date?" });
+      socket.emitMessage({ type: "user_transcript", text: "Book Boston instead", interim: true, cumulative: true });
+      socket.emitMessage({ type: "user_transcript", text: "Book Boston instead", turn_id: "same" });
+    });
+    expect(result.current.voiceChatMessages).toEqual([]);
+    expect(result.current.voiceChatTranscript).toBe("Book Boston instead");
+    expect(result.current.voiceChatReply).toBe("Which date?");
+    act(() => { socket.emitMessage({ type: "turn_complete", turn_id: "same" }); });
+    expect(result.current.voiceChatMessages.map(message => message.content)).toEqual(["Book Boston instead", "Which date?"]);
+  });
+
   it("replaces streamed assistant words with the canonical final transcript", async () => {
     const { result, socket } = await startTranscriptTestSession();
     act(() => {

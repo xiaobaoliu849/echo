@@ -104,6 +104,26 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertEqual(response.json(), {"status": "healthy"})
         self.assertTrue(bool(response.headers.get("x-request-id")))
 
+    def test_local_voice_preflight_accepts_loopback_frontends(self) -> None:
+        for origin in ("http://localhost:5173", "http://127.0.0.1:8000", "http://localhost:5174", "http://127.0.0.1:4173", "http://[::1]:5173"):
+            with self.subTest(origin=origin):
+                response = self._request("OPTIONS", "/api/realtime-local/status", headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "authorization,x-client-id",
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers["access-control-allow-origin"], origin)
+
+    def test_local_voice_preflight_rejects_untrusted_origins(self) -> None:
+        for origin in ("https://example.com", "null", "http://localhost.evil.com:5173", "http://127.0.0.1.evil.com", "http://192.168.1.10:5173"):
+            with self.subTest(origin=origin):
+                response = self._request("OPTIONS", "/api/realtime-local/status", headers={
+                    "Origin": origin, "Access-Control-Request-Method": "GET",
+                })
+                self.assertEqual(response.status_code, 400)
+                self.assertNotIn("access-control-allow-origin", response.headers)
+
     def test_voice_chat_websocket_route_registered(self) -> None:
         websocket_paths = {
             route.path

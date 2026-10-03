@@ -57,7 +57,7 @@ describe("ChatInputBar", () => {
     expect(voiceChat.onToggleRecording).toHaveBeenCalledOnce();
     expect(onOpenPal).not.toHaveBeenCalled();
   });
-  it("removes the stage after hang-up or history replacement and keeps consistent avatar labels", () => {
+  it("keeps the avatar out of the composer and preserves its labels after hang-up", () => {
     const voiceChat = createVoiceChatController({
       voiceChatProvider: "AgentPlatform", voiceChatModel: "gemini-3.8-live", voiceChatLiveAvatar: true,
       voiceChatRecording: true, voiceChatConnected: true, voiceChatAvatarName: "Leo",
@@ -65,7 +65,7 @@ describe("ChatInputBar", () => {
     });
     const chat = createChatController();
     const { rerender } = render(<ChatInputBar voiceChat={voiceChat} chat={chat} />);
-    expect(document.querySelector(".vsLiveAvatarPlayer")).toBeInTheDocument();
+    expect(document.querySelector(".vsLiveAvatarPlayer")).toBeNull();
     expect(document.querySelector(".vsVoiceReadOnlyChip")).toHaveTextContent("Gemini 3.8 Live · Avatar · Leo · Kore");
     rerender(<ChatInputBar voiceChat={{ ...voiceChat, voiceChatRecording: false, voiceChatConnected: false }} chat={chat} />);
     expect(document.querySelector(".vsLiveAvatarPlayer")).toBeNull();

@@ -6,7 +6,6 @@ import { formatVoiceChatSecondaryLabel, isRealtimeVoiceModel } from "../../hooks
 import type { UseChatResult } from "../../hooks/useChat";
 import type { UseVoiceChatResult } from "../../hooks/useVoiceChat";
 import { useI18n } from "../../i18n";
-import LiveAvatarPlayer from "../LiveAvatarPlayer";
 import { formatAvatarCallLabel } from "../../utils/geminiLivePreferences";
 
 type Props = {
@@ -405,23 +404,6 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
   return (
     <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""}`}>
-      {voiceChat.voiceChatLiveAvatar && isVoiceActive && (
-        <LiveAvatarPlayer
-          stream={voiceChat.voiceChatVideoStream}
-          avatarName={voiceChat.voiceChatAvatarName.trim() || "Ben"}
-          isVoiceActive={isVoiceActive}
-          isUserSpeaking={isUserSpeaking}
-          isAssistantSpeaking={isAssistantSpeaking}
-          isThinking={isThinking}
-          isMuted={voiceChat.voiceChatMuted}
-          onToggleMute={voiceChat.onToggleMute}
-          onEndCall={voiceChat.onToggleRecording}
-          duration={voiceChat.voiceChatDuration}
-          userTranscript={voiceChat.voiceChatTranscript}
-          userTranscriptInterim={voiceChat.voiceChatTranscriptIsInterim}
-          assistantReply={voiceChat.voiceChatReply}
-        />
-      )}
       {/* ── Live Voice Dynamic Call Capsule Banner ── */}
       {isVoiceActive && !voiceChat.voiceChatLiveAvatar && (
         <div className="vsLiveVoiceStatusBanner">

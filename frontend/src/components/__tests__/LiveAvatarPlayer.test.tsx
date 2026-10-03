@@ -88,4 +88,20 @@ describe("LiveAvatarPlayer live captions", () => {
     expect(screen.getByText("John Doe")).toBeInTheDocument();
     expect(container.innerHTML).not.toContain("preset-john");
   });
+
+  it("keeps the completed assistant caption when the streaming buffers clear", () => {
+    const stream = new EventTarget();
+    const { rerender } = render(<LiveAvatarPlayer stream={stream} assistantReply="Finished reply" />);
+    rerender(<LiveAvatarPlayer stream={stream} />);
+    expect(screen.getByText("Finished reply")).toBeInTheDocument();
+    rerender(<LiveAvatarPlayer stream={stream} userTranscript="Next question" userTranscriptInterim />);
+    expect(screen.getByText("Next question")).toBeInTheDocument();
+    expect(screen.queryByText("Finished reply")).not.toBeInTheDocument();
+  });
+
+  it("shows the newest assistant caption after speech ends rather than the old user text", () => {
+    render(<LiveAvatarPlayer stream={new EventTarget()} userTranscript="Old question" assistantReply="New answer" />);
+    expect(screen.getByText("New answer")).toBeInTheDocument();
+    expect(screen.queryByText("Old question")).not.toBeInTheDocument();
+  });
 });
