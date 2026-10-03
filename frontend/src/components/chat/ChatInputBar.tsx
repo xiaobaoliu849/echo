@@ -390,24 +390,19 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
   return (
     <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""}`}>
-      {voiceChat.voiceChatAvatarSupported && (
+      {voiceChat.voiceChatAvatarSupported && !voiceChat.voiceChatLiveAvatar && (
         <div className="vsLiveAvatarSettings">
-          <label>
-            <input type="checkbox" checked={voiceChat.voiceChatLiveAvatar} disabled={isVoiceActive || voiceChat.voiceChatBusy}
-              onChange={(e) => voiceChat.onAvatarEnabledChange(e.target.checked)} />
-            {t("实时视频分身 · Live Avatar", "Live Avatar")}
+          <label className="vsAvatarToggleLabel" title={t("开启实时视频分身", "Enable Live Avatar")}>
+            <input
+              type="checkbox"
+              checked={false}
+              disabled={isVoiceActive || voiceChat.voiceChatBusy}
+              onChange={(e) => voiceChat.onAvatarEnabledChange(e.target.checked)}
+              aria-label={t("实时视频分身 · Live Avatar", "Live Avatar")}
+            />
+            <span className="vsAvatarToggleSlider" />
+            <span className="vsAvatarToggleText">{t("实时视频分身 · Live Avatar", "Live Avatar")}</span>
           </label>
-          {voiceChat.voiceChatLiveAvatar && <label>
-            {t("预置分身名称", "Prebuilt avatar name")}
-            <input className="vsInput" value={voiceChat.voiceChatAvatarName} maxLength={80}
-              disabled={isVoiceActive || voiceChat.voiceChatBusy} onChange={(e) => voiceChat.onAvatarNameChange(e.target.value)} />
-          </label>}
-          {voiceChat.voiceChatLiveAvatar && <span className="vsFieldHint">
-            {t("默认 Ben；可填写 Cloud Studio 分身列表中的名称。语音在左侧选择，点击通话按钮开始。", "Ben is the default. Enter another name from Cloud Studio’s Avatar list. Choose a voice on the left, then click the call button.")}
-          </span>}
-          {voiceChat.voiceChatLiveAvatar && <a href="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api/configure-live-avatars" target="_blank" rel="noreferrer">
-            {t("获取 Google Cloud 接入权限", "Google Cloud access and setup")}
-          </a>}
         </div>
       )}
       {voiceChat.voiceChatLiveAvatar && (
@@ -421,10 +416,14 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
           isMuted={voiceChat.voiceChatMuted}
           onToggleMute={voiceChat.onToggleMute}
           onEndCall={voiceChat.onToggleRecording}
+          duration={voiceChat.voiceChatDuration}
+          onAvatarNameChange={voiceChat.onAvatarNameChange}
+          onAvatarEnabledChange={voiceChat.onAvatarEnabledChange}
+          isAvatarEnabled={voiceChat.voiceChatLiveAvatar}
         />
       )}
       {/* ── Live Voice Dynamic Call Capsule Banner ── */}
-      {isVoiceActive && (
+      {isVoiceActive && !voiceChat.voiceChatLiveAvatar && (
         <div className="vsLiveVoiceStatusBanner">
           <div className="vsVoiceStatusSection">
             <span className="vsVoiceStatusText">

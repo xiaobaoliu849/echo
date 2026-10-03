@@ -20,7 +20,15 @@
 @import "./styles/voice-trajectory.css";
 @import "./styles/live-avatar.css";
 /* Gemini Live avatars stay in the current conversation. */
-.vsLiveAvatarSettings { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px; }
-.vsLiveAvatarSettings label { display: flex; align-items: center; gap: 8px; }
-.vsLiveAvatarSettings .vsInput { width: 160px; }
+.vsLiveAvatarSettings {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 6px 14px;
+  margin: 0 auto 8px auto;
+  max-width: 640px;
+  background: rgba(26, 32, 48, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
 
