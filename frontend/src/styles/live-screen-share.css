@@ -1,0 +1,84 @@
+/* Sharing occupies its own row in both the audio and avatar composers. */
+.vsScreenShareControl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--bg-card) 88%, var(--surface));
+}
+
+.vsScreenShareControl.is-sharing {
+  border-color: color-mix(in oklab, var(--brand) 26%, var(--line));
+  background: color-mix(in oklab, var(--brand-soft) 35%, var(--bg-card));
+}
+
+.vsScreenShareControl video {
+  display: block;
+  width: 96px;
+  height: 54px;
+  object-fit: contain;
+  background: #171b18;
+  border: 1px solid color-mix(in oklab, var(--line) 65%, transparent);
+  border-radius: 8px;
+}
+
+.vsScreenShareIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  color: var(--brand-dark);
+  background: var(--brand-soft);
+}
+
+.vsScreenShareDescription { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.vsScreenShareTitle { display: flex; align-items: baseline; gap: 7px; font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.vsScreenShareDot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--brand-dark); }
+.vsScreenShareDescription small { font-size: 12px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+.vsScreenShareDescription small[title] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+button.vsScreenShareButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  box-shadow: none;
+  cursor: pointer;
+}
+button.vsScreenShareButton:hover:not(:disabled) { border-color: var(--brand); background: var(--brand-soft); transform: none; box-shadow: none; }
+button.vsScreenShareButton:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+button.vsScreenShareButton:disabled { opacity: 0.5; cursor: default; }
+.vsScreenShareError { grid-column: 1 / -1; color: var(--accent-strong); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.vsComposer textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+
+/* Pane queries also handle narrow desktop splits, regardless of window width. */
+@container chat-pane (max-width: 520px) {
+  .vsScreenShareControl { grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; padding: 10px; }
+  .vsScreenShareControl video { width: 80px; height: 45px; }
+  .vsScreenShareButton { grid-column: 2; justify-self: start; }
+  .vsScreenShareTitle { font-size: 12px; }
+}
+
+@media (max-width: 520px) {
+  .vsScreenShareControl { grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; padding: 10px; }
+  .vsScreenShareControl video { width: 80px; height: 45px; }
+  .vsScreenShareButton { grid-column: 2; justify-self: start; }
+  .vsScreenShareTitle { font-size: 12px; }
+}

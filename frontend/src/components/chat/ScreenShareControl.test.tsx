@@ -40,4 +40,13 @@ describe("Screen-share controls", () => {
     const { container } = render(<ScreenShareControl voiceChat={createVoiceChatController()} />);
     expect(container).toBeEmptyDOMElement();
   });
+  it.each([["screen:0:0", "整个屏幕"], ["window:731:0", "所选窗口"]])("shows a readable source name for %s", (source, label) => {
+    const voiceChat = createVoiceChatController({ voiceChatScreenShareSupported: true, voiceChatConnected: true });
+    render(<ScreenShareControl voiceChat={{ ...voiceChat, voiceChatScreenShare: { ...voiceChat.voiceChatScreenShare, sharing: true, source, error: "连接暂时中断，请重试" } }} />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.queryByText(source)).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("连接暂时中断，请重试");
+    fireEvent.click(screen.getByRole("button", { name: "停止共享" }));
+    expect(voiceChat.voiceChatScreenShare.stop).toHaveBeenCalledOnce();
+  });
 });

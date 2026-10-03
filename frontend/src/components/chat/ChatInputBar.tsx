@@ -398,7 +398,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
     })}`;
 
   const placeholder = isVoiceActive
-    ? t("正在实时通话中：可直接说话，或输入文字/粘贴图片发送...", "Live call active: speak freely, or type text / paste images to send...")
+    ? t("随时提问，或继续说话…", "Ask a question, or keep talking…")
     : isRealtime
       ? t("输入文字发送启动实时会话，或点击右侧电话按钮通话...", "Type to start realtime chat, or click the phone button to call...")
       : t("输入聊天内容，或者点击右侧麦克风语音转写...", "Type to chat, or click the microphone on the right to dictate...");

@@ -19,12 +19,4 @@
 @import "./styles/canvas.css";
 @import "./styles/voice-trajectory.css";
 @import "./styles/live-avatar.css";
-/* The same screen-share controls remain visible in audio and avatar calls. */
-.vsScreenShareControl { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border-color, #8884); border-radius: 12px; margin-bottom: 8px; }
-.vsScreenShareControl video { width: 128px; height: 72px; object-fit: contain; background: #171717; border-radius: 6px; flex-shrink: 0; }
-.vsScreenShareDescription { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; font-size: 12px; }
-.vsScreenShareDescription small { opacity: .75; }
-.vsScreenShareDescription small[title] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vsScreenShareControl button { flex-shrink: 0; }
-.vsScreenShareControl button:disabled { opacity: .5; cursor: default; }
-@media (max-width: 600px) { .vsScreenShareControl { flex-wrap: wrap; } .vsScreenShareControl video { width: 80px; height: 45px; } }
+@import "./styles/live-screen-share.css";

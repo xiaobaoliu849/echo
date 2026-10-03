@@ -58,6 +58,8 @@
 
 /* Size the stage around the source portrait, without a letterboxed backdrop. */
 .vsAvatarVideoContainer {
+  container-type: inline-size;
+  container-name: avatar-stage;
   position: relative;
   width: min(100%, calc(var(--avatar-video-height) * var(--avatar-aspect, 0.5625)));
   margin: 0 auto;
@@ -373,6 +375,18 @@
   line-height: 1.5;
 }
 
+/* A short portrait needs a small, readable placeholder rather than clipped text. */
+@container avatar-stage (max-width: 180px) {
+  .vsAvatarConnectingStage { padding: 16px 10px; gap: 10px; }
+  .vsAvatarConnectingIconWrap { width: 36px; height: 36px; flex-shrink: 0; }
+  .vsAvatarConnectingIconWrap > svg { width: 22px; height: 22px; }
+  .vsAvatarConnectingText { font-size: 11px; line-height: 1.5; }
+  .vsAvatarConnectingSubtext { display: none; }
+}
+.is-compact-stage .vsAvatarStateChip,
+.is-compact-stage .vsAvatarDurationBadge { display: none; }
+.is-compact-stage .vsAvatarHeaderPill { max-width: 100%; box-sizing: border-box; flex-shrink: 1; padding: 4px 8px; font-size: 11px; }
+
 /* Autoplay Recovery Overlay */
 .vsAvatarAutoplayOverlay {
   position: absolute;
@@ -513,7 +527,7 @@
 
 .vsChatBody.avatarActive { padding: 8px 16px 12px; overflow: hidden; }
 .vsAvatarCallView { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
-.vsAvatarCallLayout { min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(16px, 3cqw, 40px); width: 100%; max-width: 1200px; margin: 0 auto; }
+.vsAvatarCallLayout { min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: clamp(16px, 3cqw, 32px); width: 100%; max-width: 1280px; margin: 0 auto; }
 .vsAvatarMediaPane { min-height: 0; min-width: 0; display: flex; align-items: center; }
 .vsAvatarTranscriptPanel { min-height: 0; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid var(--line); border-radius: 20px; background: color-mix(in oklab, var(--bg-card) 88%, transparent); overflow: hidden; }
 .vsAvatarTranscriptHeading { padding: 16px 20px; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--muted); }
@@ -528,7 +542,7 @@
 .vsAvatarTranscriptTurn.interim p { opacity: 0.8; }
 .vsAvatarTranscriptEmpty { color: var(--muted); line-height: 1.7; font-size: 14px; }
 @container chat-pane (max-width: 640px) {
-  .vsAvatarCallLayout { grid-template-columns: minmax(0, 0.44fr) minmax(0, 0.56fr); gap: 12px; }
+  .vsAvatarCallLayout { grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr); gap: 12px; }
   .vsAvatarMediaPane .vsAvatarControlsBar { gap: 2px; padding: 4px; }
   .vsAvatarMediaPane .vsAvatarControlBtn { padding: 0 7px; }
   .vsAvatarMediaPane .vsAvatarStateChip { display: none; }
@@ -542,10 +556,9 @@
 .vsAvatarCallView.is-history { height: auto; margin-bottom: 16px; }
 .vsAvatarCallView.is-history .vsAvatarCallLayout { display: block; }
 .vsAvatarCallView.is-history .vsAvatarMediaPane { height: 0; }
-.vsComposerWrap.avatarCall .vsComposer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 8px 10px; gap: 8px; }
-.vsComposerWrap.avatarCall textarea { min-height: 38px; font-size: 14px; }
+.vsComposerWrap.avatarCall .vsComposer { display: flex; flex-direction: column; padding: 12px 14px; gap: 10px; }
+.vsComposerWrap.avatarCall textarea { min-height: 48px; font-size: 14px; }
 .vsComposerWrap.avatarCall .vsVoiceReadOnlyChip { display: none; }
-.vsComposerWrap.avatarCall .vsComposerAttachments, .vsComposerWrap.avatarCall .vsComposerInlineHint { grid-column: 1 / -1; }
 
 .vsVoiceSettingsPanel.vsAvatarPreferencesPanel {
   width: min(360px, calc(100vw - 32px)); min-width: 0; overflow-y: auto; padding: 18px;
