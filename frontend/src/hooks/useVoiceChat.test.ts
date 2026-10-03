@@ -1869,11 +1869,18 @@ describe("useVoiceChat", () => {
       preferredProvider: "AgentPlatform", preferredModel: "gemini-3.8-live",
       providerModelCatalog: { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } },
     }));
-    act(() => { result.current.onAvatarEnabledChange(true); result.current.onAvatarNameChange("Ben"); });
+    act(() => {
+      result.current.onAvatarEnabledChange(true);
+      result.current.onAvatarNameChange("  Ben  ");
+      result.current.onVoiceChange("Kore");
+      result.current.onAccentChange("en-GB");
+    });
     await act(async () => { await result.current.onToggleRecording(); });
     const socket = FakeWebSocket.instances[0];
     expect(new URL(socket.url).searchParams.get("model")).toBe("gemini-3.8-live");
     expect(new URL(socket.url).searchParams.get("avatar_name")).toBe("Ben");
+    expect(new URL(socket.url).searchParams.get("voice")).toBe("Kore");
+    expect(new URL(socket.url).searchParams.get("accent")).toBe("en-GB");
     const packets: string[] = [];
     const reset = vi.fn();
     result.current.voiceChatVideoStream.addEventListener("frame", (e) => packets.push((e as MessageEvent).data.data));
@@ -1900,6 +1907,38 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatProvider).toBe("AgentPlatform");
     expect(result.current.voiceChatModel).toBe("gemini-3.8-live");
     expect(result.current.voiceChatLiveAvatar).toBe(true);
+  });
+
+  it("starts typed realtime chat with the latest avatar, voice and accent and cleans up on history switch", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["AgentPlatform"],
+      preferredProvider: "AgentPlatform", preferredModel: "gemini-3.8-live",
+      providerModelCatalog: { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } },
+    }));
+    const start = result.current.startRecordingWithInitialPrompt;
+    act(() => {
+      result.current.onAvatarEnabledChange(true);
+      result.current.onAvatarNameChange("Ben");
+      result.current.onVoiceChange("Kore");
+      result.current.onAccentChange("en-AU");
+    });
+    await act(async () => { await start("Hello"); });
+    const socket = FakeWebSocket.instances[0];
+    const url = new URL(socket.url);
+    expect(url.searchParams.get("voice")).toBe("Kore");
+    expect(url.searchParams.get("avatar_name")).toBe("Ben");
+    expect(url.searchParams.get("accent")).toBe("en-AU");
+    const reset = vi.fn();
+    result.current.voiceChatVideoStream.addEventListener("reset", reset);
+    act(() => {
+      socket.emitOpen();
+      result.current.replaceSession([{ role: "user", content: "Earlier conversation" }], "earlier-group");
+    });
+    expect(reset).toHaveBeenCalledOnce();
+    expect(result.current.voiceChatRecording).toBe(false);
+    expect(result.current.voiceChatConnected).toBe(false);
+    act(() => socket.emitMessage({ type: "assistant_text", text: "Late reply" }));
+    expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Earlier conversation"]);
   });
 
   it("ducks on a candidate, resumes backchannels, and archives confirmed interruptions", async () => {

@@ -30,6 +30,28 @@ GOOGLE_REALTIME_VOICES = (
     "Laomedeia", "Pulcherrima", "Rasalgethi", "Sadachbia", "Sadaltager",
     "Schedar", "Sulafat", "Umbriel", "Vindemiatrix", "Zubenelgenubi",
 )
+# Accent presets for Gemini Live. Google documents accent/tone steering through
+# system instructions ("Configure language and voice" -> "Guide voice tone and
+# accent"); there is no accent field in speech_config. Keys are whitelisted ids
+# sent by the client - only these server-owned strings ever reach the prompt, so
+# a client cannot inject arbitrary instruction text through this parameter.
+GOOGLE_REALTIME_ACCENT_INSTRUCTIONS: dict[str, str] = {
+    "en-US": "When you speak English, use a natural General American (US) accent.",
+    "en-GB": "When you speak English, use a natural British (Received Pronunciation) accent.",
+    "en-AU": "When you speak English, use a natural Australian accent.",
+    "en-IN": "When you speak English, use a natural Indian English accent.",
+    "zh-CN": "When you speak Chinese, use standard Mainland Mandarin (Putonghua) pronunciation.",
+    "zh-TW": "When you speak Chinese, use a natural Taiwanese Mandarin accent.",
+    "ja-JP": "When you speak Japanese, use standard Tokyo Japanese pronunciation.",
+    "fr-FR": "When you speak French, use a natural Parisian French accent.",
+}
+
+
+def resolve_google_accent_instruction(accent: str | None) -> str:
+    """Return the fixed accent instruction for a whitelisted id, else ``""``."""
+    return GOOGLE_REALTIME_ACCENT_INSTRUCTIONS.get(str(accent or "").strip(), "")
+
+
 # Shipped DashScope default. ``qwen3.8-omni-flash-realtime`` was verified live
 # in the configured cn-beijing workspace on 2026-09-26 (full adapter payload →
 # ``session.updated``, see docs/Qwen_3_8_Omni_Realtime.md), so 3.8 takes over

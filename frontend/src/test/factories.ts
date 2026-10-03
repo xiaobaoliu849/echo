@@ -120,6 +120,8 @@ export function createVoiceChatController(
     voiceChatAvatarSupported: false,
     voiceChatLiveAvatar: false,
     voiceChatAvatarName: "Ben",
+    voiceChatAccent: "",
+    onAccentChange: vi.fn(),
     voiceChatVideoStream: new EventTarget(),
     onAvatarEnabledChange: vi.fn(),
     onAvatarNameChange: vi.fn(),

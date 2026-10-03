@@ -18,6 +18,8 @@ import {
 import { useLocalVoiceStatus } from "../hooks/useLocalVoiceStatus";
 import { useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
 import { traceSelection } from "../hooks/voiceSelectionTrace";
+import LiveAvatarSettings from "./LiveAvatarSettings";
+import { GEMINI_LIVE_ACCENTS, formatAvatarCallLabel, supportsGeminiAccent } from "../utils/geminiLivePreferences";
 
 type Translator = (zh: string, en: string) => string;
 
@@ -44,6 +46,7 @@ type ProviderGroup = {
 
 export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled = false, onOpenSettings, onOpenPal }: Props) {
   const [open, setOpen] = useState(false);
+  const [configureAvatar, setConfigureAvatar] = useState(false);
   const [openUpward, setOpenUpward] = useState(true);
   const [flyoutToLeft, setFlyoutToLeft] = useState(false);
   const [panelMaxHeight, setPanelMaxHeight] = useState(480);
@@ -271,7 +274,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       return;
     }
     if (supportsLiveAvatar(provider, model)) {
-      closePopover();
+      if (avatar) {
+        setConfigureAvatar(true);
+      } else {
+        closePopover();
+      }
       return;
     }
 
@@ -294,6 +301,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   function closePopover() {
     setOpen(false);
+    setConfigureAvatar(false);
     setActiveProvider("");
     setActiveCategory("");
     setHoveredModel("");
@@ -309,11 +317,18 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       setActiveCategory("");
       setHoveredModel("");
       setHoveredAvatar(undefined);
+      setConfigureAvatar(voiceChat.voiceChatLiveAvatar);
       setOpen(true);
     } else {
       closePopover();
     }
   }
+
+  // A settings portal belongs to the conversation that opened it. History
+  // replacement (or sending a message) must not leave it over another chat.
+  useEffect(() => {
+    closePopover();
+  }, [chat?.chatMessages, voiceChat.voiceChatMessages]);
 
   function updatePanelPosition() {
     const root = rootRef.current;
@@ -328,7 +343,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     const spaceAbove = Math.max(0, rect.top - gap - visibleTop - margin);
     const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - margin);
     const upward = spaceAbove >= spaceBelow;
-    const panelWidth = Math.min(216, window.innerWidth - margin * 2);
+    const panelWidth = Math.min(configureAvatar ? 360 : 216, window.innerWidth - margin * 2);
     setOpenUpward(upward);
     // Include both cascading flyouts when choosing their horizontal direction.
     setFlyoutToLeft(rect.left + 768 > window.innerWidth);
@@ -342,13 +357,14 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   useEffect(() => {
     if (!open) return;
+    updatePanelPosition();
     window.addEventListener("resize", updatePanelPosition);
     window.addEventListener("scroll", updatePanelPosition, true);
     return () => {
       window.removeEventListener("resize", updatePanelPosition);
       window.removeEventListener("scroll", updatePanelPosition, true);
     };
-  }, [open]);
+  }, [open, configureAvatar]);
 
   useEffect(() => {
     if (!open) return;
@@ -390,8 +406,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   useEffect(() => {
     if (!open) return;
-    panelRef.current?.querySelector<HTMLButtonElement>(".vsVoiceSettingsProviderRow.selected, .vsVoiceSettingsProviderRow")?.focus({ preventScroll: true });
-  }, [open, panelRef]);
+    panelRef.current?.querySelector<HTMLElement>(configureAvatar ? "select" : ".vsVoiceSettingsProviderRow.selected, .vsVoiceSettingsProviderRow")?.focus({ preventScroll: true });
+  }, [open, configureAvatar, panelRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -428,7 +444,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const summaryText = currentProviderName === TAVUS_PROVIDER
     ? t("Tavus · 视频分身", "Tavus · Video PAL")
     : voiceChat.voiceChatLiveAvatar && currentProviderName === committedProvider && currentModelName === committedModel
-    ? `Gemini 3.8 Live · Avatar · ${voiceChat.voiceChatAvatarName}`
+    ? formatAvatarCallLabel(voiceChat.voiceChatAvatarName, voiceChat.voiceChatVoice, t)
     : isCurrentModelRealtime
     ? `${currentModelName} · ${secondaryLabel}`
     : currentModelName.trim()
@@ -461,12 +477,16 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
       {open ? createPortal((
         <div
-          className={`vsVoiceSettingsPanel${openUpward ? "" : " below"}`}
+          className={`vsVoiceSettingsPanel${openUpward ? "" : " below"}${configureAvatar ? " vsAvatarPreferencesPanel" : ""}`}
           style={{ position: "fixed", left: panelPosition.left, top: openUpward ? "auto" : panelPosition.top, bottom: openUpward ? panelPosition.bottom : "auto", maxHeight: `${panelMaxHeight}px` }}
           ref={panelRef}
           role="dialog"
           aria-label={t("通话设置", "Call settings")}
         >
+          {configureAvatar ? (
+            <LiveAvatarSettings voiceChat={voiceChat} t={t}
+              onChangeModel={() => setConfigureAvatar(false)} onDone={closePopover} />
+          ) : <>
           {/* LEVEL 1: PROVIDER SELECTION LIST (服务商) */}
           <div className="vsVoiceLevel1List">
             <div className="vsVoiceLevel1Scroll">
@@ -633,6 +653,19 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
               {/* LEVEL 3 - VOICE LIST */}
               {activeCategory === "voice" ? (
                 <div className="vsVoiceSettingsSection">
+                  {supportsGeminiAccent(currentProviderName, previewModel) && (
+                    <label className="vsGeminiAccentField">
+                      <span>{t("口音", "Accent")}</span>
+                      <select value={voiceChat.voiceChatAccent} onChange={(e) => {
+                        commitProviderModel(currentProviderName, previewModel, hoveredAvatar);
+                        voiceChat.onAccentChange(e.target.value);
+                      }}>
+                        {GEMINI_LIVE_ACCENTS.map((accent) => (
+                          <option key={accent.value} value={accent.value}>{t(accent.zh, accent.en)}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   {voiceChat.voiceChatEnableVoiceClone ? (
                     <div
                       className="vsVoiceCloneActiveBadge"
@@ -664,7 +697,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                         }`}
                         onClick={() => {
                           if (previewModel) {
-                            commitProviderModel(currentProviderName, previewModel);
+                            commitProviderModel(currentProviderName, previewModel, hoveredAvatar);
                           }
                           if (voiceChat.voiceChatEnableVoiceClone) {
                             voiceChat.onVoiceCloneToggle?.(false);
@@ -912,6 +945,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
               ) : null}
             </div>
           ) : null}
+          </>}
         </div>
       ), document.body) : null}
     </div>

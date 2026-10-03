@@ -11,8 +11,8 @@
   overflow: hidden;
   background: radial-gradient(circle at 50% 30%, #171d2b 0%, #0d1017 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s ease;
   display: flex;
   flex-direction: column;
   animation: vsAvatarStageIn 0.45s cubic-bezier(0.16, 1, 0.3, 1);
@@ -54,262 +54,20 @@
     inset 0 0 20px rgba(192, 132, 252, 0.08);
 }
 
-/* Compact standby preview when not in an active call */
-.vsLiveAvatarPlayer.is-standby {
-  background:
-    radial-gradient(120% 160% at 8% 0%, rgba(59, 130, 246, 0.14) 0%, transparent 55%),
-    radial-gradient(120% 160% at 100% 100%, rgba(139, 92, 246, 0.12) 0%, transparent 55%),
-    linear-gradient(135deg, rgba(26, 32, 48, 0.96), rgba(15, 18, 28, 0.96));
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 14px 18px;
-  cursor: default;
-}
-
-.vsAvatarStandbyRow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-}
-
-/* Gradient portrait tile with the avatar initial + breathing halo ring */
-.vsAvatarStandbyPortrait {
-  position: relative;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  flex-shrink: 0;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.35);
-}
-
-.vsAvatarStandbyPortrait.preset-sarah {
-  background: linear-gradient(135deg, #ec4899, #a855f7);
-  box-shadow: 0 6px 18px rgba(236, 72, 153, 0.32);
-}
-
-.vsAvatarStandbyPortrait.preset-leo {
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
-  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.32);
-}
-
-.vsAvatarStandbyInitial {
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-}
-
-.vsAvatarStandbyRing {
-  position: absolute;
-  inset: -4px;
-  border-radius: 20px;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
-  animation: vsStandbyBreath 3.2s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes vsStandbyBreath {
-  0%, 100% { opacity: 0.35; transform: scale(1); }
-  50% { opacity: 0.9; transform: scale(1.05); }
-}
-
-.vsAvatarStandbyText {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-  flex: 1;
-}
-
-.vsAvatarStandbyTitle {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #f1f5f9;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.vsAvatarNameInput {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  color: #f8fafc;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 2px 8px;
-  width: 100px;
-  transition: border-color 0.2s, background 0.2s;
-}
-
-.vsAvatarNameInput:focus {
-  outline: none;
-  border-color: #38bdf8;
-  background: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
-}
-
-.vsAvatarPresetChips {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-  flex-wrap: wrap;
-}
-
-.vsAvatarPresetChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.vsAvatarPresetDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  flex-shrink: 0;
-}
-
-.vsAvatarPresetChip.preset-sarah .vsAvatarPresetDot {
-  background: linear-gradient(135deg, #ec4899, #a855f7);
-}
-
-.vsAvatarPresetChip.preset-leo .vsAvatarPresetDot {
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
-}
-
-.vsAvatarPresetChip:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #f1f5f9;
-  transform: translateY(-1px);
-}
-
-.vsAvatarPresetChip.active {
-  background: rgba(56, 189, 248, 0.16);
-  border-color: rgba(56, 189, 248, 0.45);
-  color: #7dd3fc;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.18);
-}
-
-.vsAvatarStandbyActions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.vsAvatarStandbyBadge {
-  font-size: 10px;
-  font-weight: 500;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(56, 189, 248, 0.18);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.3);
-}
-
-.vsAvatarStandbyHint {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-/* Modern Toggle Switch */
-.vsAvatarToggleLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-  font-size: 12.5px;
-  color: #cbd5e1;
-}
-
-.vsAvatarToggleLabel input[type="checkbox"] {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
-.vsAvatarToggleSlider {
-  position: relative;
-  width: 32px;
-  height: 18px;
-  background-color: rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-.vsAvatarToggleSlider::before {
-  content: "";
-  position: absolute;
-  height: 14px;
-  width: 14px;
-  left: 2px;
-  bottom: 2px;
-  background-color: #ffffff;
-  border-radius: 50%;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.vsAvatarToggleLabel input[type="checkbox"]:checked + .vsAvatarToggleSlider {
-  background: linear-gradient(135deg, #38bdf8, #2563eb);
-}
-
-.vsAvatarToggleLabel input[type="checkbox"]:checked + .vsAvatarToggleSlider::before {
-  transform: translateX(14px);
-}
-
-/* Video Stage Area — aspect adapts to the real stream (--vs-aspect), blur-fill
-   backdrop covers any residual gap so there are never dead black bars. */
+/* Preserve the full source frame without cropping or synthetic blur. */
 .vsAvatarVideoContainer {
   position: relative;
   width: 100%;
-  aspect-ratio: var(--vs-aspect, 16 / 9);
-  max-height: 72vh;
+  height: clamp(300px, 52vh, 560px);
   background: #090c12;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: aspect-ratio 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Cinematic blur-fill backdrop painted from the live stream (draws are
-   throttled and pre-blurred on the tiny canvas; this is the finishing blur) */
-.vsAvatarBackdrop {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scale(1.35);
-  filter: blur(28px) saturate(1.5) brightness(0.62);
-  opacity: 0.85;
-  pointer-events: none;
-  user-select: none;
 }
 
 .vsAvatarVideoContainer video,
-.vsAvatarVideoContainer > img:not(.vsAvatarBackdrop):not(.vsAvatarSnapshotOverlay) {
+.vsAvatarVideoContainer > img:not(.vsAvatarSnapshotOverlay) {
   position: relative;
   z-index: 1;
   width: 100%;
@@ -683,7 +441,6 @@
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: #38bdf8;
 }
 
@@ -713,8 +470,8 @@
 .vsLiveAvatarPlayer.is-pip {
   position: fixed;
   bottom: 88px;
-  right: 28px;
-  width: 290px;
+  right: 20px;
+  width: min(290px, calc(100vw - 32px));
   max-width: 290px;
   margin: 0;
   z-index: 1000;
@@ -731,4 +488,52 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+.vsAvatarModelLabel { opacity: 0.7; font-size: 11px; }
+.vsLiveAvatarPlayer.is-pip .vsAvatarVideoContainer { height: 300px; }
+.vsLiveAvatarPlayer.is-pip .vsAvatarDurationBadge,
+.vsLiveAvatarPlayer.is-pip .vsAvatarModelLabel,
+.vsLiveAvatarPlayer.is-pip .vsAvatarControlLabel { display: none; }
+.vsLiveAvatarPlayer.is-pip .vsAvatarControlsBar { gap: 4px; padding: 6px; }
+.vsLiveAvatarPlayer.is-pip .vsAvatarControlBtn { padding: 0 9px; }
+.vsAvatarVideoContainer video[hidden] { display: none; }
+
+.vsVoiceSettingsPanel.vsAvatarPreferencesPanel {
+  width: min(360px, calc(100vw - 32px)); min-width: 0; overflow-y: auto; padding: 18px;
+}
+.vsAvatarPreferences { display: flex; flex-direction: column; gap: 14px; }
+.vsAvatarPreferencesHeading, .vsAvatarPreferencesFooter {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.vsAvatarPreferencesHeading > div { display: flex; flex-direction: column; gap: 4px; }
+.vsAvatarPreferencesHeading strong { font-size: 16px; color: var(--text-primary); }
+.vsAvatarPreferencesHeading span { font-size: 12px; color: var(--muted); }
+.vsAvatarPreferences label, .vsGeminiAccentField {
+  display: flex; flex-direction: column; gap: 7px; font-size: 13px; color: var(--text-primary);
+}
+.vsAvatarPreferences input, .vsAvatarPreferences select, .vsGeminiAccentField select {
+  width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg-card); color: var(--text-primary); padding: 9px 10px;
+}
+.vsAvatarPreferencesHint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.vsAvatarPreferencesFooter {
+  position: sticky; bottom: -18px; background: var(--bg-card);
+  padding: 12px 0; border-top: 1px solid var(--line);
+}
+.vsAvatarTextButton { border: 0; background: transparent; color: var(--brand-dark); font-size: 12px; padding: 6px 0; cursor: pointer; }
+.vsAvatarDoneButton { border: 0; border-radius: 9px; background: var(--brand-dark); color: white; padding: 8px 18px; cursor: pointer; }
+.vsAvatarDoneButton:disabled { opacity: 0.5; cursor: default; }
+.vsGeminiAccentField { padding: 8px; }
+.vsAvatarPreferences :is(input, select, button):focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+@media (max-width: 520px) {
+  .vsAvatarControlsBar { gap: 4px; padding: 6px; }
+  .vsAvatarControlBtn { padding: 0 9px; }
+  .vsAvatarControlLabel, .vsAvatarModelLabel { display: none; }
+  .vsAvatarCaptions { width: calc(100% - 24px); }
+  .vsAvatarCaptionText { font-size: 13px; }
+  .vsAvatarDurationBadge { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vsLiveAvatarPlayer, .vsLiveAvatarPlayer * { animation: none !important; transition: none !important; }
 }

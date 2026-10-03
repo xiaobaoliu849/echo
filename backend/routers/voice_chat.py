@@ -233,6 +233,7 @@ async def voice_chat_ws(
     model: str | None = None,
     voice: str | None = None,
     avatar_name: str | None = None,
+    accent: str | None = None,
     voiceprint_audio_urls: list[str] | None = Query(default=None),
     translation_mode: str = "bidirectional",
     source_language_code: str = "zh-Hans",
@@ -449,6 +450,7 @@ async def voice_chat_ws(
                 target_language_code=(target_language_code or "en").strip(),
                 echo_target_language=bool(echo_target_language),
                 avatar_name=avatar_name,
+                accent=accent,
             )
     except WebSocketDisconnect:
         pass

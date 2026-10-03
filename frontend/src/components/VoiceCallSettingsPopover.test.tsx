@@ -53,7 +53,7 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(onOpenPal).not.toHaveBeenCalled();
   });
-  it("shows an explicit Cloud Avatar choice and enables video without opening a voice or face panel", () => {
+  it("opens compact avatar preferences after picking Cloud Avatar", () => {
     const onOpenPal = vi.fn();
     const voiceChat = createVoiceChatController({
       voiceChatProvider: "Google", voiceChatModel: "gemini-3.8-live",
@@ -72,6 +72,10 @@ describe("VoiceCallSettingsPopover", () => {
     expect(voiceChat.onProviderChange).toHaveBeenCalledWith("AgentPlatform");
     expect(voiceChat.onModelChange).toHaveBeenCalledWith("gemini-3.8-live");
     expect(voiceChat.onAvatarEnabledChange).toHaveBeenCalledWith(true);
+    expect(screen.getByLabelText("音色")).toBeInTheDocument();
+    expect(screen.getByLabelText("口音")).toBeInTheDocument();
+    expect(screen.queryByText("Sarah")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("完成"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(onOpenPal).not.toHaveBeenCalled();
   });
@@ -79,6 +83,15 @@ describe("VoiceCallSettingsPopover", () => {
     renderPopover();
     const summary = screen.getByTitle("通话设置");
     expect(summary).toHaveTextContent("qwen3.5-omni-plus-realtime · Tina · 甜甜 · 女声");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes avatar preferences when another conversation is restored", () => {
+    const voiceChat = createVoiceChatController({ voiceChatProvider: "AgentPlatform", voiceChatModel: "gemini-3.8-live", voiceChatLiveAvatar: true });
+    const { rerender } = render(<VoiceCallSettingsPopover voiceChat={voiceChat} t={t} />);
+    openPanel();
+    expect(screen.getByLabelText("形象")).toBeInTheDocument();
+    rerender(<VoiceCallSettingsPopover voiceChat={{ ...voiceChat, voiceChatMessages: [{ role: "user", content: "Earlier chat" }] }} t={t} />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 

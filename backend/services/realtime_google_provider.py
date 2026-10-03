@@ -62,9 +62,11 @@ from .realtime_constants import (
     _is_google_public_rest_base_url,
     _merge_streaming_text,
     resolve_agent_platform_service_account_file,
+    resolve_google_accent_instruction,
 )
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
 from .realtime_memory_session import RealtimeMemorySession, _merge_memory_text
+from .google_live_errors import format_avatar_error
 from .realtime_session_recorder import VoiceAgentSessionRecorder
 from .realtime_tool_protocol import (
     RealtimeToolCall,
@@ -1244,6 +1246,7 @@ class GoogleRealtimeMixin:
         target_language_code: str = "en",
         echo_target_language: bool = True,
         avatar_name: str | None = None,
+        accent: str | None = None,
     ) -> None:
         settings = self._resolve_google_settings(model, provider=provider)
         # The legacy UI alias is migrated only on the Cloud route.
@@ -1329,6 +1332,9 @@ class GoogleRealtimeMixin:
             if is_live_translate
             else self._build_realtime_instructions(initial_memory_context)
         )
+        accent_instruction = "" if is_live_translate else resolve_google_accent_instruction(accent)
+        if accent_instruction:
+            instructions = f"{instructions}\n\n{accent_instruction}"
         live_config = (
             self._build_live_translate_config(
                 target_language_code,
@@ -1422,12 +1428,7 @@ class GoogleRealtimeMixin:
             logger.exception("Google realtime session failed: %s", e)
             error_text = str(e)
             if avatar_name:
-                error_msg = (
-                    "Live Avatar session failed. Check Cloud billing, Agent Platform API, IAM access, "
-                    "project/region, and the prebuilt avatar name in Google Cloud Studio → Stream realtime. "
-                    "Custom avatars require access from your Google Cloud account team. "
-                    "请检查项目权限、区域及预置分身名称。 " + error_text
-                )
+                error_msg = format_avatar_error(avatar_name, error_text)
             elif "API keys are not supported by this API" in error_text or ("1008" in error_text and "OAuth2" in error_text):
                 error_msg = (
                     "Google 实时会话启动失败：Google Agent Platform 实时语音接口仅支持 OAuth2 访问令牌或服务账号凭据（不支持普通 API Key）。"

@@ -2970,7 +2970,7 @@ class ApiAuthHardeningTests(unittest.TestCase):
                 }.get(k, default)
                 with client.websocket_connect(
                     "/api/voice-chat/ws?provider=AgentPlatform"
-                    "&model=gemini-3.5-live-translate-preview&token=test-api-token"
+                    "&model=gemini-3.5-live-translate-preview&accent=en-GB&token=test-api-token"
                 ) as ws:
                     mock_stream.assert_awaited_once()
                     self.assertEqual(
@@ -2980,6 +2980,7 @@ class ApiAuthHardeningTests(unittest.TestCase):
                         mock_stream.await_args.kwargs.get("model"),
                         "gemini-3.5-live-translate-preview",
                     )
+                    self.assertEqual(mock_stream.await_args.kwargs.get("accent"), "en-GB")
 
     # -- realtime transcription WebSocket handshake auth -------------------
 

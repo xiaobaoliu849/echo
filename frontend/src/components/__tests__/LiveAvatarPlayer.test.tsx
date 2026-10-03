@@ -57,11 +57,12 @@ describe("LiveAvatarPlayer live captions", () => {
     expect(screen.getByText("Some reply text")).toBeInTheDocument();
   });
 
-  it("renders the cinematic blur-fill backdrop canvas", () => {
+  it("keeps the original video without a synthetic blurred backdrop", () => {
     const { container } = render(
       <LiveAvatarPlayer stream={new EventTarget()} avatarName="Ben" isVoiceActive />
     );
-    expect(container.querySelector("canvas.vsAvatarBackdrop")).toBeInTheDocument();
+    expect(container.querySelector(".vsAvatarBackdrop")).toBeNull();
+    expect(container.querySelector("video")).toBeInTheDocument();
   });
 
   it("prioritizes the user's interim transcript over a lingering assistant reply (barge-in)", () => {
@@ -80,13 +81,11 @@ describe("LiveAvatarPlayer live captions", () => {
     expect(screen.queryByText("Stale reply from the interrupted turn")).not.toBeInTheDocument();
   });
 
-  it("never leaks free-text avatar names into the portrait className", () => {
+  it("renders free-text names as text and never as CSS classes", () => {
     const { container } = render(
       <LiveAvatarPlayer stream={new EventTarget()} avatarName="John Doe" />
     );
-    const portrait = container.querySelector(".vsAvatarStandbyPortrait");
-    expect(portrait).toBeInTheDocument();
-    expect(portrait?.className).not.toContain("doe");
-    expect(portrait?.className).not.toContain("preset-john");
+    expect(screen.getByText("John Doe")).toBeInTheDocument();
+    expect(container.innerHTML).not.toContain("preset-john");
   });
 });

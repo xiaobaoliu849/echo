@@ -692,6 +692,7 @@ export function buildVoiceChatWebSocketUrl(params: {
   voice?: string;
   voiceprintAudioUrls?: string[];
   avatarName?: string;
+  accent?: string;
   translationMode?: string;
   sourceLanguageCode?: string;
   targetLanguageCode?: string;
@@ -717,6 +718,9 @@ export function buildVoiceChatWebSocketUrl(params: {
   }
   if (params.avatarName) {
     wsUrl.searchParams.set("avatar_name", params.avatarName.trim());
+  }
+  if (params.accent) {
+    wsUrl.searchParams.set("accent", params.accent);
   }
   if (Array.isArray(params.voiceprintAudioUrls)) {
     params.voiceprintAudioUrls
