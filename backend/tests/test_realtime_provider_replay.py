@@ -676,6 +676,67 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(decisions[0]["classification"], "TRUE_BARGE_IN")
         self.assertEqual(decisions[0]["transcript"], "嗯，等一下")
 
+    async def test_google_previews_speech_before_native_boundary_without_recording_it(self) -> None:
+        websocket = CollectingWebSocket()
+        memory = FakeMemorySession()
+        recorder = await self._recorder("Google")
+        old_turn_id = recorder.current_turn_id
+        old_user_text = recorder.current_user_text
+        session = BlockingGoogleSession(google_response(
+            input_transcription=SimpleNamespace(text="Please stop and explain", finished=False),
+        ))
+        loop = asyncio.create_task(self.service._google_to_client_loop(
+            websocket, session, memory, RecordingToolSession(active=False), recorder,
+            False, InterruptionDecisionCoordinator(clock=FakeClock()),
+        ))
+        try:
+            await asyncio.wait_for(session.response_processed.wait(), timeout=1)
+            previews = [event for event in websocket.events if event["type"] == "user_transcript"]
+            self.assertEqual(len(previews), 1)
+            self.assertEqual(previews[0]["text"], "Please stop and explain")
+            self.assertTrue(previews[0]["interim"])
+            self.assertTrue(previews[0]["cumulative"])
+            self.assertEqual(previews[0]["turn_id"], "")
+            self.assertEqual(recorder.current_turn_id, old_turn_id)
+            self.assertEqual(recorder.current_user_text, old_user_text)
+            self.assertEqual(memory.user_texts, [])
+            self.assertNotIn("interrupted", [event["type"] for event in websocket.events])
+        finally:
+            loop.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await loop
+
+    async def test_google_confirmed_input_is_visible_while_memory_lookup_is_blocked(self) -> None:
+        websocket = CollectingWebSocket()
+        memory = FakeMemorySession()
+        lookup_started = asyncio.Event()
+        release_lookup = asyncio.Event()
+
+        async def blocking_lookup():
+            lookup_started.set()
+            await release_lookup.wait()
+            return {}
+
+        memory.retrieve_memory_context = blocking_lookup
+        session = FakeGoogleSession([[
+            google_response(input_transcription=SimpleNamespace(text="Tell me about cats", finished=True)),
+        ]])
+        loop = asyncio.create_task(self.service._google_to_client_loop(
+            websocket, session, memory, RecordingToolSession(active=False), None,
+            False, InterruptionDecisionCoordinator(clock=FakeClock()),
+        ))
+        try:
+            await asyncio.wait_for(lookup_started.wait(), timeout=1)
+            transcripts = [event for event in websocket.events if event["type"] == "user_transcript"]
+            self.assertEqual([event["text"] for event in transcripts], ["Tell me about cats"] * 2)
+            self.assertTrue(transcripts[0]["interim"])
+            self.assertFalse(transcripts[1].get("interim", False))
+            self.assertEqual(memory.user_texts, ["Tell me about cats"])
+        finally:
+            release_lookup.set()
+            with self.assertRaises(ReplayComplete):
+                await loop
+
     async def test_google_client_rms_hint_does_not_duck_or_buffer_output(self) -> None:
         websocket = CollectingWebSocket(
             [

@@ -118,6 +118,7 @@ class FakeWebSocket {
   static CLOSED = 3;
 
   readyState = FakeWebSocket.CONNECTING;
+  bufferedAmount = 0;
   binaryType = "";
   sent: Array<string | ArrayBuffer> = [];
   onopen: (() => void) | null = null;
@@ -153,6 +154,54 @@ class FakeWebSocket {
 }
 
 describe("useVoiceChat", () => {
+  it("keeps Vercel realtime choices available without claiming screen-share support", () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["Vercel"],
+      preferredProvider: "Vercel", preferredModel: "google/gemini-3.8-live",
+      providerModelCatalog: { Vercel: { defaultModel: "google/gemini-3.8-live", availableModels: ["google/gemini-3.8-live"] } },
+    }));
+    expect(result.current.voiceChatProvider).toBe("Vercel");
+    expect(result.current.voiceChatProviderOptions).toContain("Vercel");
+    expect(result.current.voiceChatScreenShareSupported).toBe(false);
+  });
+
+  it.each(["hangup", "disconnect", "history", "rejection"])("releases avatar screen capture immediately on %s", async (action) => {
+    const displayTrack = Object.assign(new EventTarget(), { label: "Lesson", readyState: "live", stop: vi.fn() });
+    const displayStream = { getTracks: () => [displayTrack], getVideoTracks: () => [displayTrack] } as unknown as MediaStream;
+    Object.assign(navigator.mediaDevices, { getDisplayMedia: vi.fn().mockResolvedValue(displayStream) });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLVideoElement.prototype, "videoWidth", "get").mockReturnValue(768);
+    vi.spyOn(HTMLVideoElement.prototype, "videoHeight", "get").mockReturnValue(432);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/jpeg;base64,/9j/2Q==");
+    const { result, unmount } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["AgentPlatform"],
+      preferredProvider: "AgentPlatform", preferredModel: "gemini-3.8-live",
+      providerModelCatalog: { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } },
+    }));
+    act(() => result.current.onAvatarEnabledChange(true));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    act(() => { socket.emitOpen(); socket.emitMessage({ type: "session_open", model: "gemini-3.8-live", mode: "live_avatar" }); });
+    await act(async () => { await result.current.voiceChatScreenShare.start(); });
+    expect(result.current.voiceChatScreenShare.sharing).toBe(true);
+    expect(socket.sent.some(item => typeof item === "string" && JSON.parse(item).type === "screen_frame")).toBe(true);
+    await act(async () => {
+      if (action === "hangup") await result.current.onToggleRecording();
+      else if (action === "disconnect") socket.emitClose();
+      else if (action === "rejection") socket.emitMessage({ type: "input_rejected", input_type: "screen", message: "Invalid screen frame" });
+      else result.current.replaceSession([]);
+    });
+    expect(displayTrack.stop).toHaveBeenCalled();
+    expect(result.current.voiceChatScreenShare.sharing).toBe(false);
+    if (action === "rejection") {
+      expect(result.current.voiceChatConnected).toBe(true);
+      expect(result.current.voiceChatScreenShare.error).toBe("Invalid screen frame");
+    }
+    unmount();
+  });
+
   async function startTranscriptTestSession() {
     const hook = renderHook(() => useVoiceChat({
       formatErrorMessage: createFormatErrorMessageStub(),
@@ -185,6 +234,22 @@ describe("useVoiceChat", () => {
     });
     expect(result.current.voiceChatTranscriptIsInterim).toBe(false);
     expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Please book a flight to Boston.", "When?"]);
+  });
+
+  it("keeps repeated Gemini previews and corrected confirmations in one canonical turn", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Book Austin", interim: true, cumulative: true });
+      socket.emitMessage({ type: "user_transcript", text: "Book Austin", turn_id: "same" });
+      socket.emitMessage({ type: "assistant_text", text: "Which date?" });
+      socket.emitMessage({ type: "user_transcript", text: "Book Boston instead", interim: true, cumulative: true });
+      socket.emitMessage({ type: "user_transcript", text: "Book Boston instead", turn_id: "same" });
+    });
+    expect(result.current.voiceChatMessages).toEqual([]);
+    expect(result.current.voiceChatTranscript).toBe("Book Boston instead");
+    expect(result.current.voiceChatReply).toBe("Which date?");
+    act(() => { socket.emitMessage({ type: "turn_complete", turn_id: "same" }); });
+    expect(result.current.voiceChatMessages.map(message => message.content)).toEqual(["Book Boston instead", "Which date?"]);
   });
 
   it("replaces streamed assistant words with the canonical final transcript", async () => {
@@ -1869,11 +1934,18 @@ describe("useVoiceChat", () => {
       preferredProvider: "AgentPlatform", preferredModel: "gemini-3.8-live",
       providerModelCatalog: { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } },
     }));
-    act(() => { result.current.onAvatarEnabledChange(true); result.current.onAvatarNameChange("Ben"); });
+    act(() => {
+      result.current.onAvatarEnabledChange(true);
+      result.current.onAvatarNameChange("  Ben  ");
+      result.current.onVoiceChange("Kore");
+      result.current.onAccentChange("en-GB");
+    });
     await act(async () => { await result.current.onToggleRecording(); });
     const socket = FakeWebSocket.instances[0];
     expect(new URL(socket.url).searchParams.get("model")).toBe("gemini-3.8-live");
     expect(new URL(socket.url).searchParams.get("avatar_name")).toBe("Ben");
+    expect(new URL(socket.url).searchParams.get("voice")).toBe("Kore");
+    expect(new URL(socket.url).searchParams.get("accent")).toBe("en-GB");
     const packets: string[] = [];
     const reset = vi.fn();
     result.current.voiceChatVideoStream.addEventListener("frame", (e) => packets.push((e as MessageEvent).data.data));
@@ -1900,6 +1972,38 @@ describe("useVoiceChat", () => {
     expect(result.current.voiceChatProvider).toBe("AgentPlatform");
     expect(result.current.voiceChatModel).toBe("gemini-3.8-live");
     expect(result.current.voiceChatLiveAvatar).toBe(true);
+  });
+
+  it("starts typed realtime chat with the latest avatar, voice and accent and cleans up on history switch", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["AgentPlatform"],
+      preferredProvider: "AgentPlatform", preferredModel: "gemini-3.8-live",
+      providerModelCatalog: { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } },
+    }));
+    const start = result.current.startRecordingWithInitialPrompt;
+    act(() => {
+      result.current.onAvatarEnabledChange(true);
+      result.current.onAvatarNameChange("Ben");
+      result.current.onVoiceChange("Kore");
+      result.current.onAccentChange("en-AU");
+    });
+    await act(async () => { await start("Hello"); });
+    const socket = FakeWebSocket.instances[0];
+    const url = new URL(socket.url);
+    expect(url.searchParams.get("voice")).toBe("Kore");
+    expect(url.searchParams.get("avatar_name")).toBe("Ben");
+    expect(url.searchParams.get("accent")).toBe("en-AU");
+    const reset = vi.fn();
+    result.current.voiceChatVideoStream.addEventListener("reset", reset);
+    act(() => {
+      socket.emitOpen();
+      result.current.replaceSession([{ role: "user", content: "Earlier conversation" }], "earlier-group");
+    });
+    expect(reset).toHaveBeenCalledOnce();
+    expect(result.current.voiceChatRecording).toBe(false);
+    expect(result.current.voiceChatConnected).toBe(false);
+    act(() => socket.emitMessage({ type: "assistant_text", text: "Late reply" }));
+    expect(result.current.voiceChatMessages.map(m => m.content)).toEqual(["Earlier conversation"]);
   });
 
   it("ducks on a candidate, resumes backchannels, and archives confirmed interruptions", async () => {

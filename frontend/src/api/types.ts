@@ -754,6 +754,7 @@ export type VoiceChatServerEvent =
     }
   | { type: "assistant_playback_stop" }
   | { type: "assistant_video_frame"; mime_type: string; data: string }
+  | { type: "input_rejected"; input_type: "screen" | "image"; message: string }
   | {
       type: "interruption_pending";
       candidate_id: string;

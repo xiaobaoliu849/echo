@@ -45,6 +45,7 @@ import {
   QWEN_OMNI_REALTIME_VOICES,
   QWEN_OMNI_38_REALTIME_VOICES,
   TAVUS_PROVIDER,
+  VERCEL_PROVIDER,
   buildToolMeta,
   decodeBase64Pcm,
   encodePcm16k,
@@ -72,6 +73,9 @@ import {
   type VoiceChatMetrics
 } from "./useVoiceChatHelpers";
 import { serializeSelectionTrace, traceSelection } from "./voiceSelectionTrace";
+import { GEMINI_LIVE_ACCENTS, supportsGeminiAccent } from "../utils/geminiLivePreferences";
+import useLiveScreenShare from "./useLiveScreenShare";
+import { supportsLiveScreenShare } from "../utils/liveScreenShare";
 
 export type VoiceChatCanvasData = {
   code: string;
@@ -94,6 +98,7 @@ export default function useVoiceChat({
       GOOGLE_PROVIDER,
       AGENT_PLATFORM_PROVIDER,
       TAVUS_PROVIDER,
+      VERCEL_PROVIDER,
       DOUBAO_PROVIDER,
       CARTESIA_PROVIDER,
       GRADIUM_PROVIDER,
@@ -127,6 +132,7 @@ export default function useVoiceChat({
   const voiceChatVideoStream = useMemo(() => new EventTarget(), []);
   const voiceChatAvatarSupported = supportsLiveAvatar(voiceChatProvider, voiceChatModel);
   const voiceChatLiveAvatar = voiceChatAvatarSupported && voiceChatAvatarEnabled;
+  const [voiceChatAccent, setVoiceChatAccent] = useState("");
   const [voiceChatVoice, setVoiceChatVoice] = useState(
     initialProvider === DASHSCOPE_PROVIDER
       ? (isQwenAudio31Model(initialModel) ? "longanqian_v3.1"
@@ -202,6 +208,13 @@ export default function useVoiceChat({
   const nextPlaybackTimeRef = useRef(0);
   const audioInputReadyRef = useRef(false);
   const voiceChatConnectedRef = useRef(false);
+  const getScreenShareConnection = useCallback(() => voiceChatConnectedRef.current ? websocketRef.current : null, []);
+  const voiceChatScreenShareSupported = supportsLiveScreenShare(voiceChatProvider, voiceChatModel);
+  const voiceChatScreenShare = useLiveScreenShare({
+    enabled: voiceChatConnected && voiceChatScreenShareSupported,
+    getConnection: getScreenShareConnection,
+    language,
+  });
   const currentUserTurnRef = useRef("");
   // Captions may arrive before the previous assistant turn ends. Keep them out
   // of the canonical turn so interruption/terminal events cannot save them
@@ -467,6 +480,7 @@ export default function useVoiceChat({
   }
 
   function stopSessionResources() {
+    voiceChatScreenShare.stop();
     voiceChatVideoStream.dispatchEvent(new Event("reset"));
     clearUserTranscriptPreview();
     if (liveTranslateFinishTimerRef.current !== null) {
@@ -882,6 +896,10 @@ export default function useVoiceChat({
 
   function handleRealtimeEvent(event: VoiceChatServerEvent) {
     switch (event.type) {
+      case "input_rejected":
+        if (event.input_type === "screen") voiceChatScreenShare.reject(event.message);
+        else setVoiceChatError(event.message);
+        return;
       case "assistant_video_frame":
         voiceChatVideoStream.dispatchEvent(new MessageEvent("frame", { data: { mimeType: event.mime_type, data: event.data } }));
         return;
@@ -1033,12 +1051,13 @@ export default function useVoiceChat({
         ) {
           return;
         }
+        const sameConfirmedTurn = Boolean(event.turn_id && event.turn_id === currentTurnIdRef.current);
         const startsNewUserTurn = Boolean(
           (event.turn_id && currentTurnIdRef.current && event.turn_id !== currentTurnIdRef.current) ||
-          (hadInterimPreview && (currentUserTurnRef.current.trim() || currentAssistantTurnRef.current.trim()))
+          (hadInterimPreview && !sameConfirmedTurn && (currentUserTurnRef.current.trim() || currentAssistantTurnRef.current.trim()))
         );
         if (
-          !startsNewUserTurn &&
+          !startsNewUserTurn && !hadInterimPreview &&
           event.turn_id &&
           currentUserTurnRef.current.trim() &&
           (currentUserTurnRef.current.trim().endsWith(trimmedIncoming) ||
@@ -1049,7 +1068,7 @@ export default function useVoiceChat({
         }
         if (
           currentUserTurnRef.current.trim() &&
-          (startsNewUserTurn || !isTranscriptContinuation(currentUserTurnRef.current, event.text))
+          (startsNewUserTurn || (!sameConfirmedTurn && !isTranscriptContinuation(currentUserTurnRef.current, event.text)))
         ) {
           if (
             voiceChatLiveTranslate &&
@@ -1750,6 +1769,7 @@ export default function useVoiceChat({
         model: effectiveModel || undefined,
         voice: voiceChatVoice,
         avatarName: voiceChatLiveAvatar ? voiceChatAvatarName : undefined,
+        accent: supportsGeminiAccent(voiceChatProvider, effectiveModel) ? voiceChatAccent : undefined,
         translationMode: voiceChatLiveTranslate ? voiceChatTranslationMode : undefined,
         sourceLanguageCode: voiceChatLiveTranslate ? voiceChatSourceLanguageCode : undefined,
         targetLanguageCode: voiceChatLiveTranslate ? voiceChatTargetLanguageCode : undefined,
@@ -2138,9 +2158,13 @@ export default function useVoiceChat({
     return true;
   }, [t]);
 
+  // Keep the stable composer callback, but start with the latest model, face,
+  // voice and accent instead of the values captured on the first render.
+  const startSessionRef = useRef(startSession);
+  startSessionRef.current = startSession;
   const startRecordingWithInitialPrompt = useCallback(async (prompt: string, attachments: ChatAttachment[] = []) => {
     pendingInitialPromptRef.current = { prompt, attachments };
-    await startSession();
+    await startSessionRef.current();
   }, []);
 
   const recallMemory = useCallback((query: string): boolean => {
@@ -2203,8 +2227,14 @@ export default function useVoiceChat({
 
   return {
     voiceChatAvatarSupported,
+    voiceChatScreenShareSupported,
+    voiceChatScreenShare,
     voiceChatLiveAvatar,
     voiceChatAvatarName,
+    voiceChatAccent,
+    onAccentChange: (accent: string) => setVoiceChatAccent(
+      GEMINI_LIVE_ACCENTS.some((item) => item.value === accent) ? accent : ""
+    ),
     voiceChatVideoStream,
     onAvatarEnabledChange: setVoiceChatAvatarEnabled,
     onAvatarNameChange: handleAvatarNameChange,

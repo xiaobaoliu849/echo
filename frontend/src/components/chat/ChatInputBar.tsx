@@ -6,7 +6,8 @@ import { formatVoiceChatSecondaryLabel, isRealtimeVoiceModel } from "../../hooks
 import type { UseChatResult } from "../../hooks/useChat";
 import type { UseVoiceChatResult } from "../../hooks/useVoiceChat";
 import { useI18n } from "../../i18n";
-import LiveAvatarPlayer from "../LiveAvatarPlayer";
+import { formatAvatarCallLabel } from "../../utils/geminiLivePreferences";
+import ScreenShareControl from "./ScreenShareControl";
 
 type Props = {
   chat: UseChatResult;
@@ -382,6 +383,20 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
     }
   };
 
+  const callSummary = voiceChat.voiceChatLiveAvatar
+    ? formatAvatarCallLabel(voiceChat.voiceChatAvatarName, voiceChat.voiceChatVoice, t)
+    : `${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel} · ${formatVoiceChatSecondaryLabel({
+      liveTranslate: voiceChat.voiceChatLiveTranslate,
+      voiceCloneEnabled: Boolean(voiceChat.voiceChatEnableVoiceClone),
+      translationMode: voiceChat.voiceChatTranslationMode,
+      sourceLanguageCode: voiceChat.voiceChatSourceLanguageCode,
+      targetLanguageCode: voiceChat.voiceChatTargetLanguageCode,
+      voiceLabel: voiceChat.voiceChatVoiceLabel,
+      provider: voiceChat.voiceChatProvider,
+      model: voiceChat.voiceChatModel,
+      t,
+    })}`;
+
   const placeholder = isVoiceActive
     ? t("正在实时通话中：可直接说话，或输入文字/粘贴图片发送...", "Live call active: speak freely, or type text / paste images to send...")
     : isRealtime
@@ -390,41 +405,6 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
 
   return (
     <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""}`}>
-      {voiceChat.voiceChatAvatarSupported && !voiceChat.voiceChatLiveAvatar && (
-        <div className="vsLiveAvatarSettings">
-          <label className="vsAvatarToggleLabel" title={t("开启实时视频分身", "Enable Live Avatar")}>
-            <input
-              type="checkbox"
-              checked={false}
-              disabled={isVoiceActive || voiceChat.voiceChatBusy}
-              onChange={(e) => voiceChat.onAvatarEnabledChange(e.target.checked)}
-              aria-label={t("实时视频分身 · Live Avatar", "Live Avatar")}
-            />
-            <span className="vsAvatarToggleSlider" />
-            <span className="vsAvatarToggleText">{t("实时视频分身 · Live Avatar", "Live Avatar")}</span>
-          </label>
-        </div>
-      )}
-      {voiceChat.voiceChatLiveAvatar && (
-        <LiveAvatarPlayer
-          stream={voiceChat.voiceChatVideoStream}
-          avatarName={voiceChat.voiceChatAvatarName || "Ben"}
-          isVoiceActive={isVoiceActive}
-          isUserSpeaking={isUserSpeaking}
-          isAssistantSpeaking={isAssistantSpeaking}
-          isThinking={isThinking}
-          isMuted={voiceChat.voiceChatMuted}
-          onToggleMute={voiceChat.onToggleMute}
-          onEndCall={voiceChat.onToggleRecording}
-          duration={voiceChat.voiceChatDuration}
-          onAvatarNameChange={voiceChat.onAvatarNameChange}
-          onAvatarEnabledChange={voiceChat.onAvatarEnabledChange}
-          isAvatarEnabled={voiceChat.voiceChatLiveAvatar}
-          userTranscript={voiceChat.voiceChatTranscript}
-          userTranscriptInterim={voiceChat.voiceChatTranscriptIsInterim}
-          assistantReply={voiceChat.voiceChatReply}
-        />
-      )}
       {/* ── Live Voice Dynamic Call Capsule Banner ── */}
       {isVoiceActive && !voiceChat.voiceChatLiveAvatar && (
         <div className="vsLiveVoiceStatusBanner">
@@ -500,6 +480,7 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       )}
 
       {/* ── Input Box (Always active) ── */}
+      {isVoiceActive && <ScreenShareControl voiceChat={voiceChat} />}
       <textarea
         rows={1}
         value={chat.chatInput}
@@ -578,32 +559,10 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
           {isVoiceActive ? (
             <span
               className="vsVoiceReadOnlyChip"
-              title={`${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel} · ${formatVoiceChatSecondaryLabel({
-                liveTranslate: voiceChat.voiceChatLiveTranslate,
-                voiceCloneEnabled: Boolean(voiceChat.voiceChatEnableVoiceClone),
-                translationMode: voiceChat.voiceChatTranslationMode,
-                sourceLanguageCode: voiceChat.voiceChatSourceLanguageCode,
-                targetLanguageCode: voiceChat.voiceChatTargetLanguageCode,
-                voiceLabel: voiceChat.voiceChatVoiceLabel,
-                provider: voiceChat.voiceChatProvider,
-                model: voiceChat.voiceChatModel,
-                t,
-              })}`}
+              title={callSummary}
             >
               <MicOnIcon />
-              <span>
-                {voiceChat.voiceChatProvider} / {voiceChat.voiceChatModel} ·{" "}
-                {formatVoiceChatSecondaryLabel({
-                  liveTranslate: voiceChat.voiceChatLiveTranslate,
-                  voiceCloneEnabled: Boolean(voiceChat.voiceChatEnableVoiceClone),
-                  translationMode: voiceChat.voiceChatTranslationMode,
-                  sourceLanguageCode: voiceChat.voiceChatSourceLanguageCode,
-                  targetLanguageCode: voiceChat.voiceChatTargetLanguageCode,
-                  voiceLabel: voiceChat.voiceChatVoiceLabel,
-                  provider: voiceChat.voiceChatProvider,
-                  model: voiceChat.voiceChatModel,
-                  t,
-                })}
+              <span>{callSummary}
               </span>
             </span>
           ) : (

@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchSpeakAudio, translateText, type ChatMessage, type TtsEngine } from "../api";
 import ErrorNotice from "../components/ErrorNotice";
 import ChatInputBar from "../components/chat/ChatInputBar";
+import LiveAvatarPlayer from "../components/LiveAvatarPlayer";
+import AvatarTranscriptPanel from "../components/AvatarTranscriptPanel";
 import MarkdownContent from "../components/chat/MarkdownContent";
 import { isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
@@ -485,6 +487,13 @@ export default function ChatPage({
   }, [wordLookup]);
 
   const isVoiceActive = voiceChat.voiceChatRecording || voiceChat.voiceChatConnected;
+  const isAvatarCall = isVoiceActive && voiceChat.voiceChatLiveAvatar;
+  const [avatarView, setAvatarView] = useState<"stage" | "pip">("stage");
+  useEffect(() => {
+    if (!isAvatarCall) setAvatarView("stage");
+  }, [isAvatarCall]);
+  const showAvatarHistory = isAvatarCall && avatarView === "pip";
+  const showLiveBubbles = isVoiceActive && (!isAvatarCall || showAvatarHistory);
 
   const combinedMessages = useMemo(() => {
     return [...chat.chatMessages, ...(voiceChat.sessionSummary || [])];
@@ -627,17 +636,19 @@ export default function ChatPage({
   }, []);
 
   useEffect(() => {
-    if (shouldStickToBottomRef.current) {
+    if (isAvatarCall && !showAvatarHistory) {
+      if (bodyRef.current) bodyRef.current.scrollTop = 0;
+    } else if (shouldStickToBottomRef.current) {
       scrollToBottom(false);
     }
-  }, [combinedMessages, voiceChat.voiceChatTranscript, voiceChat.voiceChatReply, scrollToBottom]);
+  }, [combinedMessages, voiceChat.voiceChatTranscript, voiceChat.voiceChatReply, scrollToBottom, isAvatarCall, showAvatarHistory]);
 
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
 
     const performAutoScroll = () => {
-      if (shouldStickToBottomRef.current && bodyRef.current) {
+      if (shouldStickToBottomRef.current && bodyRef.current && !bodyRef.current.classList.contains("avatarActive")) {
         isProgrammaticScrollRef.current = true;
         bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
         setShowScrollBottomBtn(false);
@@ -876,10 +887,52 @@ export default function ChatPage({
         {/* ── Body ── */}
         <div
           ref={bodyRef}
-          className={`vsChatBody ${showWelcome ? "empty" : ""} ${isVoiceActive ? "liveActive" : ""}`}
+          className={`vsChatBody ${showWelcome ? "empty" : ""} ${isVoiceActive ? "liveActive" : ""} ${isAvatarCall && !showAvatarHistory ? "avatarActive" : ""}`}
           onScroll={handleBodyScroll}
         >
-        {showWelcome ? (
+        {isAvatarCall && (
+          <div className={`vsAvatarCallView ${showAvatarHistory ? "is-history" : ""}`}>
+            <div className="vsAvatarCallToolbar">
+              <span>{t("实时分身通话", "Live avatar call")}</span>
+              <button type="button" className="vsAvatarHistoryButton"
+                aria-pressed={showAvatarHistory}
+                onClick={() => setAvatarView(showAvatarHistory ? "stage" : "pip")}>
+                {showAvatarHistory ? t("返回分身", "Back to avatar") : t("对话记录", "Conversation history")}
+              </button>
+            </div>
+            <div className="vsAvatarCallLayout">
+              <div className="vsAvatarMediaPane">
+                <LiveAvatarPlayer
+                  stream={voiceChat.voiceChatVideoStream}
+                  avatarName={voiceChat.voiceChatAvatarName.trim() || "Ben"}
+                  isVoiceActive={isVoiceActive}
+                  isUserSpeaking={voiceChat.voiceChatTranscriptIsInterim}
+                  isAssistantSpeaking={voiceChat.voiceChatAssistantSpeaking}
+                  isThinking={voiceChat.voiceChatBusy}
+                  isMuted={voiceChat.voiceChatMuted}
+                  onToggleMute={voiceChat.onToggleMute}
+                  onEndCall={voiceChat.onToggleRecording}
+                  duration={voiceChat.voiceChatDuration}
+                  userTranscript={voiceChat.voiceChatTranscript}
+                  userTranscriptInterim={voiceChat.voiceChatTranscriptIsInterim}
+                  assistantReply={voiceChat.voiceChatReply}
+                  viewMode={avatarView}
+                  onViewModeChange={setAvatarView}
+                  captionsEnabled={false}
+                  showCaptionControl={false}
+                />
+              </div>
+              {!showAvatarHistory && <AvatarTranscriptPanel
+                messages={voiceChat.sessionSummary}
+                userTranscript={voiceChat.voiceChatTranscript}
+                interim={voiceChat.voiceChatTranscriptIsInterim}
+                assistantReply={voiceChat.voiceChatReply}
+                avatarName={voiceChat.voiceChatAvatarName.trim() || "Ben"}
+              />}
+            </div>
+          </div>
+        )}
+        {isAvatarCall && !showAvatarHistory ? null : showWelcome ? (
           /* ═══ EMPTY STATE ═══ */
           <div className="vsChatCentered">
             <div className="vsWelcomeHero">
@@ -965,7 +1018,7 @@ export default function ChatPage({
             })}
 
             {/* ── Live Streaming Bubbles ── */}
-            {isVoiceActive && voiceChat.voiceChatTranscript && (
+            {showLiveBubbles && voiceChat.voiceChatTranscript && (
               <div className="bubble user live isSpeaking">
                 <div className="vsBubbleMeta">
                   <span className="vsStreamingIndicator speaking">
@@ -1014,7 +1067,7 @@ export default function ChatPage({
                 ))}
               </div>
             )}
-            {isVoiceActive && voiceChat.voiceChatReply && (
+            {showLiveBubbles && voiceChat.voiceChatReply && (
               <div className="bubble assistant live isReplying">
                 <div className="vsBubbleMeta">
                   <span className="vsStreamingIndicator replying">
@@ -1059,7 +1112,7 @@ export default function ChatPage({
       </div>
 
       {/* ── Scroll to bottom floating action ── */}
-      {showScrollBottomBtn && !showWelcome && (
+      {showScrollBottomBtn && !showWelcome && (!isAvatarCall || showAvatarHistory) && (
         <button
           type="button"
           className="vsScrollToBottomBtn"
@@ -1106,7 +1159,7 @@ export default function ChatPage({
 
       {/* ── Bottom composer ── */}
       {(!showWelcome || isVoiceActive) && (
-        <div className={`vsComposerWrap ${isVoiceActive ? "liveActive" : ""}`}>
+        <div className={`vsComposerWrap ${isVoiceActive ? "liveActive" : ""} ${isAvatarCall ? "avatarCall" : ""}`}>
           <form onSubmit={handleComposerSubmit}>
             <ChatInputBar
               chat={chat}

@@ -57,11 +57,12 @@ describe("LiveAvatarPlayer live captions", () => {
     expect(screen.getByText("Some reply text")).toBeInTheDocument();
   });
 
-  it("renders the cinematic blur-fill backdrop canvas", () => {
+  it("keeps the original video without a synthetic blurred backdrop", () => {
     const { container } = render(
       <LiveAvatarPlayer stream={new EventTarget()} avatarName="Ben" isVoiceActive />
     );
-    expect(container.querySelector("canvas.vsAvatarBackdrop")).toBeInTheDocument();
+    expect(container.querySelector(".vsAvatarBackdrop")).toBeNull();
+    expect(container.querySelector("video")).toBeInTheDocument();
   });
 
   it("prioritizes the user's interim transcript over a lingering assistant reply (barge-in)", () => {
@@ -80,13 +81,27 @@ describe("LiveAvatarPlayer live captions", () => {
     expect(screen.queryByText("Stale reply from the interrupted turn")).not.toBeInTheDocument();
   });
 
-  it("never leaks free-text avatar names into the portrait className", () => {
+  it("renders free-text names as text and never as CSS classes", () => {
     const { container } = render(
       <LiveAvatarPlayer stream={new EventTarget()} avatarName="John Doe" />
     );
-    const portrait = container.querySelector(".vsAvatarStandbyPortrait");
-    expect(portrait).toBeInTheDocument();
-    expect(portrait?.className).not.toContain("doe");
-    expect(portrait?.className).not.toContain("preset-john");
+    expect(screen.getByText("John Doe")).toBeInTheDocument();
+    expect(container.innerHTML).not.toContain("preset-john");
+  });
+
+  it("keeps the completed assistant caption when the streaming buffers clear", () => {
+    const stream = new EventTarget();
+    const { rerender } = render(<LiveAvatarPlayer stream={stream} assistantReply="Finished reply" />);
+    rerender(<LiveAvatarPlayer stream={stream} />);
+    expect(screen.getByText("Finished reply")).toBeInTheDocument();
+    rerender(<LiveAvatarPlayer stream={stream} userTranscript="Next question" userTranscriptInterim />);
+    expect(screen.getByText("Next question")).toBeInTheDocument();
+    expect(screen.queryByText("Finished reply")).not.toBeInTheDocument();
+  });
+
+  it("shows the newest assistant caption after speech ends rather than the old user text", () => {
+    render(<LiveAvatarPlayer stream={new EventTarget()} userTranscript="Old question" assistantReply="New answer" />);
+    expect(screen.getByText("New answer")).toBeInTheDocument();
+    expect(screen.queryByText("Old question")).not.toBeInTheDocument();
   });
 });

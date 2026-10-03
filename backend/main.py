@@ -303,6 +303,10 @@ def create_app() -> FastAPI:
             "http://localhost:3000",
             "http://127.0.0.1:3000",
         ],
+        # Desktop and Vite preview/fallback ports are still local origins.
+        # Match the complete loopback host; never allow arbitrary websites or
+        # opaque "null" origins to access this local API with credentials.
+        allow_origin_regex=r"http://(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]{1,5})?",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

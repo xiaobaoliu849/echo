@@ -62,9 +62,12 @@ from .realtime_constants import (
     _is_google_public_rest_base_url,
     _merge_streaming_text,
     resolve_agent_platform_service_account_file,
+    resolve_google_accent_instruction,
 )
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
 from .realtime_memory_session import RealtimeMemorySession, _merge_memory_text
+from .google_live_errors import format_avatar_error
+from .live_screen_input import decode_screen_frame
 from .realtime_session_recorder import VoiceAgentSessionRecorder
 from .realtime_tool_protocol import (
     RealtimeToolCall,
@@ -378,8 +381,11 @@ class GoogleRealtimeMixin:
         recorder: VoiceAgentSessionRecorder | None = None,
         is_live_translate: bool = False,
         interruption: InterruptionDecisionCoordinator | None = None,
+        model: str | None = None,
     ) -> None:
         interruption = interruption or InterruptionDecisionCoordinator()
+        last_screen_frame_at: float | None = None
+        latest_screen_frame: bytes | None = None
         while True:
             message = await websocket.receive()
             message_type = message.get("type")
@@ -390,10 +396,33 @@ class GoogleRealtimeMixin:
             if text_data:
                 try:
                     payload = json.loads(text_data)
+                    if not isinstance(payload, dict):
+                        raise ValueError("Expected an object")
                 except Exception:
                     await self._send_event(websocket, "error", message="无效的实时语音消息。")
                     continue
                 command_type = str(payload.get("type", "")).strip()
+                if command_type == "screen_share_stopped":
+                    latest_screen_frame = None
+                    continue
+                if command_type == "screen_frame":
+                    if is_live_translate or str(model or "").split("/")[-1] != "gemini-3.8-live":
+                        await self._send_event(websocket, "input_rejected", input_type="screen", message="Screen sharing requires Gemini 3.8 Live / 屏幕共享需要 Gemini 3.8 Live。")
+                        continue
+                    now = time.monotonic()
+                    if last_screen_frame_at is not None and now - last_screen_frame_at < 1.0:
+                        continue
+                    try:
+                        frame = decode_screen_frame(payload)
+                    except ValueError as exc:
+                        await self._send_event(websocket, "input_rejected", input_type="screen", message=str(exc))
+                        continue
+                    # Realtime visual context does not end a turn, interrupt speech,
+                    # or create transcript/memory entries for each screenshot.
+                    await session.send_realtime_input(video=types.Blob(data=frame, mime_type="image/jpeg"))
+                    latest_screen_frame = frame
+                    last_screen_frame_at = now
+                    continue
                 if command_type == "text_input":
                     if is_live_translate:
                         await self._send_event(
@@ -408,7 +437,19 @@ class GoogleRealtimeMixin:
                             await recorder.note_user_transcript(content)
                         if memory_session is not None:
                             memory_session.note_user_transcript(content)
-                        await session.send(input=content, end_of_turn=True)
+                        if latest_screen_frame is not None:
+                            # Realtime frames are processed asynchronously. Attach
+                            # the latest frame to a typed question in the same turn
+                            # so a question immediately after Share can see it.
+                            await session.send_client_content(
+                                turns=types.Content(role="user", parts=[
+                                    types.Part.from_bytes(data=latest_screen_frame, mime_type="image/jpeg"),
+                                    types.Part.from_text(text=content),
+                                ]),
+                                turn_complete=True,
+                            )
+                        else:
+                            await session.send(input=content, end_of_turn=True)
                     continue
                 if command_type == "media_input":
                     if is_live_translate:
@@ -612,6 +653,8 @@ class GoogleRealtimeMixin:
                 memory_session.note_user_transcript(user_text)
                 if recorder is not None:
                     voice_turn_id = await recorder.note_user_transcript(user_text)
+                # Publish confirmed words before potentially slow memory retrieval.
+                await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
                 retrieval = await memory_session.retrieve_memory_context()
                 memory_context = str(retrieval.get("context", ""))
                 memory_count = int(retrieval.get("memories_retrieved", 0))
@@ -635,7 +678,6 @@ class GoogleRealtimeMixin:
                         cloud_count,
                     )
                     pending_prefill_context = memory_context
-            await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
 
         send_tool_event = self._tool_event_sender(websocket, recorder)
 
@@ -829,7 +871,7 @@ class GoogleRealtimeMixin:
                             else:
                                 await self._send_event(
                                     websocket, "user_transcript",
-                                    text=pending_google_user_transcript, turn_id="",
+                                    text=pending_google_user_transcript, turn_id="", interim=True, cumulative=True,
                                 )
                     audio_data = self._extract_google_pcm(response)
                     if audio_data and not suppress_interrupted_google_response:
@@ -1055,12 +1097,17 @@ class GoogleRealtimeMixin:
                             pending_google_user_transcript,
                             user_text_chunk,
                         )
-                        if (
-                            not google_user_transcript_waiting_for_boundary
-                            and InterruptionClassifier.classify_interruption(pending_google_user_transcript) != InterruptionIntent.NOISE_OR_SILENCE
-                        ):
-                            current_tid = recorder.current_turn_id if recorder is not None else ""
-                            await self._send_event(websocket, "user_transcript", text=pending_google_user_transcript, turn_id=current_tid)
+                        if InterruptionClassifier.classify_interruption(pending_google_user_transcript) != InterruptionIntent.NOISE_OR_SILENCE:
+                            if is_live_translate:
+                                current_tid = recorder.current_turn_id if recorder is not None else ""
+                                await self._send_event(websocket, "user_transcript", text=pending_google_user_transcript, turn_id=current_tid)
+                            else:
+                                # A display-only snapshot can arrive before native interruption.
+                                # It must not claim the old turn or mutate canonical history.
+                                await self._send_event(
+                                    websocket, "user_transcript", text=pending_google_user_transcript,
+                                    turn_id="", interim=True, cumulative=True,
+                                )
                     supports_finished_marker = (
                         input_transcription_value is not None
                         and hasattr(input_transcription_value, "finished")
@@ -1244,6 +1291,7 @@ class GoogleRealtimeMixin:
         target_language_code: str = "en",
         echo_target_language: bool = True,
         avatar_name: str | None = None,
+        accent: str | None = None,
     ) -> None:
         settings = self._resolve_google_settings(model, provider=provider)
         # The legacy UI alias is migrated only on the Cloud route.
@@ -1329,6 +1377,9 @@ class GoogleRealtimeMixin:
             if is_live_translate
             else self._build_realtime_instructions(initial_memory_context)
         )
+        accent_instruction = "" if is_live_translate else resolve_google_accent_instruction(accent)
+        if accent_instruction:
+            instructions = f"{instructions}\n\n{accent_instruction}"
         live_config = (
             self._build_live_translate_config(
                 target_language_code,
@@ -1401,6 +1452,7 @@ class GoogleRealtimeMixin:
                         recorder,
                         is_live_translate,
                         interruption,
+                        model=settings["model"],
                     )
                 )
                 receive_task = asyncio.create_task(
@@ -1422,12 +1474,7 @@ class GoogleRealtimeMixin:
             logger.exception("Google realtime session failed: %s", e)
             error_text = str(e)
             if avatar_name:
-                error_msg = (
-                    "Live Avatar session failed. Check Cloud billing, Agent Platform API, IAM access, "
-                    "project/region, and the prebuilt avatar name in Google Cloud Studio → Stream realtime. "
-                    "Custom avatars require access from your Google Cloud account team. "
-                    "请检查项目权限、区域及预置分身名称。 " + error_text
-                )
+                error_msg = format_avatar_error(avatar_name, error_text)
             elif "API keys are not supported by this API" in error_text or ("1008" in error_text and "OAuth2" in error_text):
                 error_msg = (
                     "Google 实时会话启动失败：Google Agent Platform 实时语音接口仅支持 OAuth2 访问令牌或服务账号凭据（不支持普通 API Key）。"

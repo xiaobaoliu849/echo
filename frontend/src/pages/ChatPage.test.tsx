@@ -4,6 +4,55 @@ import ChatPage from './ChatPage';
 import { createChatController, createVoiceChatController } from '../test/factories';
 
 describe('ChatPage', () => {
+    it('uses one transcript surface and keeps playback mounted through history and hangup', () => {
+        vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+        const chat = createChatController();
+        const voiceChat = createVoiceChatController({
+            voiceChatConnected: true, voiceChatLiveAvatar: true,
+            voiceChatTranscript: 'Current question', voiceChatReply: 'Current answer',
+            sessionSummary: [{ role: 'assistant', content: 'Earlier answer' }],
+        });
+        const { container, rerender } = render(<ChatPage chat={chat} voiceChat={voiceChat} errorRuntimeContext={{}} />);
+        const video = container.querySelector('video');
+        expect(screen.getAllByText('Current answer')).toHaveLength(1);
+        expect(screen.getByText('Earlier answer')).toBeInTheDocument();
+        expect(screen.getByText('Current question')).toBeInTheDocument();
+        expect(container.querySelector('.vsAvatarCaptions')).toBeNull();
+        expect(container.querySelector('.vsComposer video')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '对话记录' }));
+        expect(container.querySelector('video')).toBe(video);
+        expect(screen.getByText('Earlier answer')).toBeInTheDocument();
+        expect(container.querySelectorAll('.bubble.assistant.live')).toHaveLength(1);
+        expect(container.querySelector('.bubble.assistant.live p')).toHaveTextContent('Current answer');
+        expect(container.querySelector('.vsAvatarCaptions')).toBeNull();
+        expect(screen.queryByLabelText('实时字幕')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '返回分身' }));
+        expect(container.querySelector('video')).toBe(video);
+        expect(screen.getAllByText('Current answer')).toHaveLength(1);
+        rerender(<ChatPage chat={chat} voiceChat={{ ...voiceChat, voiceChatConnected: false }} errorRuntimeContext={{}} />);
+        expect(container.querySelector('video')).toBeNull();
+        expect(screen.getByText('Earlier answer')).toBeInTheDocument();
+    });
+
+    it('shows growing provisional input beside an existing reply without replacing the portrait', () => {
+        const chat = createChatController();
+        const voiceChat = createVoiceChatController({
+            voiceChatConnected: true, voiceChatLiveAvatar: true,
+            voiceChatTranscript: 'Please', voiceChatTranscriptIsInterim: true,
+            voiceChatReply: 'Previous reply still playing',
+        });
+        const { container, rerender } = render(<ChatPage chat={chat} voiceChat={voiceChat} errorRuntimeContext={{}} />);
+        const portrait = container.querySelector('video');
+        expect(screen.getByText('Please')).toBeInTheDocument();
+        expect(screen.getByText('Previous reply still playing')).toBeInTheDocument();
+        const longInput = 'Please explain this in detail. '.repeat(60);
+        rerender(<ChatPage chat={chat} voiceChat={{ ...voiceChat, voiceChatTranscript: longInput }} errorRuntimeContext={{}} />);
+        expect(container.querySelector('.vsAvatarTranscriptTurn.user p')?.textContent).toBe(longInput);
+        expect(container.querySelector('video')).toBe(portrait);
+        expect(container.querySelectorAll('.vsAvatarTranscriptPanel')).toHaveLength(1);
+        expect(container.querySelector('.bubble.user.live')).toBeNull();
+    });
+
     it('keeps a live canvas mounted while resizing and preserves it when reopened', () => {
         const toggleMute = vi.fn();
         render(<ChatPage

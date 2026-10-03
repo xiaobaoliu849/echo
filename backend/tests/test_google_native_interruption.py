@@ -168,8 +168,15 @@ class GoogleNativeInterruptionTests(unittest.IsolatedAsyncioTestCase):
             google_response(turn_complete=True),
         ])
         user_events = [e for e in self.ws.events if e["type"] == "user_transcript"]
-        self.assertEqual([e["text"] for e in user_events], ["Stop talking"])
-        self.assertNotEqual(user_events[0]["turn_id"], self.old_turn)
+        previews = [e for e in user_events if e.get("interim")]
+        confirmed = [e for e in user_events if not e.get("interim")]
+        self.assertEqual([e["text"] for e in previews], ["Stop talking"])
+        self.assertEqual(previews[0]["turn_id"], "")
+        self.assertEqual([e["text"] for e in confirmed], ["Stop talking"])
+        self.assertNotEqual(confirmed[0]["turn_id"], self.old_turn)
+        stopped = next(e for e in self.ws.events if e["type"] == "interrupted")
+        self.assertLess(self.ws.events.index(previews[0]), self.ws.events.index(stopped))
+        self.assertGreater(self.ws.events.index(confirmed[0]), self.ws.events.index(stopped))
         self.assertEqual(self.memory.user_texts, ["Stop talking"])
         self.assertFalse(any(e["type"] == "turn_complete" for e in self.ws.events))
 

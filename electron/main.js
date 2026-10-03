@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { BackendRuntime } = require('./backend-runtime');
 const { autoUpdater } = require('electron-updater');
 const { UpdateController, isTrustedUpdateSender } = require('./update-controller');
+const { installScreenSharing } = require('./screen-sharing');
 
 // Allows smoke tests and portable profiles to avoid the installed user's data.
 if (process.env.ECHO_DESKTOP_USER_DATA_DIR) {
@@ -224,6 +225,7 @@ async function createWindow() {
     mainWindow.show();
     mainWindow.focus();
   });
+  installScreenSharing(mainWindow, { desktopCapturer, BrowserWindow, ipcMain, appUrl: getFrontendUrl() });
 
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
