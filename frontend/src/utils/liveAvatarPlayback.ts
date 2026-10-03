@@ -112,6 +112,12 @@ export class LiveAvatarPlayback {
       if (!bytes) return;
       this.pendingBytes -= bytes.length;
       buffer.appendBuffer(bytes);
+      if (typeof buffer.buffered.end === "function" && buffer.buffered.length > 0) {
+        const end = buffer.buffered.end(buffer.buffered.length - 1);
+        if (end - this.video.currentTime > 0.8 && !this.video.paused) {
+          this.video.currentTime = Math.max(0, end - 0.08);
+        }
+      }
       this.report(false);
       void this.video.play().catch(() => this.report(true));
     } catch { this.fail(); }

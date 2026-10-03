@@ -1,0 +1,427 @@
+/* =========================================================
+   Gemini 3.8 Live Avatar Experience & Video Stage
+   ========================================================= */
+
+.vsLiveAvatarPlayer {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto 12px auto;
+  border-radius: 18px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 30%, #171d2b 0%, #0d1017 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ambient glow states based on conversation state */
+.vsLiveAvatarPlayer.state-speaking {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow:
+    0 0 32px rgba(56, 189, 248, 0.22),
+    0 16px 44px -8px rgba(0, 0, 0, 0.5),
+    inset 0 0 20px rgba(56, 189, 248, 0.08);
+}
+
+.vsLiveAvatarPlayer.state-listening {
+  border-color: rgba(52, 211, 153, 0.55);
+  box-shadow:
+    0 0 32px rgba(52, 211, 153, 0.22),
+    0 16px 44px -8px rgba(0, 0, 0, 0.5),
+    inset 0 0 20px rgba(52, 211, 153, 0.08);
+}
+
+.vsLiveAvatarPlayer.state-thinking {
+  border-color: rgba(192, 132, 252, 0.55);
+  box-shadow:
+    0 0 32px rgba(192, 132, 252, 0.22),
+    0 16px 44px -8px rgba(0, 0, 0, 0.5),
+    inset 0 0 20px rgba(192, 132, 252, 0.08);
+}
+
+/* Compact standby preview when not in an active call */
+.vsLiveAvatarPlayer.is-standby {
+  max-height: 80px;
+  background: linear-gradient(135deg, rgba(26, 32, 48, 0.95), rgba(15, 18, 28, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 16px;
+  cursor: default;
+}
+
+.vsAvatarStandbyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.vsAvatarStandbyInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vsAvatarStandbyAvatarIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+  flex-shrink: 0;
+}
+
+.vsAvatarStandbyText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vsAvatarStandbyTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vsAvatarStandbyBadge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.vsAvatarStandbyHint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Video Stage Area */
+.vsAvatarVideoContainer {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #090c12;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vsAvatarVideoContainer video,
+.vsAvatarVideoContainer img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Captured snapshot to prevent black flicker on interrupt */
+.vsAvatarSnapshotOverlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  transition: opacity 0.25s ease-in-out;
+}
+
+/* Top Floating Status Pill */
+.vsAvatarHeaderBar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.vsAvatarHeaderPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+
+.vsAvatarLiveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+  animation: vsLivePulse 1.8s infinite;
+}
+
+.vsAvatarLiveDot.connecting {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+@keyframes vsLivePulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.vsAvatarStateChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.25s ease;
+  pointer-events: auto;
+}
+
+.vsAvatarStateChip.speaking {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.vsAvatarStateChip.listening {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.vsAvatarStateChip.thinking {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+  border: 1px solid rgba(192, 132, 252, 0.35);
+}
+
+.vsAvatarStateChip.connecting {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+/* Audio waves animation for speaking state */
+.vsAvatarAudioBars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.vsAvatarAudioBar {
+  width: 2.5px;
+  background: currentColor;
+  border-radius: 2px;
+  animation: vsAudioBarDance 0.8s ease-in-out infinite alternate;
+}
+
+.vsAvatarAudioBar:nth-child(1) { height: 4px; animation-delay: 0.1s; }
+.vsAvatarAudioBar:nth-child(2) { height: 11px; animation-delay: 0.3s; }
+.vsAvatarAudioBar:nth-child(3) { height: 7px; animation-delay: 0.2s; }
+.vsAvatarAudioBar:nth-child(4) { height: 12px; animation-delay: 0.4s; }
+
+@keyframes vsAudioBarDance {
+  0% { transform: scaleY(0.3); }
+  100% { transform: scaleY(1); }
+}
+
+/* Floating Bottom Control Bar */
+.vsAvatarControlsBar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.76);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  opacity: 0.88;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.vsLiveAvatarPlayer:hover .vsAvatarControlsBar {
+  opacity: 1;
+}
+
+.vsAvatarControlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.vsAvatarControlBtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(1.06);
+}
+
+.vsAvatarControlBtn.active {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #38bdf8;
+}
+
+.vsAvatarControlBtn.danger {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+.vsAvatarControlBtn.danger:hover {
+  background: rgba(239, 68, 68, 0.5);
+  color: #ffffff;
+}
+
+/* Connecting / Standby Placeholder in Video Stage */
+.vsAvatarConnectingStage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 40%, #1e2638 0%, #0d1017 100%);
+  color: #e2e8f0;
+}
+
+.vsAvatarConnectingIconWrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: #ffffff;
+  box-shadow: 0 0 24px rgba(59, 130, 246, 0.4);
+}
+
+.vsAvatarConnectingRing {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px dashed rgba(56, 189, 248, 0.5);
+  animation: vsRotateRing 6s linear infinite;
+}
+
+@keyframes vsRotateRing {
+  100% { transform: rotate(360deg); }
+}
+
+.vsAvatarConnectingText {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #f1f5f9;
+}
+
+.vsAvatarConnectingSubtext {
+  font-size: 12px;
+  color: #94a3b8;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* Autoplay Recovery Overlay */
+.vsAvatarAutoplayOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(13, 16, 23, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 15;
+}
+
+.vsAvatarAutoplayBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vsAvatarAutoplayBtn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 6px 22px rgba(37, 99, 235, 0.55);
+}
+
+/* Floating Picture-in-Picture (PiP) Mode */
+.vsLiveAvatarPlayer.is-pip {
+  position: fixed;
+  bottom: 88px;
+  right: 28px;
+  width: 290px;
+  max-width: 290px;
+  margin: 0;
+  z-index: 1000;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  animation: vsPipSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vsPipSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

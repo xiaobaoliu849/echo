@@ -410,7 +410,19 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
           </a>}
         </div>
       )}
-      {voiceChat.voiceChatLiveAvatar && <LiveAvatarPlayer stream={voiceChat.voiceChatVideoStream} />}
+      {voiceChat.voiceChatLiveAvatar && (
+        <LiveAvatarPlayer
+          stream={voiceChat.voiceChatVideoStream}
+          avatarName={voiceChat.voiceChatAvatarName || "Ben"}
+          isVoiceActive={isVoiceActive}
+          isUserSpeaking={isUserSpeaking}
+          isAssistantSpeaking={isAssistantSpeaking}
+          isThinking={isThinking}
+          isMuted={voiceChat.voiceChatMuted}
+          onToggleMute={voiceChat.onToggleMute}
+          onEndCall={voiceChat.onToggleRecording}
+        />
+      )}
       {/* ── Live Voice Dynamic Call Capsule Banner ── */}
       {isVoiceActive && (
         <div className="vsLiveVoiceStatusBanner">
