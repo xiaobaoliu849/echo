@@ -420,6 +420,9 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
           onAvatarNameChange={voiceChat.onAvatarNameChange}
           onAvatarEnabledChange={voiceChat.onAvatarEnabledChange}
           isAvatarEnabled={voiceChat.voiceChatLiveAvatar}
+          userTranscript={voiceChat.voiceChatTranscript}
+          userTranscriptInterim={voiceChat.voiceChatTranscriptIsInterim}
+          assistantReply={voiceChat.voiceChatReply}
         />
       )}
       {/* ── Live Voice Dynamic Call Capsule Banner ── */}

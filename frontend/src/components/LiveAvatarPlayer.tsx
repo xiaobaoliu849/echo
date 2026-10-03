@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type CSSProperties } from "react";
 import {
   Bot,
+  Captions,
+  CaptionsOff,
   Maximize2,
   Mic,
   MicOff,
@@ -19,6 +21,21 @@ function formatDuration(seconds: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
+/** Show only the newest tail of a long streaming reply as a caption. */
+function captionTail(text: string, max = 220): string {
+  const clean = text.trim();
+  // Cut on code-point boundaries so emoji/CJK-ext never split into U+FFFD.
+  const chars = Array.from(clean);
+  return chars.length > max ? `…${chars.slice(-max).join("")}` : clean;
+}
+
+/** Clamp the stage aspect to sane shapes; blur-fill covers the residual gaps. */
+function clampStageAspect(ratio: number): number {
+  return Math.min(1.9, Math.max(0.8, ratio));
+}
+
+const AVATAR_PRESETS = ["Ben", "Sarah", "Leo"] as const;
+
 export interface LiveAvatarPlayerProps {
   stream: EventTarget;
   avatarName?: string;
@@ -33,6 +50,10 @@ export interface LiveAvatarPlayerProps {
   onAvatarNameChange?: (name: string) => void;
   onAvatarEnabledChange?: (enabled: boolean) => void;
   isAvatarEnabled?: boolean;
+  /** Live caption feeds (already streamed by the realtime session). */
+  userTranscript?: string;
+  userTranscriptInterim?: boolean;
+  assistantReply?: string;
   className?: string;
 }
 
@@ -50,16 +71,22 @@ export default function LiveAvatarPlayer({
   onAvatarNameChange,
   onAvatarEnabledChange,
   isAvatarEnabled = true,
+  userTranscript = "",
+  userTranscriptInterim = false,
+  assistantReply = "",
   className = "",
 }: LiveAvatarPlayerProps) {
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const backdropRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<"waiting" | "playing" | "error">("waiting");
   const [image, setImage] = useState("");
   const [viewMode, setViewMode] = useState<"stage" | "pip">("stage");
   const [lastSnapshot, setLastSnapshot] = useState("");
   const [isInterrupted, setIsInterrupted] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [videoAspect, setVideoAspect] = useState<number | null>(null);
+  const [captionsVisible, setCaptionsVisible] = useState(true);
 
   // Playback engine initialization and event wiring
   useEffect(() => {
@@ -73,6 +100,7 @@ export default function LiveAvatarPlayer({
       setLastSnapshot("");
       player.reset();
       setImage("");
+      setVideoAspect(null);
       setStatus("waiting");
     };
 
@@ -132,6 +160,49 @@ export default function LiveAvatarPlayer({
     }
   }, []);
 
+  // Track the real video dimensions so the stage adapts its aspect ratio
+  // (Gemini avatar streams are usually square — a fixed 16:9 box wastes space).
+  const syncVideoAspect = useCallback(() => {
+    const video = videoRef.current;
+    if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+      setVideoAspect(clampStageAspect(video.videoWidth / video.videoHeight));
+    }
+  }, []);
+
+  // Cinematic blur-fill backdrop: paint the live video into a tiny canvas and
+  // let CSS blur/scale it, so the stage never shows dead black bars.
+  const isStandby = !isVoiceActive && !previewExpanded;
+  useEffect(() => {
+    // Only spin the loop while a stage with a visible canvas is mounted.
+    if (image || isStandby) return; // image mode uses an <img> backdrop instead
+    let raf = 0;
+    let lastDraw = 0;
+    const draw = (now: number) => {
+      const video = videoRef.current;
+      const canvas = backdropRef.current;
+      // ~12fps is plenty for a blurred backdrop and avoids re-blurring the
+      // whole stage at display resolution 60 times per second.
+      if (now - lastDraw >= 80 && video && canvas && video.readyState >= 2 && video.videoWidth > 0) {
+        lastDraw = now;
+        const w = 96;
+        const h = Math.max(1, Math.round((96 * video.videoHeight) / video.videoWidth));
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          // Pre-blur on the 96px canvas (Chromium); CSS blur stays as fallback.
+          try { ctx.filter = "blur(4px)"; } catch { /* ctx.filter unsupported */ }
+          ctx.drawImage(video, 0, 0, w, h);
+        }
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [image, isStandby]);
+
   // Determine container state class
   const stateClass = isAssistantSpeaking
     ? "state-speaking"
@@ -143,40 +214,50 @@ export default function LiveAvatarPlayer({
 
   // Standby mode when not in active call and not explicitly expanded for preview
   if (!isVoiceActive && !previewExpanded) {
+    // Only emit a preset theme class when the name matches a known preset —
+    // free-text names (spaces, symbols) must never leak into className.
+    const matchedPreset = AVATAR_PRESETS.find(
+      (p) => p.toLowerCase() === (avatarName || "").trim().toLowerCase()
+    );
     return (
       <div className={`vsLiveAvatarPlayer is-standby ${className}`}>
         <div className="vsAvatarStandbyRow">
-          <div className="vsAvatarStandbyInfo">
-            <div className="vsAvatarStandbyAvatarIcon" title={avatarName}>
-              <Bot size={22} />
+          <div
+            className={`vsAvatarStandbyPortrait ${matchedPreset ? `preset-${matchedPreset.toLowerCase()}` : ""}`}
+            title={avatarName}
+          >
+            <span className="vsAvatarStandbyInitial">
+              {(avatarName || "B").trim().charAt(0).toUpperCase()}
+            </span>
+            <span className="vsAvatarStandbyRing" />
+          </div>
+          <div className="vsAvatarStandbyText">
+            <div className="vsAvatarStandbyTitle">
+              <input
+                className="vsInput vsAvatarNameInput"
+                value={avatarName || "Ben"}
+                maxLength={80}
+                disabled={isVoiceActive}
+                onChange={(e) => onAvatarNameChange?.(e.target.value)}
+                placeholder={t("预置分身名称", "Prebuilt avatar name")}
+                title={t("预置分身名称", "Prebuilt avatar name")}
+                aria-label={t("预置分身名称", "Prebuilt avatar name")}
+              />
+              <span className="vsAvatarStandbyBadge">Gemini 3.8 Live</span>
             </div>
-            <div className="vsAvatarStandbyText">
-              <div className="vsAvatarStandbyTitle">
-                <input
-                  className="vsInput vsAvatarNameInput"
-                  value={avatarName || "Ben"}
-                  maxLength={80}
-                  disabled={isVoiceActive}
-                  onChange={(e) => onAvatarNameChange?.(e.target.value)}
-                  placeholder={t("预置分身名称", "Prebuilt avatar name")}
-                  title={t("预置分身名称", "Prebuilt avatar name")}
-                  aria-label={t("预置分身名称", "Prebuilt avatar name")}
-                />
-                <span className="vsAvatarStandbyBadge">Gemini 3.8 Live</span>
-              </div>
-              <div className="vsAvatarPresetChips">
-                {["Ben", "Sarah", "Leo"].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`vsAvatarPresetChip ${avatarName === preset ? "active" : ""}`}
-                    onClick={() => onAvatarNameChange?.(preset)}
-                    title={t(`选择 ${preset} 分身`, `Select ${preset}`)}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
+            <div className="vsAvatarPresetChips">
+              {AVATAR_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={`vsAvatarPresetChip preset-${preset.toLowerCase()} ${avatarName === preset ? "active" : ""}`}
+                  onClick={() => onAvatarNameChange?.(preset)}
+                  title={t(`选择 ${preset} 分身`, `Select ${preset}`)}
+                >
+                  <span className="vsAvatarPresetDot" />
+                  {preset}
+                </button>
+              ))}
             </div>
           </div>
           <div className="vsAvatarStandbyActions">
@@ -218,6 +299,13 @@ export default function LiveAvatarPlayer({
       </div>
     );
   }
+
+  const userCaption = captionTail(userTranscript);
+  const assistantCaption = captionTail(assistantReply);
+  const showCaptions = captionsVisible && viewMode === "stage" && (assistantCaption || userCaption);
+  const stageStyle = videoAspect
+    ? ({ ["--vs-aspect" as string]: String(videoAspect) } as CSSProperties)
+    : undefined;
 
   return (
     <div
@@ -279,7 +367,14 @@ export default function LiveAvatarPlayer({
       </div>
 
       {/* Main Video Presentation Stage */}
-      <div className="vsAvatarVideoContainer">
+      <div className="vsAvatarVideoContainer" style={stageStyle}>
+        {/* Cinematic blur-fill backdrop (kills the dead black bars) */}
+        {image ? (
+          <img src={image} className="vsAvatarBackdrop" alt="" aria-hidden="true" />
+        ) : (
+          <canvas ref={backdropRef} className="vsAvatarBackdrop" aria-hidden="true" />
+        )}
+
         <video
           ref={videoRef}
           autoPlay
@@ -287,10 +382,23 @@ export default function LiveAvatarPlayer({
           hidden={Boolean(image)}
           aria-label={t("Gemini 实时视频分身", "Gemini Live Avatar")}
           onError={() => setStatus("error")}
+          onLoadedMetadata={syncVideoAspect}
+          onResize={syncVideoAspect}
         />
 
         {/* Fallback image frame stream if provider emits raw image frames */}
-        {image && <img src={image} alt={t("Gemini 实时视频分身", "Gemini Live Avatar")} />}
+        {image && (
+          <img
+            src={image}
+            alt={t("Gemini 实时视频分身", "Gemini Live Avatar")}
+            onLoad={(e) => {
+              const el = e.currentTarget;
+              if (el.naturalWidth > 0 && el.naturalHeight > 0) {
+                setVideoAspect(Math.min(1.9, Math.max(0.8, el.naturalWidth / el.naturalHeight)));
+              }
+            }}
+          />
+        )}
 
         {/* Interruption snapshot overlay: gracefully prevents black flicker */}
         {lastSnapshot && !image && status !== "playing" && (
@@ -337,6 +445,44 @@ export default function LiveAvatarPlayer({
           </div>
         )}
 
+        {/* Floating Live Captions — realtime transcription layered over the video.
+            No aria-live: token-streamed text would flood screen readers, and the
+            chat transcript already serves as the accessible record. */}
+        {showCaptions && (
+          <div className="vsAvatarCaptions">
+            {/* The user's live interim wins during barge-in: voiceChatReply
+                lingers until turn finalize, so an active interim transcript is
+                the only reliable signal that the user is speaking right now. */}
+            {userTranscriptInterim && userCaption ? (
+              <div className="vsAvatarCaptionLine user interim" key="user">
+                <span className="vsAvatarCaptionSpeaker">
+                  <Mic size={11} />
+                  {t("你", "You")}
+                </span>
+                <span className="vsAvatarCaptionText">{userCaption}</span>
+              </div>
+            ) : isAssistantSpeaking && assistantCaption ? (
+              <div className="vsAvatarCaptionLine assistant" key="assistant">
+                <span className="vsAvatarCaptionSpeaker">{avatarName || "Ben"}</span>
+                <span className="vsAvatarCaptionText">{assistantCaption}</span>
+              </div>
+            ) : userCaption ? (
+              <div className="vsAvatarCaptionLine user" key="user">
+                <span className="vsAvatarCaptionSpeaker">
+                  <Mic size={11} />
+                  {t("你", "You")}
+                </span>
+                <span className="vsAvatarCaptionText">{userCaption}</span>
+              </div>
+            ) : (
+              <div className="vsAvatarCaptionLine assistant" key="assistant">
+                <span className="vsAvatarCaptionSpeaker">{avatarName || "Ben"}</span>
+                <span className="vsAvatarCaptionText">{assistantCaption}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Floating Bottom Control Bar */}
         <div className="vsAvatarControlsBar">
           {onToggleMute && isVoiceActive && (
@@ -350,6 +496,18 @@ export default function LiveAvatarPlayer({
               <span className="vsAvatarControlLabel">{isMuted ? t("已静音", "Muted") : t("静音", "Mute")}</span>
             </button>
           )}
+
+          <button
+            type="button"
+            className={`vsAvatarControlBtn ${captionsVisible ? "active" : ""}`}
+            onClick={() => setCaptionsVisible((v) => !v)}
+            title={captionsVisible ? t("隐藏实时字幕", "Hide live captions") : t("显示实时字幕", "Show live captions")}
+            aria-label={t("实时字幕", "Live captions")}
+            aria-pressed={captionsVisible}
+          >
+            {captionsVisible ? <Captions size={15} /> : <CaptionsOff size={15} />}
+            <span className="vsAvatarControlLabel">{t("字幕", "CC")}</span>
+          </button>
 
           <button
             type="button"

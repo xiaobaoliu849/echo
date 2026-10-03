@@ -5,9 +5,9 @@
 .vsLiveAvatarPlayer {
   position: relative;
   width: 100%;
-  max-width: 640px;
+  max-width: 900px;
   margin: 0 auto 12px auto;
-  border-radius: 18px;
+  border-radius: 20px;
   overflow: hidden;
   background: radial-gradient(circle at 50% 30%, #171d2b 0%, #0d1017 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -15,6 +15,18 @@
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
+  animation: vsAvatarStageIn 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vsAvatarStageIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Ambient glow states based on conversation state */
@@ -43,46 +55,75 @@
 }
 
 /* Compact standby preview when not in an active call */
-/* Compact standby preview when not in an active call */
 .vsLiveAvatarPlayer.is-standby {
-  max-height: 96px;
-  background: linear-gradient(135deg, rgba(26, 32, 48, 0.95), rgba(15, 18, 28, 0.95));
+  background:
+    radial-gradient(120% 160% at 8% 0%, rgba(59, 130, 246, 0.14) 0%, transparent 55%),
+    radial-gradient(120% 160% at 100% 100%, rgba(139, 92, 246, 0.12) 0%, transparent 55%),
+    linear-gradient(135deg, rgba(26, 32, 48, 0.96), rgba(15, 18, 28, 0.96));
   border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 10px 16px;
+  padding: 14px 18px;
   cursor: default;
 }
 
 .vsAvatarStandbyRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
 }
 
-.vsAvatarStandbyInfo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.vsAvatarStandbyAvatarIcon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+/* Gradient portrait tile with the avatar initial + breathing halo ring */
+.vsAvatarStandbyPortrait {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
   flex-shrink: 0;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.35);
+}
+
+.vsAvatarStandbyPortrait.preset-sarah {
+  background: linear-gradient(135deg, #ec4899, #a855f7);
+  box-shadow: 0 6px 18px rgba(236, 72, 153, 0.32);
+}
+
+.vsAvatarStandbyPortrait.preset-leo {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.32);
+}
+
+.vsAvatarStandbyInitial {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.vsAvatarStandbyRing {
+  position: absolute;
+  inset: -4px;
+  border-radius: 20px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  animation: vsStandbyBreath 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes vsStandbyBreath {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.05); }
 }
 
 .vsAvatarStandbyText {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
 }
 
 .vsAvatarStandbyTitle {
@@ -116,31 +157,53 @@
 .vsAvatarPresetChips {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   margin-top: 2px;
+  flex-wrap: wrap;
 }
 
 .vsAvatarPresetChip {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
   font-weight: 500;
-  padding: 1px 7px;
-  border-radius: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #94a3b8;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
+}
+
+.vsAvatarPresetDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  flex-shrink: 0;
+}
+
+.vsAvatarPresetChip.preset-sarah .vsAvatarPresetDot {
+  background: linear-gradient(135deg, #ec4899, #a855f7);
+}
+
+.vsAvatarPresetChip.preset-leo .vsAvatarPresetDot {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
 }
 
 .vsAvatarPresetChip:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #f1f5f9;
+  transform: translateY(-1px);
 }
 
 .vsAvatarPresetChip.active {
-  background: rgba(56, 189, 248, 0.18);
-  border-color: rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.18);
 }
 
 .vsAvatarStandbyActions {
@@ -215,20 +278,40 @@
   transform: translateX(14px);
 }
 
-/* Video Stage Area */
+/* Video Stage Area — aspect adapts to the real stream (--vs-aspect), blur-fill
+   backdrop covers any residual gap so there are never dead black bars. */
 .vsAvatarVideoContainer {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: var(--vs-aspect, 16 / 9);
+  max-height: 72vh;
   background: #090c12;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: aspect-ratio 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Cinematic blur-fill backdrop painted from the live stream (draws are
+   throttled and pre-blurred on the tiny canvas; this is the finishing blur) */
+.vsAvatarBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.35);
+  filter: blur(28px) saturate(1.5) brightness(0.62);
+  opacity: 0.85;
+  pointer-events: none;
+  user-select: none;
 }
 
 .vsAvatarVideoContainer video,
-.vsAvatarVideoContainer img {
+.vsAvatarVideoContainer > img:not(.vsAvatarBackdrop):not(.vsAvatarSnapshotOverlay) {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -239,6 +322,7 @@
 .vsAvatarSnapshotOverlay {
   position: absolute;
   inset: 0;
+  z-index: 2;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -547,6 +631,82 @@
 .vsAvatarAutoplayBtn:hover {
   transform: scale(1.04);
   box-shadow: 0 6px 22px rgba(37, 99, 235, 0.55);
+}
+
+/* Floating Live Captions layered over the video stage */
+.vsAvatarCaptions {
+  position: absolute;
+  left: 50%;
+  bottom: 60px;
+  transform: translateX(-50%);
+  width: min(86%, 640px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.vsAvatarCaptionLine {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: rgba(10, 14, 22, 0.66);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  animation: vsCaptionIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vsCaptionIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.vsAvatarCaptionSpeaker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #38bdf8;
+}
+
+.vsAvatarCaptionLine.user .vsAvatarCaptionSpeaker {
+  color: #34d399;
+}
+
+.vsAvatarCaptionText {
+  font-size: 14.5px;
+  line-height: 1.5;
+  font-weight: 500;
+  color: #f8fafc;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.vsAvatarCaptionLine.interim .vsAvatarCaptionText {
+  opacity: 0.62;
+  font-style: italic;
 }
 
 /* Floating Picture-in-Picture (PiP) Mode */
