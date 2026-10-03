@@ -43,8 +43,9 @@
 }
 
 /* Compact standby preview when not in an active call */
+/* Compact standby preview when not in an active call */
 .vsLiveAvatarPlayer.is-standby {
-  max-height: 80px;
+  max-height: 96px;
   background: linear-gradient(135deg, rgba(26, 32, 48, 0.95), rgba(15, 18, 28, 0.95));
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 10px 16px;
@@ -81,7 +82,7 @@
 .vsAvatarStandbyText {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .vsAvatarStandbyTitle {
@@ -91,6 +92,61 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.vsAvatarNameInput {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 8px;
+  width: 100px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.vsAvatarNameInput:focus {
+  outline: none;
+  border-color: #38bdf8;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.vsAvatarPresetChips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.vsAvatarPresetChip {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vsAvatarPresetChip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+}
+
+.vsAvatarPresetChip.active {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.vsAvatarStandbyActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .vsAvatarStandbyBadge {
@@ -106,6 +162,57 @@
 .vsAvatarStandbyHint {
   font-size: 12px;
   color: #94a3b8;
+}
+
+/* Modern Toggle Switch */
+.vsAvatarToggleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12.5px;
+  color: #cbd5e1;
+}
+
+.vsAvatarToggleLabel input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.vsAvatarToggleSlider {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.vsAvatarToggleSlider::before {
+  content: "";
+  position: absolute;
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.vsAvatarToggleLabel input[type="checkbox"]:checked + .vsAvatarToggleSlider {
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+}
+
+.vsAvatarToggleLabel input[type="checkbox"]:checked + .vsAvatarToggleSlider::before {
+  transform: translateX(14px);
 }
 
 /* Video Stage Area */
@@ -252,6 +359,36 @@
   100% { transform: scaleY(1); }
 }
 
+/* Duration Timer Badge in Stage Header */
+.vsAvatarDurationBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #f1f5f9;
+  letter-spacing: 0.02em;
+}
+
+.vsAvatarDurationDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px #34d399;
+  animation: vsPulseLive 2s ease-in-out infinite;
+}
+
+@keyframes vsPulseLive {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
 /* Floating Bottom Control Bar */
 .vsAvatarControlsBar {
   position: absolute;
@@ -261,15 +398,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.76);
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   z-index: 10;
-  opacity: 0.88;
+  opacity: 0.95;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
@@ -281,19 +418,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  gap: 6px;
   height: 32px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.08);
   color: #f1f5f9;
   cursor: pointer;
   transition: all 0.18s ease;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.vsAvatarControlLabel {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .vsAvatarControlBtn:hover {
   background: rgba(255, 255, 255, 0.18);
-  transform: scale(1.06);
+  transform: scale(1.04);
 }
 
 .vsAvatarControlBtn.active {

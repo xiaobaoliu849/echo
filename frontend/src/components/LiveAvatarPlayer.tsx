@@ -13,6 +13,12 @@ import {
 import { useI18n } from "../i18n";
 import { LiveAvatarPlayback, type AvatarFrame } from "../utils/liveAvatarPlayback";
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
 export interface LiveAvatarPlayerProps {
   stream: EventTarget;
   avatarName?: string;
@@ -21,8 +27,12 @@ export interface LiveAvatarPlayerProps {
   isAssistantSpeaking?: boolean;
   isThinking?: boolean;
   isMuted?: boolean;
+  duration?: number;
   onToggleMute?: () => void;
   onEndCall?: () => void;
+  onAvatarNameChange?: (name: string) => void;
+  onAvatarEnabledChange?: (enabled: boolean) => void;
+  isAvatarEnabled?: boolean;
   className?: string;
 }
 
@@ -34,8 +44,12 @@ export default function LiveAvatarPlayer({
   isAssistantSpeaking = false,
   isThinking = false,
   isMuted = false,
+  duration,
   onToggleMute,
   onEndCall,
+  onAvatarNameChange,
+  onAvatarEnabledChange,
+  isAvatarEnabled = true,
   className = "",
 }: LiveAvatarPlayerProps) {
   const { t } = useI18n();
@@ -138,22 +152,54 @@ export default function LiveAvatarPlayer({
             </div>
             <div className="vsAvatarStandbyText">
               <div className="vsAvatarStandbyTitle">
-                <span>{avatarName || "Ben"}</span>
+                <input
+                  className="vsInput vsAvatarNameInput"
+                  value={avatarName || "Ben"}
+                  maxLength={80}
+                  disabled={isVoiceActive}
+                  onChange={(e) => onAvatarNameChange?.(e.target.value)}
+                  placeholder={t("预置分身名称", "Prebuilt avatar name")}
+                  title={t("预置分身名称", "Prebuilt avatar name")}
+                  aria-label={t("预置分身名称", "Prebuilt avatar name")}
+                />
                 <span className="vsAvatarStandbyBadge">Gemini 3.8 Live</span>
               </div>
-              <div className="vsAvatarStandbyHint">
-                {t("实时视频分身已就绪 · 点击通话按钮开始对话", "Live avatar ready · Click call button to start")}
+              <div className="vsAvatarPresetChips">
+                {["Ben", "Sarah", "Leo"].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={`vsAvatarPresetChip ${avatarName === preset ? "active" : ""}`}
+                    onClick={() => onAvatarNameChange?.(preset)}
+                    title={t(`选择 ${preset} 分身`, `Select ${preset}`)}
+                  >
+                    {preset}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            className="vsAvatarControlBtn"
-            onClick={() => setPreviewExpanded(true)}
-            title={t("预览分身舞台", "Preview Avatar Stage")}
-          >
-            <Maximize2 size={14} />
-          </button>
+          <div className="vsAvatarStandbyActions">
+            {onAvatarEnabledChange && (
+              <label className="vsAvatarToggleLabel" title={t("开启/关闭视频分身", "Toggle Live Avatar")}>
+                <input
+                  type="checkbox"
+                  checked={isAvatarEnabled}
+                  onChange={(e) => onAvatarEnabledChange(e.target.checked)}
+                  aria-label={t("实时视频分身 · Live Avatar", "Live Avatar")}
+                />
+                <span className="vsAvatarToggleSlider" />
+              </label>
+            )}
+            <button
+              type="button"
+              className="vsAvatarControlBtn"
+              onClick={() => setPreviewExpanded(true)}
+              title={t("预览分身舞台", "Preview Avatar Stage")}
+            >
+              <Maximize2 size={14} />
+            </button>
+          </div>
         </div>
         {/* Keep video element in DOM to preserve test expectations */}
         <video
@@ -188,6 +234,13 @@ export default function LiveAvatarPlayer({
           <span>{avatarName || "Ben"}</span>
           <span style={{ opacity: 0.6, fontSize: "10.5px" }}>Gemini 3.8</span>
         </div>
+
+        {duration != null && duration > 0 && (
+          <div className="vsAvatarDurationBadge" title={t("通话时长", "Call Duration")}>
+            <span className="vsAvatarDurationDot" />
+            <span>{formatDuration(duration)}</span>
+          </div>
+        )}
 
         {isAssistantSpeaking ? (
           <div className="vsAvatarStateChip speaking">
@@ -291,9 +344,10 @@ export default function LiveAvatarPlayer({
               type="button"
               className={`vsAvatarControlBtn ${isMuted ? "active danger" : ""}`}
               onClick={onToggleMute}
-              title={isMuted ? t("取消静音", "Unmute") : t("静音麦克风", "Mute mic")}
+              title={isMuted ? t("取消静音 (M)", "Unmute (M)") : t("静音麦克风 (M)", "Mute mic (M)")}
             >
               {isMuted ? <MicOff size={15} /> : <Mic size={15} />}
+              <span className="vsAvatarControlLabel">{isMuted ? t("已静音", "Muted") : t("静音", "Mute")}</span>
             </button>
           )}
 
@@ -320,6 +374,9 @@ export default function LiveAvatarPlayer({
             ) : (
               <Maximize2 size={15} />
             )}
+            <span className="vsAvatarControlLabel">
+              {viewMode === "pip" ? t("还原", "Restore") : t("画中画", "PiP")}
+            </span>
           </button>
 
           {onEndCall && isVoiceActive && (
@@ -327,9 +384,10 @@ export default function LiveAvatarPlayer({
               type="button"
               className="vsAvatarControlBtn danger"
               onClick={onEndCall}
-              title={t("挂断通话", "End call")}
+              title={t("挂断实时通话", "Hang up call")}
             >
               <PhoneOff size={15} />
+              <span className="vsAvatarControlLabel">{t("挂断", "Hang up")}</span>
             </button>
           )}
         </div>
