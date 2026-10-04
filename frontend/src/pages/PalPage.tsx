@@ -958,7 +958,6 @@ export default function PalPage({ formatErrorMessage, errorRuntimeContext, onCon
                 aria-pressed={conversation.isSharingScreen}
               >
                 {conversation.isSharingScreen ? <MonitorOff size={18} /> : <Monitor size={18} />}
-                <span className="vsPalShareLabel">{conversation.isSharingScreen ? t("停止共享", "Stop sharing") : t("共享屏幕", "Share screen")}</span>
               </button>
 
               {!showDrawer && <button

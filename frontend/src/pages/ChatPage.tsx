@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { fetchSpeakAudio, translateText, type ChatMessage, type TtsEngine } from "../api";
 import ErrorNotice from "../components/ErrorNotice";
 import ChatInputBar from "../components/chat/ChatInputBar";
@@ -494,6 +494,7 @@ export default function ChatPage({
     if (!isAvatarCall) setAvatarView("stage");
   }, [isAvatarCall]);
   const showAvatarHistory = isAvatarCall && avatarView === "pip";
+  const [avatarStageWidth, setAvatarStageWidth] = useState<number | null>(null);
   const showLiveBubbles = isVoiceActive && (!isAvatarCall || showAvatarHistory);
 
   const combinedMessages = useMemo(() => {
@@ -893,18 +894,8 @@ export default function ChatPage({
         >
         {isAvatarCall && (
           <div className={`vsAvatarCallView ${showAvatarHistory ? "is-history" : ""}`}>
-            <div className="vsAvatarCallToolbar">
-              <span>{t("实时分身通话", "Live avatar call")}</span>
-              <div className="vsAvatarCallActions">
-                <ScreenShareControl voiceChat={voiceChat} compact />
-                <button type="button" className="vsAvatarHistoryButton"
-                  aria-pressed={showAvatarHistory}
-                  onClick={() => setAvatarView(showAvatarHistory ? "stage" : "pip")}>
-                  {showAvatarHistory ? t("返回分身", "Back to avatar") : t("对话记录", "Conversation history")}
-                </button>
-              </div>
-            </div>
-            <div className="vsAvatarCallLayout vsCallWorkspace">
+            <div className="vsAvatarCallLayout vsCallWorkspace"
+              style={avatarStageWidth ? { "--avatar-stage-width": `${avatarStageWidth}px` } as CSSProperties : undefined}>
               <div className="vsAvatarMediaPane">
                 <LiveAvatarPlayer
                   stream={voiceChat.voiceChatVideoStream}
@@ -924,6 +915,8 @@ export default function ChatPage({
                   onViewModeChange={setAvatarView}
                   captionsEnabled={false}
                   showCaptionControl={false}
+                  extraControls={<ScreenShareControl voiceChat={voiceChat} variant="icon" />}
+                  onStageWidthChange={setAvatarStageWidth}
                 />
               </div>
               {!showAvatarHistory && <AvatarTranscriptPanel

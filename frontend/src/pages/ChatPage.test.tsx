@@ -4,22 +4,28 @@ import ChatPage from './ChatPage';
 import { createChatController, createVoiceChatController } from '../test/factories';
 
 describe('ChatPage', () => {
-    it('keeps sharing outside the compact composer and available through history mode', () => {
+    it('puts icon-only sharing in the avatar control bar and keeps it through PiP history', () => {
         const voiceChat = createVoiceChatController({
-            voiceChatConnected: true, voiceChatLiveAvatar: true, voiceChatScreenShareSupported: true,
+            voiceChatConnected: true, voiceChatLiveAvatar: true, voiceChatScreenShareSupported: true, voiceChatDuration: 25,
         });
         const { container, rerender } = render(<ChatPage chat={createChatController()} voiceChat={voiceChat} errorRuntimeContext={{}} />);
         const portrait = container.querySelector('.vsLiveAvatarPlayer video');
         expect(container.querySelector('.vsComposer .vsScreenShareControl')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: '共享屏幕' }));
+        expect(screen.queryByRole('button', { name: '对话记录' })).toBeNull();
+        const share = screen.getByRole('button', { name: '共享屏幕' });
+        expect(share.closest('.vsAvatarControlsBar')).not.toBeNull();
+        expect(share).toHaveAttribute('title', '让模型看到您的屏幕');
+        expect(container.querySelector('.vsAvatarHeaderPill .vsAvatarDurationBadge')).toHaveTextContent('00:25');
+        fireEvent.click(share);
         expect(voiceChat.voiceChatScreenShare.start).toHaveBeenCalledOnce();
         rerender(<ChatPage chat={createChatController()} voiceChat={{ ...voiceChat,
             voiceChatScreenShare: { ...voiceChat.voiceChatScreenShare, sharing: true, source: 'Lesson' },
         }} errorRuntimeContext={{}} />);
-        expect(screen.getByText('Lesson')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '停止共享' })).toHaveAttribute('title', expect.stringContaining('Lesson'));
         expect(container.querySelector('.vsLiveAvatarPlayer video')).toBe(portrait);
-        fireEvent.click(screen.getByRole('button', { name: '对话记录' }));
-        fireEvent.click(screen.getByRole('button', { name: '停止共享' }));
+        fireEvent.click(screen.getByTitle('画中画悬浮'));
+        // jsdom cannot open the PiP popover, so its controls count as hidden there.
+        fireEvent.click(screen.getByRole('button', { name: '停止共享', hidden: true }));
         expect(voiceChat.voiceChatScreenShare.stop).toHaveBeenCalledOnce();
         expect(container.querySelector('.vsLiveAvatarPlayer video')).toBe(portrait);
     });
@@ -38,14 +44,14 @@ describe('ChatPage', () => {
         expect(screen.getByText('Current question')).toBeInTheDocument();
         expect(container.querySelector('.vsAvatarCaptions')).toBeNull();
         expect(container.querySelector('.vsComposer video')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: '对话记录' }));
+        fireEvent.click(screen.getByTitle('画中画悬浮'));
         expect(container.querySelector('video')).toBe(video);
         expect(screen.getByText('Earlier answer')).toBeInTheDocument();
         expect(container.querySelectorAll('.bubble.assistant.live')).toHaveLength(1);
         expect(container.querySelector('.bubble.assistant.live p')).toHaveTextContent('Current answer');
         expect(container.querySelector('.vsAvatarCaptions')).toBeNull();
         expect(screen.queryByLabelText('实时字幕')).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: '返回分身' }));
+        fireEvent.click(screen.getByTitle('还原舞台'));
         expect(container.querySelector('video')).toBe(video);
         expect(screen.getAllByText('Current answer')).toHaveLength(1);
         rerender(<ChatPage chat={chat} voiceChat={{ ...voiceChat, voiceChatConnected: false }} errorRuntimeContext={{}} />);

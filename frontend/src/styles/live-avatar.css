@@ -166,7 +166,9 @@
   pointer-events: auto;
   white-space: nowrap;
 }
-.vsAvatarHeaderPill { flex-shrink: 0; }
+.vsAvatarHeaderPill { flex-shrink: 1; min-width: 0; }
+.vsAvatarHeaderPill > span:not(.vsAvatarLiveDot) { min-width: 0; }
+.vsAvatarLiveDot { flex-shrink: 0; }
 .vsAvatarHeaderPill > span:not(.vsAvatarLiveDot) { max-width: 72px; }
 
 .vsAvatarStateChip.speaking {
@@ -218,38 +220,16 @@
   100% { transform: scaleY(1); }
 }
 
-/* Duration Timer Badge in Stage Header */
-.vsAvatarDurationBadge {
-  display: inline-flex;
-  position: absolute;
-  top: 36px;
-  left: 50%;
-  transform: translateX(-50%);
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  font-size: 11.5px;
+/* Call timer sits inline in the name pill, separated by a hairline. */
+.vsAvatarHeaderPill > span.vsAvatarDurationBadge {
+  flex-shrink: 0;
+  max-width: none;
+  padding-left: 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  color: #e2e8f0;
   font-weight: 600;
-  color: #f1f5f9;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-}
-
-.vsAvatarDurationDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #34d399;
-  box-shadow: 0 0 6px #34d399;
-  animation: vsPulseLive 2s ease-in-out infinite;
-}
-
-@keyframes vsPulseLive {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.85); }
 }
 
 /* Floating Bottom Control Bar */
@@ -526,8 +506,8 @@
 .vsAvatarVideoContainer video[hidden] { display: none; }
 
 .vsChatBody.avatarActive { padding: 8px 16px 12px; overflow: hidden; }
-.vsAvatarCallView { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
-.vsAvatarCallLayout { min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: clamp(16px, 3cqw, 32px); width: 100%; max-width: 1280px; margin: 0 auto; }
+.vsAvatarCallView { height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+.vsAvatarCallLayout { min-height: 0; min-width: 0; display: grid; width: 100%; max-width: 1280px; margin: 0 auto; }
 .vsAvatarMediaPane { min-height: 0; min-width: 0; display: flex; align-items: center; }
 .vsAvatarTranscriptPanel { min-height: 0; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid var(--line); border-radius: 20px; background: color-mix(in oklab, var(--bg-card) 88%, transparent); overflow: hidden; }
 .vsAvatarTranscriptHeading { padding: 16px 20px; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--muted); }
@@ -542,7 +522,6 @@
 .vsAvatarTranscriptTurn.interim p { opacity: 0.8; }
 .vsAvatarTranscriptEmpty { color: var(--muted); line-height: 1.7; font-size: 14px; }
 @container chat-pane (max-width: 640px) {
-  .vsAvatarCallLayout { grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr); gap: 12px; }
   .vsAvatarMediaPane .vsAvatarControlsBar { gap: 2px; padding: 4px; }
   .vsAvatarMediaPane .vsAvatarControlBtn { padding: 0 7px; }
   .vsAvatarMediaPane .vsAvatarStateChip { display: none; }
@@ -550,10 +529,7 @@
   .vsAvatarTranscriptScroll { padding: 12px 14px; }
   .vsAvatarTranscriptTurn p { font-size: 14px; line-height: 1.6; }
 }
-.vsAvatarCallToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
-.vsAvatarHistoryButton { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-primary); background: var(--bg-card); cursor: pointer; }
-.vsAvatarHistoryButton:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
-.vsAvatarCallView.is-history { height: auto; margin-bottom: 16px; }
+.vsAvatarCallView.is-history { height: 0; }
 .vsAvatarCallView.is-history .vsAvatarCallLayout { display: block; }
 .vsAvatarCallView.is-history .vsAvatarMediaPane { height: 0; }
 .vsComposerWrap.avatarCall .vsComposer { display: flex; flex-direction: column; padding: 12px 14px; gap: 10px; }

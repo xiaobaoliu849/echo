@@ -62,4 +62,45 @@ describe("Screen-share controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "停止共享" }));
     expect(voiceChat.voiceChatScreenShare.stop).toHaveBeenCalledOnce();
   });
+  describe("icon variant", () => {
+    it("is a single icon button whose tooltip carries the sharing state", () => {
+      const voiceChat = createVoiceChatController({ voiceChatScreenShareSupported: true, voiceChatConnected: true });
+      const { rerender } = render(<ScreenShareControl voiceChat={voiceChat} variant="icon" />);
+      const button = screen.getByRole("button", { name: "共享屏幕" });
+      expect(button).toHaveTextContent("");
+      expect(button).toHaveAttribute("title", "让模型看到您的屏幕");
+      fireEvent.click(button);
+      expect(voiceChat.voiceChatScreenShare.start).toHaveBeenCalledOnce();
+      rerender(<ScreenShareControl voiceChat={{ ...voiceChat, voiceChatScreenShare: { ...voiceChat.voiceChatScreenShare, pending: true } }} variant="icon" />);
+      fireEvent.click(screen.getByRole("button", { name: "取消共享" }));
+      expect(voiceChat.voiceChatScreenShare.stop).toHaveBeenCalledOnce();
+      rerender(<ScreenShareControl voiceChat={{ ...voiceChat, voiceChatScreenShare: { ...voiceChat.voiceChatScreenShare, sharing: true, source: "screen:0:0", error: "连接暂时中断，请重试" } }} variant="icon" />);
+      const stop = screen.getByRole("button", { name: "停止共享" });
+      expect(stop).toHaveAttribute("aria-pressed", "true");
+      expect(stop.getAttribute("title")).toContain("整个屏幕");
+      expect(screen.getByRole("alert")).toHaveTextContent("连接暂时中断，请重试");
+      expect(screen.queryByLabelText("共享屏幕预览")).toBeNull();
+    });
+    it("stays focusable with an explanatory tooltip when sharing is unavailable", () => {
+      const voiceChat = createVoiceChatController({ voiceChatScreenShareSupported: true });
+      const { rerender } = render(<ScreenShareControl voiceChat={voiceChat} variant="icon" />);
+      let button = screen.getByRole("button", { name: "共享屏幕" });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).toHaveAttribute("title", "通话连接后即可共享屏幕");
+      fireEvent.click(button);
+      expect(voiceChat.voiceChatScreenShare.start).not.toHaveBeenCalled();
+      rerender(<ScreenShareControl voiceChat={{ ...voiceChat, voiceChatConnected: true, voiceChatScreenShare: { ...voiceChat.voiceChatScreenShare, supported: false } }} variant="icon" />);
+      button = screen.getByRole("button", { name: "共享屏幕" });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button.getAttribute("title")).toContain("Chrome");
+      rerender(<ScreenShareControl voiceChat={createVoiceChatController({ voiceChatProvider: "Vercel", voiceChatModel: "google/gemini-3.8-live", voiceChatConnected: true })} variant="icon" />);
+      button = screen.getByRole("button", { name: "共享屏幕" });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button.getAttribute("title")).toMatch(/Vercel 实时通话目前不支持屏幕输入/);
+    });
+    it("renders nothing for models without screen input", () => {
+      const { container } = render(<ScreenShareControl voiceChat={createVoiceChatController()} variant="icon" />);
+      expect(container).toBeEmptyDOMElement();
+    });
+  });
 });

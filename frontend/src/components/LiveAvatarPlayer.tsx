@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type CSSProperties } from "react";
+import { useEffect, useRef, useState, useCallback, type CSSProperties, type ReactNode } from "react";
 import {
   Bot,
   Captions,
@@ -51,6 +51,10 @@ export interface LiveAvatarPlayerProps {
   captionsEnabled?: boolean;
   showCaptionControl?: boolean;
   className?: string;
+  /** Extra call controls (e.g. screen sharing) rendered in the floating control bar. */
+  extraControls?: ReactNode;
+  /** Reports the rendered portrait width so the page can size its column to the stage. */
+  onStageWidthChange?: (width: number | null) => void;
 }
 
 export default function LiveAvatarPlayer({
@@ -72,6 +76,8 @@ export default function LiveAvatarPlayer({
   captionsEnabled = true,
   showCaptionControl = true,
   className = "",
+  extraControls,
+  onStageWidthChange,
 }: LiveAvatarPlayerProps) {
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -104,6 +110,16 @@ export default function LiveAvatarPlayer({
     fitStage();
     return () => observer.disconnect();
   }, [viewMode, floating.ref]);
+
+  // Width comes from height and aspect only, so reporting it cannot feed back into fitStage.
+  const stageWidthCallback = useRef(onStageWidthChange);
+  stageWidthCallback.current = onStageWidthChange;
+  const reportedStageWidth = viewMode !== "pip" && stageHeight != null ? Math.round(stageHeight * aspectRatio) : null;
+  useEffect(() => {
+    stageWidthCallback.current?.(reportedStageWidth);
+  }, [reportedStageWidth]);
+  useEffect(() => () => stageWidthCallback.current?.(null), []);
+
 
   // Playback engine initialization and event wiring
   useEffect(() => {
@@ -225,6 +241,9 @@ export default function LiveAvatarPlayer({
           />
           <span>{avatarName || "Ben"}</span>
           <span className="vsAvatarModelLabel">Gemini 3.8 Live</span>
+          {duration != null && duration > 0 && (
+            <span className="vsAvatarDurationBadge" title={t("通话时长", "Call Duration")}>{formatDuration(duration)}</span>
+          )}
         </div>
         {viewMode === "pip" && (
           <button type="button" className="vsAvatarDragHandle" onKeyDown={floating.onKeyDown}
@@ -234,12 +253,6 @@ export default function LiveAvatarPlayer({
           </button>
         )}
 
-        {duration != null && duration > 0 && (
-          <div className="vsAvatarDurationBadge" title={t("通话时长", "Call Duration")}>
-            <span className="vsAvatarDurationDot" />
-            <span>{formatDuration(duration)}</span>
-          </div>
-        )}
 
         {isAssistantSpeaking ? (
           <div className="vsAvatarStateChip speaking">
@@ -382,6 +395,8 @@ export default function LiveAvatarPlayer({
               <span className="vsAvatarControlLabel">{isMuted ? t("已静音", "Muted") : t("静音", "Mute")}</span>
             </button>
           )}
+
+          {extraControls}
 
           {showCaptionControl && <button
             type="button"
