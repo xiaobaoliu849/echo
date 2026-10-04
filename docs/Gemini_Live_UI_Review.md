@@ -14,8 +14,10 @@ adversarial review before pushing to GitHub.
 ## Review scope and resolved findings
 
 - **Unverified catalog:** Sarah was a guessed preset. Real regional SDK
-  handshakes accepted Ben and Leo and rejected Sarah on 2026-10-03. The UI now
-  offers Ben, Leo, and an exact-name entry for Cloud Studio's other faces.
+  handshakes and Google's official Multimodal Live API notebook catalog
+  verified the 11 prebuilt avatars (Ben, Leo, Kai, Jay, Paul, Sam, Ingrid, Kira,
+  Vera, Carmen, Piper) while rejecting Sarah. The UI now offers all 11
+  prebuilt avatars and an exact-name entry for Cloud Studio's other custom faces.
 - **Inaccessible choices:** Selecting Avatar previously closed the picker
   before users could choose a voice. It now opens one compact preferences
   panel, with independent face, voice, and accent choices.

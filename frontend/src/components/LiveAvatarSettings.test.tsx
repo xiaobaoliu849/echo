@@ -3,7 +3,40 @@ import { describe, expect, it, vi } from "vitest";
 import VoiceCallSettingsPopover from "./VoiceCallSettingsPopover";
 import useVoiceChat from "../hooks/useVoiceChat";
 
+import { PREBUILT_AVATARS } from "./LiveAvatarSettings";
+
 describe("avatar preferences", () => {
+  it("includes all 11 Google prebuilt avatars", () => {
+    expect(PREBUILT_AVATARS).toEqual([
+      "Ben",
+      "Leo",
+      "Kai",
+      "Jay",
+      "Paul",
+      "Sam",
+      "Ingrid",
+      "Kira",
+      "Vera",
+      "Carmen",
+      "Piper",
+    ]);
+  });
+
+  it("allows selecting any prebuilt avatar directly from the dropdown", () => {
+    const providers = ["AgentPlatform"];
+    const catalog = { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } };
+    function Preferences() {
+      const voiceChat = useVoiceChat({ providerOptions: providers, providerModelCatalog: catalog,
+        preferredProvider: "AgentPlatform", preferredModel: "gemini-3.8-live-avatar", formatErrorMessage: vi.fn() });
+      return <VoiceCallSettingsPopover voiceChat={voiceChat} t={(zh) => zh} />;
+    }
+    render(<Preferences />);
+    fireEvent.click(screen.getByTitle("通话设置"));
+    fireEvent.change(screen.getByLabelText("形象"), { target: { value: "Kai" } });
+    fireEvent.click(screen.getByText("完成"));
+    expect(screen.getByTitle("通话设置")).toHaveTextContent("Kai");
+  });
+
   it("does not claim Ben is selected when another face name is empty, and preserves changes after reopening", () => {
     const providers = ["AgentPlatform"];
     const catalog = { AgentPlatform: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] } };

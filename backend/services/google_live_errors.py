@@ -5,8 +5,8 @@ def format_avatar_error(avatar_name: str, error_text: str) -> str:
     text = error_text.lower()
     if "unsupported avatar name" in text or "unknown avatar" in text:
         return (
-            f"Google 不支持分身形象「{avatar_name}」。请使用 Ben，或填写 Google Cloud Studio 中的准确名称。 "
-            f'Google does not recognize the avatar "{avatar_name}". Choose Ben or enter the exact name from Google Cloud Studio.'
+            f"Google 不支持分身形象「{avatar_name}」。请选择预置形象（如 Ben、Leo、Kai 等），或填写 Google Cloud Studio 中的准确名称。 "
+            f'Google does not recognize the avatar "{avatar_name}". Choose a prebuilt avatar (e.g. Ben, Leo, Kai) or enter the exact name from Google Cloud Studio.'
         )
     if any(term in text for term in ("resource_exhausted", "quota", "429")):
         return (
