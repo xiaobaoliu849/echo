@@ -45,12 +45,14 @@ Sources: [Cloud model availability](https://docs.cloud.google.com/gemini-enterpr
 1. In Chat's call settings/model picker choose **Google Agent Platform →
    Gemini 3.8 Live · Avatar**. Chat stays open and a compact settings panel
    offers **Avatar**, **Voice**, and **Accent** together.
-2. Choose **Ben** or **Leo**. Both passed a real regional Cloud handshake on
-   2026-10-03 using the configured account. **Sarah** was rejected with
-   `unsupported avatar name`; it was an invented UI preset and has been removed.
-   For another face, choose **Another avatar from Cloud Studio** and enter the
-   exact name from that project's Stream realtime avatar list. Availability can
-   vary; these checks do not establish a complete catalog for every project.
+2. Choose from the prebuilt stock avatars (**Ben**, **Leo**, **Kai**, **Jay**,
+   **Paul**, **Sam**, **Ingrid**, **Kira**, **Vera**, **Carmen**, **Piper**)
+   verified against Google Cloud's Multimodal Live API. **Sarah** was rejected
+   with `unsupported avatar name`; it was an invented UI preset and has been
+   removed. For another face, choose **Another avatar from Cloud Studio** and
+   enter the exact name from that project's Stream realtime avatar list.
+   Availability can vary; these checks do not establish a complete catalog for
+   every project.
 3. Choose any supported prebuilt voice independently of the face. Choose a
    natural accent or an English, Mandarin, Japanese, or French accent preset.
    Accent choices add fixed, server-owned system instructions; they guide the

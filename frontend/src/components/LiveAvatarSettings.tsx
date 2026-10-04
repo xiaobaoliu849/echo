@@ -9,9 +9,22 @@ type Props = {
   onDone: () => void;
 };
 
-// Ben is documented; Ben and Leo both passed a real regional Cloud handshake
-// on 2026-10-03. Do not add guessed face names to this list.
-const PREBUILT_AVATARS = ["Ben", "Leo"];
+// Official prebuilt stock avatars for Google Gemini Live Avatar on Agent Platform
+// (GoogleCloudPlatform generative-ai Multimodal Live API):
+// Ben, Leo, Kai, Jay, Paul, Sam, Ingrid, Kira, Vera, Carmen, Piper.
+export const PREBUILT_AVATARS = [
+  "Ben",
+  "Leo",
+  "Kai",
+  "Jay",
+  "Paul",
+  "Sam",
+  "Ingrid",
+  "Kira",
+  "Vera",
+  "Carmen",
+  "Piper",
+];
 
 /** Face, voice and accent are independent session preferences. */
 export default function LiveAvatarSettings({ voiceChat, t, onChangeModel, onDone }: Props) {

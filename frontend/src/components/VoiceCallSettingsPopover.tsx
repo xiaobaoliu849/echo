@@ -577,8 +577,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     currentProviderGroup.provider === committedProvider &&
                     item.model === committedModel &&
                     Boolean(item.avatar) === Boolean(voiceChat.voiceChatLiveAvatar);
+                  const avatarFace = voiceChat.voiceChatAvatarName.trim() || "Ben";
                   const hint = item.avatar
-                    ? t("实时视频分身 · 默认形象 Ben", "Live video avatar · Default face Ben")
+                    ? (avatarFace === "Ben"
+                        ? t("实时视频分身 · 默认形象 Ben", "Live video avatar · Default face Ben")
+                        : t(`实时视频分身 · 形象 ${avatarFace}`, `Live video avatar · Face ${avatarFace}`))
                     : formatModelHint(currentProviderGroup.provider, item.model, t);
                   return (
                     <button
