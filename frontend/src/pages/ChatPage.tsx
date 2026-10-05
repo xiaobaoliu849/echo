@@ -903,6 +903,8 @@ export default function ChatPage({
                   isVoiceActive={isVoiceActive}
                   isUserSpeaking={voiceChat.voiceChatTranscriptIsInterim}
                   isAssistantSpeaking={voiceChat.voiceChatAssistantSpeaking}
+                  audioContext={voiceChat.assistantAnalyser?.context as AudioContext | undefined}
+                  micAnalyser={voiceChat.micAnalyser}
                   isThinking={voiceChat.voiceChatBusy}
                   isMuted={voiceChat.voiceChatMuted}
                   onToggleMute={voiceChat.onToggleMute}

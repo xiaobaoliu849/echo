@@ -16,6 +16,7 @@ import {
 import { useI18n } from "../i18n";
 import { LiveAvatarPlayback, type AvatarFrame } from "../utils/liveAvatarPlayback";
 import { useFloatingAvatar } from "../hooks/useFloatingAvatar";
+import { useAudioActivity, useAvatarAudioActivity } from "../hooks/useAvatarAudioActivity";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -38,6 +39,8 @@ export interface LiveAvatarPlayerProps {
   isUserSpeaking?: boolean;
   isAssistantSpeaking?: boolean;
   isThinking?: boolean;
+  audioContext?: AudioContext | null;
+  micAnalyser?: AnalyserNode | null;
   isMuted?: boolean;
   duration?: number;
   onToggleMute?: () => void;
@@ -64,6 +67,8 @@ export default function LiveAvatarPlayer({
   isUserSpeaking = false,
   isAssistantSpeaking = false,
   isThinking = false,
+  audioContext,
+  micAnalyser,
   isMuted = false,
   duration,
   onToggleMute,
@@ -94,6 +99,11 @@ export default function LiveAvatarPlayer({
   const [isInterrupted, setIsInterrupted] = useState(false);
   const [isAvatarPlaying, setIsAvatarPlaying] = useState(false);
   const [captionsVisible, setCaptionsVisible] = useState(true);
+  const avatarAudioActive = useAvatarAudioActivity(videoRef, audioContext, isVoiceActive, stream);
+  const assistantSpeaking = isVoiceActive && (isAssistantSpeaking || (isAvatarPlaying && !image && avatarAudioActive));
+  // Interim transcription may linger after the user stops. Prefer the live mic meter.
+  const micActive = useAudioActivity(micAnalyser, isVoiceActive && !isMuted, assistantSpeaking ? 0.055 : 0.025);
+  const userSpeaking = isVoiceActive && !isMuted && (micAnalyser ? micActive : isUserSpeaking);
 
   useEffect(() => {
     const player = floating.ref.current;
@@ -201,13 +211,10 @@ export default function LiveAvatarPlayer({
     }
   }, []);
 
-  // Avatar MP4 carries its own speech track; the separate PCM flag can stay false.
-  // Follow rendered playback, not frame arrival or server turn completion.
-  const assistantSpeaking = isAssistantSpeaking || (isVoiceActive && isAvatarPlaying);
-  const stateClass = assistantSpeaking
-    ? "state-speaking"
-    : isUserSpeaking
+  const stateClass = userSpeaking
     ? "state-listening"
+    : assistantSpeaking
+    ? "state-speaking"
     : isThinking
     ? "state-thinking"
     : "state-idle";
@@ -262,7 +269,12 @@ export default function LiveAvatarPlayer({
         )}
 
 
-        {assistantSpeaking ? (
+        {userSpeaking ? (
+          <div className="vsAvatarStateChip listening">
+            <Mic size={12} />
+            <span>{t("正在聆听", "Listening")}</span>
+          </div>
+        ) : assistantSpeaking ? (
           <div className="vsAvatarStateChip speaking">
             <span className="vsAvatarAudioBars">
               <span className="vsAvatarAudioBar" />
@@ -271,11 +283,6 @@ export default function LiveAvatarPlayer({
               <span className="vsAvatarAudioBar" />
             </span>
             <span>{t("正在说话", "Speaking")}</span>
-          </div>
-        ) : isUserSpeaking ? (
-          <div className="vsAvatarStateChip listening">
-            <Mic size={12} />
-            <span>{t("正在聆听", "Listening")}</span>
           </div>
         ) : isThinking ? (
           <div className="vsAvatarStateChip thinking">

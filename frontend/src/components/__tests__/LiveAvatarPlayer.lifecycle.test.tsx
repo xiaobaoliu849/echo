@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LiveAvatarPlayer from "../LiveAvatarPlayer";
 
 const playback = vi.hoisted(() => ({ append: vi.fn(), reset: vi.fn() }));
@@ -11,61 +11,181 @@ vi.mock("../../utils/liveAvatarPlayback", () => ({
 }));
 
 describe("avatar stage lifecycle", () => {
-  it("shows speaking for muxed avatar playback ahead of interim input and thinking, through PiP and reply completion", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] }));
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (HTMLVideoElement.prototype as HTMLVideoElement & { captureStream?: () => MediaStream }).captureStream;
+  });
+
+  function audio() {
+    const node = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+    const context = { state: "running", destination: {}, createMediaStreamSource: vi.fn(node),
+      createAnalyser: vi.fn(() => meter), createGain: vi.fn(() => ({ ...node(), gain: { value: 1 } })) };
+    let volume = 0;
+    const meter = { ...node(), context, fftSize: 1024,
+      getFloatTimeDomainData: (samples: Float32Array) => samples.fill(volume) };
+    const track = { readyState: "live", stop: vi.fn() };
+    const capture = Object.assign(new EventTarget(), { getAudioTracks: () => [track], getTracks: () => [track] });
+    Object.defineProperty(HTMLVideoElement.prototype, "captureStream", { value: () => capture, configurable: true });
+    return { context: context as unknown as AudioContext, rawContext: context, capture, track,
+      attach: (video: HTMLVideoElement) => Object.defineProperty(video, "captureStream", { value: () => capture, configurable: true }),
+      sound: (value: number) => { volume = value; } };
+  }
+  const tick = (ms = 80) => act(() => vi.advanceTimersByTime(ms));
+  const avatarChip = (container: HTMLElement) => container.querySelector(".vsAvatarStateChip")!;
+
+  it("ignores continuous silent video and stale interim input, tracks actual audio through PiP and reply completion", () => {
     const stream = new EventTarget();
-    const { container, rerender } = render(
-      <LiveAvatarPlayer stream={stream} isVoiceActive isUserSpeaking isThinking assistantReply="Streaming" />
-    );
+    const media = audio();
+    const { container, rerender } = render(<LiveAvatarPlayer stream={stream} audioContext={media.context} isVoiceActive assistantReply="Streaming" />);
     const video = container.querySelector("video")!;
-    act(() => stream.dispatchEvent(new MessageEvent("frame", {
-      data: { mimeType: "video/mp4", data: "queued" },
-    })));
-    expect(screen.getByText("正在聆听")).toBeInTheDocument();
+    media.attach(video);
+    act(() => stream.dispatchEvent(new MessageEvent("frame", { data: { mimeType: "image/png", data: "portrait" } })));
+    // Switch back to the video path; arrival alone cannot mean speech.
+    act(() => stream.dispatchEvent(new MessageEvent("frame", { data: { mimeType: "video/mp4", data: "queued" } })));
     fireEvent.playing(video);
-    expect(screen.getByText("正在说话")).toBeInTheDocument();
-    expect(container.firstChild).toHaveClass("state-speaking");
-    expect(screen.queryByText("正在聆听")).not.toBeInTheDocument();
+    tick(1000);
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+    media.sound(0.04);
+    tick();
+    expect(avatarChip(container)).toHaveClass("speaking");
     fireEvent.click(screen.getByTitle("画中画悬浮"));
-    rerender(<LiveAvatarPlayer stream={stream} isVoiceActive isUserSpeaking />);
+    rerender(<LiveAvatarPlayer stream={stream} audioContext={media.context} isVoiceActive />);
     expect(container.querySelector("video")).toBe(video);
-    expect(screen.getByText("正在说话")).toBeInTheDocument();
-    fireEvent.waiting(video);
-    expect(screen.getByText("正在聆听")).toBeInTheDocument();
-    fireEvent.playing(video);
-    expect(screen.getByText("正在说话")).toBeInTheDocument();
+    expect(avatarChip(container)).toHaveClass("speaking");
+    media.sound(0);
+    tick(240);
+    expect(avatarChip(container)).toHaveClass("speaking");
+    tick(160);
+    expect(avatarChip(container)).toHaveTextContent("在线就绪");
+    expect(avatarChip(container)).not.toHaveClass("speaking");
   });
 
   it.each(["waiting", "pause", "ended", "emptied", "error"])("clears muxed speaking on %s", (event) => {
-    const { container } = render(<LiveAvatarPlayer stream={new EventTarget()} isVoiceActive isUserSpeaking />);
+    const media = audio();
+    const { container } = render(<LiveAvatarPlayer stream={new EventTarget()} audioContext={media.context} isVoiceActive />);
     const video = container.querySelector("video")!;
+    media.attach(video);
+    media.sound(0.04);
     fireEvent.playing(video);
-    expect(screen.getByText("正在说话")).toBeInTheDocument();
+    tick();
+    expect(avatarChip(container)).toHaveClass("speaking");
     fireEvent(video, new Event(event));
-    expect(screen.queryByText("正在说话")).not.toBeInTheDocument();
-    expect(container.firstChild).toHaveClass("state-listening");
+    expect(avatarChip(container)).not.toHaveClass("speaking");
   });
 
-  it.each(["interrupt", "reset"])("clears muxed speaking immediately on stream %s", (event) => {
+  it.each(["interrupt", "reset"])("clears capture on %s and reconnects the next video without stopping native playback", (event) => {
     const stream = new EventTarget();
-    const { container } = render(<LiveAvatarPlayer stream={stream} isVoiceActive />);
-    fireEvent.playing(container.querySelector("video")!);
+    const media = audio();
+    const { container, unmount } = render(<LiveAvatarPlayer stream={stream} audioContext={media.context} isVoiceActive />);
+    const video = container.querySelector("video")!;
+    const pause = vi.spyOn(video, "pause").mockImplementation(() => {});
+    media.attach(video);
+    media.sound(0.04);
+    fireEvent.playing(video);
+    tick();
     act(() => stream.dispatchEvent(new Event(event)));
-    expect(screen.queryByText("正在说话")).not.toBeInTheDocument();
-    expect(container.firstChild).toHaveClass("state-idle");
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+    expect(media.track.stop).toHaveBeenCalledTimes(1);
+    fireEvent.playing(video);
+    tick();
+    expect(avatarChip(container)).toHaveClass("speaking");
+    expect(pause).not.toHaveBeenCalled();
+    unmount();
+    expect(media.track.stop).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("clears muxed speaking when the stream changes or the call ends, and preserves separate audio speaking", () => {
+  it("prioritizes listening during barge-in, detects mic silence despite stale ASR, and respects mute", () => {
+    const stream = new EventTarget();
+    const media = audio();
+    const micContext = { state: "running" };
+    let micVolume = 0.1;
+    const mic = { fftSize: 64, context: micContext,
+      getFloatTimeDomainData: (samples: Float32Array) => samples.fill(micVolume) } as unknown as AnalyserNode;
+    const props = { stream, audioContext: media.context, micAnalyser: mic, isVoiceActive: true, isUserSpeaking: true };
+    const { container, rerender } = render(<LiveAvatarPlayer {...props} />);
+    media.attach(container.querySelector("video")!);
+    media.sound(0.04);
+    fireEvent.playing(container.querySelector("video")!);
+    tick(160);
+    expect(avatarChip(container)).toHaveTextContent("正在聆听");
+    expect(container.querySelectorAll(".vsAvatarStateChip")).toHaveLength(1);
+    expect(container.querySelector(".vsAvatarActivityBar")).toBeNull();
+    micVolume = 0;
+    tick(400);
+    expect(avatarChip(container)).toHaveTextContent("正在说话");
+    rerender(<LiveAvatarPlayer {...props} isMuted />);
+    expect(avatarChip(container)).toHaveClass("speaking");
+  });
+
+  it("does not infer speech without capture support and preserves the separate PCM flag", () => {
     const stream = new EventTarget();
     const { container, rerender } = render(<LiveAvatarPlayer stream={stream} isVoiceActive />);
     fireEvent.playing(container.querySelector("video")!);
-    rerender(<LiveAvatarPlayer stream={stream} />);
-    expect(screen.queryByText("正在说话")).not.toBeInTheDocument();
-    const nextStream = new EventTarget();
-    rerender(<LiveAvatarPlayer stream={nextStream} isVoiceActive />);
-    expect(screen.queryByText("正在说话")).not.toBeInTheDocument();
-    rerender(<LiveAvatarPlayer stream={nextStream} isVoiceActive isAssistantSpeaking />);
-    fireEvent.waiting(container.querySelector("video")!);
-    expect(screen.getByText("正在说话")).toBeInTheDocument();
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+    rerender(<LiveAvatarPlayer stream={stream} isVoiceActive isAssistantSpeaking />);
+    expect(avatarChip(container)).toHaveClass("speaking");
+    rerender(<LiveAvatarPlayer stream={new EventTarget()} />);
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+  });
+
+  it("discovers a late audio track and clears activity while its context is suspended", () => {
+    const media = audio();
+    media.track.readyState = "ended";
+    const { container } = render(<LiveAvatarPlayer stream={new EventTarget()} audioContext={media.context} isVoiceActive />);
+    media.attach(container.querySelector("video")!);
+    media.sound(0.04);
+    fireEvent.playing(container.querySelector("video")!);
+    tick();
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+    expect(media.rawContext.createMediaStreamSource).not.toHaveBeenCalled();
+    media.track.readyState = "live";
+    act(() => media.capture.dispatchEvent(new Event("addtrack")));
+    tick();
+    expect(avatarChip(container)).toHaveClass("speaking");
+    media.rawContext.state = "suspended";
+    tick();
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+    media.rawContext.state = "running";
+    tick();
+    expect(avatarChip(container)).toHaveClass("speaking");
+  });
+
+  it("releases the old meter on stream replacement and call end", () => {
+    const media = audio();
+    const first = new EventTarget();
+    const { container, rerender } = render(<LiveAvatarPlayer stream={first} audioContext={media.context} isVoiceActive />);
+    media.attach(container.querySelector("video")!);
+    media.sound(0.04);
+    fireEvent.playing(container.querySelector("video")!);
+    tick();
+    expect(avatarChip(container)).toHaveClass("speaking");
+    const next = new EventTarget();
+    rerender(<LiveAvatarPlayer stream={next} audioContext={media.context} isVoiceActive />);
+    expect(media.track.stop).toHaveBeenCalledTimes(1);
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+    act(() => first.dispatchEvent(new Event("reset")));
+    expect(media.track.stop).toHaveBeenCalledTimes(1);
+    fireEvent.playing(container.querySelector("video")!);
+    tick();
+    rerender(<LiveAvatarPlayer stream={next} audioContext={media.context} />);
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+    expect(media.track.stop).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("leaves video playback intact if capture fails", () => {
+    const media = audio();
+    const { container } = render(<LiveAvatarPlayer stream={new EventTarget()} audioContext={media.context} isVoiceActive />);
+    const video = container.querySelector("video")!;
+    Object.defineProperty(video, "captureStream", { value: () => { throw new Error("Unavailable"); }, configurable: true });
+    const pause = vi.spyOn(video, "pause").mockImplementation(() => {});
+    fireEvent.playing(video);
+    tick();
+    expect(avatarChip(container)).not.toHaveClass("speaking");
+    expect(pause).not.toHaveBeenCalled();
+    expect(media.rawContext.createMediaStreamSource).not.toHaveBeenCalled();
   });
 
   it("keeps one playback video through PiP, preserves initialization on interruption and releases it on unmount", () => {
