@@ -297,9 +297,20 @@
   color: #fca5a5;
 }
 
-.vsAvatarControlBtn.danger:hover {
+/* Override the global button.danger hover surface on this dark call dock. */
+button.vsAvatarControlBtn.danger:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.5);
+  border-color: rgba(248, 113, 113, 0.85);
   color: #ffffff;
+  filter: none;
+  transform: none;
+}
+
+button.vsAvatarControlBtn.danger:focus-visible {
+  background: rgba(239, 68, 68, 0.5);
+  border-color: rgba(248, 113, 113, 0.85);
+  color: #ffffff;
+  outline-color: #fca5a5;
 }
 
 /* Connecting / Standby Placeholder in Video Stage */
