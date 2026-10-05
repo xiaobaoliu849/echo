@@ -11,6 +11,63 @@ vi.mock("../../utils/liveAvatarPlayback", () => ({
 }));
 
 describe("avatar stage lifecycle", () => {
+  it("shows speaking for muxed avatar playback ahead of interim input and thinking, through PiP and reply completion", () => {
+    const stream = new EventTarget();
+    const { container, rerender } = render(
+      <LiveAvatarPlayer stream={stream} isVoiceActive isUserSpeaking isThinking assistantReply="Streaming" />
+    );
+    const video = container.querySelector("video")!;
+    act(() => stream.dispatchEvent(new MessageEvent("frame", {
+      data: { mimeType: "video/mp4", data: "queued" },
+    })));
+    expect(screen.getByText("正在聆听")).toBeInTheDocument();
+    fireEvent.playing(video);
+    expect(screen.getByText("正在说话")).toBeInTheDocument();
+    expect(container.firstChild).toHaveClass("state-speaking");
+    expect(screen.queryByText("正在聆听")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("画中画悬浮"));
+    rerender(<LiveAvatarPlayer stream={stream} isVoiceActive isUserSpeaking />);
+    expect(container.querySelector("video")).toBe(video);
+    expect(screen.getByText("正在说话")).toBeInTheDocument();
+    fireEvent.waiting(video);
+    expect(screen.getByText("正在聆听")).toBeInTheDocument();
+    fireEvent.playing(video);
+    expect(screen.getByText("正在说话")).toBeInTheDocument();
+  });
+
+  it.each(["waiting", "pause", "ended", "emptied", "error"])("clears muxed speaking on %s", (event) => {
+    const { container } = render(<LiveAvatarPlayer stream={new EventTarget()} isVoiceActive isUserSpeaking />);
+    const video = container.querySelector("video")!;
+    fireEvent.playing(video);
+    expect(screen.getByText("正在说话")).toBeInTheDocument();
+    fireEvent(video, new Event(event));
+    expect(screen.queryByText("正在说话")).not.toBeInTheDocument();
+    expect(container.firstChild).toHaveClass("state-listening");
+  });
+
+  it.each(["interrupt", "reset"])("clears muxed speaking immediately on stream %s", (event) => {
+    const stream = new EventTarget();
+    const { container } = render(<LiveAvatarPlayer stream={stream} isVoiceActive />);
+    fireEvent.playing(container.querySelector("video")!);
+    act(() => stream.dispatchEvent(new Event(event)));
+    expect(screen.queryByText("正在说话")).not.toBeInTheDocument();
+    expect(container.firstChild).toHaveClass("state-idle");
+  });
+
+  it("clears muxed speaking when the stream changes or the call ends, and preserves separate audio speaking", () => {
+    const stream = new EventTarget();
+    const { container, rerender } = render(<LiveAvatarPlayer stream={stream} isVoiceActive />);
+    fireEvent.playing(container.querySelector("video")!);
+    rerender(<LiveAvatarPlayer stream={stream} />);
+    expect(screen.queryByText("正在说话")).not.toBeInTheDocument();
+    const nextStream = new EventTarget();
+    rerender(<LiveAvatarPlayer stream={nextStream} isVoiceActive />);
+    expect(screen.queryByText("正在说话")).not.toBeInTheDocument();
+    rerender(<LiveAvatarPlayer stream={nextStream} isVoiceActive isAssistantSpeaking />);
+    fireEvent.waiting(container.querySelector("video")!);
+    expect(screen.getByText("正在说话")).toBeInTheDocument();
+  });
+
   it("keeps one playback video through PiP, preserves initialization on interruption and releases it on unmount", () => {
     vi.clearAllMocks();
     const stream = new EventTarget();

@@ -92,6 +92,7 @@ export default function LiveAvatarPlayer({
   const [lastCaption, setLastCaption] = useState<{ text: string; user: boolean; interim: boolean } | null>(null);
   const [lastSnapshot, setLastSnapshot] = useState("");
   const [isInterrupted, setIsInterrupted] = useState(false);
+  const [isAvatarPlaying, setIsAvatarPlaying] = useState(false);
   const [captionsVisible, setCaptionsVisible] = useState(true);
 
   useEffect(() => {
@@ -124,11 +125,14 @@ export default function LiveAvatarPlayer({
   // Playback engine initialization and event wiring
   useEffect(() => {
     if (!videoRef.current) return;
+    setIsAvatarPlaying(false);
     const player = new LiveAvatarPlayback(videoRef.current, (error) => {
+      if (error) setIsAvatarPlaying(false);
       setStatus(error ? "error" : "playing");
     });
 
     const reset = () => {
+      setIsAvatarPlaying(false);
       setIsInterrupted(false);
       setLastSnapshot("");
       setLastCaption(null);
@@ -138,6 +142,7 @@ export default function LiveAvatarPlayer({
     };
 
     const interrupt = () => {
+      setIsAvatarPlaying(false);
       // Capture the current frame into canvas so the video avatar doesn't flash black
       try {
         if (videoRef.current && videoRef.current.videoWidth > 0) {
@@ -165,6 +170,7 @@ export default function LiveAvatarPlayer({
       setLastSnapshot("");
       const data = (event as MessageEvent<AvatarFrame>).data;
       if (/^image\/(jpeg|png|webp)$/.test(data.mimeType)) {
+        setIsAvatarPlaying(false);
         setImage(`data:${data.mimeType};base64,${data.data}`);
         setStatus("playing");
       } else {
@@ -195,8 +201,10 @@ export default function LiveAvatarPlayer({
     }
   }, []);
 
-  // Determine container state class
-  const stateClass = isAssistantSpeaking
+  // Avatar MP4 carries its own speech track; the separate PCM flag can stay false.
+  // Follow rendered playback, not frame arrival or server turn completion.
+  const assistantSpeaking = isAssistantSpeaking || (isVoiceActive && isAvatarPlaying);
+  const stateClass = assistantSpeaking
     ? "state-speaking"
     : isUserSpeaking
     ? "state-listening"
@@ -254,7 +262,7 @@ export default function LiveAvatarPlayer({
         )}
 
 
-        {isAssistantSpeaking ? (
+        {assistantSpeaking ? (
           <div className="vsAvatarStateChip speaking">
             <span className="vsAvatarAudioBars">
               <span className="vsAvatarAudioBar" />
@@ -296,13 +304,21 @@ export default function LiveAvatarPlayer({
           ref={videoRef}
           autoPlay
           playsInline
+          onPlaying={() => setIsAvatarPlaying(true)}
+          onWaiting={() => setIsAvatarPlaying(false)}
+          onPause={() => setIsAvatarPlaying(false)}
+          onEnded={() => setIsAvatarPlaying(false)}
+          onEmptied={() => setIsAvatarPlaying(false)}
           onLoadedMetadata={(event) => {
             const video = event.currentTarget;
             if (video.videoWidth && video.videoHeight) setAspectRatio(video.videoWidth / video.videoHeight);
           }}
           hidden={Boolean(image)}
           aria-label={t("Gemini 实时视频分身", "Gemini Live Avatar")}
-          onError={() => setStatus("error")}
+          onError={() => {
+            setIsAvatarPlaying(false);
+            setStatus("error");
+          }}
         />
 
         {/* Fallback image frame stream if provider emits raw image frames */}
