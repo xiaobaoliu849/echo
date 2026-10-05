@@ -56,7 +56,7 @@ _TOOL_DECLARATIONS: tuple[dict[str, Any], ...] = (
             "properties": {
                 "code": {
                     "type": "string",
-                    "description": "Complete, self-contained React functional component (exported as default or App) or complete HTML with embedded CSS/Tailwind classes to render in the user's visual canvas side panel.",
+                    "description": "Complete React functional component (exported as default or App) or complete HTML with embedded CSS/Tailwind classes. React imports are limited to react, react-dom, react-dom/client, and lucide-react (icons). Other packages and local file imports are not available; implement everything else within the component.",
                 },
                 "mode": {
                     "type": "string",

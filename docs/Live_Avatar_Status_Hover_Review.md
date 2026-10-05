@@ -42,3 +42,44 @@ findings remained after inspecting the full diff and checking these failure case
 - Backend tests used the available Python 3.12.3 runtime because the local
   Windows virtual environments refer to a missing interpreter. No installer
   build was performed.
+
+## Follow-up: audio activity and canvas imports — 2026-10-05
+
+The earlier `playing`-event fix was insufficient: continuous or silent avatar
+video could keep the speaking badge active. The single original corner badge
+and its layout are retained. Speech now requires energy in captured muxed audio
+or the existing separate PCM flag. The existing microphone analyser determines
+listening, takes priority during barge-in, and cannot be held active by stale ASR.
+Video capture only feeds a silent analysis branch in the already-running call
+AudioContext; it never redirects native media audio or creates another context.
+
+The canvas runtime now loads the pinned React Lucide build and resolves
+`lucide-react` imports. The tool declaration lists the available modules.
+Unknown packages remain rejected; the iframe keeps `sandbox="allow-scripts"`
+and errors still require the current iframe as their message source. Errors are
+displayed once, with readable contrast and wrapping.
+
+Adversarial self-review before pushing found no remaining blocking issues:
+
+- Silent video, short pauses, simultaneous mic/output activity, lingering ASR,
+  mute, waiting, media failure, suspended contexts, and late audio tracks were
+  checked. Interruption, stream replacement, call end, and unmount release
+  captured tracks, graph nodes, timers, and listeners without pausing the video.
+- Named and namespace Lucide imports execute against the real pinned UMD build,
+  including SVG props and interactive state. Unknown imports, script-tag
+  escaping, error-source checks, and error reset remain covered.
+- Real native MP4/AAC playback in the browser changed status between audible
+  and silent sections. The canvas rendered imported icons and its Shop action
+  worked. The temporary fixture and generated media were removed.
+- The final layout has one status chip in the original header, no added status
+  row, and no stylesheet changes. Regression tests assert the single-chip layout.
+
+Final verification: 788 frontend tests across 75 files, TypeScript/Vite build,
+1,084 backend tests, and 117 subtests passed. Backend tests reported the same two
+dependency warnings. No paid Gemini session or Windows installer was run.
+Audio capture support was checked in the browser, not every desktop runtime;
+unsupported capture falls back to the separate PCM signal without inferring
+speech from video. Canvas previews still require their existing CDN dependencies.
+
+References: [media capture](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/captureStream),
+[Lucide React](https://lucide.dev/guide/react/).

@@ -17,10 +17,10 @@ function getReactHtml(code: string) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     ${tailwindCdn}
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin onload="window.react = window.React"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide-react@0.577.0/dist/umd/lucide-react.js" crossorigin></script>
   </head>
   <body>
     <div id="root"></div>
@@ -28,7 +28,7 @@ function getReactHtml(code: string) {
       function reportError(error) {
         const message = String(error && error.message || error);
         window.parent.postMessage({ type: 'CANVAS_ERROR', message }, '*');
-        document.getElementById('root').textContent = 'Error: ' + message;
+        document.getElementById('root').textContent = '';
       }
       window.addEventListener('error', event => reportError(event.error || event.message));
       window.addEventListener('unhandledrejection', event => reportError(event.reason));
@@ -44,6 +44,7 @@ function getReactHtml(code: string) {
         const require = name => {
           if (name === 'react') return React;
           if (name === 'react-dom' || name === 'react-dom/client') return ReactDOM;
+          if (name === 'lucide-react') return LucideReact;
           throw new Error('Unsupported canvas import: ' + name + '. Use a self-contained component.');
         };
         const evaluate = new Function('React', 'require',
@@ -116,7 +117,7 @@ export default function CanvasPreview({ code, mode }: CanvasPreviewProps) {
   return (
     <div className="vsCanvasPreviewContainer" style={{ position: "relative", width: "100%", height: "100%" }}>
       {error && (
-        <div className="vsCanvasPreviewError" style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "16px", background: "rgba(255, 0, 0, 0.1)", color: "red", zIndex: 10 }}>
+        <div role="alert" className="vsCanvasPreviewError" style={{ position: "absolute", top: 0, left: 0, width: "100%", boxSizing: "border-box", padding: "16px", background: "#fff1f2", color: "#9f1239", overflowWrap: "anywhere", zIndex: 10 }}>
           {t("预览出错：", "Preview Error: ")} {error}
         </div>
       )}

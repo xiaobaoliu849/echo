@@ -2,8 +2,13 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import * as Babel from "@babel/standalone";
 import * as React from "react";
 import * as ReactDOM from "react-dom/client";
+import lucideUmd from "../../../node_modules/lucide-react/dist/umd/lucide-react.js?raw";
 import { describe, expect, it, vi } from "vitest";
 import CanvasPreview from "./CanvasPreview";
+
+// Exercise the actual pinned UMD build, including its React dependency.
+const LucideReact: Record<string, unknown> = {};
+new Function("exports", "module", "require", lucideUmd)(LucideReact, { exports: LucideReact }, () => React);
 
 // Execute the preview's actual boot script with the same Babel version as its
 // CDN runtime. jsdom does not execute iframe srcdoc scripts on its own.
@@ -18,8 +23,9 @@ function executePreview(code: string) {
   const root = ReactDOM.createRoot(target);
   const postMessage = vi.fn();
   act(() => {
-    new Function("Babel", "React", "ReactDOM", "window", "document", scripts[0].textContent!)(
+    new Function("Babel", "React", "ReactDOM", "LucideReact", "window", "document", scripts[0].textContent!)(
       Babel, React, { createRoot: () => root },
+      LucideReact,
       { parent: { postMessage }, addEventListener: vi.fn() },
       { getElementById: () => target },
     );
@@ -31,6 +37,33 @@ function executePreview(code: string) {
 }
 
 describe("CanvasPreview React execution", () => {
+  it("renders imported Lucide icons with props and interactive state", () => {
+    const preview = executePreview(`
+      import React, { useState } from 'react';
+      import { ShoppingBag, X, Image as ImageIcon } from 'lucide-react';
+      export default function Ad() {
+        const [show, setShow] = useState(true);
+        return <main><ImageIcon size={32} aria-label="Artwork" />{show &&
+          <button onClick={() => setShow(false)}><ShoppingBag color="purple" /><X />Shop</button>}
+        </main>;
+      }
+    `);
+    try {
+      expect(preview.target.querySelectorAll("svg")).toHaveLength(3);
+      expect(preview.target.querySelector('[aria-label="Artwork"]')).toHaveAttribute("width", "32");
+      fireEvent.click(preview.target.querySelector("button")!);
+      expect(preview.target.querySelectorAll("svg")).toHaveLength(1);
+      expect(preview.postMessage).not.toHaveBeenCalled();
+    } finally { preview.dispose(); }
+  });
+
+  it("supports namespace icon imports", () => {
+    const preview = executePreview(`import * as Icons from 'lucide-react'; export default () => <Icons.Sparkles />;`);
+    try {
+      expect(preview.target.querySelector("svg")).toBeInTheDocument();
+      expect(preview.postMessage).not.toHaveBeenCalled();
+    } finally { preview.dispose(); }
+  });
   it.each([
     "export default function Cat() { return <h1>Canvas cat</h1>; }",
     "export default () => <h1>Canvas cat</h1>;",
@@ -85,7 +118,7 @@ describe("CanvasPreview React execution", () => {
       expect(preview.postMessage).toHaveBeenCalledWith(
         { type: "CANVAS_ERROR", message: expect.any(String) }, "*",
       );
-      expect(preview.target.textContent).toMatch(/^Error:/);
+      expect(preview.target.textContent).toBe("");
     } finally { preview.dispose(); }
   });
 
