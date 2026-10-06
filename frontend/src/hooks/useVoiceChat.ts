@@ -926,7 +926,9 @@ export default function useVoiceChat({
           const { prompt, attachments } = pendingInitialPromptRef.current;
           pendingInitialPromptRef.current = null;
           setTimeout(() => {
-            sendTextMessage(prompt, attachments);
+            if (sessionEpochRef.current === currentEpoch) {
+              sendTextMessage(prompt, attachments);
+            }
           }, 50);
         }
         return;

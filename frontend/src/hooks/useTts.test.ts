@@ -17,6 +17,34 @@ describe('useTts', () => {
         vi.mocked(fetchVoices).mockReset().mockResolvedValue({ count: 0, voices: [] });
     });
 
+    it('discards a synthesis response that lands after the engine was switched', async () => {
+        let resolveSpeak: (value: { blob: Blob; memorySaved: boolean }) => void = () => {};
+        vi.mocked(fetchSpeakAudio).mockReturnValueOnce(
+            new Promise((resolve) => { resolveSpeak = resolve; })
+        );
+        const formatErrorMessage = createFormatErrorMessageStub();
+        const { result } = renderHook(() => useTts({ defaultText: 'Hello', formatErrorMessage }));
+
+        let submitPromise: Promise<void> = Promise.resolve();
+        act(() => {
+            submitPromise = result.current.onSubmit({ preventDefault() {} } as any);
+        });
+        expect(result.current.generating).toBe(true);
+
+        act(() => result.current.onEngineChange('qwen_flash'));
+        expect(result.current.generating).toBe(false);
+
+        await act(async () => {
+            resolveSpeak({ blob: new Blob(['edge-audio'], { type: 'audio/mpeg' }), memorySaved: false });
+            await submitPromise;
+        });
+
+        expect(result.current.ttsEngine).toBe('qwen_flash');
+        expect(result.current.audioUrl).toBe('');
+        expect(result.current.audioBlob).toBeNull();
+        expect(result.current.generating).toBe(false);
+    });
+
     it('supports switching to dialogue mode', () => {
         const formatErrorMessage = createFormatErrorMessageStub();
         const { result } = renderHook(() => useTts({ defaultText: 'Initial text', formatErrorMessage }));

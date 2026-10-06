@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { fetchSpeakAudio, fetchVoices, extractPdfText, polishPdfText, VOICE_CATALOG_CHANGED_EVENT, type TtsEngine, type VoiceInfo } from "../api";
 import { createInlineTranslator, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
@@ -273,6 +273,16 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
     };
   }, [audioUrl]);
 
+  // Bumped on every synthesis request and whenever engine/model changes clear
+  // the output, so a slow response for a superseded request is discarded
+  // instead of replacing the audio for the user's current selection.
+  const synthesisSeqRef = useRef(0);
+
+  function invalidatePendingSynthesis() {
+    synthesisSeqRef.current += 1;
+    setGenerating(false);
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setTtsError("");
@@ -289,6 +299,8 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
       setTtsError(t("请输入要合成的文本。", "Enter text to synthesize."));
       return;
     }
+    const requestSeq = ++synthesisSeqRef.current;
+    const isCurrent = () => synthesisSeqRef.current === requestSeq;
     setGenerating(true);
     try {
       const result = await fetchSpeakAudio({
@@ -301,6 +313,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
         model: ttsModel || undefined,
         modelB: ttsMode === "dialogue" ? (ttsModelB || undefined) : undefined,
       });
+      if (!isCurrent()) return;
       if (audioUrl.startsWith("blob:")) {
         URL.revokeObjectURL(audioUrl);
       }
@@ -310,9 +323,10 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
         setTtsInfo(t("已将本次语音生成偏好写入长期记忆。", "Saved this voice generation preference into long-term memory."));
       }
     } catch (err) {
+      if (!isCurrent()) return;
       setTtsError(formatErrorMessage(err, t("语音合成请求失败。", "Text-to-speech request failed.")));
     } finally {
-      setGenerating(false);
+      if (isCurrent()) setGenerating(false);
     }
   }
 
@@ -323,6 +337,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
   }
 
   function onEngineChange(engine: TtsEngine) {
+    invalidatePendingSynthesis();
     setTtsEngine(engine);
     setTtsModel(DEFAULT_ENGINE_MODELS[engine]?.defaultModel || "");
     setLoadingVoices(true);
@@ -338,6 +353,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
   }
 
   function onEngineBChange(engine: TtsEngine) {
+    invalidatePendingSynthesis();
     setTtsEngineB(engine);
     setTtsModelB(DEFAULT_ENGINE_MODELS[engine]?.defaultModel || "");
     setLoadingVoicesB(true);
@@ -353,6 +369,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
   }
 
   function onModelChange(model: string) {
+    invalidatePendingSynthesis();
     setTtsModel(model);
     setLoadingVoices(true);
     setVoices([]);
@@ -364,6 +381,7 @@ export default function useTts({ defaultText, formatErrorMessage, language = "zh
   }
 
   function onModelBChange(model: string) {
+    invalidatePendingSynthesis();
     setTtsModelB(model);
     setLoadingVoicesB(true);
     setVoicesB([]);

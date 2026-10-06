@@ -140,8 +140,9 @@ type MessageBubbleProps = {
   onCopy: (content: string, key: string) => void;
   onPlayTts: (content: string, key: string) => void;
   onTranslate?: (content: string, key: string) => void;
-  onRegenerate: (index: number) => void;
-  onDelete: (index: number) => void;
+  /** Omitted for voice-session summary bubbles, which are not chat history. */
+  onRegenerate?: (index: number) => void;
+  onDelete?: (index: number) => void;
   onToggleSources: (key: string) => void;
   onToggleReasoning: (key: string) => void;
   onOpenInCanvas?: (code: string, mode: "react" | "html", title?: string) => void;
@@ -383,7 +384,7 @@ function MessageBubbleImpl({
           </button>
         )}
 
-        {msg.role === "assistant" && (
+        {msg.role === "assistant" && onRegenerate && (
           <button
             type="button"
             className="vsBubbleActionBtn"
@@ -396,15 +397,17 @@ function MessageBubbleImpl({
           </button>
         )}
 
-        <button
-          type="button"
-          className="vsBubbleActionBtn danger"
-          aria-label={t("删除消息", "Delete message")}
-          title={t("删除消息", "Delete message")}
-          onClick={() => onDelete(index)}
-        >
-          <TrashIcon />
-        </button>
+        {onDelete && (
+          <button
+            type="button"
+            className="vsBubbleActionBtn danger"
+            aria-label={t("删除消息", "Delete message")}
+            title={t("删除消息", "Delete message")}
+            onClick={() => onDelete(index)}
+          >
+            <TrashIcon />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -983,6 +986,7 @@ export default function ChatPage({
           <div className="vsMessageList" onMouseUp={handleMessageListMouseUp}>
             {combinedMessages.map((msg, idx) => {
               const messageKey = msg.id ?? `${idx}-${msg.role}`;
+              const isChatHistory = idx < chat.chatMessages.length;
               return (
                 <MessageBubble
                   key={messageKey}
@@ -1007,8 +1011,8 @@ export default function ChatPage({
                   onCopy={stableCopyMessage}
                   onPlayTts={stablePlayTts}
                   onTranslate={stableTranslateMessage}
-                  onRegenerate={stableRegenerateMessage}
-                  onDelete={stableDeleteMessage}
+                  onRegenerate={isChatHistory ? stableRegenerateMessage : undefined}
+                  onDelete={isChatHistory ? stableDeleteMessage : undefined}
                   onToggleSources={stableToggleSources}
                   onToggleReasoning={stableToggleReasoning}
                   onOpenInCanvas={handleOpenInCanvas}

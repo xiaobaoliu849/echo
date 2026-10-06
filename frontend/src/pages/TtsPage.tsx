@@ -227,15 +227,17 @@ function TtsDockPlayer({ src, t }: TtsDockPlayerProps) {
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
 
+  // Reset progress only when a new clip arrives. Speed changes must not
+  // restart playback; defaultPlaybackRate carries the chosen speed across
+  // src loads (the media load algorithm resets playbackRate to it).
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     if (audioRef.current) {
-      audioRef.current.playbackRate = playbackRate;
       audioRef.current.currentTime = 0;
     }
-  }, [src, playbackRate]);
+  }, [src]);
 
   useEffect(() => {
     if (!speedMenuOpen) return;
@@ -323,6 +325,7 @@ function TtsDockPlayer({ src, t }: TtsDockPlayerProps) {
 
   const handleSpeedChange = (rate: number) => {
     if (audioRef.current) {
+      audioRef.current.defaultPlaybackRate = rate;
       audioRef.current.playbackRate = rate;
     }
     setPlaybackRate(rate);
