@@ -177,7 +177,9 @@ async def create_voice_clone(
             },
         )
 
-    data = await audio_file.read()
+    # Read at most one byte past the cap: enough to detect oversize without
+    # pulling an arbitrarily large upload into memory.
+    data = await audio_file.read(MAX_LOCAL_CLONE_FILE_BYTES + 1)
     if not data:
         raise HTTPException(
             status_code=400,
@@ -217,7 +219,7 @@ async def create_voice_clone(
             consent_data = None
             consent_mime = ""
             if consent_file and consent_file.filename:
-                consent_data = await consent_file.read()
+                consent_data = await consent_file.read(MAX_LOCAL_CLONE_FILE_BYTES + 1)
                 consent_mime = consent_file.content_type or ""
                 if len(consent_data) > MAX_LOCAL_CLONE_FILE_BYTES:
                     raise ValueError("consent_file is too large. Keep it within 20MB.")

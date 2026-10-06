@@ -250,10 +250,12 @@ class GeminiVoiceService:
         # Google Gemini Voice Replication strictly requires 24kHz mono 16-bit PCM WAV.
         # _normalize_to_gemini_wav now raises ValueError on failure instead of
         # silently returning un-normalized bytes (which caused cryptic Google 500s).
-        norm_source, _ = _normalize_to_gemini_wav(audio_bytes)
+        # pydub shells out to ffmpeg; run it off the event loop so a clone
+        # upload does not stall live voice sessions.
+        norm_source, _ = await asyncio.to_thread(_normalize_to_gemini_wav, audio_bytes)
         source_b64 = base64.b64encode(norm_source).decode("ascii")
 
-        norm_consent, _ = _normalize_to_gemini_wav(consent_bytes)
+        norm_consent, _ = await asyncio.to_thread(_normalize_to_gemini_wav, consent_bytes)
         if norm_source == norm_consent:
             raise ValueError(
                 "Gemini requires two different recordings: natural speech for the "

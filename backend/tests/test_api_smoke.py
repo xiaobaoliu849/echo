@@ -1760,6 +1760,26 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertEqual(body["voice"], "vc_elevenlabs_1")
         self.assertEqual(body["provider"], "elevenlabs")
 
+    def test_voices_clone_rejects_oversized_audio_without_calling_provider(self) -> None:
+        called = False
+
+        async def fake_create_voice_clone(**kwargs: Any) -> dict[str, Any]:
+            nonlocal called
+            called = True
+            return {}
+
+        oversized = b"\0" * (voices_router.MAX_LOCAL_CLONE_FILE_BYTES + 1024)
+        with patch.object(voices_router.qwen_voice_service, "create_voice_clone", new=fake_create_voice_clone):
+            r_clone = self._request(
+                "POST",
+                "/api/voices/clone",
+                data={"preferred_name": "demo"},
+                files={"audio_file": ("big.wav", oversized, "audio/wav")},
+            )
+        self.assertEqual(r_clone.status_code, 400)
+        self.assertEqual(r_clone.json()["detail"]["code"], "VOICE_CLONE_BAD_REQUEST")
+        self.assertFalse(called)
+
     def test_voices_list_endpoint_echoes_provider(self) -> None:
         async def fake_list_voices() -> dict[str, Any]:
             return {

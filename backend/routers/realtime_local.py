@@ -54,7 +54,10 @@ class ServerRequest(BaseModel):
 
 
 @router.get("/status")
-async def local_status() -> dict[str, Any]:
+def local_status() -> dict[str, Any]:
+    # Sync on purpose: status() shells out to nvidia-smi, walks the model
+    # cache and probes ports. FastAPI runs plain-def routes in a worker
+    # thread, keeping that blocking work off the event loop.
     return {
         "providers": [runtime.status(spec) for spec in PROVIDER_SPECS.values()],
     }

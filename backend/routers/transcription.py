@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from services.api_auth_guard import validate_websocket_token
+from services.background_tasks import spawn_background_task
 from services.realtime_asr_service import (
     RealtimeAsrError,
     STREAMING_MODEL_LANGUAGE_HINT_CAPS,
@@ -36,12 +37,16 @@ _BACKGROUND_TASKS: dict[str, asyncio.Task] = {}
 
 
 def _spawn_background_task(coro, job_id: str = "") -> None:
+    if not job_id:
+        # Without a key there is nothing to cancel by; still hold a strong
+        # reference via the shared registry so the task cannot be GC'd.
+        spawn_background_task(coro, name="transcription-job")
+        return
     task = asyncio.create_task(coro)
-    if job_id:
-        _BACKGROUND_TASKS[job_id] = task
+    _BACKGROUND_TASKS[job_id] = task
 
     def _on_done(done: asyncio.Task) -> None:
-        if job_id and _BACKGROUND_TASKS.get(job_id) is done:
+        if _BACKGROUND_TASKS.get(job_id) is done:
             del _BACKGROUND_TASKS[job_id]
         # Surface unexpected failures — a silently dead background task would
         # leave the job polling as "running" forever with no diagnostics.
