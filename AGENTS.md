@@ -10,6 +10,19 @@ The old PySide6 application may still exist in local, ignored folders on some wo
 
 ## Commands
 
+### Backend Python environment
+
+Development uses a dedicated virtual environment at `backend/.venv`, built from the same lock file as the Windows installer, so development runs the exact package versions users get:
+
+```powershell
+cd backend
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
+.venv\Scripts\python.exe -m pip install -r requirements-packaging.lock -r ..\desktop_requirements.txt
+```
+
+`run_web.bat` and `run_web_desktop.bat` use `backend\.venv` automatically when it exists and fall back to the Python on `PATH` otherwise. Rebuild the environment whenever `requirements-packaging.lock` changes. Do not use a global Conda environment for backend work.
+
 ### Web development
 
 ```bat
@@ -22,7 +35,7 @@ Equivalent manual commands:
 
 ```bash
 cd backend
-python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 
 cd frontend
 npm run dev
@@ -59,7 +72,7 @@ npm run test:run
 npm run build
 
 cd backend
-python -m pytest -q
+.venv\Scripts\python.exe -m pytest -q
 ```
 
 Run the focused tests while iterating, then run the full frontend tests, frontend production build, and backend tests before handing off changes that cross application boundaries.

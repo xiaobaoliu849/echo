@@ -8,13 +8,22 @@ Voice Spirit 2.0 is a web-based desktop application for AI-powered voice synthes
 
 ## Commands
 
+### Backend Python environment
+The backend runs in a dedicated venv at `backend/.venv`, built from the installer's lock file (never the global Conda env):
+```bash
+cd backend
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements-packaging.lock -r ..\desktop_requirements.txt
+```
+`run_web.bat` / `run_web_desktop.bat` pick it up automatically (falling back to `python` on PATH). Rebuild it when `requirements-packaging.lock` changes.
+
 ### Run (Development)
 ```bash
 # Start backend + frontend dev servers (two windows)
 run_web.bat
 
 # Or manually:
-cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+cd backend && .venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 cd frontend && npm run dev
 ```
 
@@ -32,7 +41,7 @@ npm run build    # tsc -b && vite build → frontend/dist/
 
 ### Run Backend Tests
 ```bash
-cd backend && python -m pytest tests/ -q
+cd backend && .venv\Scripts\python.exe -m pytest tests/ -q
 ```
 
 ## Architecture
