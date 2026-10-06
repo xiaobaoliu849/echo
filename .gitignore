@@ -14,6 +14,7 @@ dist/
 .packaging-venv/
 backend/.venv/
 backend/.venv-win/
+.venv-win/
 backend/temp_audio/
 .voicespirit-desktop/
 
