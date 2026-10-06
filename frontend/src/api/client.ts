@@ -626,10 +626,33 @@ export async function endTavusConversation(conversationId: string): Promise<void
   }
 }
 
-function apiFetch(
+// Quick control-plane calls (settings, status, auth) should never leave the UI
+// spinning forever when the backend is wedged. Long-running endpoints (TTS,
+// transcription, LLM calls, streams) deliberately do not opt in.
+const CONTROL_REQUEST_TIMEOUT_MS = 30_000;
+
+// Picks the UI language stamped on <html lang> by I18nProvider, for user-facing
+// errors raised outside React.
+function localizedError(zh: string, en: string): string {
+  const lang = typeof document !== "undefined" ? document.documentElement.lang : "";
+  return lang.toLowerCase().startsWith("en") ? en : zh;
+}
+
+export class ApiTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    const seconds = Math.round(timeoutMs / 1000);
+    super(localizedError(
+      `请求超时（${seconds} 秒无响应），请检查后端服务是否正常运行。`,
+      `Request timed out (no response in ${seconds}s). Check that the backend is running.`
+    ));
+    this.name = "ApiTimeoutError";
+  }
+}
+
+async function apiFetch(
   input: RequestInfo | URL,
   init: RequestInit = {},
-  options: { useAdminToken?: boolean } = {}
+  options: { useAdminToken?: boolean; timeoutMs?: number } = {}
 ): Promise<Response> {
   const headers = new Headers(init.headers || {});
   const token = resolveAuthToken(options.useAdminToken === true);
@@ -639,7 +662,41 @@ function apiFetch(
   if (!headers.has("X-Client-ID")) {
     headers.set("X-Client-ID", getClientId());
   }
-  return fetch(input, { ...init, headers });
+  const timeoutMs = options.timeoutMs ?? 0;
+  if (timeoutMs <= 0) {
+    return fetch(input, { ...init, headers });
+  }
+
+  // The timeout only bounds the wait for response headers; it is cleared as
+  // soon as they arrive so reading the body is never cut short.
+  const controller = new AbortController();
+  const callerSignal = init.signal;
+  const forwardAbort = () => controller.abort(callerSignal?.reason);
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      forwardAbort();
+    } else {
+      callerSignal.addEventListener("abort", forwardAbort, { once: true });
+    }
+  }
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await fetch(input, { ...init, headers, signal: controller.signal });
+  } catch (error) {
+    callerSignal?.removeEventListener("abort", forwardAbort);
+    if (timedOut) {
+      throw new ApiTimeoutError(timeoutMs);
+    }
+    throw error;
+  } finally {
+    // On success the caller's abort forwarder stays attached so aborting
+    // still cancels an in-progress body read.
+    clearTimeout(timer);
+  }
 }
 
 // Deduplicates concurrent identical idempotent GETs and caches the parsed JSON
@@ -827,7 +884,7 @@ export async function fetchAgentRun(agentRunId: string): Promise<AgentRunSummary
 }
 
 export async function fetchApiRuntimeInfo(): Promise<ApiRuntimeInfo> {
-  const response = await apiFetch(`${API_BASE_URL}/`);
+  const response = await apiFetch(`${API_BASE_URL}/`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -879,7 +936,7 @@ export async function registerAuthUser(email: string, password: string): Promise
 }
 
 export async function fetchCurrentAuthUser(): Promise<AuthRuntimeConfig> {
-  const response = await apiFetch(`${API_BASE_URL}/api/auth/me`);
+  const response = await apiFetch(`${API_BASE_URL}/api/auth/me`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -930,7 +987,7 @@ export async function logoutAuthSession(): Promise<void> {
 }
 
 export async function fetchAuthSessions(): Promise<AuthSessionInfo[]> {
-  const response = await apiFetch(`${API_BASE_URL}/api/auth/sessions`);
+  const response = await apiFetch(`${API_BASE_URL}/api/auth/sessions`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -1287,10 +1344,16 @@ export async function streamChatCompletion(
   }
 
   const finalChunk = buffer.trim();
-  if (finalChunk) {
-    handleSseChunk(finalChunk, handlers);
+  if (finalChunk && handleSseChunk(finalChunk, handlers)) {
+    return;
   }
-  handlers.onDone?.();
+  // The backend always terminates a healthy stream with a `done` event; EOF
+  // without one means the connection was cut (proxy timeout, server crash)
+  // and the answer on screen is truncated.
+  throw new Error(localizedError(
+    "回复流意外中断，内容可能不完整，请重试。",
+    "The reply stream was interrupted; the answer may be incomplete. Please retry."
+  ));
 }
 
 export async function translateText(
@@ -1407,7 +1470,7 @@ export async function deleteCustomVoice(
 }
 
 export async function fetchSettings(): Promise<SettingsResponse> {
-  const response = await apiFetch(`${API_BASE_URL}/api/settings/`);
+  const response = await apiFetch(`${API_BASE_URL}/api/settings/`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -1415,7 +1478,7 @@ export async function fetchSettings(): Promise<SettingsResponse> {
 }
 
 export async function fetchDesktopStatus(): Promise<DesktopStatusResponse> {
-  const response = await apiFetch(`${API_BASE_URL}/api/settings/desktop-status`);
+  const response = await apiFetch(`${API_BASE_URL}/api/settings/desktop-status`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -1425,7 +1488,7 @@ export async function fetchDesktopStatus(): Promise<DesktopStatusResponse> {
 // ── Local realtime voice runtimes (GLM-4-Voice / PersonaPlex) ────────────────
 
 export async function fetchLocalVoiceStatus(): Promise<LocalVoiceStatusResponse> {
-  const response = await apiFetch(`${API_BASE_URL}/api/realtime-local/status`);
+  const response = await apiFetch(`${API_BASE_URL}/api/realtime-local/status`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -1510,7 +1573,7 @@ export async function updateSettings(
         settings: settingsPatch
       })
     },
-    { useAdminToken: true }
+    { useAdminToken: true, timeoutMs: CONTROL_REQUEST_TIMEOUT_MS }
   );
   if (!response.ok) {
     await throwApiError(response);
@@ -1541,7 +1604,7 @@ export async function revealSettingsSecret(
       key: key || "",
       provider_id: providerId || "",
     }),
-  });
+  }, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
   }

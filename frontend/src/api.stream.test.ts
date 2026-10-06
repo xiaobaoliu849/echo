@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { streamChatCompletion } from "./api";
+import { ApiTimeoutError, fetchSettings, streamChatCompletion } from "./api";
 
 function createStreamResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -118,5 +118,63 @@ describe("chat stream parsing", () => {
 
     expect(output).toBe("Hello world");
     expect(doneCalled).toBe(true);
+  });
+
+  it("rejects a stream that ends without a done event and keeps the partial text", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      createStreamResponse(['event: delta\ndata: {"content":"Half an ans"}\n\n'])
+    ));
+
+    let output = "";
+    const onDone = vi.fn();
+    await expect(
+      streamChatCompletion(
+        { provider: "DashScope", model: "qwen-plus", messages: [{ role: "user", content: "hi" }] },
+        { onDelta: (chunk) => { output += chunk; }, onDone }
+      )
+    ).rejects.toThrow();
+
+    expect(output).toBe("Half an ans");
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("accepts a done event in the trailing buffer without a blank-line terminator", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      createStreamResponse([
+        'event: delta\ndata: {"content":"ok"}\n\n',
+        'event: done\ndata: {"memories_retrieved":0,"memory_saved":false}',
+      ])
+    ));
+
+    const onDone = vi.fn();
+    await streamChatCompletion(
+      { provider: "DashScope", model: "qwen-plus", messages: [{ role: "user", content: "hi" }] },
+      { onDelta: () => {}, onDone }
+    );
+
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("control-plane request timeout", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("fails a hung settings request with ApiTimeoutError instead of waiting forever", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("The operation was aborted.", "AbortError"))
+        );
+      })
+    ));
+
+    const pending = fetchSettings();
+    const assertion = expect(pending).rejects.toBeInstanceOf(ApiTimeoutError);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await assertion;
   });
 });
