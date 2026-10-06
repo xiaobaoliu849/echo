@@ -903,7 +903,7 @@ export default function useVoiceChat({
       case "assistant_video_frame":
         voiceChatVideoStream.dispatchEvent(new MessageEvent("frame", { data: { mimeType: event.mime_type, data: event.data } }));
         return;
-      case "session_open":
+      case "session_open": {
         voiceChatConnectedRef.current = true;
         setVoiceChatConnected(true);
         setVoiceChatRecording(true);
@@ -932,6 +932,7 @@ export default function useVoiceChat({
           }, 50);
         }
         return;
+      }
       case "memory_config":
         setVoiceChatMemoryScope(event.enabled ? event.scope : "");
         {
@@ -944,7 +945,7 @@ export default function useVoiceChat({
           setVoiceChatMemoryGroupId(nextGroupId);
         }
         return;
-      case "user_transcript":
+      case "user_transcript": {
         if (voiceChatLiveTranslate) {
           currentTurnIdRef.current = event.turn_id || currentTurnIdRef.current;
           liveTranslateLastSourceActivityAtRef.current = Date.now();
@@ -1104,6 +1105,7 @@ export default function useVoiceChat({
         setVoiceChatMemorySourceStatus("");
         setVoiceChatStatus(t("正在听你说话…", "Listening…"));
         return;
+      }
       case "translation_preview":
         if (voiceChatLiveTranslate) {
           currentTurnIdRef.current = event.turn_id || currentTurnIdRef.current;
@@ -1219,7 +1221,7 @@ export default function useVoiceChat({
         voiceChatVideoStream.dispatchEvent(new Event("interrupt"));
         stopAssistantPlayback();
         return;
-      case "interruption_pending":
+      case "interruption_pending": {
         if (handledInterruptionCandidatesRef.current.has(event.candidate_id)) {
           return;
         }
@@ -1250,6 +1252,7 @@ export default function useVoiceChat({
           setVoiceChatStatus(t("中断判断超时，已恢复助手播放", "Interruption check timed out; playback resumed"));
         }, 2500);
         return;
+      }
       case "interruption_decision": {
         if (handledInterruptionCandidatesRef.current.has(event.candidate_id)) {
           return;

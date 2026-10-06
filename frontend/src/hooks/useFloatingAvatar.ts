@@ -21,7 +21,9 @@ export function useFloatingAvatar(floating: boolean) {
       return;
     }
     // Escape chat/canvas containment without moving or remounting the video.
-    ref.current?.showPopover?.();
+    // Capture the element so cleanup hides the same one this effect showed.
+    const player = ref.current;
+    player?.showPopover?.();
     const keepVisible = () => {
       const rect = ref.current?.getBoundingClientRect();
       if (rect) move(rect.left, rect.top);
@@ -29,9 +31,8 @@ export function useFloatingAvatar(floating: boolean) {
     keepVisible();
     window.addEventListener("resize", keepVisible);
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(keepVisible);
-    if (ref.current) observer?.observe(ref.current);
+    if (player) observer?.observe(player);
     return () => {
-      const player = ref.current;
       if (player?.hidePopover && player.matches(":popover-open")) player.hidePopover();
       window.removeEventListener("resize", keepVisible);
       observer?.disconnect();

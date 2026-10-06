@@ -805,7 +805,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
         if (settingsProviderHeadersJson.trim()) {
           try {
             headersObj = JSON.parse(settingsProviderHeadersJson);
-          } catch (err) {
+          } catch {
             setSettingsError(t("自定义请求头 JSON 格式不正确。", "Invalid Custom Headers JSON format."));
             setSettingsSaving(false);
             return;
@@ -943,7 +943,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
       try {
         headersObj = JSON.parse(headersJson);
       } catch (err) {
-        throw new Error(t("自定义请求头 JSON 格式不正确。", "Invalid Custom Headers JSON format."));
+        throw new Error(t("自定义请求头 JSON 格式不正确。", "Invalid Custom Headers JSON format."), { cause: err });
       }
     }
 

@@ -872,6 +872,8 @@ export default function useAudioOverview(options: Options) {
     }
     const defaultTopic = t("播客脚本", "Podcast Script");
     const safeTopic = (audioOverviewTopic.trim() || defaultTopic)
+      // Control characters are invalid in filenames; stripping them is the point.
+      // eslint-disable-next-line no-control-regex
       .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
       .slice(0, 48);
     const blob = new Blob([scriptText], { type: "text/plain;charset=utf-8" });

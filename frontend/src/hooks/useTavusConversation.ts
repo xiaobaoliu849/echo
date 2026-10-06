@@ -434,7 +434,7 @@ export default function useTavusConversation({
   const syncTracks = useCallback(() => {
     const call = callRef.current;
     if (!call || typeof call.participants !== "function") return;
-    let participants: Record<string, any> = {};
+    let participants: Record<string, any>;
     try {
       participants = (call.participants() as Record<string, any>) || {};
     } catch {
@@ -491,7 +491,9 @@ export default function useTavusConversation({
       const nextMuted = !isMuted;
       call.setLocalAudio(!nextMuted);
       setIsMuted(nextMuted);
-    } catch {}
+    } catch {
+      // Daily throws once the call has left; keep the current UI state.
+    }
   }, [isMuted]);
 
   const toggleVideo = useCallback(() => {
@@ -501,7 +503,9 @@ export default function useTavusConversation({
       const nextOff = !isVideoOff;
       call.setLocalVideo(!nextOff);
       setIsVideoOff(nextOff);
-    } catch {}
+    } catch {
+      // Daily throws once the call has left; keep the current UI state.
+    }
   }, [isVideoOff]);
 
   const toggleScreenShare = useCallback(async () => {
@@ -555,7 +559,9 @@ export default function useTavusConversation({
     if (call) {
       try {
         call.stopLocalAudioLevelObserver();
-      } catch {}
+      } catch {
+        // The observer may never have started or the call is already gone.
+      }
       try {
         void Promise.resolve(call.destroy()).catch(() => {});
       } catch {

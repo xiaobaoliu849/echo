@@ -88,7 +88,7 @@ export function formatVoiceLabel(
 
   // Full mode: resolve locale with dialect-tolerant lookup
   const localeEntry = resolveLocaleDisplay(item.locale || "");
-  let localeStr = localeEntry
+  const localeStr = localeEntry
     ? t(localeEntry.zh, localeEntry.en)
     : ((item.locale || "").toLowerCase() === "multi" ? "" : (item.locale || ""));
   const localePart = localeStr ? ` - ${localeStr}` : "";
