@@ -312,4 +312,55 @@ describe("ChatInputBar", () => {
 
     expect(screen.getByText(/不支持语音转文字/)).toBeInTheDocument();
   });
+
+  it("renders every non-avatar call as one compact bar with state, share, mute and hang-up", () => {
+    const voiceChat = createVoiceChatController({
+      voiceChatRecording: true,
+      voiceChatConnected: true,
+      voiceChatProvider: "Google",
+      voiceChatModel: "gemini-3.8-live",
+      voiceChatScreenShareSupported: true,
+      voiceChatTranscript: "hello",
+    });
+    const { container, rerender } = render(<ChatInputBar chat={createChatController()} voiceChat={voiceChat} />);
+
+    const bar = container.querySelector(".vsCallBar");
+    expect(bar).not.toBeNull();
+    expect(container.querySelector(".vsComposerToolbar")).toBeNull();
+    expect(container.querySelector(".vsCallPill")).toHaveClass("is-user");
+    expect(screen.getByText("聆听中")).toBeInTheDocument();
+    expect(container.querySelectorAll(".vsCallWaveBar").length).toBeGreaterThan(0);
+    const controls = container.querySelector(".vsCallControls")!;
+    expect(controls).toContainElement(screen.getByRole("button", { name: "共享屏幕" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: "静音麦克风" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: "挂断实时通话" }));
+    // Send appears beside the input only once there is something to send.
+    expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
+
+    rerender(<ChatInputBar
+      chat={createChatController({ chatInput: "hi" })}
+      voiceChat={{ ...voiceChat, voiceChatTranscript: "", voiceChatAssistantSpeaking: true }}
+    />);
+    expect(container.querySelector(".vsCallPill")).toHaveClass("is-replying");
+    expect(screen.getByText("回复中")).toBeInTheDocument();
+    expect(container.querySelector(".vsCallInput")).toContainElement(screen.getByRole("button", { name: "发送" }));
+  });
+
+  it("keeps avatar call controls on the stage and only the input in the bar", () => {
+    const voiceChat = createVoiceChatController({
+      voiceChatRecording: true,
+      voiceChatConnected: true,
+      voiceChatLiveAvatar: true,
+      voiceChatProvider: "AgentPlatform",
+      voiceChatModel: "gemini-3.8-live",
+      voiceChatScreenShareSupported: true,
+    });
+    const { container } = render(<ChatInputBar chat={createChatController()} voiceChat={voiceChat} />);
+    expect(container.querySelector(".vsComposer.is-avatar-composer .vsCallBar")).not.toBeNull();
+    expect(container.querySelector(".vsCallPill")).toBeNull();
+    expect(screen.queryByRole("button", { name: "挂断实时通话" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "静音麦克风" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "共享屏幕" })).toBeNull();
+    expect(screen.getByLabelText("消息")).toBeInTheDocument();
+  });
 });

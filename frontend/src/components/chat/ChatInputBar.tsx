@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { extractPdfText } from "../../api";
 import VoiceCallSettingsPopover from "../VoiceCallSettingsPopover";
 import { isVoiceRealtimeModel } from "../../hooks/useChat";
@@ -8,6 +8,7 @@ import type { UseVoiceChatResult } from "../../hooks/useVoiceChat";
 import { useI18n } from "../../i18n";
 import { formatAvatarCallLabel } from "../../utils/geminiLivePreferences";
 import ScreenShareControl from "./ScreenShareControl";
+import CallWaveform, { type CallVisualState } from "./CallWaveform";
 
 type Props = {
   chat: UseChatResult;
@@ -118,121 +119,35 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
   const isUserSpeaking = !isAssistantSpeaking && Boolean(voiceChat.voiceChatTranscript);
   const isThinking = !isAssistantSpeaking && !isUserSpeaking && Boolean(voiceChat.voiceChatBusy);
 
-  // Determine conversational state for visualizer
-  const visualizerState = useMemo(() => {
-    if (voiceChat.voiceChatMuted) return "state-muted";
-    if (isAssistantSpeaking) return "state-replying";
-    if (isUserSpeaking) return "state-listening";
-    if (isThinking) return "state-thinking";
-    return "state-listening";
-  }, [voiceChat.voiceChatMuted, isAssistantSpeaking, isUserSpeaking, isThinking]);
+  // One conversational state drives the call pill colour, label and waveform.
+  const callState: CallVisualState = voiceChat.voiceChatMuted
+    ? "muted"
+    : !voiceChat.voiceChatConnected
+      ? "connecting"
+      : isAssistantSpeaking
+        ? "replying"
+        : isUserSpeaking
+          ? "user"
+          : isThinking ? "thinking" : "idle";
+  const callStateLabel = {
+    muted: t("已静音", "Muted"),
+    connecting: t("连接中…", "Connecting…"),
+    replying: t("回复中", "Speaking"),
+    user: t("聆听中", "Listening"),
+    thinking: t("思考中…", "Thinking…"),
+    idle: t("已连接", "Connected"),
+  }[callState];
 
-  // Soundwave visualizer requestAnimationFrame animation loop (20 bars, symmetric with Lerp/Damping)
-  useEffect(() => {
-    if (!voiceChat.voiceChatConnected) return;
-
-    const micAnalyser = voiceChat.micAnalyser;
-    const assistantAnalyser = voiceChat.assistantAnalyser;
-
-    if (!micAnalyser && !assistantAnalyser) return;
-
-    let animationFrameId: number;
-    const micDataArray = micAnalyser ? new Uint8Array(micAnalyser.frequencyBinCount) : null;
-    const assistantDataArray = assistantAnalyser ? new Uint8Array(assistantAnalyser.frequencyBinCount) : null;
-
-    // Symmetrical bar distribution indices for 20 bars
-    const symmetricIndices = [0, 1, 2, 3, 5, 7, 9, 11, 13, 15, 15, 13, 11, 9, 7, 5, 3, 2, 1, 0];
-    const currentBarHeights = new Float32Array(20).fill(18);
-    let currentGlowScale = 0.85;
-    let currentGlowOpacity = 0.35;
-
-    const updateVisualizer = () => {
-      let micVolume = 0;
-      let assistantVolume = 0;
-
-      if (micAnalyser && micDataArray && !voiceChat.voiceChatMuted) {
-        micAnalyser.getByteFrequencyData(micDataArray);
-        let sum = 0;
-        for (let i = 0; i < micDataArray.length; i++) {
-          sum += micDataArray[i];
-        }
-        micVolume = sum / micDataArray.length;
-      }
-
-      if (assistantAnalyser && assistantDataArray) {
-        assistantAnalyser.getByteFrequencyData(assistantDataArray);
-        let sum = 0;
-        for (let i = 0; i < assistantDataArray.length; i++) {
-          sum += assistantDataArray[i];
-        }
-        assistantVolume = sum / assistantDataArray.length;
-      }
-
-      const visualizerEl = document.getElementById("vs-voice-visualizer");
-      if (visualizerEl) {
-        const isAssistantActive = isAssistantSpeaking || assistantVolume > 1.5;
-        const activeVolume = isAssistantActive ? assistantVolume : (voiceChat.voiceChatMuted ? 0 : micVolume);
-        const dataArray = isAssistantActive ? assistantDataArray : (voiceChat.voiceChatMuted ? null : micDataArray);
-
-        // Ambient glow damping lerp
-        const glowEl = visualizerEl.querySelector(".vsVoiceGlow") as HTMLElement;
-        if (glowEl) {
-          let targetScale = 0.85;
-          let targetOpacity = 0.25;
-
-          if (voiceChat.voiceChatMuted) {
-            targetScale = 0.8;
-            targetOpacity = 0;
-          } else if (activeVolume > 2) {
-            targetScale = 0.85 + (activeVolume / 255) * 0.65;
-            targetOpacity = 0.35 + (activeVolume / 255) * 0.65;
-          }
-
-          currentGlowScale += (targetScale - currentGlowScale) * 0.18;
-          currentGlowOpacity += (targetOpacity - currentGlowOpacity) * 0.18;
-          glowEl.style.transform = `scale(${currentGlowScale.toFixed(3)})`;
-          glowEl.style.opacity = `${currentGlowOpacity.toFixed(3)}`;
-        }
-
-        // 20-track soundwave lerp physics
-        const bars = visualizerEl.querySelectorAll(".vsWaveBar");
-        if (bars.length > 0) {
-          const isSoundActive = !voiceChat.voiceChatMuted && activeVolume > 1.8 && dataArray;
-          const attackAlpha = 0.42;  // Quick attack for acoustic responsiveness
-          const decayAlpha = 0.16;   // Smooth natural exponential release
-
-          bars.forEach((bar, index) => {
-            let targetHeight = 18;
-            if (isSoundActive) {
-              const sampleIdx = symmetricIndices[index % symmetricIndices.length] || 0;
-              const val = dataArray[sampleIdx] || 0;
-              targetHeight = 18 + (val / 255) * 82;
-            } else if (voiceChat.voiceChatMuted) {
-              targetHeight = 14;
-            }
-
-            const current = currentBarHeights[index] ?? 18;
-            const alpha = targetHeight > current ? attackAlpha : decayAlpha;
-            const nextHeight = current + (targetHeight - current) * alpha;
-            currentBarHeights[index] = nextHeight;
-
-            (bar as HTMLElement).style.height = `${nextHeight.toFixed(1)}%`;
-          });
-        }
-      }
-
-      animationFrameId = requestAnimationFrame(updateVisualizer);
-    };
-
-    const timerId = setTimeout(() => {
-      updateVisualizer();
-    }, 50);
-
-    return () => {
-      clearTimeout(timerId);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [voiceChat.voiceChatConnected, voiceChat.voiceChatMuted, isAssistantSpeaking, voiceChat.micAnalyser, voiceChat.assistantAnalyser]);
+  // Grow the textarea with its content (CSS max-height caps it).
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
+    // Lets the round call bar relax its corners once the text wraps.
+    el.toggleAttribute("data-multiline", el.scrollHeight > 48);
+  }, [chat.chatInput, isVoiceActive]);
 
   function appendDictationText(text: string) {
     const clean = text.trim();
@@ -403,183 +318,185 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       ? t("输入文字发送启动实时会话，或点击右侧电话按钮通话...", "Type to start realtime chat, or click the phone button to call...")
       : t("输入聊天内容，或者点击右侧麦克风语音转写...", "Type to chat, or click the microphone on the right to dictate...");
 
-  return (
-    <div className={`vsComposer ${isVoiceActive ? "liveActive" : ""} ${isVoiceActive && voiceChat.voiceChatLiveAvatar ? "is-avatar-composer" : ""}`}>
-      {/* ── Live Voice Dynamic Call Capsule Banner ── */}
-      {isVoiceActive && !voiceChat.voiceChatLiveAvatar && (
-        <div className="vsLiveVoiceStatusBanner">
-          <div className="vsVoiceStatusSection">
-            <span className="vsVoiceStatusText">
-              <span
-                className={`vsVoiceStatusDot ${
-                  voiceChat.voiceChatMuted
-                    ? "muted"
-                    : voiceChat.voiceChatConnected
-                      ? (isAssistantSpeaking
-                          ? "replying"
-                          : (isUserSpeaking
-                              ? "listening"
-                              : (isThinking ? "thinking" : "connected")))
-                      : "connecting"
-                }`}
+  const fileInput = (
+    <input
+      type="file"
+      ref={fileInputRef}
+      style={{ display: "none" }}
+      onChange={handleFileChange}
+      accept="image/*,.pdf,.txt,.md,.json,.py,.ts,.tsx,.js,.html,.css"
+      multiple
+    />
+  );
+  const attachButton = (
+    <button
+      type="button"
+      className={isVoiceActive ? "vsCallIconBtn vsCallAttachBtn" : "vsToolbarBtn"}
+      aria-label={t("附件/图片", "Attachment / Image")}
+      onClick={() => fileInputRef.current?.click()}
+      title={t("添加图片或文件 (支持截图粘贴 Ctrl+V)", "Add images or documents (supports pasting Ctrl+V)")}
+    >
+      <PaperclipIcon />
+    </button>
+  );
+  const textarea = (
+    <textarea
+      ref={textareaRef}
+      aria-label={t("消息", "Message")}
+      rows={1}
+      value={chat.chatInput}
+      onChange={(e) => chat.onInputChange(e.target.value)}
+      onPaste={handlePaste}
+      placeholder={placeholder}
+      onKeyDown={chat.onComposerKeyDown}
+    />
+  );
+  const sendButton = canSend ? (
+    <button
+      type="submit"
+      className="vsSendBtn"
+      disabled={chat.chatBusy}
+      aria-label={t("发送", "Send")}
+      title={t("发送", "Send")}
+    >
+      {chat.chatBusy ? <SpinnerIcon /> : <SendIcon />}
+    </button>
+  ) : null;
+  const dictationHint = dictationError ? <div className="vsComposerInlineHint">{dictationError}</div> : null;
+  const attachmentsPreview = ((chat.chatAttachments && chat.chatAttachments.length > 0) || parsingFiles.length > 0) && (
+      <div className="vsComposerAttachments">
+        {chat.chatAttachments?.map((att, index) => {
+          const isImage = att.type === "image" || att.dataUrl?.startsWith("data:image/") || /\.(png|jpe?g|webp|gif)$/i.test(att.name);
+          const imgSrc = att.dataUrl || att.url;
+          return isImage && imgSrc ? (
+            <div key={`${index}-${att.name}`} className="vsAttachmentImagePill">
+              <img src={imgSrc} alt={att.name} className="vsAttachmentThumb" />
+              <span className="vsAttachmentPillName" title={att.name}>{att.name}</span>
+              <button
+                type="button"
+                className="vsAttachmentPillDelete"
+                onClick={() => chat.removeChatAttachment(index)}
+                title={t("删除附件", "Delete attachment")}
+              >
+                ×
+              </button>
+            </div>
+          ) : (
+            <div key={`${index}-${att.name}`} className="vsAttachmentPill">
+              <span className="vsAttachmentPillIcon">{att.type === "pdf" ? "📕" : "📄"}</span>
+              <span className="vsAttachmentPillName" title={att.name}>{att.name}</span>
+              <button
+                type="button"
+                className="vsAttachmentPillDelete"
+                onClick={() => chat.removeChatAttachment(index)}
+                title={t("删除附件", "Delete attachment")}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+        {parsingFiles.map((name) => (
+          <div key={name} className="vsAttachmentPill loading">
+            <span className="spinner-mini"></span>
+            <span className="vsAttachmentPillName" title={name}>{name}</span>
+          </div>
+        ))}
+      </div>
+    );
+
+  if (isVoiceActive) {
+    // Every realtime call (voice, translate, avatar) shares this one-row bar.
+    // Avatar calls keep mute / hang-up / share on the avatar stage, so the bar
+    // only carries the input there.
+    const isAvatar = voiceChat.voiceChatLiveAvatar;
+    return (
+      <div className={`vsComposer liveActive ${isAvatar ? "is-avatar-composer" : ""}`}>
+        {attachmentsPreview}
+        {fileInput}
+        <div className="vsCallBar">
+          {isAvatar ? (
+            // The stage already shows the call; keep the summary for assistive tech.
+            <span className="vsVoiceReadOnlyChip vsVisuallyHidden">{callSummary}</span>
+          ) : (
+            <div className={`vsCallPill is-${callState}`} title={callSummary}>
+              <CallWaveform
+                state={callState}
+                micAnalyser={voiceChat.micAnalyser}
+                assistantAnalyser={voiceChat.assistantAnalyser}
               />
-              {voiceChat.voiceChatMuted
-                ? t("已静音", "Muted")
-                : voiceChat.voiceChatConnected
-                  ? (isAssistantSpeaking
-                      ? t("正在回复...", "Replying...")
-                      : (isUserSpeaking
-                          ? t("正在聆听...", "Listening...")
-                          : (isThinking
-                              ? t("正在思考...", "Thinking...")
-                              : t("已连接，您可以说话或打字", "Connected: speak or type freely"))))
-                  : t("正在建立安全连接...", "Connecting live session...")}
-            </span>
-
-            {voiceChat.voiceChatConnected && (
-              <span className="vsVoiceTimerBadge" title={t("通话时长", "Call Duration")}>
-                <span className="vsVoiceTimerDot" />
-                {formatDuration(voiceChat.voiceChatDuration || 0)}
+              <span className="vsCallPillText">
+                <span className="vsCallPillStatus">
+                  <span className="vsCallPillLabel">{callStateLabel}</span>
+                  {voiceChat.voiceChatConnected && (
+                    <span className="vsCallPillTimer" title={t("通话时长", "Call Duration")}>
+                      {formatDuration(voiceChat.voiceChatDuration || 0)}
+                    </span>
+                  )}
+                </span>
+                <span className="vsVoiceReadOnlyChip">{callSummary}</span>
               </span>
-            )}
-          </div>
-
-          <div className={`vsVoiceVisualizerContainer ${visualizerState}`} id="vs-voice-visualizer">
-            <div className="vsVoiceVisualizerWave">
-              {Array.from({ length: 20 }).map((_, i) => (
-                <div key={i} className={`vsWaveBar bar-${i + 1}`}></div>
-              ))}
             </div>
-            <div className="vsVoiceGlow"></div>
+          )}
+          <div className="vsCallInput">
+            {attachButton}
+            {textarea}
+            {sendButton}
           </div>
-
-          <div className="vsVoiceControlsGroup">
-            <button
-              type="button"
-              className={`vsVoiceCallMuteBtn ${voiceChat.voiceChatMuted ? "muted" : ""}`}
-              onClick={voiceChat.onToggleMute}
-              title={voiceChat.voiceChatMuted ? t("取消静音 (M)", "Unmute mic (M)") : t("静音麦克风 (M)", "Mute mic (M)")}
-              aria-label={voiceChat.voiceChatMuted ? t("取消静音", "Unmute mic") : t("静音麦克风", "Mute mic")}
-            >
-              {voiceChat.voiceChatMuted ? <MicOffIcon /> : <MicOnIcon />}
-              <span>{voiceChat.voiceChatMuted ? t("已静音", "Muted") : t("静音", "Mute")}</span>
-            </button>
-
-            <button
-              type="button"
-              className="vsVoiceCallHangupMiniBtn"
-              onClick={() => void voiceChat.onToggleRecording()}
-              title={t("挂断实时通话", "Hang up call")}
-              aria-label={t("挂断实时通话", "Hang up call")}
-            >
-              <PhoneOffIcon />
-              <span>{t("挂断", "Hang up")}</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Input Box (Always active) ── */}
-      {isVoiceActive && !voiceChat.voiceChatLiveAvatar && <ScreenShareControl voiceChat={voiceChat} />}
-      <textarea
-        aria-label={t("消息", "Message")}
-        rows={1}
-        value={chat.chatInput}
-        onChange={(e) => chat.onInputChange(e.target.value)}
-        onPaste={handlePaste}
-        placeholder={placeholder}
-        onKeyDown={chat.onComposerKeyDown}
-      />
-      {dictationError ? <div className="vsComposerInlineHint">{dictationError}</div> : null}
-
-      {/* ── Attachment Preview Section ── */}
-      {((chat.chatAttachments && chat.chatAttachments.length > 0) || parsingFiles.length > 0) && (
-        <div className="vsComposerAttachments">
-          {chat.chatAttachments?.map((att, index) => {
-            const isImage = att.type === "image" || att.dataUrl?.startsWith("data:image/") || /\.(png|jpe?g|webp|gif)$/i.test(att.name);
-            const imgSrc = att.dataUrl || att.url;
-            return isImage && imgSrc ? (
-              <div key={`${index}-${att.name}`} className="vsAttachmentImagePill">
-                <img src={imgSrc} alt={att.name} className="vsAttachmentThumb" />
-                <span className="vsAttachmentPillName" title={att.name}>{att.name}</span>
-                <button
-                  type="button"
-                  className="vsAttachmentPillDelete"
-                  onClick={() => chat.removeChatAttachment(index)}
-                  title={t("删除附件", "Delete attachment")}
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <div key={`${index}-${att.name}`} className="vsAttachmentPill">
-                <span className="vsAttachmentPillIcon">{att.type === "pdf" ? "📕" : "📄"}</span>
-                <span className="vsAttachmentPillName" title={att.name}>{att.name}</span>
-                <button
-                  type="button"
-                  className="vsAttachmentPillDelete"
-                  onClick={() => chat.removeChatAttachment(index)}
-                  title={t("删除附件", "Delete attachment")}
-                >
-                  ×
-                </button>
-              </div>
-            );
-          })}
-          {parsingFiles.map((name) => (
-            <div key={name} className="vsAttachmentPill loading">
-              <span className="spinner-mini"></span>
-              <span className="vsAttachmentPillName" title={name}>{name}</span>
+          {!isAvatar && (
+            <div className="vsCallControls">
+              <ScreenShareControl voiceChat={voiceChat} variant="toolbar" />
+              <button
+                type="button"
+                className={`vsCallIconBtn vsCallMuteBtn ${voiceChat.voiceChatMuted ? "is-muted" : ""}`}
+                onClick={voiceChat.onToggleMute}
+                aria-pressed={voiceChat.voiceChatMuted}
+                title={voiceChat.voiceChatMuted ? t("取消静音 (M)", "Unmute mic (M)") : t("静音麦克风 (M)", "Mute mic (M)")}
+                aria-label={voiceChat.voiceChatMuted ? t("取消静音", "Unmute mic") : t("静音麦克风", "Mute mic")}
+              >
+                {voiceChat.voiceChatMuted ? <MicOffIcon /> : <MicOnIcon />}
+              </button>
+              <button
+                type="button"
+                className="vsCallHangupBtn"
+                onClick={() => void voiceChat.onToggleRecording()}
+                title={t("挂断实时通话", "Hang up call")}
+                aria-label={t("挂断实时通话", "Hang up call")}
+              >
+                <PhoneOffIcon />
+                <span className="vsCallHangupLabel">{t("挂断", "Hang up")}</span>
+              </button>
             </div>
-          ))}
+          )}
         </div>
-      )}
+        {dictationHint}
+      </div>
+    );
+  }
 
-      {/* ── Toolbar Section ── */}
+  return (
+    <div className="vsComposer">
+      {textarea}
+      {dictationHint}
+      {attachmentsPreview}
+
       <div className="vsComposerToolbar">
         <div className="vsComposerToolbarLeft">
-          <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: "none" }}
-            onChange={handleFileChange}
-            accept="image/*,.pdf,.txt,.md,.json,.py,.ts,.tsx,.js,.html,.css"
-            multiple
+          {fileInput}
+          {attachButton}
+          {/* Unified provider → model → voice picker */}
+          <VoiceCallSettingsPopover
+            onOpenPal={onOpenPal}
+            voiceChat={voiceChat}
+            chat={chat}
+            t={t}
+            disabled={false}
+            onOpenSettings={onOpenSettings}
           />
-          <button
-            type="button"
-            className="vsToolbarBtn"
-            aria-label={t("附件/图片", "Attachment / Image")}
-            onClick={() => fileInputRef.current?.click()}
-            title={t("添加图片或文件 (支持截图粘贴 Ctrl+V)", "Add images or documents (supports pasting Ctrl+V)")}
-          >
-            <PaperclipIcon />
-          </button>
-
-          {/* Unified provider → model → voice picker (or read-only chip during active call) */}
-          {isVoiceActive ? (
-            <span
-              className="vsVoiceReadOnlyChip"
-              title={callSummary}
-            >
-              <MicOnIcon />
-              <span>{callSummary}
-              </span>
-            </span>
-          ) : (
-            <VoiceCallSettingsPopover
-              onOpenPal={onOpenPal}
-              voiceChat={voiceChat}
-              chat={chat}
-              t={t}
-              disabled={false}
-              onOpenSettings={onOpenSettings}
-            />
-          )}
         </div>
 
         <div className="vsComposerToolbarRight">
-          {!isVoiceActive && !isRealtime && (
+          {!isRealtime && (
             <button
               type="button"
               className={`vsToolbarBtn ${dictating ? "recording" : ""}`}
@@ -592,64 +509,52 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
             </button>
           )}
 
-          {!isVoiceActive && (
-            <button
-              type="button"
-              className={`vsComposerCallBtn ${!canStartCall ? "disabled" : ""}`}
-              aria-label={
-                (chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus"
-                  ? t("开启视频分身", "Video PAL")
-                  : t("实时通话", "Realtime call")
-              }
-              onClick={() => {
-                if (!canStartCall) return;
-                // NOTE: no chat→voiceChat sync here. The voice-call selection
-                // lives in voiceChat's own state (the popover on the left);
-                // useVoiceChat already adopts realtime chat selections via its
-                // sync effect. Force-copying chat's provider/model at click
-                // time would clobber a voice-popover pick (e.g. Agent Platform
-                // live-translate) with the chat model (e.g. DashScope), and
-                // the same-tick startSession would use stale state anyway.
-                const activeProv = chat ? chat.chatProvider : voiceChat.voiceChatProvider;
-                if (activeProv === "Tavus") {
-                  if (onOpenPal) {
-                    onOpenPal();
-                  } else {
-                    void voiceChat.onToggleRecording();
-                  }
-                  return;
+          <button
+            type="button"
+            className={`vsComposerCallBtn ${!canStartCall ? "disabled" : ""}`}
+            aria-label={
+              (chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus"
+                ? t("开启视频分身", "Video PAL")
+                : t("实时通话", "Realtime call")
+            }
+            onClick={() => {
+              if (!canStartCall) return;
+              // NOTE: no chat→voiceChat sync here. The voice-call selection
+              // lives in voiceChat's own state (the popover on the left);
+              // useVoiceChat already adopts realtime chat selections via its
+              // sync effect. Force-copying chat's provider/model at click
+              // time would clobber a voice-popover pick (e.g. Agent Platform
+              // live-translate) with the chat model (e.g. DashScope), and
+              // the same-tick startSession would use stale state anyway.
+              const activeProv = chat ? chat.chatProvider : voiceChat.voiceChatProvider;
+              if (activeProv === "Tavus") {
+                if (onOpenPal) {
+                  onOpenPal();
+                } else {
+                  void voiceChat.onToggleRecording();
                 }
-                void voiceChat.onToggleRecording();
-              }}
-              disabled={!canStartCall || !voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
-              title={
-                !canStartCall
-                  ? t(
-                      "当前选择的是文本/多模态模型，实时通话请在左侧切换为实时语音模型（如带「实时」徽章的模型）",
-                      "Current model is a text/multimodal model. Switch to a realtime voice model on the left to start a call."
-                    )
-                  : (chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus"
-                    ? t("开启 Tavus 实时视频分身对话", "Start Tavus video PAL conversation")
-                    : isLiveTranslate
-                      ? t(`实时翻译：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Live translate: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
-                      : t(`实时通话：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Realtime call: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+                return;
               }
-            >
-              {(chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus" ? <VideoIcon /> : <PhoneIcon />}
-            </button>
-          )}
+              void voiceChat.onToggleRecording();
+            }}
+            disabled={!canStartCall || !voiceChat.voiceChatSupported || voiceChat.voiceChatBusy}
+            title={
+              !canStartCall
+                ? t(
+                    "当前选择的是文本/多模态模型，实时通话请在左侧切换为实时语音模型（如带「实时」徽章的模型）",
+                    "Current model is a text/multimodal model. Switch to a realtime voice model on the left to start a call."
+                  )
+                : (chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus"
+                  ? t("开启 Tavus 实时视频分身对话", "Start Tavus video PAL conversation")
+                  : isLiveTranslate
+                    ? t(`实时翻译：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Live translate: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+                    : t(`实时通话：${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`, `Realtime call: ${voiceChat.voiceChatProvider} / ${voiceChat.voiceChatModel}`)
+            }
+          >
+            {(chat ? chat.chatProvider : voiceChat.voiceChatProvider) === "Tavus" ? <VideoIcon /> : <PhoneIcon />}
+          </button>
 
-          {canSend ? (
-            <button
-              type="submit"
-              className="vsSendBtn"
-              disabled={chat.chatBusy}
-              aria-label={t("发送", "Send")}
-              title={t("发送", "Send")}
-            >
-              {chat.chatBusy ? <SpinnerIcon /> : <SendIcon />}
-            </button>
-          ) : null}
+          {sendButton}
         </div>
       </div>
     </div>

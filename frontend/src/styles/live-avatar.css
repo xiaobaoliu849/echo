@@ -543,9 +543,6 @@ button.vsAvatarControlBtn.danger:focus-visible {
 .vsAvatarCallView.is-history { height: 0; }
 .vsAvatarCallView.is-history .vsAvatarCallLayout { display: block; }
 .vsAvatarCallView.is-history .vsAvatarMediaPane { height: 0; }
-.vsComposerWrap.avatarCall .vsComposer { display: flex; flex-direction: column; padding: 12px 14px; gap: 10px; }
-.vsComposerWrap.avatarCall textarea { min-height: 48px; font-size: 14px; }
-.vsComposerWrap.avatarCall .vsVoiceReadOnlyChip { display: none; }
 
 .vsVoiceSettingsPanel.vsAvatarPreferencesPanel {
   width: min(360px, calc(100vw - 32px)); min-width: 0; overflow-y: auto; padding: 18px;

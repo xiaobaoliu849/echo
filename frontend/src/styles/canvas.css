@@ -258,11 +258,6 @@ button.vsCanvasIconActionBtn.danger:hover:not(:disabled) {
   min-width: 0;
 }
 
-.vsVoiceReadOnlyChip {
-  max-width: min(320px, 100%);
-  min-width: 0;
-}
-
 .vsChatCanvasToggleBtn {
   display: inline-flex;
   align-items: center;
@@ -383,33 +378,12 @@ button.vsCanvasIconActionBtn.danger:hover:not(:disabled) {
 }
 
 @container chat-pane (max-width: 680px) {
-  .vsLiveVoiceStatusBanner {
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 8px 10px;
-  }
-  .vsVoiceStatusSection {
-    flex: 1 1 100%;
-    overflow: visible;
-    flex-wrap: wrap;
-  }
-  .vsVoiceStatusText {
-    white-space: normal;
-  }
-  .vsVoiceVisualizerContainer {
-    min-width: 48px;
-    max-width: none;
-    flex: 1 1 48px;
-  }
   .vsComposerWrap,
   .vsComposerWrap.liveActive {
     width: calc(100% - 24px);
   }
   .vsComposer {
     padding: 12px;
-  }
-  .vsVoiceControlsGroup {
-    margin-left: auto;
   }
 }
 

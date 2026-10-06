@@ -207,7 +207,7 @@ describe('ChatPage', () => {
             />
         );
 
-        expect(screen.getByText(/已连接，您可以说话或打字/)).toBeInTheDocument();
+        expect(screen.getByText('已连接')).toBeInTheDocument();
         const sendBtn = screen.getByRole('button', { name: '发送' });
         expect(sendBtn).not.toBeDisabled();
 

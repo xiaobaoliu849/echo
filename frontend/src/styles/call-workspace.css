@@ -92,32 +92,6 @@
 .vsScreenShareControl.is-compact .vsScreenShareDescription small { font-size: 11px; }
 .vsScreenShareControl.is-compact .vsScreenShareError { max-width: 420px; }
 
-.vsComposerWrap.avatarCall { width: calc(100% - 32px); max-width: 1280px; margin-bottom: 12px; }
-.vsComposerWrap.avatarCall .vsComposer.is-avatar-composer {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 18px;
-}
-.vsComposer.is-avatar-composer .vsComposerToolbar { display: contents; }
-.vsComposer.is-avatar-composer .vsComposerToolbarLeft { grid-column: 1; grid-row: 1; }
-.vsComposer.is-avatar-composer .vsComposerToolbarRight { grid-column: 3; grid-row: 1; }
-.vsComposerWrap.avatarCall .vsComposer.is-avatar-composer textarea {
-  grid-column: 2;
-  grid-row: 1;
-  min-height: 36px;
-  height: 36px;
-  max-height: 100px;
-  overflow-y: auto;
-  font-size: 14px;
-  line-height: 30px;
-}
-.vsComposer.is-avatar-composer .vsComposerAttachments,
-.vsComposer.is-avatar-composer .vsComposerInlineHint { grid-column: 1 / -1; }
-.vsComposer.is-avatar-composer .vsComposerAttachments { max-height: 100px; overflow-y: auto; }
-
 /* Tavus uses the same bounded panes; controls occupy their own row. */
 .vsPalPage { container-type: inline-size; container-name: pal-pane; }
 .vsPalStage.is-live {

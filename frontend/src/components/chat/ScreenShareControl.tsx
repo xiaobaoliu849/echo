@@ -6,8 +6,11 @@ import { useI18n } from "../../i18n";
 interface ScreenShareControlProps {
   voiceChat: UseVoiceChatResult;
   compact?: boolean;
-  /** "icon" renders a single call-control button for floating call docks. */
-  variant?: "panel" | "icon";
+  /**
+   * "icon" renders a single call-control button for floating call docks;
+   * "toolbar" renders the same button styled for the call composer bar.
+   */
+  variant?: "panel" | "icon" | "toolbar";
 }
 
 export default function ScreenShareControl({ voiceChat, compact = false, variant = "panel" }: ScreenShareControlProps) {
@@ -37,7 +40,7 @@ export default function ScreenShareControl({ voiceChat, compact = false, variant
   const actionLabel = capture.sharing ? t("停止共享", "Stop sharing") : capture.pending ? t("取消共享", "Cancel sharing") : t("共享屏幕", "Share screen");
   const toggle = () => capture.sharing || capture.pending ? capture.stop() : void capture.start();
 
-  if (variant === "icon") {
+  if (variant === "icon" || variant === "toolbar") {
     const active = capture.sharing || capture.pending;
     const unavailable = !active && (vercelUnsupported || !capture.supported || !voiceChat.voiceChatConnected);
     // The tooltip carries the status that the panel variant shows as text.
@@ -47,9 +50,10 @@ export default function ScreenShareControl({ voiceChat, compact = false, variant
       : capture.pending ? `${title} · ${t("点击取消", "Click to cancel")}`
       : !voiceChat.voiceChatConnected ? t("通话连接后即可共享屏幕", "Share your screen once the call connects")
       : title;
-    return <>
+    const buttonClass = variant === "toolbar" ? "vsCallIconBtn vsCallShareBtn" : "vsAvatarControlBtn vsAvatarShareBtn";
+    const content = <>
       {/* aria-disabled keeps the tooltip reachable by hover and keyboard focus. */}
-      <button type="button" className={`vsAvatarControlBtn vsAvatarShareBtn ${capture.sharing ? "active" : ""}`}
+      <button type="button" className={`${buttonClass} ${capture.sharing ? "active" : ""}`}
         aria-label={actionLabel} aria-pressed={capture.sharing} aria-disabled={unavailable || undefined}
         title={tooltip} onClick={() => { if (!unavailable) toggle(); }}>
         {capture.sharing ? <MonitorOff size={15} /> : capture.pending ? <Square size={15} /> : <Monitor size={15} />}
@@ -57,6 +61,7 @@ export default function ScreenShareControl({ voiceChat, compact = false, variant
       </button>
       {capture.error && <span className="vsAvatarControlError" role="alert">{capture.error}</span>}
     </>;
+    return variant === "toolbar" ? <span className="vsCallShareSlot">{content}</span> : content;
   }
   return <div className={`vsScreenShareControl ${compact ? "is-compact" : ""} ${capture.sharing ? "is-sharing" : ""}`}>
     {capture.sharing && <video ref={preview} muted playsInline aria-label={t("共享屏幕预览", "Shared screen preview")} />}
