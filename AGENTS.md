@@ -68,6 +68,7 @@ Use Python 3.12 and Node.js 22 or newer. This creates an isolated packaging envi
 
 ```bash
 cd frontend
+npm run lint
 npm run test:run
 npm run build
 
@@ -76,6 +77,8 @@ cd backend
 ```
 
 Run the focused tests while iterating, then run the full frontend tests, frontend production build, and backend tests before handing off changes that cross application boundaries.
+
+`npm run lint` must report 0 errors. Warnings (`exhaustive-deps`, `no-explicit-any`, `only-export-components`) are tracked debt: do not add new ones, and fix `exhaustive-deps` only case by case, since many effects are deliberately mount-only and blindly adding dependencies can cause render loops. The React Compiler rules are disabled in `frontend/eslint.config.js` because the project does not use React Compiler; see the comment there.
 
 ## Architecture
 

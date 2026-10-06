@@ -37,6 +37,7 @@ run_web_desktop.bat
 ```bash
 cd frontend
 npm run build    # tsc -b && vite build → frontend/dist/
+npm run lint     # ESLint; must report 0 errors (warnings are tracked debt)
 ```
 
 ### Run Backend Tests
