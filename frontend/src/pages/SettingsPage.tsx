@@ -212,10 +212,14 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
               <VoiceTrajectoryHeatmap />
             </div>
           )}
-          {activeCategory === "provider" && <ProviderSettingsSection settings={settings} />}
-          {activeCategory === "memory" && <MemorySettingsSection settings={settings} />}
-          {activeCategory === "transcription" && <TranscriptionSettingsSection settings={settings} />}
-          {activeCategory === "desktop" && <DesktopSettingsSection settings={settings} />}
+          {/* Locked while saving: the save response re-syncs every field, which
+              would silently discard anything typed during the request. */}
+          <fieldset className="vsSettingsFieldset" disabled={settings.settingsSaving}>
+            {activeCategory === "provider" && <ProviderSettingsSection settings={settings} />}
+            {activeCategory === "memory" && <MemorySettingsSection settings={settings} />}
+            {activeCategory === "transcription" && <TranscriptionSettingsSection settings={settings} />}
+            {activeCategory === "desktop" && <DesktopSettingsSection settings={settings} />}
+          </fieldset>
           {activeCategory === "local-voice" && <LocalVoiceSettingsSection />}
 
           <footer className="vsSettingsFormFooter">

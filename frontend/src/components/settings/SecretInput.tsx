@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useI18n } from "../../i18n";
 import { revealSettingsSecret } from "../../api/client";
@@ -42,6 +42,22 @@ export default function SecretInput({
   const [revealed, setRevealed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // The same instance is reused across providers (secretKey changes with the
+  // selected provider). Drop any revealed value when the secret's identity
+  // changes, otherwise the previous provider's real key would stay on screen
+  // and the next keystroke would save it into the new provider's field.
+  const secretIdentity = `${section ?? ""}|${secretKey ?? ""}|${customProviderId ?? ""}`;
+  const [shownIdentity, setShownIdentity] = useState(secretIdentity);
+  if (shownIdentity !== secretIdentity) {
+    setShownIdentity(secretIdentity);
+    setRevealed(null);
+    setPlainShown(false);
+  }
+  const identityRef = useRef(secretIdentity);
+  useEffect(() => {
+    identityRef.current = secretIdentity;
+  }, [secretIdentity]);
+
   const isMasked = value === MASKED_SECRET && revealed === null;
   const inputValue = revealed !== null ? revealed : value;
   const showText = revealed !== null || plainShown;
@@ -57,8 +73,11 @@ export default function SecretInput({
     }
     if (busy) return;
     setBusy(true);
+    const requestedIdentity = secretIdentity;
     revealSettingsSecret(section, secretKey, customProviderId)
-      .then((real) => setRevealed(real))
+      .then((real) => {
+        if (identityRef.current === requestedIdentity) setRevealed(real);
+      })
       .catch(() => {
         // Keep the masked placeholder on failure; nothing else to do here.
       })

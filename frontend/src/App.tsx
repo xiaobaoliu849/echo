@@ -135,18 +135,22 @@ export default function App() {
   });
   const { errorRuntimeContext } = settings;
 
+  // useSettings returns a fresh object every render; read it through a ref so
+  // the window listener is registered once instead of on every render.
+  const onProviderChangeRef = useRef(settings.onProviderChange);
+  onProviderChangeRef.current = settings.onProviderChange;
   useEffect(() => {
     const handleOpenSettings = (e: Event) => {
       const customEvent = e as CustomEvent<{ category?: string; provider?: string }>;
       const { provider } = customEvent.detail || {};
       if (provider) {
-        settings.onProviderChange(provider);
+        onProviderChangeRef.current(provider);
       }
       setIsSettingsOpen(true);
     };
     window.addEventListener("open-settings", handleOpenSettings);
     return () => window.removeEventListener("open-settings", handleOpenSettings);
-  }, [settings]);
+  }, []);
 
   const workspaceClassName = `vsWorkspaceViewportInner is-${activeTab.replace(/_/g, "-")}`;
   // Tabs that manage their own internal scrolling and need a fixed-height

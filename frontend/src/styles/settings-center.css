@@ -134,6 +134,16 @@
   gap: 20px;
 }
 
+/* Pure behavioural wrapper (disables controls while saving); it must not
+   add a box, or the sections stop being flex children of the form. */
+.vsSettingsFieldset {
+  display: contents;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
 .vsSettingsHeader {
   display: flex;
   align-items: flex-end;
