@@ -55,14 +55,17 @@ class QwenAudioRealtimeMixin:
     def _build_qwen_audio_instructions(memory_context: str = "") -> str:
         import datetime
         current_date = datetime.date.today().isoformat()
-        base = f"{QWEN_AUDIO_REALTIME_INSTRUCTIONS}\n当前日期: {current_date}。{current_tutor_instructions()}"
+        base = f"{QWEN_AUDIO_REALTIME_INSTRUCTIONS}\n当前日期: {current_date}。"
+        # The coach persona goes last so it outranks the default persona.
+        tutor = current_tutor_instructions()
         if not memory_context:
-            return base
+            return f"{base}{tutor}"
         return (
             f"{base}\n\n"
             "以下是系统检索到的长期记忆，用于个性化回复。当相关时请参考这些记忆，"
             "但不要逐字引用，除非用户直接询问。\n"
             f"{memory_context}"
+            f"{tutor}"
         )
     async def _client_to_qwen_audio_loop(
         self,

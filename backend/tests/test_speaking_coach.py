@@ -369,7 +369,58 @@ def test_tutor_mode_reaches_qwen_audio_and_doubao_prompts() -> None:
     finally:
         reset_tutor_session(token)
 
-    # Doubao composes its prompt inline from the base constant; both sites must append the tutor block.
+    # Doubao composes its prompt inline from the base constant: the handshake
+    # fallback appends the tutor block, and the session path appends it after
+    # the startup memory summary so it stays last.
     source = inspect.getsource(realtime_doubao_provider)
-    assert source.count("{BASE_REALTIME_INSTRUCTIONS}{current_tutor_instructions()}") == 2
-    assert "instructions or BASE_REALTIME_INSTRUCTIONS" not in source
+    assert source.count("{BASE_REALTIME_INSTRUCTIONS}{current_tutor_instructions()}") == 1
+    assert 'tutor_block = "" if instructions else current_tutor_instructions()' in source
+    assert 'base_instructions = f"{base_instructions}{tutor_block}"' in source
+
+
+def test_tutor_block_comes_last_so_it_outranks_generic_rules() -> None:
+    from services.speaking_coach import normalize_tutor_config, reset_tutor_session, set_tutor_session
+
+    token = set_tutor_session(normalize_tutor_config(enabled=True, scenario="daily_life"))
+    try:
+        for built in (
+            RealtimeVoiceService._build_realtime_instructions(),
+            RealtimeVoiceService._build_realtime_instructions("user likes hiking"),
+            RealtimeVoiceService._build_qwen_audio_instructions(),
+            RealtimeVoiceService._build_qwen_audio_instructions("user likes hiking"),
+        ):
+            assert built.rindex("[Language Tutor Mode]") > built.find("hiking")
+            assert built.endswith("open the scenario with a simple question.")
+            assert built.count("[Language Tutor Mode]") == 1
+        assert "[Memory & Tool Calling Rules]" in RealtimeVoiceService._build_realtime_instructions()
+    finally:
+        reset_tutor_session(token)
+
+
+def test_tutor_coaches_live_except_during_the_ielts_mock_test() -> None:
+    from services.speaking_coach import build_tutor_instructions, normalize_tutor_config
+
+    chat = build_tutor_instructions(normalize_tutor_config(enabled=True, level="beginner", scenario="travel"))
+    assert "fix it right away in your spoken reply" in chat
+    assert "At most ONE correction per turn" in chat
+    assert "short explanation in Chinese" in chat
+    # Feedback is the voice model's job now; it must not defer to cards that may be off.
+    assert "shown to the learner separately" not in chat
+
+    exam = build_tutor_instructions(normalize_tutor_config(enabled=True, level="ielts", scenario="ielts"))
+    assert "do not correct" in exam
+    assert "fix it right away" not in exam
+
+
+def test_tutor_mode_reaches_local_voice_models() -> None:
+    import inspect
+
+    from services import realtime_glm4voice_provider, realtime_personaplex_provider
+
+    for module, const in (
+        (realtime_personaplex_provider, "PERSONAPLEX_REALTIME_INSTRUCTIONS"),
+        (realtime_glm4voice_provider, "GLM4VOICE_REALTIME_INSTRUCTIONS"),
+    ):
+        source = inspect.getsource(module)
+        assert f'f"{{{const}}}{{current_tutor_instructions()}}"' in source
+        assert f'.strip() or {const}\n' not in source

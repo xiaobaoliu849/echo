@@ -670,7 +670,9 @@ class DoubaoRealtimeMixin:
         # instructions here, the model knows prior topics exist and can
         # naturally reference them when the user asks — without bloating
         # every reply with history the user didn't ask about.
-        base_instructions = instructions or f"{BASE_REALTIME_INSTRUCTIONS}{current_tutor_instructions()}"
+        base_instructions = instructions or BASE_REALTIME_INSTRUCTIONS
+        # The coach persona goes after the memory summary so it stays last.
+        tutor_block = "" if instructions else current_tutor_instructions()
         if memory_session._config.get_service() is None and not memory_session._explicitly_configured:
             memory_session.configure_from_server()
         if memory_session._config.get_service() is not None:
@@ -709,6 +711,7 @@ class DoubaoRealtimeMixin:
                     logger.info("voice_memory_handshake_inject local=%s cloud=%s", len(local_entries), len(cloud_entries))
             except Exception:
                 logger.exception("doubao_memory_handshake_prefetch_failed")
+        base_instructions = f"{base_instructions}{tutor_block}"
         # Turn lifecycle state, owned here and consumed by the downlink loop.
         turn_state: dict[str, Any] = {
             "active_turn_id": None,       # recorder 话轮 id(用户转写打标用)

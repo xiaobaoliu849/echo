@@ -17,6 +17,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 if TYPE_CHECKING:
     import numpy as np
 
+from .speaking_coach import current_tutor_instructions
 from .realtime_constants import (
     DEFAULT_GLM4VOICE_REALTIME_MODEL,
     DEFAULT_GLM4VOICE_REALTIME_VOICE,
@@ -274,7 +275,7 @@ class RealtimeGlm4VoiceMixin:
             return
 
         base_url = settings["realtime_base_url"]
-        text_prompt = (instructions or "").strip() or GLM4VOICE_REALTIME_INSTRUCTIONS
+        text_prompt = (instructions or "").strip() or f"{GLM4VOICE_REALTIME_INSTRUCTIONS}{current_tutor_instructions()}"
         ws_url = (
             f"{base_url}"
             f"?text_prompt={aiohttp.helpers.quote(text_prompt)}"

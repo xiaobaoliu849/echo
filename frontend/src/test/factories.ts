@@ -140,6 +140,7 @@ export function createVoiceChatController(
     voiceChatVoiceOptionsFor: (_provider: string, _model: string) => voiceOptions,
     voiceChatLiveTranslate: false,
     voiceChatCoachConfig: DEFAULT_COACH_CONFIG,
+    voiceChatCoachSupported: true,
     onCoachConfigChange: vi.fn(),
     onDismissCoachFeedback: vi.fn(),
     onSaveCoachItem: vi.fn(),

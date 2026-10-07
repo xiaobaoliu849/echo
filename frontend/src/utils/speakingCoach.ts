@@ -1,6 +1,10 @@
 import type { CoachConfig, CoachLevel, TutorScenario } from "../api";
 
 const STORAGE_KEY = "vs_speaking_coach";
+// v2: "tutor" is the coach switch (the voice AI coaches live) and "enabled"
+// only adds written feedback cards on top. Older saves had them as two
+// independent toggles, where "enabled" alone was what users knew as the coach.
+const STORAGE_VERSION = 2;
 
 export const COACH_LEVELS: CoachLevel[] = ["beginner", "intermediate", "advanced", "ielts"];
 
@@ -28,7 +32,8 @@ export function readStoredCoachConfig(): CoachConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_COACH_CONFIG;
-    const parsed = JSON.parse(raw) as Partial<CoachConfig>;
+    const parsed = JSON.parse(raw) as Partial<CoachConfig> & { v?: number };
+    const legacyCoachOn = parsed.v !== STORAGE_VERSION && parsed.enabled === true;
     return {
       enabled: parsed.enabled === true,
       target_language:
@@ -42,7 +47,7 @@ export function readStoredCoachConfig(): CoachConfig {
       level: COACH_LEVELS.includes(parsed.level as CoachLevel)
         ? (parsed.level as CoachLevel)
         : DEFAULT_COACH_CONFIG.level,
-      tutor: parsed.tutor === true,
+      tutor: parsed.tutor === true || legacyCoachOn,
       scenario: TUTOR_SCENARIOS.some((item) => item.value === parsed.scenario)
         ? (parsed.scenario as TutorScenario)
         : DEFAULT_COACH_CONFIG.scenario,
@@ -54,10 +59,27 @@ export function readStoredCoachConfig(): CoachConfig {
 
 export function writeStoredCoachConfig(config: CoachConfig): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...config, v: STORAGE_VERSION }));
   } catch {
     // Ignore storage errors in restricted contexts
   }
+}
+
+/** Written feedback cards are an add-on to the coach, never active on their own. */
+export function coachCardsActive(config: CoachConfig): boolean {
+  return config.tutor && config.enabled;
+}
+
+/** Transcription-only realtime models take no system prompt, so they cannot coach. */
+export function coachSupportedModel(model: string): boolean {
+  return !/transcribe/i.test(model || "");
+}
+
+/** Fields baked into the realtime system prompt at call start. */
+export function tutorPromptKey(config: CoachConfig): string {
+  return config.tutor
+    ? [config.target_language, config.native_language, config.level, config.scenario].join("|")
+    : "";
 }
 
 /** Normalizes an utterance so a backend review can be matched to its chat bubble. */

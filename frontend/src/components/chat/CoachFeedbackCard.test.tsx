@@ -1,7 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CoachFeedback } from "../../api";
-import { coachTextKey, readStoredCoachConfig, writeStoredCoachConfig } from "../../utils/speakingCoach";
+import {
+  coachCardsActive,
+  coachTextKey,
+  readStoredCoachConfig,
+  tutorPromptKey,
+  writeStoredCoachConfig,
+} from "../../utils/speakingCoach";
 import CoachFeedbackCard from "./CoachFeedbackCard";
 
 const t = (_zh: string, en: string) => en;
@@ -64,10 +70,27 @@ describe("speakingCoach utils", () => {
     } as const;
     writeStoredCoachConfig(stored);
     expect(readStoredCoachConfig()).toEqual(stored);
-    localStorage.setItem("vs_speaking_coach", JSON.stringify({ enabled: true, level: "guru", scenario: "mars" }));
+    localStorage.setItem("vs_speaking_coach", JSON.stringify({ v: 2, enabled: true, level: "guru", scenario: "mars" }));
     expect(readStoredCoachConfig().level).toBe("intermediate");
     expect(readStoredCoachConfig().scenario).toBe("free_talk");
     expect(readStoredCoachConfig().tutor).toBe(false);
+  });
+
+  it("migrates a legacy cards-only coach to the live voice coach", () => {
+    localStorage.setItem("vs_speaking_coach", JSON.stringify({ enabled: true, tutor: false }));
+    expect(readStoredCoachConfig()).toMatchObject({ enabled: true, tutor: true });
+    localStorage.setItem("vs_speaking_coach", JSON.stringify({ enabled: false, tutor: false }));
+    expect(readStoredCoachConfig().tutor).toBe(false);
+  });
+
+  it("only runs feedback cards while the coach is on", () => {
+    const base = { ...readStoredCoachConfig(), enabled: true };
+    expect(coachCardsActive({ ...base, tutor: false })).toBe(false);
+    expect(coachCardsActive({ ...base, tutor: true })).toBe(true);
+    expect(tutorPromptKey({ ...base, tutor: false })).toBe("");
+    expect(tutorPromptKey({ ...base, tutor: true, level: "ielts" })).not.toBe(
+      tutorPromptKey({ ...base, tutor: true, level: "beginner" })
+    );
   });
 });
 

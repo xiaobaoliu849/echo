@@ -25,7 +25,14 @@ import {
 } from "../api";
 import { createInlineTranslator } from "../i18n";
 import { createMessageId, ensureMessageIds } from "../utils/messageId";
-import { coachTextKey, readStoredCoachConfig, writeStoredCoachConfig } from "../utils/speakingCoach";
+import {
+  coachCardsActive,
+  coachSupportedModel,
+  coachTextKey,
+  readStoredCoachConfig,
+  tutorPromptKey,
+  writeStoredCoachConfig,
+} from "../utils/speakingCoach";
 import {
   DASHSCOPE_PROVIDER,
   DEFAULT_DASHSCOPE_MODEL,
@@ -218,8 +225,19 @@ export default function useVoiceChat({
 
   const sendCoachConfig = useCallback((ws: WebSocket | null, config: CoachConfig) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: "coach_config", coach: config.enabled ? config : null }));
+    ws.send(JSON.stringify({ type: "coach_config", coach: coachCardsActive(config) ? config : null }));
   }, []);
+
+  // The coach lives in the realtime system prompt, which providers only take
+  // at session start. Changing it mid-call reconnects (debounced, so a few
+  // quick clicks cost one reconnect) instead of silently waiting for the
+  // next call. null = no running session whose prompt could go stale.
+  const sessionTutorKeyRef = useRef<string | null>(null);
+  const coachRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingCoachRestartRef = useRef(false);
+  // A muted learner stays muted across the reconnect.
+  const restartMutedRef = useRef(false);
+  const stopSessionRef = useRef<() => void>(() => {});
 
   const updateVoiceChatCoachConfig = useCallback((patch: Partial<CoachConfig>) => {
     const next = { ...coachConfigRef.current, ...patch };
@@ -227,7 +245,23 @@ export default function useVoiceChat({
     setVoiceChatCoachConfigState(next);
     writeStoredCoachConfig(next);
     sendCoachConfig(websocketRef.current, next);
-  }, [sendCoachConfig]);
+    if (sessionTutorKeyRef.current === null) return;
+    if (coachRestartTimerRef.current !== null) clearTimeout(coachRestartTimerRef.current);
+    coachRestartTimerRef.current = setTimeout(() => {
+      coachRestartTimerRef.current = null;
+      const sessionKey = sessionTutorKeyRef.current;
+      if (sessionKey === null || !websocketRef.current) return;
+      if (sessionKey === tutorPromptKey(coachConfigRef.current)) return;
+      pendingCoachRestartRef.current = true;
+      restartMutedRef.current = isMutedRef.current;
+      stopSessionRef.current();
+      setVoiceChatStatus(
+        coachConfigRef.current.tutor
+          ? t("正在切换口语教练设置…", "Applying speaking coach settings…")
+          : t("正在关闭口语教练…", "Turning off the speaking coach…")
+      );
+    }, 800);
+  }, [sendCoachConfig, t]);
 
   const dismissCoachFeedback = useCallback((id: number) => {
     for (const [key, item] of coachFeedbackByTextRef.current) {
@@ -363,6 +397,7 @@ export default function useVoiceChat({
     }))
     .filter((group) => group.models.length > 0);
   const voiceChatLiveTranslate = isLiveTranslateModel(voiceChatProvider, voiceChatModel);
+  const voiceChatCoachSupported = !voiceChatLiveTranslate && coachSupportedModel(voiceChatModel);
   const voiceChatVoiceOptions = useMemo(
     () => formatRealtimeVoiceOptions(voiceChatProvider, language, voiceChatModel),
     [language, voiceChatProvider, voiceChatModel]
@@ -578,6 +613,10 @@ export default function useVoiceChat({
     }
     const ws = websocketRef.current;
     websocketRef.current = null;
+    sessionTutorKeyRef.current = null;
+    // An unsent opening message only survives a coach reconnect; hang-up,
+    // reset or switching sessions must not replay it into a later call.
+    if (!pendingCoachRestartRef.current) pendingInitialPromptRef.current = null;
     audioInputReadyRef.current = false;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
       try {
@@ -1056,11 +1095,13 @@ export default function useVoiceChat({
         setAssistantPlaybackGain(1);
         setVoiceChatStatus(t(`实时会话已连接：${event.model}`, `Realtime session connected: ${event.model}`));
         if (pendingInitialPromptRef.current) {
-          const { prompt, attachments } = pendingInitialPromptRef.current;
-          pendingInitialPromptRef.current = null;
+          const pending = pendingInitialPromptRef.current;
           setTimeout(() => {
-            if (sessionEpochRef.current === currentEpoch) {
-              sendTextMessage(prompt, attachments);
+            // Cleared only once sent: a session replaced in the meantime (e.g.
+            // a coach-settings reconnect) leaves it for the next one.
+            if (sessionEpochRef.current === currentEpoch && pendingInitialPromptRef.current === pending) {
+              pendingInitialPromptRef.current = null;
+              sendTextMessage(pending.prompt, pending.attachments);
             }
           }, 50);
         }
@@ -1788,10 +1829,11 @@ export default function useVoiceChat({
     }
   }
 
-  async function startSession() {
+  async function startSession({ muted = false }: { muted?: boolean } = {}) {
     if (voiceChatBusy || voiceChatConnected || voiceChatRecording) {
       return;
     }
+    pendingCoachRestartRef.current = false;
     setVoiceChatBusy(true);
     setVoiceChatError("");
     const AudioContextCtor = getAudioContextCtor();
@@ -1889,6 +1931,13 @@ export default function useVoiceChat({
         return;
       }
       mediaStreamRef.current = stream;
+      if (muted) {
+        isMutedRef.current = true;
+        setVoiceChatMuted(true);
+        stream.getTracks().forEach((track) => {
+          track.enabled = false;
+        });
+      }
 
       const audioContext = new AudioContextCtor();
       audioContextRef.current = audioContext;
@@ -1916,6 +1965,7 @@ export default function useVoiceChat({
       setAssistantAnalyser(assistantAnalyser);
 
       traceSelection("connect", `${voiceChatProvider}/${effectiveModel}/${voiceChatVoice}`);
+      const coachAllowed = !voiceChatLiveTranslate && coachSupportedModel(effectiveModel);
       const wsUrl = buildVoiceChatWebSocketUrl({
         provider: voiceChatProvider,
         model: effectiveModel || undefined,
@@ -1930,7 +1980,7 @@ export default function useVoiceChat({
         voiceCloneFrequency: (voiceChatProvider === DASHSCOPE_PROVIDER && voiceChatLiveTranslate) ? voiceChatVoiceCloneFrequency : undefined,
         clientTrace: serializeSelectionTrace(),
         tutor:
-          coachConfigRef.current.tutor && !voiceChatLiveTranslate
+          coachConfigRef.current.tutor && coachAllowed
             ? {
                 targetLanguage: coachConfigRef.current.target_language,
                 nativeLanguage: coachConfigRef.current.native_language,
@@ -1943,6 +1993,8 @@ export default function useVoiceChat({
       const memoryConfig = buildVoiceChatSessionConfig(memoryGroupId || undefined);
       ws.binaryType = "arraybuffer";
       websocketRef.current = ws;
+      // Live translate / transcription never carry the coach, so their prompt cannot go stale.
+      sessionTutorKeyRef.current = coachAllowed ? tutorPromptKey(coachConfigRef.current) : null;
       audioInputReadyRef.current = false;
       nextPlaybackTimeRef.current = audioContext.currentTime + 0.12;
 
@@ -2003,7 +2055,7 @@ export default function useVoiceChat({
         if (memoryConfig) {
           ws.send(JSON.stringify({ type: "config", memory: memoryConfig }));
         }
-        if (coachConfigRef.current.enabled && !voiceChatLiveTranslate) {
+        if (coachCardsActive(coachConfigRef.current) && coachAllowed) {
           sendCoachConfig(ws, coachConfigRef.current);
         }
         const source = audioContext.createMediaStreamSource(stream);
@@ -2138,6 +2190,22 @@ export default function useVoiceChat({
     }
     await startSession();
   }
+
+  stopSessionRef.current = stopSession;
+
+  // Second half of a coach-settings reconnect: start again once the old
+  // session has fully torn down.
+  useEffect(() => {
+    if (!pendingCoachRestartRef.current || voiceChatConnected || voiceChatBusy || voiceChatRecording) return;
+    pendingCoachRestartRef.current = false;
+    const muted = restartMutedRef.current;
+    restartMutedRef.current = false;
+    void startSessionRef.current({ muted });
+  }, [voiceChatConnected, voiceChatBusy, voiceChatRecording]);
+
+  useEffect(() => () => {
+    if (coachRestartTimerRef.current !== null) clearTimeout(coachRestartTimerRef.current);
+  }, []);
 
   const onToggleMute = useCallback(() => {
     setVoiceChatMuted((prev) => {
@@ -2413,6 +2481,7 @@ export default function useVoiceChat({
     voiceChatVoiceOptionsFor,
     voiceChatLiveTranslate,
     voiceChatCoachConfig,
+    voiceChatCoachSupported,
     onCoachConfigChange: updateVoiceChatCoachConfig,
     onDismissCoachFeedback: dismissCoachFeedback,
     onSaveCoachItem: saveCoachItem,

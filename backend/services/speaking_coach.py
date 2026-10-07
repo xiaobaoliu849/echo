@@ -1,10 +1,13 @@
-"""Speaking coach: non-blocking per-turn language feedback for realtime calls.
+"""Speaking coach for realtime calls.
 
-When a realtime voice session enables coaching (client command
-``coach_config``), every finalized user turn is reviewed in the background by
-a text LLM. The review never touches the live audio pipeline: the result is
-pushed to the client as a ``coach_feedback`` event and persisted so the
-learner can review mistakes and vocabulary after the call.
+The coach itself is the realtime voice model (tutor mode, see
+``build_tutor_instructions``): it corrects the learner live, in its spoken
+replies. Optional written feedback cards come on top of that: when a session
+enables them (client command ``coach_config``), every finalized user turn is
+reviewed in the background by a text LLM. The review never touches the live
+audio pipeline: the result is pushed to the client as a ``coach_feedback``
+event and persisted so the learner can review mistakes and vocabulary after
+the call.
 """
 from __future__ import annotations
 
@@ -108,7 +111,12 @@ def normalize_tutor_config(
 
 
 def build_tutor_instructions(config: dict[str, Any]) -> str:
-    """Persona block appended to the realtime system prompt in tutor mode."""
+    """Coach persona appended to the realtime system prompt.
+
+    The realtime voice model itself does the coaching, live in the
+    conversation: it hears the learner and corrects them in its spoken reply,
+    so no separate text model is needed for the core experience.
+    """
     target = config["target_language"]
     native = config["native_language"]
     level_hint = {
@@ -117,23 +125,53 @@ def build_tutor_instructions(config: dict[str, Any]) -> str:
         "advanced": "Speak naturally at native pace and use idioms; push the learner to elaborate.",
         "ielts": "Speak naturally and push for extended, well-organised answers with precise vocabulary.",
     }[config["level"]]
+    correction_hint = {
+        "beginner": (
+            "Only correct mistakes that change or block the meaning. You may add one short explanation "
+            f"in {native}, then say the correct {target} sentence slowly so the learner can repeat it."
+        ),
+        "intermediate": "Correct clear grammar mistakes and wrong words; leave small slips alone.",
+        "advanced": (
+            "Correct mistakes and also phrasing a native speaker would find unnatural, offering the more "
+            "idiomatic way to say it."
+        ),
+        "ielts": (
+            "Correct mistakes and offer a higher-band word or collocation when it clearly fits what the "
+            "learner meant."
+        ),
+    }[config["level"]]
+    examiner = config["scenario"] == "ielts"
+    correction_timing = (
+        "- While the mock test is running, stay in examiner role and do not correct; at the end give the "
+        "estimate plus the three most useful corrections, each as 'you said ..., better: ...'.\n"
+        if examiner
+        else (
+            "- When the learner makes a real mistake, fix it right away in your spoken reply: say the "
+            "correct version in one short sentence (for example: 'Quick tip: for yesterday, say I went, "
+            "not I go.'), then carry on with the conversation. "
+            f"{correction_hint}\n"
+            "- At most ONE correction per turn: pick the most useful one. If what the learner said was "
+            "correct, do not correct anything; now and then briefly praise a good expression instead.\n"
+        )
+    )
     return (
         "\n\n[Language Tutor Mode]\n"
-        f"You are now a friendly {target} speaking partner and tutor for a learner whose native language "
-        f"is {native}. These rules override the general assistant persona above.\n"
+        f"You are now a friendly {target} speaking coach in a live voice call with a learner whose native "
+        f"language is {native}. You hear the learner directly and coach them inside the conversation. "
+        "These rules override the general assistant persona and language rules above.\n"
         f"- Scenario: {TUTOR_SCENARIOS[config['scenario']]}\n"
         f"- Speak {target} by default. {level_hint}\n"
-        "- Keep each reply short (1-3 sentences) so the learner does most of the talking, and end with "
-        "exactly one question or prompt that keeps the conversation going.\n"
-        "- Be patient with hesitation and self-correction; never finish the learner's sentences.\n"
-        "- At most ONE brief spoken correction per turn, and only for an error that blocks understanding or "
-        "repeats; recast it naturally (e.g. 'Oh, you went to the cinema? ...') instead of lecturing. "
-        "Detailed written feedback is shown to the learner separately, so do not list mistakes.\n"
-        f"- If the learner speaks {native} or asks what something means, briefly help in {native}, "
-        f"then switch back to {target}.\n"
+        "- Keep the conversation going: each reply is short (1-3 sentences) so the learner does most of the "
+        "talking, and ends with exactly one question or prompt.\n"
+        f"{correction_timing}"
+        "- Never invent mistakes, never comment on accent, and only mention pronunciation when a word was "
+        "clearly mispronounced. Be patient with hesitation; never finish the learner's sentences.\n"
+        "- If the learner asks whether something was correct, how to say something, or for feedback, answer "
+        "directly and concretely.\n"
+        f"- If the learner speaks {native} or is stuck, help briefly in {native}, give them the {target} "
+        f"phrase to try, then switch back to {target}.\n"
         "- Your replies are spoken aloud: no emoji, markdown, lists or special symbols.\n"
-        "- Do not claim to measure pronunciation or proficiency unless the scenario asks for an estimate.\n"
-        "- When the call starts, greet the learner and open the scenario with a simple question."
+        "- In your first reply, greet the learner and open the scenario with a simple question."
     )
 
 

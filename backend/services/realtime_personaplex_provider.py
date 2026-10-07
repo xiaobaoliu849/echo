@@ -36,6 +36,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 if TYPE_CHECKING:  # numpy is optional at runtime — see the note below.
     import numpy as np
 
+from .speaking_coach import current_tutor_instructions
 from .realtime_constants import (
     DEFAULT_PERSONAPLEX_REALTIME_MODEL,
     DEFAULT_PERSONAPLEX_REALTIME_VOICE,
@@ -369,7 +370,7 @@ class PersonaPlexRealtimeMixin:
             return
 
         resolved_voice = self._normalize_personaplex_voice(voice)
-        text_prompt = (instructions or "").strip() or PERSONAPLEX_REALTIME_INSTRUCTIONS
+        text_prompt = (instructions or "").strip() or f"{PERSONAPLEX_REALTIME_INSTRUCTIONS}{current_tutor_instructions()}"
 
         memory_session = RealtimeMemorySession()
         recorder = await self._create_voice_session_recorder(

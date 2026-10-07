@@ -38,6 +38,10 @@ class FakeMediaStream {
   getTracks() {
     return [this.track];
   }
+
+  getAudioTracks() {
+    return [this.track];
+  }
 }
 
 class FakeAudioNode {
@@ -217,6 +221,122 @@ describe("useVoiceChat", () => {
     });
     return { ...hook, socket };
   }
+
+  it("reconnects mid-call when the coach prompt changes, but not for card-only or reverted changes", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    expect(socket.url).not.toContain("tutor=true");
+
+    // Cards are applied live over the socket; they don't touch the system prompt.
+    act(() => result.current.onCoachConfigChange({ enabled: true }));
+    // Toggled on and back off within the debounce window: nothing to apply.
+    act(() => result.current.onCoachConfigChange({ tutor: true }));
+    act(() => result.current.onCoachConfigChange({ tutor: false }));
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(result.current.voiceChatConnected).toBe(true);
+
+    act(() => result.current.onToggleMute());
+    act(() => result.current.onCoachConfigChange({ tutor: true, level: "beginner" }));
+    act(() => result.current.onCoachConfigChange({ scenario: "travel" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: 2000 });
+    // A muted learner must not go live just because the coach reconnected.
+    expect(result.current.voiceChatMuted).toBe(true);
+    const next = FakeWebSocket.instances[1];
+    expect(next.url).toContain("tutor=true");
+    expect(next.url).toContain("tutor_level=beginner");
+    expect(next.url).toContain("tutor_scenario=travel");
+    act(() => next.emitOpen());
+    // Cards now ride on the coach, so the new session asks for them.
+    const coachCommands = next.sent
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => JSON.parse(item))
+      .filter((item) => item.type === "coach_config");
+    expect(coachCommands.at(-1)?.coach?.level).toBe("beginner");
+  });
+
+  it("never sends the coach to a transcription-only model", async () => {
+    localStorage.setItem("vs_speaking_coach", JSON.stringify({ v: 2, tutor: true, enabled: true }));
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["Google"],
+      preferredProvider: "Google",
+      preferredModel: "gemini-3.5-transcribe-live",
+      providerModelCatalog: {
+        Google: { defaultModel: "gemini-3.5-transcribe-live", availableModels: ["gemini-3.5-transcribe-live"] },
+      },
+    }));
+    expect(result.current.voiceChatModel).toBe("gemini-3.5-transcribe-live");
+    expect(result.current.voiceChatCoachSupported).toBe(false);
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    expect(socket.url).not.toContain("tutor=true");
+    act(() => socket.emitOpen());
+    expect(socket.sent.some((item) => typeof item === "string" && JSON.parse(item).type === "coach_config")).toBe(false);
+  });
+
+  it("keeps a typed opening message for the session that replaces a superseded one", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["Google"],
+      preferredProvider: "Google",
+      preferredModel: "gemini-3.1-flash-live-preview",
+    }));
+    await act(async () => { await result.current.startRecordingWithInitialPrompt("Hello coach"); });
+    const first = FakeWebSocket.instances[0];
+    vi.useFakeTimers();
+    try {
+      act(() => first.emitOpen());
+      act(() => result.current.onCoachConfigChange({ tutor: true }));
+      act(() => { vi.advanceTimersByTime(790); });
+      // session_open lands just before the reconnect, which then supersedes
+      // the session inside the 50 ms deferred-send window.
+      act(() => first.emitMessage({ type: "session_open", provider: "Google", model: "gemini-3.1-flash-live-preview" }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: 2000 });
+    const textInputs = (socket: FakeWebSocket) => socket.sent
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => JSON.parse(item))
+      .filter((item) => item.type === "text_input");
+    const second = FakeWebSocket.instances[1];
+    act(() => {
+      second.emitOpen();
+      second.emitMessage({ type: "session_open", provider: "Google", model: "gemini-3.1-flash-live-preview" });
+    });
+    await waitFor(() => expect(textInputs(second).map((item) => item.text)).toEqual(["Hello coach"]));
+    expect(textInputs(first)).toEqual([]);
+  });
+
+  it("drops an unsent opening message when the user hangs up", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["Google"],
+      preferredProvider: "Google",
+      preferredModel: "gemini-3.1-flash-live-preview",
+    }));
+    await act(async () => { await result.current.startRecordingWithInitialPrompt("Old prompt"); });
+    const first = FakeWebSocket.instances[0];
+    act(() => {
+      first.emitOpen();
+      first.emitMessage({ type: "session_open", provider: "Google", model: "gemini-3.1-flash-live-preview" });
+    });
+    await act(async () => { await result.current.onToggleRecording(); }); // hang up inside the 50 ms window
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const second = FakeWebSocket.instances[1];
+    act(() => {
+      second.emitOpen();
+      second.emitMessage({ type: "session_open", provider: "Google", model: "gemini-3.1-flash-live-preview" });
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const sentTexts = [first, second].flatMap((socket) => socket.sent
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => JSON.parse(item))
+      .filter((item) => item.type === "text_input"));
+    expect(sentTexts).toEqual([]);
+  });
 
   it("attaches each coach review only to its own turn, never to a later identical sentence", async () => {
     const { result, socket } = await startTranscriptTestSession();

@@ -263,11 +263,12 @@ export type CoachLevel = "beginner" | "intermediate" | "advanced" | "ielts";
 export type TutorScenario = "free_talk" | "daily_life" | "workplace" | "travel" | "job_interview" | "ielts";
 
 export type CoachConfig = {
+  /** Written feedback cards from a separate text model; only used while the coach (tutor) is on. */
   enabled: boolean;
   target_language: string;
   native_language: string;
   level: CoachLevel;
-  /** Tutor mode: the realtime model itself acts as a language partner (applies at call start). */
+  /** Speaking coach: the realtime voice model itself coaches the learner live (system prompt). */
   tutor: boolean;
   scenario: TutorScenario;
 };

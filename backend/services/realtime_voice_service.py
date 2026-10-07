@@ -216,10 +216,11 @@ class RealtimeVoiceService(
             return None
 
     @staticmethod
-    def _get_base_instructions() -> str:
+    def _get_base_instructions(*, include_tutor: bool = True) -> str:
         import datetime
         current_date = datetime.date.today().isoformat()
-        return f"{BASE_REALTIME_INSTRUCTIONS}\nCurrent Date: {current_date}.{current_tutor_instructions()}"
+        tutor = current_tutor_instructions() if include_tutor else ""
+        return f"{BASE_REALTIME_INSTRUCTIONS}\nCurrent Date: {current_date}.{tutor}"
 
     @staticmethod
     def _build_realtime_instructions(
@@ -228,7 +229,10 @@ class RealtimeVoiceService(
         **kwargs: Any,
     ) -> str:
         ctx = (memory_context or initial_memory_context or "").strip()
-        base_inst = RealtimeVoiceService._get_base_instructions()
+        base_inst = RealtimeVoiceService._get_base_instructions(include_tutor=False)
+        # The coach persona goes last so it outranks the generic assistant and
+        # tool rules above it.
+        tutor = current_tutor_instructions()
         memory_rules = (
             "\n\n[Memory & Tool Calling Rules]\n"
             "You have access to long-term memory via the `recall_memory` tool, external search via `search_web`, and canvas visualization via `render_canvas`.\n"
@@ -247,7 +251,7 @@ class RealtimeVoiceService(
             "lucide-react icon names, and build everything else with plain elements or inline SVG."
         )
         if not ctx:
-            return f"{base_inst}{memory_rules}"
+            return f"{base_inst}{memory_rules}{tutor}"
         return (
             f"{base_inst}{memory_rules}\n\n"
             "Relevant long-term memories for personalization are provided below. Use them whenever they are relevant. "
@@ -256,6 +260,7 @@ class RealtimeVoiceService(
             "independent, and do not ignore the memory block when it is relevant. Only avoid quoting the block verbatim "
             "unless the user directly asks.\n"
             f"{ctx}"
+            f"{tutor}"
         )
 
     @staticmethod

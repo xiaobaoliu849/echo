@@ -267,8 +267,8 @@ export default function ReviewPage() {
         <div className="vsReviewEmpty">
           {stats.total_items === 0
             ? t(
-                "还没有收藏。在语音通话里打开「🎓 口语教练」，点纠错卡片里的「＋ 收藏」就能加进来。",
-                "Nothing saved yet. Turn on 🎓 Speaking coach in a voice call and press ＋ Save on a feedback card."
+                "还没有收藏。在语音通话里打开「🎓 口语教练」并勾选「📝 同时显示文字纠错卡片」，点卡片里的「＋ 收藏」就能加进来。",
+                "Nothing saved yet. In a voice call, turn on 🎓 Speaking coach with 📝 written feedback cards, then press ＋ Save on a card."
               )
             : t("今天的复习都完成了，明天再来！", "All caught up for today. Come back tomorrow!")}
         </div>

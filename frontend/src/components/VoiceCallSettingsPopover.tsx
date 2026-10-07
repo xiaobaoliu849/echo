@@ -172,6 +172,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
 
   const committedProvider = voiceChat.voiceChatProvider || chat?.chatProvider || providerGroups[0]?.provider || "";
   const committedModel = voiceChat.voiceChatModel || chat?.chatModel || "";
+  const coachConfig = voiceChat.voiceChatCoachConfig;
 
   const candidateProvider = open
     ? (activeProvider ||
@@ -662,62 +663,50 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     <label
                       className="vsVoiceSettingsEcho"
                       title={t(
-                        "每句话说完后在后台点评语法与用词，不打断对话",
-                        "Reviews grammar and wording after each sentence without interrupting the call"
+                        "语音 AI 变成你的口语老师：用练习语言陪你聊，听到说错就在回复里马上纠正",
+                        "The voice AI becomes your speaking coach: it talks with you in the practice language and corrects you right in its replies"
                       )}
                     >
                       <input
                         type="checkbox"
-                        checked={voiceChat.voiceChatCoachConfig.enabled}
-                        onChange={(e) => voiceChat.onCoachConfigChange({ enabled: e.target.checked })}
-                      />
-                      <span style={{ fontWeight: 600 }}>{t("🎓 口语教练（纠错卡片）", "🎓 Speaking coach (feedback cards)")}</span>
-                    </label>
-                    <span className="vsCoachHint">
-                      {t(
-                        "另一个文字模型根据转写给你写点评，不改变语音 AI 的行为",
-                        "A separate text model reviews your transcript; it doesn't change how the voice AI talks"
-                      )}
-                    </span>
-                    <label
-                      className="vsVoiceSettingsEcho"
-                      title={t(
-                        "AI 扮演语言老师：说练习语言、回复简短、每轮抛出一个问题，按场景陪你练",
-                        "The AI acts as a language partner: speaks the practice language, keeps replies short and asks one question per turn"
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={voiceChat.voiceChatCoachConfig.tutor}
+                        checked={coachConfig.tutor && voiceChat.voiceChatCoachSupported}
+                        disabled={!voiceChat.voiceChatCoachSupported}
                         onChange={(e) => voiceChat.onCoachConfigChange({ tutor: e.target.checked })}
                       />
-                      <span style={{ fontWeight: 600 }}>{t("🧑‍🏫 陪练模式（AI 当语言老师）", "🧑‍🏫 Tutor mode (AI language partner)")}</span>
+                      <span style={{ fontWeight: 600 }}>{t("🎓 口语教练", "🎓 Speaking coach")}</span>
                     </label>
                     <span className="vsCoachHint">
-                      {t(
-                        "让实时语音 AI 本身扮演老师、按场景陪你说；下次通话生效",
-                        "Makes the realtime voice AI itself act as your teacher; applies from the next call"
-                      )}
+                      {voiceChat.voiceChatLiveTranslate
+                        ? t("同声传译模式下不启用口语教练", "The speaking coach is off during live translation")
+                        : !voiceChat.voiceChatCoachSupported
+                        ? t("纯转写模型不支持口语教练，请换一个实时对话模型", "Transcription-only models can't coach; pick a realtime conversation model")
+                        : coachConfig.tutor
+                        ? t(
+                            "AI 用练习语言和你实时对话，说错时直接在回复里纠正；通话中修改会自动重连，按新设置开始新一轮练习",
+                            "The AI talks with you live and corrects mistakes in its replies; changing this during a call reconnects and starts a fresh lesson"
+                          )
+                        : t(
+                            "开启后语音 AI 会当你的口语老师，在对话里实时纠正你",
+                            "Turn on to make the voice AI your speaking coach, correcting you live in the conversation"
+                          )}
                     </span>
-                    {voiceChat.voiceChatCoachConfig.tutor ? (
-                      <label className="vsGeminiAccentField">
-                        <span>{t("练习场景", "Scenario")}</span>
-                        <select
-                          value={voiceChat.voiceChatCoachConfig.scenario}
-                          onChange={(e) => voiceChat.onCoachConfigChange({ scenario: e.target.value as TutorScenario })}
-                        >
-                          {TUTOR_SCENARIOS.map((item) => (
-                            <option key={item.value} value={item.value}>{t(item.zh, item.en)}</option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                    {voiceChat.voiceChatCoachConfig.enabled || voiceChat.voiceChatCoachConfig.tutor ? (
+                    {coachConfig.tutor && voiceChat.voiceChatCoachSupported ? (
                       <>
+                        <label className="vsGeminiAccentField">
+                          <span>{t("练习场景", "Scenario")}</span>
+                          <select
+                            value={coachConfig.scenario}
+                            onChange={(e) => voiceChat.onCoachConfigChange({ scenario: e.target.value as TutorScenario })}
+                          >
+                            {TUTOR_SCENARIOS.map((item) => (
+                              <option key={item.value} value={item.value}>{t(item.zh, item.en)}</option>
+                            ))}
+                          </select>
+                        </label>
                         <label className="vsGeminiAccentField">
                           <span>{t("练习语言", "Practice language")}</span>
                           <select
-                            value={voiceChat.voiceChatCoachConfig.target_language}
+                            value={coachConfig.target_language}
                             onChange={(e) => voiceChat.onCoachConfigChange({ target_language: e.target.value })}
                           >
                             {COACH_TARGET_LANGUAGES.map((lang) => (
@@ -730,7 +719,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                             <button
                               key={level}
                               type="button"
-                              className={`vsPresetPillBtn ${voiceChat.voiceChatCoachConfig.level === level ? "active" : ""}`}
+                              className={`vsPresetPillBtn ${coachConfig.level === level ? "active" : ""}`}
                               onClick={() => voiceChat.onCoachConfigChange({ level })}
                             >
                               {level === "beginner"
@@ -743,6 +732,20 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                             </button>
                           ))}
                         </div>
+                        <label
+                          className="vsVoiceSettingsEcho"
+                          title={t(
+                            "另一个文字模型在后台逐句点评，生成可收藏到「复习」的纠错卡片，不打断对话",
+                            "A separate text model reviews each sentence in the background and makes cards you can save for review"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={coachConfig.enabled}
+                            onChange={(e) => voiceChat.onCoachConfigChange({ enabled: e.target.checked })}
+                          />
+                          <span>{t("📝 同时显示文字纠错卡片", "📝 Also show written feedback cards")}</span>
+                        </label>
                       </>
                     ) : null}
                   </div>

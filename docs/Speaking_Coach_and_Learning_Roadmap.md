@@ -24,18 +24,27 @@ Design rules (from the review's risk list):
 - `summary.good_ratio` is an activity signal, **not** a proficiency score.
 - Live-translate sessions are never coached.
 
-## Phase 1a — shipped: Tutor mode
+## Phase 1a — shipped: Tutor mode (the 🎓 Speaking coach switch)
 
-The realtime model itself becomes a language partner (short replies, one question per turn,
-≤1 recast-style spoken correction, native-language help on request, no emoji since replies are spoken).
+The realtime model itself is the coach: it hears the learner and corrects them live, inside its
+spoken reply (one short "say X, not Y" per turn at most, density by level; the IELTS mock holds
+corrections for the end), keeps replies short with one question per turn, helps in the native
+language when the learner is stuck, and uses no emoji since replies are spoken. The block is
+appended **last** in the system prompt so it outranks the generic assistant/tool rules.
+
+Since 2026-10-07 the UI has a single 🎓 口语教练 switch (= `tutor`). The text-model cards
+(`enabled`) are an optional sub-option and never run without the coach; legacy saves with only
+the old cards toggle on are migrated to the coach (`v: 2` in `vs_speaking_coach`). Changing
+coach settings mid-call reconnects automatically (800 ms debounce) because providers only read
+the system prompt at session start.
 
 | Piece | Where |
 |---|---|
 | Scenarios (free talk, daily life, workplace, travel, job interview, IELTS mock with Part 1/2/3) + tutor prompt | `TUTOR_SCENARIOS`, `build_tutor_instructions` in `backend/services/speaking_coach.py` |
-| Per-session binding: WS query params `tutor`, `tutor_language`, `tutor_native_language`, `tutor_level`, `tutor_scenario` → `ContextVar` set in `routers/voice_chat.py` before the provider connects; `_get_base_instructions()` appends the block, so every provider built on it (DashScope, Google, OpenAI, Doubao, StepFun, Vercel, Cartesia, Gradium) gets it with no per-provider code | `routers/voice_chat.py`, `realtime_voice_service.py` |
-| UI: 陪练模式 checkbox + 练习场景 select (shares language/level with the coach); applies at next call start | `VoiceCallSettingsPopover.tsx` |
+| Per-session binding: WS query params `tutor`, `tutor_language`, `tutor_native_language`, `tutor_level`, `tutor_scenario` → `ContextVar` set in `routers/voice_chat.py` before the provider connects; `_get_base_instructions()` appends the block, so every provider built on it (DashScope, Google, OpenAI, Doubao, StepFun, Vercel, Cartesia, Gradium, Qwen-Audio, PersonaPlex, GLM-4-Voice) gets it | `routers/voice_chat.py`, `realtime_voice_service.py` |
+| UI: 🎓 口语教练 switch + 练习场景 / 练习语言 / level, nested 📝 文字纠错卡片 option; mid-call changes reconnect | `VoiceCallSettingsPopover.tsx`, `useVoiceChat.ts` |
 
-Not covered: local PersonaPlex / GLM-4-Voice (own prompts) and live-translate sessions.
+Not covered: live-translate sessions. Text-model cards need the shared command handler, so they don't run on PersonaPlex / GLM-4-Voice (the spoken coaching does).
 
 ## Phase 1b — shipped: saved phrases + spaced review
 
