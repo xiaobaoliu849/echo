@@ -14,6 +14,8 @@ import {
   type CoachConfig,
   type CoachFeedback,
   deleteCoachFeedback,
+  saveLearningItem,
+  type LearningItemKind,
   type VoiceAgentSource,
   type VoiceAgentSessionHistory,
   type VoiceAgentSessionHistoryDetailResponse,
@@ -229,6 +231,13 @@ export default function useVoiceChat({
       // Best effort: the card is already hidden locally.
     });
   }, []);
+
+  const saveCoachItem = useCallback(
+    async (item: { text: string; kind: LearningItemKind; meaning?: string; context?: string; sourceFeedbackId?: number }) => {
+      await saveLearningItem({ ...item, language: coachConfigRef.current.target_language });
+    },
+    []
+  );
 
   const attachCoachFeedback = useCallback((feedback: CoachFeedback) => {
     const key = coachTextKey(feedback.user_text);
@@ -2333,6 +2342,7 @@ export default function useVoiceChat({
     voiceChatCoachConfig,
     onCoachConfigChange: updateVoiceChatCoachConfig,
     onDismissCoachFeedback: dismissCoachFeedback,
+    onSaveCoachItem: saveCoachItem,
     voiceChatTranslationMode,
     voiceChatSourceLanguageCode,
     voiceChatTargetLanguageCode,

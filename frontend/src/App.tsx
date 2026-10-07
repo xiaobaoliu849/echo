@@ -28,6 +28,7 @@ import useVoiceManagement from "./hooks/useVoiceManagement";
 const AudioOverviewPage = lazyWithRetry(() => import("./pages/AudioOverviewPage"));
 const ChatPage = lazyWithRetry(() => import("./pages/ChatPage"));
 const PalPage = lazyWithRetry(() => import("./pages/PalPage"));
+const ReviewPage = lazyWithRetry(() => import("./pages/ReviewPage"));
 const VoiceCenterPage = lazyWithRetry(() => import("./pages/VoiceCenterPage"));
 import { I18nProvider, createInlineTranslator } from "./i18n";
 import { formatErrorMessage } from "./utils/errorFormatting";
@@ -469,6 +470,8 @@ export default function App() {
                 {activeTab === "audio_overview" ? (
                   <AudioOverviewPage audioOverview={audioOverview} errorRuntimeContext={errorRuntimeContext} />
                 ) : null}
+
+                {activeTab === "review" ? <ReviewPage /> : null}
 
                 {activeTab === "pal" ? (
                   <PalPage

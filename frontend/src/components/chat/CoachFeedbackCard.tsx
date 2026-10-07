@@ -1,12 +1,23 @@
 import { useState } from "react";
-import type { CoachFeedback, CoachIssue } from "../../api";
+import type { CoachFeedback, CoachIssue, LearningItemKind } from "../../api";
 
 type Translator = (zh: string, en: string) => string;
+
+export type CoachSaveHandler = (item: {
+  text: string;
+  kind: LearningItemKind;
+  meaning?: string;
+  context?: string;
+  sourceFeedbackId?: number;
+}) => Promise<void>;
+
+type SaveState = "saving" | "saved" | "error";
 
 type Props = {
   feedback: CoachFeedback;
   t: Translator;
   onDismiss?: (id: number) => void;
+  onSave?: CoachSaveHandler;
 };
 
 function issueLabel(type: CoachIssue["type"], t: Translator): string {
@@ -24,8 +35,41 @@ function issueLabel(type: CoachIssue["type"], t: Translator): string {
   }
 }
 
-export default function CoachFeedbackCard({ feedback, t, onDismiss }: Props) {
+export default function CoachFeedbackCard({ feedback, t, onDismiss, onSave }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
+
+  const save = (key: string, item: Parameters<CoachSaveHandler>[0]) => {
+    if (!onSave || saveStates[key] === "saving" || saveStates[key] === "saved") return;
+    setSaveStates((prev) => ({ ...prev, [key]: "saving" }));
+    onSave({ ...item, sourceFeedbackId: feedback.id > 0 ? feedback.id : undefined }).then(
+      () => setSaveStates((prev) => ({ ...prev, [key]: "saved" })),
+      () => setSaveStates((prev) => ({ ...prev, [key]: "error" }))
+    );
+  };
+
+  const saveButton = (key: string, item: Parameters<CoachSaveHandler>[0], label: string) => {
+    if (!onSave) return null;
+    const state = saveStates[key];
+    return (
+      <button
+        type="button"
+        className={`vsCoachSave${state === "saved" ? " saved" : ""}`}
+        onClick={() => save(key, item)}
+        disabled={state === "saving" || state === "saved"}
+        aria-label={label}
+        title={label}
+      >
+        {state === "saved"
+          ? t("✓ 已收藏", "✓ Saved")
+          : state === "saving"
+          ? "…"
+          : state === "error"
+          ? t("重试收藏", "Retry")
+          : t("＋ 收藏", "＋ Save")}
+      </button>
+    );
+  };
   const improve = feedback.verdict === "improve";
   const hasDetails = feedback.issues.length > 0 || feedback.vocabulary.length > 0 || Boolean(feedback.tip);
 
@@ -60,6 +104,16 @@ export default function CoachFeedbackCard({ feedback, t, onDismiss }: Props) {
               {issue.explanation ? <span className="vsCoachIssueWhy">{issue.explanation}</span> : null}
             </div>
           ))}
+          {improve && feedback.corrected ? (
+            <div className="vsCoachVocab">
+              <span className="vsCoachIssueType">{t("正确说法", "Corrected sentence")}</span>
+              {saveButton(
+                "sentence",
+                { text: feedback.corrected, kind: "sentence", context: feedback.user_text },
+                t("收藏这句改正，加入复习", "Save this correction for review")
+              )}
+            </div>
+          ) : null}
           {feedback.vocabulary.length > 0 ? (
             <div className="vsCoachVocab">
               <span className="vsCoachIssueType">{t("可以学的表达", "Useful phrases")}</span>
@@ -67,6 +121,11 @@ export default function CoachFeedbackCard({ feedback, t, onDismiss }: Props) {
                 <span key={`vocab-${idx}`} className="vsCoachVocabItem" title={item.meaning}>
                   <strong>{item.term}</strong>
                   {item.meaning ? ` · ${item.meaning}` : ""}
+                  {saveButton(
+                    `vocab-${idx}`,
+                    { text: item.term, kind: "phrase", meaning: item.meaning, context: feedback.corrected || feedback.user_text },
+                    t(`收藏「${item.term}」`, `Save "${item.term}"`)
+                  )}
                 </span>
               ))}
             </div>

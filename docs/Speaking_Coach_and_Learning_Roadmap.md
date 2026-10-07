@@ -37,10 +37,19 @@ The realtime model itself becomes a language partner (short replies, one questio
 
 Not covered: local PersonaPlex / GLM-4-Voice (own prompts) and live-translate sessions.
 
-## Phase 1b — saved phrases + review (≈1–2 weeks)
+## Phase 1b — shipped: saved phrases + spaced review
 
-1. **Saved phrases** (`learning_items`): "save" button on vocabulary/corrections; dedupe by normalized text.
-2. **Spaced review** (`learning_review_events`): transparent intervals 1/3/7/14/30 days, "again" resets; review queue with TTS playback of the correct sentence.
+| Piece | Where |
+|---|---|
+| `learning_items` (dedupe on language+kind+normalized text) and `learning_review_events` tables; fixed schedule 1/3/7/14/30/60 days, "again" resets to 1 day, new items due immediately; "learned" = step ≥ 3 | `backend/services/learning_service.py` |
+| REST: `POST/GET /api/learning/items`, `DELETE /api/learning/items/{id}`, `GET /api/learning/reviews/due`, `POST /api/learning/reviews`, `GET /api/learning/stats` | `backend/routers/learning.py` |
+| "＋ 收藏" on coach cards: corrected sentence (kind `sentence`, context = what the learner said) and each useful phrase (kind `phrase`, meaning + example) | `CoachFeedbackCard.tsx`, `useVoiceChat.ts` (`onSaveCoachItem` uses the practice language) |
+| 复习 tab: stats, active-recall cards (phrase: native meaning → say it; sentence: original mistake → fix it), reveal, Edge TTS playback, 没记住/记住了, keyboard Space / 1 / 2, saved-list with delete | `frontend/src/pages/ReviewPage.tsx` |
+
+## Phase 1c — next
+
+1. **Bring reviews into conversation**: at call start in tutor mode, inject 3–5 due phrases and ask the tutor to create chances to use them (prompted recall ≠ independent use — track separately).
+2. **Speak the answer**: record the learner's attempt on a review card and compare via ASR instead of self-grading.
 3. **Post-call report**: top 3 corrections, new phrases, next objective (also P3 "口语评测卡片" in the earlier roadmap).
 
 ## Phase 2 — pronunciation (2–4 weeks)

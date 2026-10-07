@@ -15,6 +15,7 @@ import {
   Fingerprint,
   Mic2,
   FileAudio,
+  GraduationCap,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
@@ -43,6 +44,7 @@ const IconMap: Record<string, React.ElementType> = {
   Fingerprint,
   Mic2,
   FileAudio,
+  GraduationCap,
   Settings,
   Video,
   PanelRight

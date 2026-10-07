@@ -6,7 +6,7 @@ import ScreenShareControl from "../components/chat/ScreenShareControl";
 import LiveAvatarPlayer from "../components/LiveAvatarPlayer";
 import AvatarTranscriptPanel from "../components/AvatarTranscriptPanel";
 import MarkdownContent from "../components/chat/MarkdownContent";
-import CoachFeedbackCard from "../components/chat/CoachFeedbackCard";
+import CoachFeedbackCard, { type CoachSaveHandler } from "../components/chat/CoachFeedbackCard";
 import { isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import type { UseSettingsResult } from "../hooks/useSettings";
@@ -148,6 +148,7 @@ type MessageBubbleProps = {
   onToggleReasoning: (key: string) => void;
   onOpenInCanvas?: (code: string, mode: "react" | "html", title?: string) => void;
   onDismissCoach?: (id: number) => void;
+  onSaveCoachItem?: CoachSaveHandler;
 };
 
 const TOOL_RESULT_STATUSES = new Set(["result", "completed", "context_injected", "result_delivered"]);
@@ -176,6 +177,7 @@ function MessageBubbleImpl({
   onToggleReasoning,
   onOpenInCanvas,
   onDismissCoach,
+  onSaveCoachItem,
 }: MessageBubbleProps) {
   const toolCalls = msg.toolCalls;
   const lastTool =
@@ -323,7 +325,7 @@ function MessageBubbleImpl({
       )}
 
       {msg.role === "user" && msg.coach ? (
-        <CoachFeedbackCard feedback={msg.coach} t={t} onDismiss={onDismissCoach} />
+        <CoachFeedbackCard feedback={msg.coach} t={t} onDismiss={onDismissCoach} onSave={onSaveCoachItem} />
       ) : null}
 
       {translation && (
@@ -1024,6 +1026,7 @@ export default function ChatPage({
                   onToggleReasoning={stableToggleReasoning}
                   onOpenInCanvas={handleOpenInCanvas}
                   onDismissCoach={voiceChat.onDismissCoachFeedback}
+                  onSaveCoachItem={voiceChat.onSaveCoachItem}
                 />
               );
             })}

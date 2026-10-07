@@ -2,6 +2,9 @@ import type {
   AgentRunSummary,
   CoachFeedback,
   CoachSummary,
+  LearningItem,
+  LearningItemKind,
+  LearningStats,
   ApiErrorDetail,
   ApiRuntimeInfo,
   AudioAgentCreateRunRequest,
@@ -924,6 +927,71 @@ export async function deleteCoachFeedback(id: number): Promise<void> {
   if (!response.ok) {
     await throwApiError(response);
   }
+}
+
+export async function saveLearningItem(params: {
+  text: string;
+  kind: LearningItemKind;
+  meaning?: string;
+  context?: string;
+  language?: string;
+  sourceFeedbackId?: number;
+}): Promise<{ item: LearningItem; created: boolean }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/learning/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text: params.text,
+      kind: params.kind,
+      meaning: params.meaning ?? "",
+      context: params.context ?? "",
+      language: params.language ?? "English",
+      source_feedback_id: params.sourceFeedbackId || null,
+    }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return (await response.json()) as { item: LearningItem; created: boolean };
+}
+
+export async function fetchLearningItems(limit = 200): Promise<LearningItem[]> {
+  const response = await apiFetch(`${API_BASE_URL}/api/learning/items?limit=${limit}`);
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const data = (await response.json()) as { items?: LearningItem[] };
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+export async function deleteLearningItem(id: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/api/learning/items/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+}
+
+export async function fetchDueReviews(limit = 20): Promise<{ items: LearningItem[]; stats: LearningStats }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/learning/reviews/due?limit=${limit}`);
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return (await response.json()) as { items: LearningItem[]; stats: LearningStats };
+}
+
+export async function submitReview(
+  itemId: number,
+  result: "again" | "good"
+): Promise<{ item: LearningItem; stats: LearningStats }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/learning/reviews`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item_id: itemId, result }),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return (await response.json()) as { item: LearningItem; stats: LearningStats };
 }
 
 export async function fetchApiRuntimeInfo(): Promise<ApiRuntimeInfo> {

@@ -89,3 +89,32 @@ describe("buildVoiceChatWebSocketUrl tutor params", () => {
     expect(tutored.searchParams.get("tutor_language")).toBe("English");
   });
 });
+
+describe("CoachFeedbackCard saving", () => {
+  it("saves the corrected sentence and a phrase once each", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<CoachFeedbackCard feedback={IMPROVE} t={t} onSave={onSave} />);
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save this correction for review" }));
+    fireEvent.click(screen.getByRole("button", { name: 'Save "stroll"' }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      text: "I went to the park yesterday.",
+      kind: "sentence",
+      context: "I go to the park yesterday",
+      sourceFeedbackId: 7,
+    });
+    expect(onSave).toHaveBeenCalledWith({
+      text: "stroll",
+      kind: "phrase",
+      meaning: "a relaxed walk",
+      context: "I went to the park yesterday.",
+      sourceFeedbackId: 7,
+    });
+    expect(await screen.findAllByText("✓ Saved")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: 'Save "stroll"' }));
+    expect(onSave).toHaveBeenCalledTimes(2);
+  });
+});

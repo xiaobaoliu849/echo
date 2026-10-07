@@ -142,6 +142,7 @@ export function createVoiceChatController(
     voiceChatCoachConfig: DEFAULT_COACH_CONFIG,
     onCoachConfigChange: vi.fn(),
     onDismissCoachFeedback: vi.fn(),
+    onSaveCoachItem: vi.fn(),
     voiceChatTranslationMode: "bidirectional",
     voiceChatSourceLanguageCode: "zh-Hans",
     voiceChatTargetLanguageCode: "en",

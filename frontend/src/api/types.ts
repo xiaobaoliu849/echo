@@ -291,6 +291,32 @@ export type CoachFeedback = {
   created_at?: string;
 };
 
+export type LearningItemKind = "phrase" | "sentence";
+
+export type LearningItem = {
+  id: number;
+  language: string;
+  kind: LearningItemKind;
+  text: string;
+  meaning: string;
+  context: string;
+  source_feedback_id: number | null;
+  review_step: number;
+  review_count: number;
+  lapse_count: number;
+  due_at: string;
+  last_reviewed_at: string;
+  created_at: string;
+};
+
+export type LearningStats = {
+  total_items: number;
+  due_now: number;
+  learned_items: number;
+  reviewed_today: number;
+  recalled_today: number;
+};
+
 export type CoachSummary = {
   reviewed_turns: number;
   good_turns: number;
