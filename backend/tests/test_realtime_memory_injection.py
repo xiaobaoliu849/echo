@@ -104,6 +104,16 @@ class PrefetchTests(_IsolatedCache):
         self.assertEqual(result["memories_retrieved"], 1)
 
 
+class WarmUpTests(_IsolatedCache):
+    async def test_configuring_memory_opens_the_everos_connection_early(self) -> None:
+        warm_up = AsyncMock(return_value=None)
+        with patch.object(EverMemService, "warm_up", new=warm_up):
+            session = _configured_session()
+            await _settle()
+            await session.drain()
+        warm_up.assert_awaited_once()
+
+
 class BackgroundPersistTests(_IsolatedCache):
     async def test_flush_turn_does_not_wait_for_the_cloud_write(self) -> None:
         session = _configured_session()

@@ -14,3 +14,17 @@ os.environ["ECHO_DATA_DIR"] = _test_profile.name
 os.environ["VOICESPIRIT_DATA_DIR"] = _test_profile.name
 
 os.environ.setdefault("ECHO_DISABLE_FILE_LOG", "1")
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _no_evermem_warm_up(monkeypatch):
+    """Configuring voice memory opens an EverOS connection in the background;
+    tests use fake hosts and must stay off the network."""
+    from services.evermem_service import EverMemService
+
+    async def _noop(self) -> None:
+        return None
+
+    monkeypatch.setattr(EverMemService, "warm_up", _noop)

@@ -394,6 +394,21 @@ class RealtimeMemorySession:
             self._config.group_id,
             self._config.url,
         )
+        self._warm_up_service()
+
+    def _warm_up_service(self) -> None:
+        """Open the EverOS connection while the user is still getting started."""
+        service = self._config.get_service()
+        warm_up = getattr(service, "warm_up", None)
+        if not callable(warm_up):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = asyncio.create_task(warm_up())
+        self._prefetch_tasks.add(task)  # cancelled by drain() like a prefetch
+        task.add_done_callback(self._prefetch_tasks.discard)
 
     def note_user_transcript(self, text: str) -> None:
         cleaned = str(text or "").strip()
@@ -740,6 +755,9 @@ class RealtimeMemorySession:
                     sender=scope,
                     sender_name="User",
                     group_id=self._config.group_id or None,
+                    # Flushed right below: a queued (202) add may not have
+                    # landed yet and the flush would find nothing to extract.
+                    sync=True,
                 )
                 if result:
                     saved_count += 1

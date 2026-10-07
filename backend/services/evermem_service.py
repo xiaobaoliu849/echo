@@ -8,13 +8,38 @@ contracts.  v1 paths are legacy and kept only for migration reference.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import time
-from typing import Any
+import weakref
+from typing import Any, AsyncIterator
 
 import httpx # type: ignore
 
 logger = logging.getLogger(__name__)
+
+# One pooled client per event loop. A fresh client per call paid a new TLS
+# handshake every time: measured from the dev machine, 0.88 s per search
+# versus 0.30 s on a reused connection, which matters for realtime recall.
+# Keyed weakly by loop because an httpx client is bound to the loop it was
+# first used on.
+_SHARED_CLIENTS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+@contextlib.asynccontextmanager
+async def _pooled_client() -> AsyncIterator[httpx.AsyncClient]:
+    loop = asyncio.get_running_loop()
+    client = _SHARED_CLIENTS.get(loop)
+    if client is None or client.is_closed is True:
+        # httpx drops idle connections after 5 s by default, but voice recalls
+        # are often minutes apart; keep the connection (and its TLS session)
+        # warm much longer. The server may still close it, which httpx handles.
+        client = httpx.AsyncClient(timeout=30.0, limits=httpx.Limits(keepalive_expiry=300.0))
+        _SHARED_CLIENTS[loop] = client
+    yield client
 
 
 class EverMemService:
@@ -49,12 +74,17 @@ class EverMemService:
         sender_name: str = "User",
         flush: bool = False,
         group_id: str | None = None,
+        sync: bool = False,
     ) -> dict[str, Any] | None:
         """Add a memory message to EverOS (v2 add endpoint).
 
         v2 keys on ``session_id``; ``user_id`` is NOT sent in the request body
         (the server derives it from the API key + sender_id).  Returns
         ``{"status": "success"}`` on HTTP 202 (async) or 200 (sync).
+
+        ``sync`` (implied by ``flush``) waits for the message to be accepted:
+        per the v2 docs, a flush right after a queued (202) add can run before
+        the message lands and return ``no_extraction``.
         """
         if not self.api_key:
             logger.warning("EverMemService: Missing API key. Cannot add memory.")
@@ -73,12 +103,12 @@ class EverMemService:
 
         payload = {
             "session_id": session_id,
-            "async_mode": True,
+            "async_mode": not (sync or flush),
             "messages": [message],
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with _pooled_client() as client:
                 resp = await client.post(
                     f"{self.api_url}/api/v2/memory/add",
                     headers=self._headers(),
@@ -132,7 +162,7 @@ class EverMemService:
         resolved_session = self._session_id_for(user_id, session_id)
         payload = {"session_id": resolved_session}
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with _pooled_client() as client:
                 resp = await client.post(
                     f"{self.api_url}/api/v2/memory/flush",
                     headers=self._headers(),
@@ -184,10 +214,10 @@ class EverMemService:
         the only way to retrieve ``unprocessed_messages`` (the in-flight buffer
         of not-yet-extracted raw messages).
 
-        v2 does not accept a ``memory_types`` array on search; the endpoint
-        returns episodes, profiles, agent_cases, agent_skills, and
-        unprocessed_messages in one response.  The ``memory_types`` parameter
-        is accepted for call-site compatibility but not sent.
+        v2 does not accept a ``memory_types`` array on search. Profiles are
+        only returned with ``include_profile`` (default false per the v2
+        docs), so it is sent whenever profiles are wanted: ``memory_types``
+        unset (all types) or containing ``"profile"``.
         """
         if not self.api_key:
             logger.warning("EverMemService: Missing API key. Cannot search memories.")
@@ -204,11 +234,13 @@ class EverMemService:
             "method": "hybrid",
             "top_k": 5,
         }
+        if memory_types is None or "profile" in memory_types:
+            payload["include_profile"] = True
         if filters:
             payload["filters"] = filters
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with _pooled_client() as client:
                 resp = await client.post(
                     f"{self.api_url}/api/v2/memory/search",
                     headers=self._headers(),
@@ -283,6 +315,20 @@ class EverMemService:
             logger.error(f"Failed to search memories in EverOS: {e}")
             return []
 
+    async def warm_up(self) -> None:
+        """Open the pooled connection ahead of the first realtime recall.
+
+        The TLS handshake is most of a cold search (~0.6 s of ~0.95 s
+        measured); any response, even a 404, leaves a reusable connection.
+        """
+        if not self.api_key:
+            return
+        try:
+            async with _pooled_client() as client:
+                await client.get(self.api_url, timeout=5.0)
+        except Exception as exc:
+            logger.debug("EverOS warm-up skipped: %s", exc)
+
     async def get_memories(self, user_id: str = "guest") -> list[dict[str, Any]]:
         """Get episodic memories for a user (v2 get endpoint).
 
@@ -301,7 +347,7 @@ class EverMemService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with _pooled_client() as client:
                 resp = await client.post(
                     f"{self.api_url}/api/v2/memory/get",
                     headers=self._headers(),

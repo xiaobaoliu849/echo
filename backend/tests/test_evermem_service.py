@@ -251,6 +251,59 @@ class EverMemServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["json"]["user_id"], "scope-main")
         self.assertEqual(kwargs["json"]["filters"], {"session_id": "group-chat-001"})
 
+    async def test_search_requests_profiles_which_v2_omits_by_default(self) -> None:
+        service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {"data": {"episodes": [], "profiles": []}}
+        post = AsyncMock(return_value=response)
+
+        with patch("services.evermem_service.httpx.AsyncClient") as client_cls:
+            client, _ = _make_client_mock(post)
+            client.post = post
+            client_cls.return_value = client
+            await service.search_memories(query="偏好", user_id="u", memory_types=["episodic_memory", "profile"])
+            self.assertTrue(post.call_args.kwargs["json"]["include_profile"])
+            await service.search_memories(query="偏好", user_id="u")
+            self.assertTrue(post.call_args.kwargs["json"]["include_profile"])
+            await service.search_memories(query="偏好", user_id="u", memory_types=["episodic_memory"])
+            self.assertNotIn("include_profile", post.call_args.kwargs["json"])
+
+    async def test_add_before_flush_is_synchronous(self) -> None:
+        # v2 docs: a flush right after a queued (202) add may find nothing.
+        service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
+        response = Mock()
+        response.status_code = 200
+        post = AsyncMock(return_value=response)
+
+        with patch("services.evermem_service.httpx.AsyncClient") as client_cls:
+            client, _ = _make_client_mock(post)
+            client.post = post
+            client_cls.return_value = client
+            await service.add_memory(content="x", user_id="u", flush=True)
+            self.assertFalse(post.call_args_list[0].kwargs["json"]["async_mode"])
+            await service.add_memory(content="x", user_id="u", sync=True)
+            self.assertFalse(post.call_args.kwargs["json"]["async_mode"])
+
+    async def test_calls_reuse_one_pooled_client_per_event_loop(self) -> None:
+        service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {"data": {"episodes": []}}
+        post = AsyncMock(return_value=response)
+
+        with patch("services.evermem_service.httpx.AsyncClient") as client_cls:
+            client, _ = _make_client_mock(post)
+            client.post = post
+            client.is_closed = False
+            client_cls.return_value = client
+            await service.search_memories(query="a", user_id="u")
+            await service.search_memories(query="b", user_id="u")
+            await service.flush_pending_memories(user_id="u")
+        # One client (one TLS connection pool) instead of one per call.
+        self.assertEqual(client_cls.call_count, 1)
+        client.__aexit__.assert_not_called()
+
     async def test_get_memories_uses_v2_get_endpoint(self) -> None:
         service = EverMemService(api_url="https://memory.example.com", api_key="test-key")
 
