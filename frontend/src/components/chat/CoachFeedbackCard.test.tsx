@@ -54,14 +54,38 @@ describe("speakingCoach utils", () => {
 
   it("round-trips stored config and rejects invalid levels", () => {
     expect(readStoredCoachConfig().enabled).toBe(false);
-    writeStoredCoachConfig({ enabled: true, target_language: "Japanese", native_language: "Chinese", level: "ielts" });
-    expect(readStoredCoachConfig()).toEqual({
+    const stored = {
       enabled: true,
       target_language: "Japanese",
       native_language: "Chinese",
       level: "ielts",
-    });
-    localStorage.setItem("vs_speaking_coach", JSON.stringify({ enabled: true, level: "guru" }));
+      tutor: true,
+      scenario: "travel",
+    } as const;
+    writeStoredCoachConfig(stored);
+    expect(readStoredCoachConfig()).toEqual(stored);
+    localStorage.setItem("vs_speaking_coach", JSON.stringify({ enabled: true, level: "guru", scenario: "mars" }));
     expect(readStoredCoachConfig().level).toBe("intermediate");
+    expect(readStoredCoachConfig().scenario).toBe("free_talk");
+    expect(readStoredCoachConfig().tutor).toBe(false);
+  });
+});
+
+describe("buildVoiceChatWebSocketUrl tutor params", () => {
+  it("adds tutor query params only when tutor mode is requested", async () => {
+    const { buildVoiceChatWebSocketUrl } = await import("../../api");
+    const plain = new URL(buildVoiceChatWebSocketUrl({ provider: "DashScope" }));
+    expect(plain.searchParams.has("tutor")).toBe(false);
+
+    const tutored = new URL(
+      buildVoiceChatWebSocketUrl({
+        provider: "DashScope",
+        tutor: { targetLanguage: "English", nativeLanguage: "Chinese", level: "ielts", scenario: "ielts" },
+      })
+    );
+    expect(tutored.searchParams.get("tutor")).toBe("true");
+    expect(tutored.searchParams.get("tutor_level")).toBe("ielts");
+    expect(tutored.searchParams.get("tutor_scenario")).toBe("ielts");
+    expect(tutored.searchParams.get("tutor_language")).toBe("English");
   });
 });

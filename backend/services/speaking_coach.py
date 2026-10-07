@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import sqlite3
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,98 @@ def normalize_coach_config(payload: Any) -> dict[str, Any] | None:
         "native_language": _clean(payload.get("native_language"), "Chinese"),
         "level": level if level in COACH_LEVELS else "intermediate",
     }
+
+
+# -- tutor mode: the realtime model itself plays a language partner ----------
+
+TUTOR_SCENARIOS: dict[str, str] = {
+    "free_talk": "Free conversation: chat about the learner's day, interests and opinions.",
+    "daily_life": "Daily life: shopping, ordering food, making plans with friends, small talk with neighbours.",
+    "workplace": "Workplace: self-introduction at work, meetings, giving updates, polite disagreement, emails read aloud.",
+    "travel": "Travel: airport check-in, hotel, asking for directions, restaurants, solving problems on a trip.",
+    "job_interview": (
+        "Job interview: you are the interviewer. Ask typical interview questions one by one "
+        "and follow up on the learner's answers."
+    ),
+    "ielts": (
+        "IELTS Speaking mock test: you are the examiner. Run Part 1 (short questions about familiar topics), "
+        "then Part 2 (give a cue card topic and ask the learner to speak for 1-2 minutes), "
+        "then Part 3 (abstract discussion questions). Stay in examiner role; at the end give a brief, "
+        "honest estimate of fluency, vocabulary, grammar and pronunciation."
+    ),
+}
+DEFAULT_TUTOR_SCENARIO = "free_talk"
+
+_tutor_session: ContextVar[dict[str, Any] | None] = ContextVar("speaking_tutor_session", default=None)
+
+
+def normalize_tutor_config(
+    *,
+    enabled: bool,
+    target_language: str | None = None,
+    native_language: str | None = None,
+    level: str | None = None,
+    scenario: str | None = None,
+) -> dict[str, Any] | None:
+    """Sanitized tutor config, or None when tutor mode is off."""
+    if not enabled:
+        return None
+    base = normalize_coach_config(
+        {
+            "enabled": True,
+            "target_language": target_language,
+            "native_language": native_language,
+            "level": level,
+        }
+    )
+    assert base is not None
+    clean_scenario = str(scenario or "").strip().lower()
+    base["scenario"] = clean_scenario if clean_scenario in TUTOR_SCENARIOS else DEFAULT_TUTOR_SCENARIO
+    return base
+
+
+def build_tutor_instructions(config: dict[str, Any]) -> str:
+    """Persona block appended to the realtime system prompt in tutor mode."""
+    target = config["target_language"]
+    native = config["native_language"]
+    level_hint = {
+        "beginner": "Use very simple words and short sentences, speak slowly, and repeat key words.",
+        "intermediate": "Use everyday vocabulary and natural sentences; introduce a few new expressions.",
+        "advanced": "Speak naturally at native pace and use idioms; push the learner to elaborate.",
+        "ielts": "Speak naturally and push for extended, well-organised answers with precise vocabulary.",
+    }[config["level"]]
+    return (
+        "\n\n[Language Tutor Mode]\n"
+        f"You are now a friendly {target} speaking partner and tutor for a learner whose native language "
+        f"is {native}. These rules override the general assistant persona above.\n"
+        f"- Scenario: {TUTOR_SCENARIOS[config['scenario']]}\n"
+        f"- Speak {target} by default. {level_hint}\n"
+        "- Keep each reply short (1-3 sentences) so the learner does most of the talking, and end with "
+        "exactly one question or prompt that keeps the conversation going.\n"
+        "- Be patient with hesitation and self-correction; never finish the learner's sentences.\n"
+        "- At most ONE brief spoken correction per turn, and only for an error that blocks understanding or "
+        "repeats; recast it naturally (e.g. 'Oh, you went to the cinema? ...') instead of lecturing. "
+        "Detailed written feedback is shown to the learner separately, so do not list mistakes.\n"
+        f"- If the learner speaks {native} or asks what something means, briefly help in {native}, "
+        f"then switch back to {target}.\n"
+        "- Your replies are spoken aloud: no emoji, markdown, lists or special symbols.\n"
+        "- Do not claim to measure pronunciation or proficiency unless the scenario asks for an estimate.\n"
+        "- When the call starts, greet the learner and open the scenario with a simple question."
+    )
+
+
+def set_tutor_session(config: dict[str, Any] | None) -> Any:
+    """Bind tutor config to the current realtime session task; returns a reset token."""
+    return _tutor_session.set(config)
+
+
+def reset_tutor_session(token: Any) -> None:
+    _tutor_session.reset(token)
+
+
+def current_tutor_instructions() -> str:
+    config = _tutor_session.get()
+    return build_tutor_instructions(config) if config else ""
 
 
 def build_coach_instructions(config: dict[str, Any]) -> str:

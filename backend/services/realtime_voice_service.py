@@ -47,7 +47,7 @@ from .realtime_tool_protocol import (
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_dashscope_client import DashScopeRealtimeCallback, DashScopeAudioRealtimeConversation
 from .realtime_session_recorder import VoiceAgentSessionRecorder, run_db_call
-from .speaking_coach import SpeakingCoach, normalize_coach_config, should_review
+from .speaking_coach import SpeakingCoach, current_tutor_instructions, normalize_coach_config, should_review
 
 # Conditional SDK imports — kept here so that test_api_smoke can patch
 # ``realtime_voice_service.genai`` / ``realtime_voice_service.types``.
@@ -218,7 +218,7 @@ class RealtimeVoiceService(
     def _get_base_instructions() -> str:
         import datetime
         current_date = datetime.date.today().isoformat()
-        return f"{BASE_REALTIME_INSTRUCTIONS}\nCurrent Date: {current_date}."
+        return f"{BASE_REALTIME_INSTRUCTIONS}\nCurrent Date: {current_date}.{current_tutor_instructions()}"
 
     @staticmethod
     def _build_realtime_instructions(

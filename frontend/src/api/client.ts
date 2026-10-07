@@ -762,6 +762,12 @@ export function buildVoiceChatWebSocketUrl(params: {
    *  the backend so a mis-routed call can be traced to the state change that
    *  caused it. Safe to omit. */
   clientTrace?: string;
+  tutor?: {
+    targetLanguage: string;
+    nativeLanguage: string;
+    level: string;
+    scenario: string;
+  };
 }): string {
   const httpUrl = new URL(API_BASE_URL);
   const protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
@@ -808,6 +814,13 @@ export function buildVoiceChatWebSocketUrl(params: {
   }
   if (params.clientTrace) {
     wsUrl.searchParams.set("client_trace", params.clientTrace.slice(0, 1200));
+  }
+  if (params.tutor) {
+    wsUrl.searchParams.set("tutor", "true");
+    wsUrl.searchParams.set("tutor_language", params.tutor.targetLanguage);
+    wsUrl.searchParams.set("tutor_native_language", params.tutor.nativeLanguage);
+    wsUrl.searchParams.set("tutor_level", params.tutor.level);
+    wsUrl.searchParams.set("tutor_scenario", params.tutor.scenario);
   }
   const wsToken = getRealtimeWebSocketToken();
   if (wsToken) {

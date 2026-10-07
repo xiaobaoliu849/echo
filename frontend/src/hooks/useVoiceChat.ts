@@ -1847,6 +1847,15 @@ export default function useVoiceChat({
         enableVoiceClone: (voiceChatProvider === DASHSCOPE_PROVIDER && voiceChatLiveTranslate) ? voiceChatEnableVoiceClone : undefined,
         voiceCloneFrequency: (voiceChatProvider === DASHSCOPE_PROVIDER && voiceChatLiveTranslate) ? voiceChatVoiceCloneFrequency : undefined,
         clientTrace: serializeSelectionTrace(),
+        tutor:
+          coachConfigRef.current.tutor && !voiceChatLiveTranslate
+            ? {
+                targetLanguage: coachConfigRef.current.target_language,
+                nativeLanguage: coachConfigRef.current.native_language,
+                level: coachConfigRef.current.level,
+                scenario: coachConfigRef.current.scenario,
+              }
+            : undefined,
       });
       const ws = new WebSocket(wsUrl);
       const memoryConfig = buildVoiceChatSessionConfig(memoryGroupId || undefined);

@@ -20,8 +20,8 @@ import { useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
 import { traceSelection } from "../hooks/voiceSelectionTrace";
 import LiveAvatarSettings from "./LiveAvatarSettings";
 import { GEMINI_LIVE_ACCENTS, formatAvatarCallLabel, supportsGeminiAccent } from "../utils/geminiLivePreferences";
-import { COACH_LEVELS, COACH_TARGET_LANGUAGES } from "../utils/speakingCoach";
-import type { CoachLevel } from "../api";
+import { COACH_LEVELS, COACH_TARGET_LANGUAGES, TUTOR_SCENARIOS } from "../utils/speakingCoach";
+import type { CoachLevel, TutorScenario } from "../api";
 
 type Translator = (zh: string, en: string) => string;
 
@@ -671,9 +671,41 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                         checked={voiceChat.voiceChatCoachConfig.enabled}
                         onChange={(e) => voiceChat.onCoachConfigChange({ enabled: e.target.checked })}
                       />
-                      <span style={{ fontWeight: 600 }}>{t("🎓 口语教练", "🎓 Speaking coach")}</span>
+                      <span style={{ fontWeight: 600 }}>{t("🎓 口语教练（纠错卡片）", "🎓 Speaking coach (feedback cards)")}</span>
                     </label>
-                    {voiceChat.voiceChatCoachConfig.enabled ? (
+                    <label
+                      className="vsVoiceSettingsEcho"
+                      title={t(
+                        "AI 扮演语言老师：说练习语言、回复简短、每轮抛出一个问题，按场景陪你练",
+                        "The AI acts as a language partner: speaks the practice language, keeps replies short and asks one question per turn"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={voiceChat.voiceChatCoachConfig.tutor}
+                        onChange={(e) => voiceChat.onCoachConfigChange({ tutor: e.target.checked })}
+                      />
+                      <span style={{ fontWeight: 600 }}>{t("🧑‍🏫 陪练模式（AI 当语言老师）", "🧑‍🏫 Tutor mode (AI language partner)")}</span>
+                    </label>
+                    {voiceChat.voiceChatCoachConfig.tutor ? (
+                      <label className="vsGeminiAccentField">
+                        <span>{t("练习场景", "Scenario")}</span>
+                        <select
+                          value={voiceChat.voiceChatCoachConfig.scenario}
+                          onChange={(e) => voiceChat.onCoachConfigChange({ scenario: e.target.value as TutorScenario })}
+                        >
+                          {TUTOR_SCENARIOS.map((item) => (
+                            <option key={item.value} value={item.value}>{t(item.zh, item.en)}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {voiceChat.voiceChatCoachConfig.tutor && voiceChat.voiceChatRecording ? (
+                      <span className="vsCoachHint">
+                        {t("陪练模式的设置在下次开始通话时生效", "Tutor settings apply when the next call starts")}
+                      </span>
+                    ) : null}
+                    {voiceChat.voiceChatCoachConfig.enabled || voiceChat.voiceChatCoachConfig.tutor ? (
                       <>
                         <label className="vsGeminiAccentField">
                           <span>{t("练习语言", "Practice language")}</span>

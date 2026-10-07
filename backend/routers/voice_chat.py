@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from services.api_auth_guard import validate_websocket_token
 from services.realtime_session_recorder import run_db_call
+from services.speaking_coach import normalize_tutor_config, reset_tutor_session, set_tutor_session
 from services.realtime_voice_service import (
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
     DEFAULT_GOOGLE_REALTIME_VOICE,
@@ -242,6 +243,11 @@ async def voice_chat_ws(
     enable_voice_clone: bool = False,
     voice_clone_frequency: str = "once",
     client_trace: str = "",
+    tutor: bool = False,
+    tutor_language: str | None = Query(default=None, max_length=40),
+    tutor_native_language: str | None = Query(default=None, max_length=40),
+    tutor_level: str | None = Query(default=None, max_length=20),
+    tutor_scenario: str | None = Query(default=None, max_length=40),
     token: str | None = None,
 ) -> None:
     # The HTTP auth middleware does not cover WebSocket scopes; enforce auth
@@ -367,6 +373,17 @@ async def voice_chat_ws(
         await websocket.close(code=1003)
         return
 
+    # Tutor mode is bound to this session's task context before the provider
+    # connects, so every provider's system prompt picks it up at session start.
+    tutor_token = set_tutor_session(
+        normalize_tutor_config(
+            enabled=tutor,
+            target_language=tutor_language,
+            native_language=tutor_native_language,
+            level=tutor_level,
+            scenario=tutor_scenario,
+        )
+    )
     try:
         if selected_provider == "Cartesia":
             await voice_chat_service.stream_cartesia_session(
@@ -465,3 +482,5 @@ async def voice_chat_ws(
             await websocket.close(code=1011, reason=str(exc)[:100])
         except Exception:
             pass
+    finally:
+        reset_tutor_session(tutor_token)

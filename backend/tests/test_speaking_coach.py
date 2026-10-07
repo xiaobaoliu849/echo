@@ -205,3 +205,51 @@ def test_coach_config_disable(payload: Any) -> None:
 
     websocket = asyncio.run(scenario())
     assert websocket.sent == [{"type": "coach_config", "enabled": False, "coach": None}]
+
+
+def test_tutor_config_and_base_instructions_binding() -> None:
+    from services.speaking_coach import (
+        TUTOR_SCENARIOS,
+        normalize_tutor_config,
+        reset_tutor_session,
+        set_tutor_session,
+    )
+
+    assert normalize_tutor_config(enabled=False, scenario="ielts") is None
+    cfg = normalize_tutor_config(enabled=True, target_language="Japanese", level="beginner", scenario="bogus")
+    assert cfg is not None
+    assert cfg["scenario"] == "free_talk"
+    assert cfg["target_language"] == "Japanese"
+
+    plain = RealtimeVoiceService._get_base_instructions()
+    assert "[Language Tutor Mode]" not in plain
+
+    ielts = normalize_tutor_config(enabled=True, level="ielts", scenario="ielts")
+    token = set_tutor_session(ielts)
+    try:
+        tutored = RealtimeVoiceService._get_base_instructions()
+        built = RealtimeVoiceService._build_realtime_instructions("memory ctx")
+    finally:
+        reset_tutor_session(token)
+    assert tutored.startswith(plain)
+    assert "[Language Tutor Mode]" in tutored
+    assert TUTOR_SCENARIOS["ielts"] in tutored
+    assert "native language is Chinese" in tutored
+    assert "[Language Tutor Mode]" in built
+    assert "[Language Tutor Mode]" not in RealtimeVoiceService._get_base_instructions()
+
+
+def test_tutor_session_is_isolated_per_task() -> None:
+    from services.speaking_coach import normalize_tutor_config, set_tutor_session
+
+    async def session(enabled: bool) -> str:
+        set_tutor_session(normalize_tutor_config(enabled=enabled))
+        await asyncio.sleep(0)
+        return RealtimeVoiceService._get_base_instructions()
+
+    async def main() -> list[str]:
+        return list(await asyncio.gather(session(True), session(False)))
+
+    tutored, plain = asyncio.run(main())
+    assert "[Language Tutor Mode]" in tutored
+    assert "[Language Tutor Mode]" not in plain

@@ -298,6 +298,11 @@
   border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
 }
 
+.vsCoachHint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
 /* ── Interactive English Word Token for Lookup ── */
 .vsWordInteractive {
   display: inline-block;

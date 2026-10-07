@@ -24,13 +24,24 @@ Design rules (from the review's risk list):
 - `summary.good_ratio` is an activity signal, **not** a proficiency score.
 - Live-translate sessions are never coached.
 
-## Phase 1 — tutor mode + saved phrases + review (≈1–2 weeks)
+## Phase 1a — shipped: Tutor mode
 
-1. **Tutor persona**: when coaching is on, inject a tutor system prompt at session start (short replies, one question at a time, ≤1 brief spoken correction, explanations in native language on request). Needs per-provider instruction plumbing — start with DashScope + Google.
-2. **Scenarios**: small bilingual catalog (daily chat, workplace, travel, IELTS Part 1/2/3) with objectives and opening prompts.
-3. **Saved phrases** (`learning_items`): "save" button on vocabulary/corrections; dedupe by normalized text.
-4. **Spaced review** (`learning_review_events`): transparent intervals 1/3/7/14/30 days, "again" resets; review queue with TTS playback of the correct sentence.
-5. **Post-call report**: top 3 corrections, new phrases, next objective (also P3 "口语评测卡片" in the earlier roadmap).
+The realtime model itself becomes a language partner (short replies, one question per turn,
+≤1 recast-style spoken correction, native-language help on request, no emoji since replies are spoken).
+
+| Piece | Where |
+|---|---|
+| Scenarios (free talk, daily life, workplace, travel, job interview, IELTS mock with Part 1/2/3) + tutor prompt | `TUTOR_SCENARIOS`, `build_tutor_instructions` in `backend/services/speaking_coach.py` |
+| Per-session binding: WS query params `tutor`, `tutor_language`, `tutor_native_language`, `tutor_level`, `tutor_scenario` → `ContextVar` set in `routers/voice_chat.py` before the provider connects; `_get_base_instructions()` appends the block, so every provider built on it (DashScope, Google, OpenAI, Doubao, StepFun, Vercel, Cartesia, Gradium) gets it with no per-provider code | `routers/voice_chat.py`, `realtime_voice_service.py` |
+| UI: 陪练模式 checkbox + 练习场景 select (shares language/level with the coach); applies at next call start | `VoiceCallSettingsPopover.tsx` |
+
+Not covered: local PersonaPlex / GLM-4-Voice (own prompts) and live-translate sessions.
+
+## Phase 1b — saved phrases + review (≈1–2 weeks)
+
+1. **Saved phrases** (`learning_items`): "save" button on vocabulary/corrections; dedupe by normalized text.
+2. **Spaced review** (`learning_review_events`): transparent intervals 1/3/7/14/30 days, "again" resets; review queue with TTS playback of the correct sentence.
+3. **Post-call report**: top 3 corrections, new phrases, next objective (also P3 "口语评测卡片" in the earlier roadmap).
 
 ## Phase 2 — pronunciation (2–4 weeks)
 

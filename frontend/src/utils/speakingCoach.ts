@@ -1,8 +1,17 @@
-import type { CoachConfig, CoachLevel } from "../api";
+import type { CoachConfig, CoachLevel, TutorScenario } from "../api";
 
 const STORAGE_KEY = "vs_speaking_coach";
 
 export const COACH_LEVELS: CoachLevel[] = ["beginner", "intermediate", "advanced", "ielts"];
+
+export const TUTOR_SCENARIOS: { value: TutorScenario; zh: string; en: string }[] = [
+  { value: "free_talk", zh: "自由聊天", en: "Free talk" },
+  { value: "daily_life", zh: "日常生活", en: "Daily life" },
+  { value: "workplace", zh: "职场沟通", en: "Workplace" },
+  { value: "travel", zh: "旅行出行", en: "Travel" },
+  { value: "job_interview", zh: "模拟面试", en: "Job interview" },
+  { value: "ielts", zh: "雅思口语模考", en: "IELTS speaking mock" },
+];
 
 export const COACH_TARGET_LANGUAGES = ["English", "Japanese", "Korean", "French", "German", "Spanish"];
 
@@ -11,6 +20,8 @@ export const DEFAULT_COACH_CONFIG: CoachConfig = {
   target_language: "English",
   native_language: "Chinese",
   level: "intermediate",
+  tutor: false,
+  scenario: "free_talk",
 };
 
 export function readStoredCoachConfig(): CoachConfig {
@@ -31,6 +42,10 @@ export function readStoredCoachConfig(): CoachConfig {
       level: COACH_LEVELS.includes(parsed.level as CoachLevel)
         ? (parsed.level as CoachLevel)
         : DEFAULT_COACH_CONFIG.level,
+      tutor: parsed.tutor === true,
+      scenario: TUTOR_SCENARIOS.some((item) => item.value === parsed.scenario)
+        ? (parsed.scenario as TutorScenario)
+        : DEFAULT_COACH_CONFIG.scenario,
     };
   } catch {
     return DEFAULT_COACH_CONFIG;
