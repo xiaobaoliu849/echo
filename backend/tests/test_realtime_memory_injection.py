@@ -338,3 +338,92 @@ class DoubaoInjectionTests(_IsolatedCache):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IdentityMemoryTests(_IsolatedCache):
+    """Screenshot bug, 2026-10-07: "my name is Xiao Bao" was never stored and
+    "do you know my name?" never recalled; the recall_memory tool always failed."""
+
+    def test_name_statements_become_identity_entries(self) -> None:
+        session = _configured_session()
+        cases = {
+            "I want you to remember my name is Xiao Bao. Could you do that?": "Xiao Bao",
+            "Please call me Ada.": "Ada",
+            "my name's Li Wei and I live in Beijing": "Li Wei",
+            "记住，我叫小宝。": "小宝",
+            "我的名字是王小明": "王小明",
+            "以后叫我阿杰吧": "阿杰",
+        }
+        for text, name in cases.items():
+            with self.subTest(text=text):
+                entries = session._extract_memory_entries(text)
+                self.assertTrue(entries and entries[0].startswith("用户身份: 用户的名字是 " + name + "（"), entries)
+
+    def test_questions_and_non_names_are_not_stored_as_identity(self) -> None:
+        session = _configured_session()
+        for text in ("my name is not important", "我叫什么名字？", "我叫你小助手", "What's the name of that song?"):
+            with self.subTest(text=text):
+                self.assertFalse(any(e.startswith("用户身份") for e in session._extract_memory_entries(text)))
+
+    def test_asking_for_their_name_is_an_explicit_recall(self) -> None:
+        session = _configured_session()
+        for text in ("Hello, do you know my name?", "Who am I?", "你还知道我叫什么吗"):
+            with self.subTest(text=text):
+                self.assertTrue(session.should_retrieve_context(text, quiet=True))
+                self.assertTrue(session.is_forced_recall_query(text))
+
+    async def test_local_identity_entry_answers_a_name_question_and_never_expires(self) -> None:
+        session = _configured_session()
+        scope = session._scope_pending_cache_key()
+        session._queue_pending_entries(scope, ["用户身份: 用户的名字是 Old（the user's name is Old）"])
+        session._queue_pending_entries(scope, ["用户身份: 用户的名字是 Xiao Bao（the user's name is Xiao Bao）"])
+        # Age everything past the TTL and overflow the cap with newer entries.
+        for item in RealtimeMemorySession._PENDING_MEMORY_CACHE[scope]:
+            item["created_at"] = 0.0
+        session._queue_pending_entries(scope, [f"用户偏好: 偏好 {i} 号方案的详细说明" for i in range(40)])
+
+        hits = session._search_pending_entries(scope, "what is my name")
+        self.assertIn("Xiao Bao", hits[0]["content"])
+        identities = [
+            item for item in RealtimeMemorySession._PENDING_MEMORY_CACHE[scope]
+            if item["content"].startswith("用户身份")
+        ]
+        self.assertEqual(len(identities), 1, "a newly stated name replaces the old one")
+
+    async def test_identity_question_adds_a_statement_form_cloud_query(self) -> None:
+        session = _configured_session()
+        queries: list[str] = []
+
+        async def search(*_args: Any, query: str, **_kwargs: Any) -> list[dict[str, Any]]:
+            queries.append(query)
+            if query == RealtimeMemorySession._IDENTITY_EXPANSION_QUERY:
+                return [{"content": "[历史对话] 用户表示希望系统记住自己的名字是 Xiao Bao", "score": 0.6}]
+            return [{"content": "[历史对话] 用户询问助手是否知道自己的名字", "score": 0.4}]
+
+        with patch.object(EverMemService, "search_memories", new=search):
+            session.note_user_transcript("Hello, do you know my name?")
+            result = await session.retrieve_memory_context(query="Hello, do you know my name?")
+
+        self.assertIn(RealtimeMemorySession._IDENTITY_EXPANSION_QUERY, queries)
+        first_line = result["context"].splitlines()[0]
+        self.assertIn("Xiao Bao", first_line)
+        self.assertIn("云端", first_line)
+
+    async def test_recall_memory_tool_returns_memories_without_restaging_them(self) -> None:
+        from services.voice_agent_tools import VoiceAgentToolSession
+
+        session = _configured_session()
+        tools = VoiceAgentToolSession(default_provider="Google", memory_session=session).service
+        events: list[str] = []
+
+        async def send(event_type: str, _payload: dict[str, Any]) -> None:
+            events.append(event_type)
+
+        search = AsyncMock(return_value=[{"content": "[历史对话] 用户的名字是 Xiao Bao", "score": 0.6}])
+        with patch.object(EverMemService, "search_memories", new=search):
+            result = await tools.run_recall_memory("name", send_event=send)
+
+        self.assertIn("Xiao Bao", result["answer"])
+        self.assertEqual(events[:2], ["tool_call_started", "tool_call_completed"])
+        # The model already has these; injecting them again next turn would duplicate.
+        self.assertEqual(session._pending_recall_context, "")

@@ -526,7 +526,9 @@ class VoiceAgentToolService:
 
         retrieval: dict[str, Any] = {}
         try:
-            retrieval = await mem_session.recall_memory_query(clean_query)
+            # recall_memory_query never existed: every native recall_memory
+            # call failed with AttributeError and told the model "not found".
+            retrieval = await mem_session.recall_by_query(clean_query, stage=False)
         except Exception as exc:
             logger.warning("run_recall_memory failed for query=%r: %s", clean_query, exc)
 

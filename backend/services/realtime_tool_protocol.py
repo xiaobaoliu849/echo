@@ -33,7 +33,7 @@ _TOOL_DECLARATIONS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "recall_memory",
-        "description": "Recall and retrieve long-term memories, user personal preferences, past conversations, or historical topics from the user's private EverMem / EverOS memory center. Always call this tool when the user asks what was previously discussed, asks you to recall or remember past conversations, or asks about their saved profile or preferences. Never use search_web to look up user-specific past conversations or personal memories.",
+        "description": "Recall and retrieve long-term memories, user personal preferences, past conversations, or historical topics from the user's private EverMem / EverOS memory center. Always call this tool when the user asks what was previously discussed, asks you to recall or remember past conversations, or asks about their saved profile or preferences, or about personal facts they told you before such as their name (\"do you know my name?\", \"who am I?\"). Never guess or deny knowing such facts without calling this tool first. Never use search_web to look up user-specific past conversations or personal memories.",
         "parameters": {
             "type": "object",
             "properties": {

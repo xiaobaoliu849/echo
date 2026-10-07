@@ -200,7 +200,49 @@ class RealtimeMemorySession:
         "action_item": "待办事项",
         "task_context": "当前任务上下文",
         "session_summary": "会话摘要",
+        "identity": "用户身份",
     }
+    # Who the user is. "My name is ..." used to fall through every classifier
+    # (no_candidate_memory), so the one fact users most expect remembered was
+    # only ever stored inside a session summary, where search ranks it below
+    # many "do you know my name?" episodes.
+    _IDENTITY_NAME_PATTERNS = (
+        # ASR capitalises names; requiring it keeps "my name is not important" out.
+        # Matched case-sensitively; only the lead-in words are case-insensitive.
+        r"\b(?i:my name(?:'s| is))\s+([A-Z][\w'-]*(?:\s+[A-Z][\w'-]*){0,2})",
+        r"\b(?i:call me)\s+([A-Z][\w'-]*(?:\s+[A-Z][\w'-]*){0,2})",
+        r"\b(?i:I(?:'m| am) called)\s+([A-Z][\w'-]*(?:\s+[A-Z][\w'-]*){0,2})",
+        r"我的名字(?:是|叫)\s*([一-鿿A-Za-z][一-鿿A-Za-z ·]{0,15})",
+        r"(?<![你他她它])我叫(?!什么|啥|你|他|她)\s*([一-鿿A-Za-z][一-鿿A-Za-z ·]{0,15})",
+        r"(?:以后)?(?:请)?叫我(?!什么|啥)\s*([一-鿿]{1,6})",
+    )
+    # Asking who they are: always worth a recall.
+    _IDENTITY_QUESTION_PATTERNS = (
+        r"\bmy name\b",
+        r"\bwho am i\b",
+        r"\bremember me\b",
+        r"我叫什么",
+        r"我叫啥",
+        r"我的名字",
+        r"我是谁",
+        r"怎么称呼我",
+    )
+    # Broader: a recall-tool query like "name" or "user's name".
+    _IDENTITY_TOPIC_PATTERNS = _IDENTITY_QUESTION_PATTERNS + (
+        r"\bname\b",
+        r"名字",
+        r"称呼",
+        r"\bidentity\b",
+    )
+    # EverOS writes episodes as declarative Chinese summaries ("用户表示希望系统
+    # 记住自己的名字是 ..."). Questions about the user's name rank those below
+    # episodes where the user merely asked; a statement-form query ranks the
+    # one that holds the name first (measured: rank 0 vs rank 5-9).
+    _IDENTITY_EXPANSION_QUERY = "记住我的名字 我叫 my name is"
+    _IDENTITY_NAME_TRAILERS = re.compile(
+        r"\s+(?:and|but|so|could|can|please|ok|okay|thanks|thank)\b.*$|[了的啊呢吧哦呀嘛，,。.!！?？].*$",
+        re.IGNORECASE,
+    )
     _RETRIEVE_HINT_PATTERNS = (
         r"之前",
         r"上次",
@@ -817,6 +859,13 @@ class RealtimeMemorySession:
                 candidate[:120],
             )
             return False
+        if self._is_identity_question(candidate):
+            _log(
+                "voice_memory_retrieve trigger=identity scope=%s query=%r",
+                self._config.memory_scope,
+                candidate[:120],
+            )
+            return True
         if self._matches_any(candidate, self._RETRIEVE_HINT_PATTERNS):
             _log(
                 "voice_memory_retrieve trigger=hint scope=%s query=%r",
@@ -861,7 +910,8 @@ class RealtimeMemorySession:
         # A hint word alone ("earlier", "记得", "之前") signals recall intent
         # even without a question marker — treat it as forced so it gets the
         # longer cloud timeout instead of timing out at the trivial budget.
-        return self._matches_any(candidate, self._RETRIEVE_HINT_PATTERNS)
+        # "Do you know my name?" is the same kind of explicit recall.
+        return self._matches_any(candidate, self._RETRIEVE_HINT_PATTERNS) or self._is_identity_question(candidate)
 
     async def retrieve_memory_context(self, utterance_id: str = "", *, query: str | None = None) -> dict[str, Any]:
         """Per-turn memory context, with the session-start block prepended once.
@@ -892,7 +942,7 @@ class RealtimeMemorySession:
             result["explicit"] = True
         return result
 
-    async def recall_by_query(self, query: str) -> dict[str, Any]:
+    async def recall_by_query(self, query: str, *, stage: bool = True) -> dict[str, Any]:
         """Explicit recall requested by the user (via the ``recall`` command).
 
         Bypasses ``should_retrieve_context`` — the user asked, so we search.
@@ -960,9 +1010,12 @@ class RealtimeMemorySession:
             cleaned[:120],
         )
         context = "\n".join(lines)
-        # Stage for one-shot injection into the next turn.
-        self._pending_recall_context = context
-        self._pending_recall_count = len(lines)
+        # Stage for one-shot injection into the next turn. The recall_memory
+        # tool hands the result to the model directly and passes stage=False,
+        # or the same memories would be injected a second time.
+        if stage:
+            self._pending_recall_context = context
+            self._pending_recall_count = len(lines)
         return {
             "context": context,
             "memories_retrieved": len(lines),
@@ -1214,6 +1267,30 @@ class RealtimeMemorySession:
         query: str,
         force_global: bool = False,
     ) -> list[dict[str, Any]]:
+        """Search EverOS, adding a statement-form query for identity questions."""
+        if not self._is_identity_topic(query):
+            return await self._search_cloud_core(service=service, query=query, force_global=force_global)
+        original, expanded = await asyncio.gather(
+            self._search_cloud_core(service=service, query=query, force_global=force_global),
+            self._search_cloud_core(
+                service=service, query=self._IDENTITY_EXPANSION_QUERY, force_global=force_global,
+            ),
+        )
+        # Episodes that actually state a name first; the rest keep their order.
+        stated = [
+            {**mem, "source": mem.get("source") or "cloud"}
+            for mem in expanded
+            if "名字是" in str(mem.get("content", "")) or "name is" in str(mem.get("content", "")).lower()
+        ]
+        return self._merge_retrieved_memories(local_memories=stated, cloud_memories=original + expanded)
+
+    async def _search_cloud_core(
+        self,
+        *,
+        service: EverMemService,
+        query: str,
+        force_global: bool = False,
+    ) -> list[dict[str, Any]]:
         """Search EverOS for memories.
 
         When ``force_global`` is False (default per-turn behavior), the
@@ -1262,9 +1339,35 @@ class RealtimeMemorySession:
                 return scoped
         return await service.search_memories(**base_kwargs)
 
-    def _extract_memory_entries(self, text: str) -> list[str]:
+    @classmethod
+    def _extract_identity_entries(cls, text: str) -> list[str]:
+        """``用户身份`` entries for names the user states ("my name is ...")."""
         entries: list[str] = []
-        seen: set[str] = set()
+        for pattern in cls._IDENTITY_NAME_PATTERNS:
+            for match in re.finditer(pattern, str(text or "")):
+                name = cls._IDENTITY_NAME_TRAILERS.sub("", match.group(1)).strip(" ·")
+                if not name or len(name) > 24:
+                    continue
+                entry = f"{cls._MEMORY_LABELS['identity']}: 用户的名字是 {name}（the user's name is {name}）"
+                if entry not in entries:
+                    entries.append(entry)
+        return entries[:1]
+
+    @classmethod
+    def _is_identity_question(cls, text: str) -> bool:
+        return cls._matches_any(str(text or ""), cls._IDENTITY_QUESTION_PATTERNS)
+
+    @classmethod
+    def _is_identity_topic(cls, text: str) -> bool:
+        return cls._matches_any(str(text or ""), cls._IDENTITY_TOPIC_PATTERNS)
+
+    @classmethod
+    def _is_identity_entry(cls, content: str) -> bool:
+        return str(content or "").startswith(f"{cls._MEMORY_LABELS['identity']}:")
+
+    def _extract_memory_entries(self, text: str) -> list[str]:
+        entries: list[str] = self._extract_identity_entries(text)
+        seen: set[str] = {entry.lower() for entry in entries}
 
         for sentence in self._split_sentences(text):
             candidate = self._normalize_candidate(sentence)
@@ -1344,12 +1447,14 @@ class RealtimeMemorySession:
         cls._load_pending_cache_from_disk()
         now = time.time()
         entries = cls._PENDING_MEMORY_CACHE.get(scope, [])
+        # Who the user is does not go stale after three days.
         fresh = [
             item for item in entries
-            if now - float(item.get("created_at", 0.0)) <= cls._PENDING_MEMORY_TTL_SECONDS
+            if cls._is_identity_entry(str(item.get("content", "")))
+            or now - float(item.get("created_at", 0.0)) <= cls._PENDING_MEMORY_TTL_SECONDS
         ]
         if fresh:
-            cls._PENDING_MEMORY_CACHE[scope] = fresh[-cls._PENDING_MEMORY_MAX_PER_SCOPE :]
+            cls._PENDING_MEMORY_CACHE[scope] = cls._cap_pending(fresh)
         else:
             cls._PENDING_MEMORY_CACHE.pop(scope, None)
         cls._save_pending_cache_to_disk()
@@ -1367,12 +1472,29 @@ class RealtimeMemorySession:
             key = cls._content_dedupe_key(entry)
             if not key or key in seen:
                 continue
+            if cls._is_identity_entry(entry):
+                # A newly stated name replaces the old one.
+                existing = [
+                    item for item in existing
+                    if not cls._is_identity_entry(str(item.get("content", "")))
+                ]
             existing.append({"content": entry, "created_at": now})
             seen.add(key)
             appended += 1
-        cls._PENDING_MEMORY_CACHE[scope] = existing[-cls._PENDING_MEMORY_MAX_PER_SCOPE :]
+        cls._PENDING_MEMORY_CACHE[scope] = cls._cap_pending(existing)
         cls._save_pending_cache_to_disk()
         return appended
+
+    @classmethod
+    def _cap_pending(cls, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep the newest entries, never evicting the identity entry."""
+        limit = cls._PENDING_MEMORY_MAX_PER_SCOPE
+        if len(items) <= limit:
+            return items
+        pinned = [item for item in items if cls._is_identity_entry(str(item.get("content", "")))]
+        others = [item for item in items if item not in pinned]
+        keep = others[-max(0, limit - len(pinned)):] if limit > len(pinned) else []
+        return [item for item in items if item in pinned or item in keep]
 
     @classmethod
     def _all_pending_entries(cls, scope: str) -> list[dict[str, Any]]:
@@ -1409,8 +1531,13 @@ class RealtimeMemorySession:
             return []
 
         scored: list[tuple[float, dict[str, Any]]] = []
+        identity_query = cls._is_identity_topic(query)
         for item in pending:
             content = str(item.get("content", "")).strip()
+            # "What's my name?" shares no words with "用户的名字是 Xiao Bao".
+            if identity_query and cls._is_identity_entry(content):
+                scored.append((2.0, {"content": content, "source": "local_pending"}))
+                continue
             score = cls._score_pending_entry(query, content)
             if score < 0.18:
                 continue
