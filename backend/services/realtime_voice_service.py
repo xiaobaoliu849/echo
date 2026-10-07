@@ -47,6 +47,7 @@ from .realtime_tool_protocol import (
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_dashscope_client import DashScopeRealtimeCallback, DashScopeAudioRealtimeConversation
 from .realtime_session_recorder import VoiceAgentSessionRecorder, run_db_call
+from .speaking_coach import SpeakingCoach, normalize_coach_config, should_review
 
 # Conditional SDK imports — kept here so that test_api_smoke can patch
 # ``realtime_voice_service.genai`` / ``realtime_voice_service.types``.
@@ -168,6 +169,9 @@ class RealtimeVoiceService(
     ):
         self.config = config or BackendConfig()
         self.voice_session_repository = voice_session_repository
+        self.speaking_coach = SpeakingCoach()
+        # Strong refs so in-flight background coach reviews are not GC'd.
+        self._coach_tasks: set[asyncio.Task[Any]] = set()
 
     @staticmethod
     async def _run_duplex_tasks(*tasks: asyncio.Task[Any]) -> None:
@@ -655,6 +659,12 @@ class RealtimeVoiceService(
             )
             return "handled"
 
+        if command_type == "coach_config":
+            coach_config = normalize_coach_config(payload.get("coach"))
+            self._coach_state(websocket, create=True)["config"] = coach_config
+            await self._send_event(websocket, "coach_config", enabled=coach_config is not None, coach=coach_config)
+            return "handled"
+
         if command_type == "ping":
             await self._send_event(websocket, "pong")
             return "handled"
@@ -750,6 +760,7 @@ class RealtimeVoiceService(
         *,
         gated: bool = False,
     ) -> tuple[dict[str, Any], str]:
+        coach_user_text, coach_assistant_text = self._peek_coach_turn(memory_session)
         memory_result = await memory_session.flush_turn()
         completed_turn_id = ""
         if recorder is not None and not gated:
@@ -770,7 +781,123 @@ class RealtimeVoiceService(
                 turn_id=completed_turn_id,
                 interrupted=False,
             )
+        self._schedule_coach_review(
+            websocket,
+            recorder,
+            user_text=coach_user_text,
+            assistant_text=coach_assistant_text,
+            turn_id=completed_turn_id,
+        )
         return memory_result, completed_turn_id
+
+    # -- speaking coach ------------------------------------------------------
+
+    MAX_COACH_REVIEWS_IN_FLIGHT = 2
+
+    @staticmethod
+    def _peek_coach_turn(memory_session: RealtimeMemorySession) -> tuple[str, str]:
+        try:
+            user_text, assistant_text = memory_session.peek_turn_texts()
+        except (AttributeError, TypeError, ValueError):
+            return "", ""
+        if not isinstance(user_text, str) or not isinstance(assistant_text, str):
+            return "", ""
+        return user_text, assistant_text
+
+    @staticmethod
+    def _coach_state(websocket: WebSocket, *, create: bool = False) -> dict[str, Any] | None:
+        """Per-connection coach state, kept on ``websocket.state``."""
+        state = getattr(websocket, "state", None)
+        if state is None:
+            return None
+        coach_state = getattr(state, "speaking_coach", None)
+        if isinstance(coach_state, dict):
+            return coach_state
+        if not create:
+            return None
+        coach_state = {"config": None, "in_flight": 0, "previous_assistant_text": ""}
+        try:
+            state.speaking_coach = coach_state
+        except Exception:
+            return None
+        return coach_state
+
+    def _schedule_coach_review(
+        self,
+        websocket: WebSocket,
+        recorder: VoiceAgentSessionRecorder | None,
+        *,
+        user_text: str,
+        assistant_text: str,
+        turn_id: str,
+    ) -> None:
+        coach_state = self._coach_state(websocket)
+        if coach_state is None or not isinstance(coach_state.get("config"), dict):
+            return
+        # The tutor reply that *prompted* this utterance is the useful context.
+        context = coach_state.get("previous_assistant_text", "")
+        if assistant_text:
+            coach_state["previous_assistant_text"] = assistant_text
+        if not should_review(user_text):
+            return
+        if coach_state["in_flight"] >= self.MAX_COACH_REVIEWS_IN_FLIGHT:
+            logger.info("speaking_coach review dropped: %d already in flight", coach_state["in_flight"])
+            return
+        coach_state["in_flight"] += 1
+        task = asyncio.create_task(
+            self._run_coach_review(
+                websocket,
+                coach_state,
+                dict(coach_state["config"]),
+                user_text=user_text,
+                context=context,
+                turn_id=turn_id,
+                session_id=getattr(recorder, "session_id", "") or "",
+            )
+        )
+        self._coach_tasks.add(task)
+        task.add_done_callback(self._coach_tasks.discard)
+
+    async def _run_coach_review(
+        self,
+        websocket: WebSocket,
+        coach_state: dict[str, Any],
+        config: dict[str, Any],
+        *,
+        user_text: str,
+        context: str,
+        turn_id: str,
+        session_id: str,
+    ) -> None:
+        try:
+            review = await self.speaking_coach.review(config, user_text, context)
+            if review is None or review["verdict"] == "skip":
+                return
+            feedback_id = 0
+            try:
+                feedback_id = await run_db_call(
+                    self.speaking_coach.repository.add,
+                    review=review,
+                    user_text=user_text,
+                    config=config,
+                    session_id=session_id,
+                    turn_id=turn_id,
+                )
+            except Exception:
+                logger.exception("speaking_coach persist failed")
+            await self._send_event(
+                websocket,
+                "coach_feedback",
+                id=feedback_id,
+                turn_id=turn_id,
+                user_text=user_text,
+                **review,
+            )
+        except Exception as exc:
+            # Socket closed or LLM failure: coaching is best-effort by design.
+            logger.info("speaking_coach review failed: %s", exc)
+        finally:
+            coach_state["in_flight"] = max(0, coach_state["in_flight"] - 1)
 
     async def stream_doubao_session(
         self,

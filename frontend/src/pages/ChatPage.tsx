@@ -6,6 +6,7 @@ import ScreenShareControl from "../components/chat/ScreenShareControl";
 import LiveAvatarPlayer from "../components/LiveAvatarPlayer";
 import AvatarTranscriptPanel from "../components/AvatarTranscriptPanel";
 import MarkdownContent from "../components/chat/MarkdownContent";
+import CoachFeedbackCard from "../components/chat/CoachFeedbackCard";
 import { isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import type { UseSettingsResult } from "../hooks/useSettings";
@@ -146,6 +147,7 @@ type MessageBubbleProps = {
   onToggleSources: (key: string) => void;
   onToggleReasoning: (key: string) => void;
   onOpenInCanvas?: (code: string, mode: "react" | "html", title?: string) => void;
+  onDismissCoach?: (id: number) => void;
 };
 
 const TOOL_RESULT_STATUSES = new Set(["result", "completed", "context_injected", "result_delivered"]);
@@ -173,6 +175,7 @@ function MessageBubbleImpl({
   onToggleSources,
   onToggleReasoning,
   onOpenInCanvas,
+  onDismissCoach,
 }: MessageBubbleProps) {
   const toolCalls = msg.toolCalls;
   const lastTool =
@@ -318,6 +321,10 @@ function MessageBubbleImpl({
       ) : (
         <p>{msg.content}</p>
       )}
+
+      {msg.role === "user" && msg.coach ? (
+        <CoachFeedbackCard feedback={msg.coach} t={t} onDismiss={onDismissCoach} />
+      ) : null}
 
       {translation && (
         <div className="vsBubbleTranslation">
@@ -1016,6 +1023,7 @@ export default function ChatPage({
                   onToggleSources={stableToggleSources}
                   onToggleReasoning={stableToggleReasoning}
                   onOpenInCanvas={handleOpenInCanvas}
+                  onDismissCoach={voiceChat.onDismissCoachFeedback}
                 />
               );
             })}

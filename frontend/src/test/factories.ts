@@ -5,6 +5,7 @@ import type { UseChatResult } from "../hooks/useChat";
 import type { UseSettingsResult } from "../hooks/useSettings";
 import type { UseTtsResult } from "../hooks/useTts";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
+import { DEFAULT_COACH_CONFIG } from "../utils/speakingCoach";
 import type { UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 import type { VoiceDesignController, VoiceCloneController } from "../hooks/useVoiceManagement";
@@ -138,6 +139,9 @@ export function createVoiceChatController(
     voiceChatVoiceOptions: voiceOptions,
     voiceChatVoiceOptionsFor: (_provider: string, _model: string) => voiceOptions,
     voiceChatLiveTranslate: false,
+    voiceChatCoachConfig: DEFAULT_COACH_CONFIG,
+    onCoachConfigChange: vi.fn(),
+    onDismissCoachFeedback: vi.fn(),
     voiceChatTranslationMode: "bidirectional",
     voiceChatSourceLanguageCode: "zh-Hans",
     voiceChatTargetLanguageCode: "en",

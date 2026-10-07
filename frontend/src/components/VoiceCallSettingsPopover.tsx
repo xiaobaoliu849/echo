@@ -20,6 +20,8 @@ import { useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
 import { traceSelection } from "../hooks/voiceSelectionTrace";
 import LiveAvatarSettings from "./LiveAvatarSettings";
 import { GEMINI_LIVE_ACCENTS, formatAvatarCallLabel, supportsGeminiAccent } from "../utils/geminiLivePreferences";
+import { COACH_LEVELS, COACH_TARGET_LANGUAGES } from "../utils/speakingCoach";
+import type { CoachLevel } from "../api";
 
 type Translator = (zh: string, en: string) => string;
 
@@ -656,6 +658,55 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
               {/* LEVEL 3 - VOICE LIST */}
               {activeCategory === "voice" ? (
                 <div className="vsVoiceSettingsSection">
+                  <div className="vsCoachSettings">
+                    <label
+                      className="vsVoiceSettingsEcho"
+                      title={t(
+                        "每句话说完后在后台点评语法与用词，不打断对话",
+                        "Reviews grammar and wording after each sentence without interrupting the call"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={voiceChat.voiceChatCoachConfig.enabled}
+                        onChange={(e) => voiceChat.onCoachConfigChange({ enabled: e.target.checked })}
+                      />
+                      <span style={{ fontWeight: 600 }}>{t("🎓 口语教练", "🎓 Speaking coach")}</span>
+                    </label>
+                    {voiceChat.voiceChatCoachConfig.enabled ? (
+                      <>
+                        <label className="vsGeminiAccentField">
+                          <span>{t("练习语言", "Practice language")}</span>
+                          <select
+                            value={voiceChat.voiceChatCoachConfig.target_language}
+                            onChange={(e) => voiceChat.onCoachConfigChange({ target_language: e.target.value })}
+                          >
+                            {COACH_TARGET_LANGUAGES.map((lang) => (
+                              <option key={lang} value={lang}>{lang}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="vsPresetPillsGroup">
+                          {COACH_LEVELS.map((level: CoachLevel) => (
+                            <button
+                              key={level}
+                              type="button"
+                              className={`vsPresetPillBtn ${voiceChat.voiceChatCoachConfig.level === level ? "active" : ""}`}
+                              onClick={() => voiceChat.onCoachConfigChange({ level })}
+                            >
+                              {level === "beginner"
+                                ? t("入门", "Beginner")
+                                : level === "intermediate"
+                                ? t("中级", "Intermediate")
+                                : level === "advanced"
+                                ? t("高级", "Advanced")
+                                : t("雅思", "IELTS")}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
                   {supportsGeminiAccent(currentProviderName, previewModel) && (
                     <label className="vsGeminiAccentField">
                       <span>{t("口音", "Accent")}</span>

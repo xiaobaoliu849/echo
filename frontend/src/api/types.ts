@@ -252,8 +252,46 @@ export type ChatMessage = {
   toolCalls?: VoiceAgentToolRecord[];
   turnId?: string;
   interrupted?: boolean;
+  /** Speaking-coach review of a user utterance (realtime voice only). */
+  coach?: CoachFeedback;
   /** Stable client-side identity used for React keys and per-message UI state. */
   id?: string;
+};
+
+export type CoachLevel = "beginner" | "intermediate" | "advanced" | "ielts";
+
+export type CoachConfig = {
+  enabled: boolean;
+  target_language: string;
+  native_language: string;
+  level: CoachLevel;
+};
+
+export type CoachIssue = {
+  type: "grammar" | "word_choice" | "naturalness" | "pronunciation" | "fluency";
+  original: string;
+  suggestion: string;
+  explanation: string;
+};
+
+export type CoachFeedback = {
+  id: number;
+  verdict: "good" | "improve";
+  user_text: string;
+  corrected: string;
+  issues: CoachIssue[];
+  vocabulary: { term: string; meaning: string }[];
+  tip: string;
+  turn_id?: string;
+  created_at?: string;
+};
+
+export type CoachSummary = {
+  reviewed_turns: number;
+  good_turns: number;
+  improve_turns: number;
+  good_ratio: number | null;
+  issue_counts: Record<string, number>;
 };
 
 export type ChatRequest = {
@@ -720,6 +758,8 @@ export type VoiceChatServerEvent =
       echo_target_language?: boolean;
     }
   | { type: "memory_config"; enabled: boolean; scope: string; group_id?: string }
+  | { type: "coach_config"; enabled: boolean; coach: CoachConfig | null }
+  | ({ type: "coach_feedback" } & CoachFeedback)
   | {
       type: "memory_context";
       memories_retrieved: number;

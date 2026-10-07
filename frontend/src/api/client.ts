@@ -1,5 +1,7 @@
 import type {
   AgentRunSummary,
+  CoachFeedback,
+  CoachSummary,
   ApiErrorDetail,
   ApiRuntimeInfo,
   AudioAgentCreateRunRequest,
@@ -881,6 +883,34 @@ export async function fetchAgentRun(agentRunId: string): Promise<AgentRunSummary
     await throwApiError(response);
   }
   return (await response.json()) as AgentRunSummary;
+}
+
+export async function fetchCoachFeedback(
+  options: { limit?: number; verdict?: "good" | "improve" } = {}
+): Promise<CoachFeedback[]> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 50) });
+  if (options.verdict) params.set("verdict", options.verdict);
+  const response = await apiFetch(`${API_BASE_URL}/api/coach/feedback?${params.toString()}`);
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const data = (await response.json()) as { items?: CoachFeedback[] };
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+export async function fetchCoachSummary(): Promise<CoachSummary> {
+  const response = await apiFetch(`${API_BASE_URL}/api/coach/summary`);
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return (await response.json()) as CoachSummary;
+}
+
+export async function deleteCoachFeedback(id: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/api/coach/feedback/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
 }
 
 export async function fetchApiRuntimeInfo(): Promise<ApiRuntimeInfo> {

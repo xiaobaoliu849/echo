@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from routers import agent_runs, audio_agent, audio_overview, auth, chat, documents, evermem, realtime_local, settings, tavus, transcription, translate, tts, voice_chat, voices
+from routers import agent_runs, audio_agent, audio_overview, auth, chat, coach, documents, evermem, realtime_local, settings, tavus, transcription, translate, tts, voice_chat, voices
 from services.api_auth_guard import (
     is_auth_enabled,
     should_enforce_auth,
@@ -316,6 +316,7 @@ def create_app() -> FastAPI:
     app.include_router(documents.router, prefix="/api/tts", tags=["documents"])
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+    app.include_router(coach.router, prefix="/api/coach", tags=["coach"])
     app.include_router(evermem.router, prefix="/api/evermem", tags=["evermem"])
     app.include_router(tavus.router, prefix="/api/tavus", tags=["tavus"])
     app.include_router(translate.router, prefix="/api/translate", tags=["translate"])

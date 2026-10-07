@@ -11,6 +11,9 @@ import {
   persistEverMemConversationGroupId,
   type ChatMessage,
   type ChatAttachment,
+  type CoachConfig,
+  type CoachFeedback,
+  deleteCoachFeedback,
   type VoiceAgentSource,
   type VoiceAgentSessionHistory,
   type VoiceAgentSessionHistoryDetailResponse,
@@ -20,6 +23,7 @@ import {
 } from "../api";
 import { createInlineTranslator } from "../i18n";
 import { createMessageId, ensureMessageIds } from "../utils/messageId";
+import { coachTextKey, readStoredCoachConfig, writeStoredCoachConfig } from "../utils/speakingCoach";
 import {
   DASHSCOPE_PROVIDER,
   DEFAULT_DASHSCOPE_MODEL,
@@ -129,6 +133,11 @@ export default function useVoiceChat({
       // Ignore storage errors in restricted contexts
     }
   }, []);
+  const [voiceChatCoachConfig, setVoiceChatCoachConfigState] = useState<CoachConfig>(readStoredCoachConfig);
+  const coachConfigRef = useRef(voiceChatCoachConfig);
+  // Reviews arrive asynchronously, possibly before the user turn is committed
+  // to the message list; keyed by normalized utterance text, bounded.
+  const coachFeedbackByTextRef = useRef(new Map<string, CoachFeedback>());
   const voiceChatVideoStream = useMemo(() => new EventTarget(), []);
   const voiceChatAvatarSupported = supportsLiveAvatar(voiceChatProvider, voiceChatModel);
   const voiceChatLiveAvatar = voiceChatAvatarSupported && voiceChatAvatarEnabled;
@@ -195,6 +204,54 @@ export default function useVoiceChat({
   isMutedRef.current = voiceChatMuted;
 
   const websocketRef = useRef<WebSocket | null>(null);
+
+  const sendCoachConfig = useCallback((ws: WebSocket | null, config: CoachConfig) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "coach_config", coach: config.enabled ? config : null }));
+  }, []);
+
+  const updateVoiceChatCoachConfig = useCallback((patch: Partial<CoachConfig>) => {
+    const next = { ...coachConfigRef.current, ...patch };
+    coachConfigRef.current = next;
+    setVoiceChatCoachConfigState(next);
+    writeStoredCoachConfig(next);
+    sendCoachConfig(websocketRef.current, next);
+  }, [sendCoachConfig]);
+
+  const dismissCoachFeedback = useCallback((id: number) => {
+    for (const [key, item] of coachFeedbackByTextRef.current) {
+      if (item.id === id) coachFeedbackByTextRef.current.delete(key);
+    }
+    setVoiceChatMessages((prev) =>
+      prev.map((msg) => (msg.coach?.id === id ? { ...msg, coach: undefined } : msg))
+    );
+    void deleteCoachFeedback(id).catch(() => {
+      // Best effort: the card is already hidden locally.
+    });
+  }, []);
+
+  const attachCoachFeedback = useCallback((feedback: CoachFeedback) => {
+    const key = coachTextKey(feedback.user_text);
+    if (!key) return;
+    const pending = coachFeedbackByTextRef.current;
+    pending.delete(key);
+    pending.set(key, feedback);
+    while (pending.size > 20) {
+      const oldest = pending.keys().next().value;
+      if (oldest === undefined) break;
+      pending.delete(oldest);
+    }
+    setVoiceChatMessages((prev) => {
+      for (let i = prev.length - 1; i >= 0; i -= 1) {
+        const msg = prev[i];
+        if (msg.role !== "user" || msg.coach || coachTextKey(msg.content) !== key) continue;
+        const next = [...prev];
+        next[i] = { ...msg, coach: feedback };
+        return next;
+      }
+      return prev;
+    });
+  }, []);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -706,7 +763,8 @@ export default function useVoiceChat({
     setVoiceChatMessages((prev) => {
       const next = [...prev];
       if (userText) {
-        next.push({ role: "user", content: userText, memorySaved, turnId, id: createMessageId() });
+        const coach = coachFeedbackByTextRef.current.get(coachTextKey(userText));
+        next.push({ role: "user", content: userText, memorySaved, turnId, coach, id: createMessageId() });
       }
       if (assistantText || toolCalls.length > 0) {
         const fallbackToolMessage = toolCalls.at(-1)?.message || t("工具调用已记录", "Tool call recorded");
@@ -1635,6 +1693,13 @@ export default function useVoiceChat({
         stopSessionResources();
         setVoiceChatStatus(t("实时语音会话已结束", "Realtime voice session ended"));
         return;
+      case "coach_feedback": {
+        const { type: _type, ...feedback } = event;
+        void _type;
+        attachCoachFeedback(feedback);
+        return;
+      }
+      case "coach_config":
       case "pong":
       default:
         return;
@@ -1846,6 +1911,9 @@ export default function useVoiceChat({
         }
         if (memoryConfig) {
           ws.send(JSON.stringify({ type: "config", memory: memoryConfig }));
+        }
+        if (coachConfigRef.current.enabled && !voiceChatLiveTranslate) {
+          sendCoachConfig(ws, coachConfigRef.current);
         }
         const source = audioContext.createMediaStreamSource(stream);
         if (micAnalyserRef.current) {
@@ -2253,6 +2321,9 @@ export default function useVoiceChat({
     voiceChatVoiceOptions,
     voiceChatVoiceOptionsFor,
     voiceChatLiveTranslate,
+    voiceChatCoachConfig,
+    onCoachConfigChange: updateVoiceChatCoachConfig,
+    onDismissCoachFeedback: dismissCoachFeedback,
     voiceChatTranslationMode,
     voiceChatSourceLanguageCode,
     voiceChatTargetLanguageCode,

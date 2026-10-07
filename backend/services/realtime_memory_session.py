@@ -402,6 +402,10 @@ class RealtimeMemorySession:
                 self._current_assistant_text, text, cumulative=cumulative
             )
 
+    def peek_turn_texts(self) -> tuple[str, str]:
+        """Current turn's (user, assistant) text without clearing it."""
+        return self._current_user_text.strip(), self._current_assistant_text.strip()
+
     def discard_turn(self) -> None:
         """Drop an interrupted turn without writing partial content to long-term memory."""
         self._current_user_text = ""

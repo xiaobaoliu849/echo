@@ -164,6 +164,140 @@
   line-height: 1.5;
 }
 
+/* ── Speaking Coach feedback (realtime voice) ── */
+.vsCoachCard {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in oklab, var(--line) 60%, transparent);
+  font-size: 13px;
+  line-height: 1.5;
+  animation: fadeUp 0.2s ease forwards;
+}
+
+.vsCoachSummary {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.vsCoachSummary:disabled {
+  cursor: default;
+}
+
+.vsCoachSummary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.vsCoachBadge {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.vsCoachCard.good .vsCoachBadge {
+  color: color-mix(in oklab, #16a34a 80%, var(--text));
+}
+
+.vsCoachCorrected {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.vsCoachCorrected.muted {
+  color: var(--text-muted);
+}
+
+.vsCoachArrow {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.vsCoachArrow.open {
+  transform: rotate(180deg);
+}
+
+.vsCoachDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.vsCoachIssue,
+.vsCoachVocab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.vsCoachIssueType {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.vsCoachIssueChange del {
+  color: var(--text-muted);
+}
+
+.vsCoachIssueChange ins {
+  text-decoration: none;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.vsCoachIssueWhy {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.vsCoachVocabItem {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.vsCoachTip {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.vsCoachDismiss {
+  all: unset;
+  align-self: flex-start;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
+.vsCoachDismiss:hover {
+  color: var(--text);
+}
+
+.vsCoachSettings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+}
+
 /* ── Interactive English Word Token for Lookup ── */
 .vsWordInteractive {
   display: inline-block;
