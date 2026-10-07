@@ -89,6 +89,9 @@ export type VoiceChatCanvasData = {
   title: string;
 };
 
+/** An early coach review only belongs to a turn committed shortly after it. */
+const COACH_PENDING_TTL_MS = 30_000;
+
 export default function useVoiceChat({
   formatErrorMessage,
   providerOptions = [],
@@ -138,8 +141,10 @@ export default function useVoiceChat({
   const [voiceChatCoachConfig, setVoiceChatCoachConfigState] = useState<CoachConfig>(readStoredCoachConfig);
   const coachConfigRef = useRef(voiceChatCoachConfig);
   // Reviews arrive asynchronously, possibly before the user turn is committed
-  // to the message list; keyed by normalized utterance text, bounded.
-  const coachFeedbackByTextRef = useRef(new Map<string, CoachFeedback>());
+  // to the message list. Only such early reviews wait here (keyed by
+  // normalized utterance text); each is consumed once and expires, so a later
+  // identical sentence can never inherit an old review.
+  const coachFeedbackByTextRef = useRef(new Map<string, { feedback: CoachFeedback; receivedAt: number }>());
   const voiceChatVideoStream = useMemo(() => new EventTarget(), []);
   const voiceChatAvatarSupported = supportsLiveAvatar(voiceChatProvider, voiceChatModel);
   const voiceChatLiveAvatar = voiceChatAvatarSupported && voiceChatAvatarEnabled;
@@ -172,6 +177,10 @@ export default function useVoiceChat({
   const [voiceChatTranscriptIsInterim, setVoiceChatTranscriptIsInterim] = useState(false);
   const [voiceChatReply, setVoiceChatReply] = useState("");
   const [voiceChatMessages, setVoiceChatMessages] = useState<ChatMessage[]>([]);
+  const voiceChatMessagesRef = useRef<ChatMessage[]>([]);
+  useEffect(() => {
+    voiceChatMessagesRef.current = voiceChatMessages;
+  }, [voiceChatMessages]);
   const [voiceChatConnected, setVoiceChatConnected] = useState(false);
   const [voiceChatMemoriesRetrieved, setVoiceChatMemoriesRetrieved] = useState(0);
   const [voiceChatMemoryWriteStatus, setVoiceChatMemoryWriteStatus] = useState("");
@@ -222,7 +231,7 @@ export default function useVoiceChat({
 
   const dismissCoachFeedback = useCallback((id: number) => {
     for (const [key, item] of coachFeedbackByTextRef.current) {
-      if (item.id === id) coachFeedbackByTextRef.current.delete(key);
+      if (item.feedback.id === id) coachFeedbackByTextRef.current.delete(key);
     }
     setVoiceChatMessages((prev) =>
       prev.map((msg) => (msg.coach?.id === id ? { ...msg, coach: undefined } : msg))
@@ -242,13 +251,19 @@ export default function useVoiceChat({
   const attachCoachFeedback = useCallback((feedback: CoachFeedback) => {
     const key = coachTextKey(feedback.user_text);
     if (!key) return;
-    const pending = coachFeedbackByTextRef.current;
-    pending.delete(key);
-    pending.set(key, feedback);
-    while (pending.size > 20) {
-      const oldest = pending.keys().next().value;
-      if (oldest === undefined) break;
-      pending.delete(oldest);
+    const committed = voiceChatMessagesRef.current.some(
+      (msg) => msg.role === "user" && !msg.coach && coachTextKey(msg.content) === key
+    );
+    if (!committed) {
+      const pending = coachFeedbackByTextRef.current;
+      pending.delete(key);
+      pending.set(key, { feedback, receivedAt: Date.now() });
+      while (pending.size > 20) {
+        const oldest = pending.keys().next().value;
+        if (oldest === undefined) break;
+        pending.delete(oldest);
+      }
+      return;
     }
     setVoiceChatMessages((prev) => {
       for (let i = prev.length - 1; i >= 0; i -= 1) {
@@ -769,10 +784,10 @@ export default function useVoiceChat({
       currentAssistantInterruptedRef.current = false;
       return;
     }
+    const coach = userText ? takePendingCoachFeedback(userText) : undefined;
     setVoiceChatMessages((prev) => {
       const next = [...prev];
       if (userText) {
-        const coach = coachFeedbackByTextRef.current.get(coachTextKey(userText));
         next.push({ role: "user", content: userText, memorySaved, turnId, coach, id: createMessageId() });
       }
       if (assistantText || toolCalls.length > 0) {
@@ -807,6 +822,14 @@ export default function useVoiceChat({
     currentMemoryExplicitRef.current = false;
     setVoiceChatTranscript(userTranscriptPreviewRef.current ?? "");
     setVoiceChatReply("");
+  }
+
+  function takePendingCoachFeedback(userText: string): CoachFeedback | undefined {
+    const key = coachTextKey(userText);
+    const entry = coachFeedbackByTextRef.current.get(key);
+    if (!entry) return undefined;
+    coachFeedbackByTextRef.current.delete(key);
+    return Date.now() - entry.receivedAt <= COACH_PENDING_TTL_MS ? entry.feedback : undefined;
   }
 
   function clearUserTranscriptPreview() {
@@ -2418,6 +2441,7 @@ export default function useVoiceChat({
       setVoiceChatReply("");
       setVoiceChatMemoriesRetrieved(0);
       setVoiceChatMessages([]);
+      coachFeedbackByTextRef.current.clear();
       setVoiceChatError("");
       setVoiceChatStatus(t("点击开始实时语音聊天", "Click to start realtime voice chat"));
       setVoiceChatMemoryWriteStatus("");

@@ -218,6 +218,41 @@ describe("useVoiceChat", () => {
     return { ...hook, socket };
   }
 
+  it("attaches each coach review only to its own turn, never to a later identical sentence", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    const review = (id: number) => ({
+      type: "coach_feedback", id, verdict: "improve", user_text: "Thank you very much.",
+      corrected: `fix ${id}`, issues: [], vocabulary: [], tip: "",
+    });
+    const sayThanks = (turnId: string) => {
+      socket.emitMessage({ type: "user_transcript", text: "Thank you very much.", turn_id: turnId });
+      socket.emitMessage({ type: "assistant_text", text: "You're welcome." });
+      socket.emitMessage({ type: "turn_complete", turn_id: turnId });
+    };
+    const userCoachIds = () =>
+      result.current.voiceChatMessages.filter(m => m.role === "user").map(m => m.coach?.id ?? null);
+
+    act(() => sayThanks("t1"));
+    act(() => socket.emitMessage(review(1)));
+    expect(userCoachIds()).toEqual([1]);
+
+    act(() => sayThanks("t2"));
+    expect(userCoachIds()).toEqual([1, null]);
+    act(() => socket.emitMessage(review(2)));
+    expect(userCoachIds()).toEqual([1, 2]);
+
+    // A review that arrives before its turn is committed is held and attached once.
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "Thank you very much.", turn_id: "t3" });
+      socket.emitMessage(review(3));
+      socket.emitMessage({ type: "assistant_text", text: "Anytime." });
+      socket.emitMessage({ type: "turn_complete", turn_id: "t3" });
+    });
+    expect(userCoachIds()).toEqual([1, 2, 3]);
+    act(() => sayThanks("t4"));
+    expect(userCoachIds()).toEqual([1, 2, 3, null]);
+  });
+
   it("shows provisional corrections without archiving them and saves only final words", async () => {
     const { result, socket } = await startTranscriptTestSession();
     act(() => {
