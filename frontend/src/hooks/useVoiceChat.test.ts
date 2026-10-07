@@ -240,7 +240,12 @@ describe("useVoiceChat", () => {
     act(() => result.current.onCoachConfigChange({ scenario: "travel" }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: 2000 });
     // A muted learner must not go live just because the coach reconnected.
-    expect(result.current.voiceChatMuted).toBe(true);
+    // The state update may commit after the socket exists, so wait for it.
+    await waitFor(() => expect(result.current.voiceChatMuted).toBe(true));
+    const micStreams = await Promise.all(
+      vi.mocked(navigator.mediaDevices.getUserMedia).mock.results.map((item) => item.value as Promise<FakeMediaStream>)
+    );
+    expect(micStreams.at(-1)?.getTracks().every((track) => (track as FakeTrack & { enabled?: boolean }).enabled === false)).toBe(true);
     const next = FakeWebSocket.instances[1];
     expect(next.url).toContain("tutor=true");
     expect(next.url).toContain("tutor_level=beginner");
