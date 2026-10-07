@@ -21,6 +21,9 @@ SENSITIVE_READ_PATH_PREFIXES = (
     "/api/settings",
     # Transcription jobs expose full transcript text and job metadata.
     "/api/transcription",
+    # Coach reviews and saved phrases contain the learner's spoken utterances.
+    "/api/coach",
+    "/api/learning",
 )
 
 

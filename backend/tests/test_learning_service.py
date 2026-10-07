@@ -98,3 +98,15 @@ def test_learning_router_flow(tmp_path, monkeypatch) -> None:
     assert len(client.get("/api/learning/items").json()["items"]) == 1
     assert client.delete(f"/api/learning/items/{item_id}").status_code == 200
     assert client.delete(f"/api/learning/items/{item_id}").status_code == 404
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/coach/feedback", "/api/coach/summary", "/api/learning/items", "/api/learning/reviews/due"],
+)
+def test_learning_reads_require_auth_when_enabled(monkeypatch, path: str) -> None:
+    from services import api_auth_guard
+
+    monkeypatch.setattr(api_auth_guard, "is_auth_enabled", lambda: True)
+    # These GETs return the learner's spoken utterances, like transcripts.
+    assert api_auth_guard.should_enforce_auth("GET", path) is True
