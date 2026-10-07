@@ -23,6 +23,7 @@ import websockets
 import websockets.exceptions  # noqa: F401  # explicit: lazy loader hides it otherwise
 from fastapi import WebSocket, WebSocketDisconnect
 
+from .speaking_coach import current_tutor_instructions
 from .realtime_constants import (
     BASE_REALTIME_INSTRUCTIONS,
     DEFAULT_DOUBAO_DUPLEX_DIALOG_MODEL,
@@ -127,7 +128,7 @@ class DoubaoRealtimeMixin:
         """session.create → session.created. Returns the server dialog id."""
         session_payload: dict[str, Any] = {
             "model": dialog_model,
-            "instructions": instructions or BASE_REALTIME_INSTRUCTIONS,
+            "instructions": instructions or f"{BASE_REALTIME_INSTRUCTIONS}{current_tutor_instructions()}",
             "audio": {
                 "input": {"format": {"type": "pcm", "rate": 16000}},
                 "output": {
@@ -654,7 +655,7 @@ class DoubaoRealtimeMixin:
         # instructions here, the model knows prior topics exist and can
         # naturally reference them when the user asks — without bloating
         # every reply with history the user didn't ask about.
-        base_instructions = instructions or BASE_REALTIME_INSTRUCTIONS
+        base_instructions = instructions or f"{BASE_REALTIME_INSTRUCTIONS}{current_tutor_instructions()}"
         if memory_session._config.get_service() is None and not memory_session._explicitly_configured:
             memory_session.configure_from_server()
         if memory_session._config.get_service() is not None:

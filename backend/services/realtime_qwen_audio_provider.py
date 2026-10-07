@@ -13,6 +13,7 @@ from typing import Any
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 
+from .speaking_coach import current_tutor_instructions
 from .realtime_constants import (
     DEFAULT_DASHSCOPE_REALTIME_MODEL,
     QWEN_AUDIO_BENIGN_ERROR_PATTERNS,
@@ -53,7 +54,7 @@ class QwenAudioRealtimeMixin:
     def _build_qwen_audio_instructions(memory_context: str = "") -> str:
         import datetime
         current_date = datetime.date.today().isoformat()
-        base = f"{QWEN_AUDIO_REALTIME_INSTRUCTIONS}\n当前日期: {current_date}。"
+        base = f"{QWEN_AUDIO_REALTIME_INSTRUCTIONS}\n当前日期: {current_date}。{current_tutor_instructions()}"
         if not memory_context:
             return base
         return (

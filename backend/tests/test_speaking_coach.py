@@ -353,3 +353,23 @@ def test_direct_flush_turn_path_triggers_review(tmp_path) -> None:
     websocket = asyncio.run(scenario())
     feedback = [event for event in websocket.sent if event["type"] == "coach_feedback"]
     assert [event["user_text"] for event in feedback] == ["I go to the park yesterday"]
+
+
+def test_tutor_mode_reaches_qwen_audio_and_doubao_prompts() -> None:
+    import inspect
+
+    from services import realtime_doubao_provider
+    from services.speaking_coach import normalize_tutor_config, reset_tutor_session, set_tutor_session
+
+    assert "[Language Tutor Mode]" not in RealtimeVoiceService._build_qwen_audio_instructions()
+    token = set_tutor_session(normalize_tutor_config(enabled=True, scenario="travel"))
+    try:
+        assert "[Language Tutor Mode]" in RealtimeVoiceService._build_qwen_audio_instructions()
+        assert "[Language Tutor Mode]" in RealtimeVoiceService._build_qwen_audio_instructions("memory")
+    finally:
+        reset_tutor_session(token)
+
+    # Doubao composes its prompt inline from the base constant; both sites must append the tutor block.
+    source = inspect.getsource(realtime_doubao_provider)
+    assert source.count("{BASE_REALTIME_INSTRUCTIONS}{current_tutor_instructions()}") == 2
+    assert "instructions or BASE_REALTIME_INSTRUCTIONS" not in source
