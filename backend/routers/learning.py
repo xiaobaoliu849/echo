@@ -5,7 +5,12 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from services.learning_service import LearningItemError, LearningRepository
+from services.learning_service import (
+    MAX_ITEM_TEXT_CHARS,
+    LearningItemError,
+    LearningRepository,
+    StaleReviewError,
+)
 
 
 router = APIRouter()
@@ -20,10 +25,10 @@ def get_repository() -> LearningRepository:
 
 
 class LearningItemCreate(BaseModel):
-    text: str = Field(min_length=1, max_length=300)
+    text: str = Field(min_length=1, max_length=MAX_ITEM_TEXT_CHARS)
     kind: Literal["phrase", "sentence"] = "phrase"
-    meaning: str = Field(default="", max_length=300)
-    context: str = Field(default="", max_length=600)
+    meaning: str = Field(default="", max_length=MAX_ITEM_TEXT_CHARS)
+    context: str = Field(default="", max_length=MAX_ITEM_TEXT_CHARS)
     language: str = Field(default="English", max_length=40)
     source_feedback_id: int | None = None
 
@@ -31,6 +36,8 @@ class LearningItemCreate(BaseModel):
 class ReviewSubmit(BaseModel):
     item_id: int
     result: Literal["again", "good"]
+    # Version the client graded; stale/duplicate submissions get 409.
+    expected_review_count: int | None = Field(default=None, ge=0)
 
 
 @router.post("/items")
@@ -63,7 +70,15 @@ def due_reviews(limit: int = Query(20, ge=1, le=200)) -> dict[str, Any]:
 @router.post("/reviews")
 def submit_review(payload: ReviewSubmit) -> dict[str, Any]:
     repo = get_repository()
-    item = repo.review(payload.item_id, payload.result)
+    try:
+        item = repo.review(
+            payload.item_id, payload.result, expected_review_count=payload.expected_review_count
+        )
+    except StaleReviewError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "This card was already graded.", "item": exc.item, "stats": repo.stats()},
+        ) from exc
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found.")
     return {"item": item, "stats": repo.stats()}

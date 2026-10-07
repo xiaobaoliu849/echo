@@ -20,6 +20,8 @@ REVIEW_INTERVAL_DAYS = (1, 3, 7, 14, 30, 60)
 # Items whose next interval is at least this many days count as "learned".
 LEARNED_STEP = 3
 ITEM_KINDS = ("phrase", "sentence")
+# Matches the speaking coach's longest correction, so any card can be saved.
+MAX_ITEM_TEXT_CHARS = 1200
 REVIEW_RESULTS = ("again", "good")
 
 
@@ -48,6 +50,14 @@ def next_schedule(step: int, result: str, *, now: datetime) -> tuple[int, dateti
 
 class LearningItemError(ValueError):
     pass
+
+
+class StaleReviewError(Exception):
+    """The card was graded since the client loaded it (retry or concurrent submit)."""
+
+    def __init__(self, item: dict[str, Any]) -> None:
+        super().__init__("Review is stale.")
+        self.item = item
 
 
 class LearningRepository:
@@ -139,7 +149,7 @@ class LearningRepository:
         now: datetime | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Save an item; returns (item, created). Re-saving returns the existing item."""
-        clean_text = re.sub(r"\s+", " ", str(text or "")).strip()[:300]
+        clean_text = re.sub(r"\s+", " ", str(text or "")).strip()[:MAX_ITEM_TEXT_CHARS]
         normalized = normalize_item_text(clean_text)
         if not normalized:
             raise LearningItemError("Text is required.")
@@ -147,33 +157,42 @@ class LearningRepository:
             raise LearningItemError(f"Unsupported kind: {kind}")
         clean_language = re.sub(r"\s+", " ", str(language or "")).strip()[:40] or "English"
         stamp = _iso(now or utc_now())
+        lookup = (
+            "SELECT * FROM learning_items WHERE language = ? AND kind = ? AND normalized_text = ?",
+            (clean_language, kind, normalized),
+        )
         with self._connect() as conn:
-            existing = conn.execute(
-                "SELECT * FROM learning_items WHERE language = ? AND kind = ? AND normalized_text = ?",
-                (clean_language, kind, normalized),
-            ).fetchone()
+            existing = conn.execute(*lookup).fetchone()
             if existing:
                 return self._row_to_item(existing), False
-            cursor = conn.execute(
-                """
-                INSERT INTO learning_items (
-                    language, kind, text, normalized_text, meaning, context,
-                    source_feedback_id, due_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    clean_language,
-                    kind,
-                    clean_text,
-                    normalized,
-                    str(meaning or "").strip()[:300],
-                    str(context or "").strip()[:600],
-                    int(source_feedback_id) if source_feedback_id else None,
-                    stamp,
-                    stamp,
-                ),
-            )
-            conn.commit()
+            try:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO learning_items (
+                        language, kind, text, normalized_text, meaning, context,
+                        source_feedback_id, due_at, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        clean_language,
+                        kind,
+                        clean_text,
+                        normalized,
+                        str(meaning or "").strip()[:MAX_ITEM_TEXT_CHARS],
+                        str(context or "").strip()[:MAX_ITEM_TEXT_CHARS],
+                        int(source_feedback_id) if source_feedback_id else None,
+                        stamp,
+                        stamp,
+                    ),
+                )
+                conn.commit()
+            except sqlite3.IntegrityError:
+                # A concurrent save of the same text won the UNIQUE race.
+                conn.rollback()
+                existing = conn.execute(*lookup).fetchone()
+                if existing is None:
+                    raise
+                return self._row_to_item(existing), False
             item = self._get(conn, int(cursor.lastrowid or 0))
         assert item is not None
         return item, True
@@ -194,7 +213,17 @@ class LearningRepository:
             ).fetchall()
         return [self._row_to_item(row) for row in rows]
 
-    def review(self, item_id: int, result: str, *, now: datetime | None = None) -> dict[str, Any] | None:
+    def review(
+        self,
+        item_id: int,
+        result: str,
+        *,
+        expected_review_count: int | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        """Grade a card. ``expected_review_count`` is the version the client saw;
+        a mismatch (lost-response retry, double submit) raises StaleReviewError
+        instead of promoting the card twice."""
         if result not in REVIEW_RESULTS:
             raise LearningItemError(f"Unsupported result: {result}")
         moment = now or utc_now()
@@ -202,18 +231,33 @@ class LearningRepository:
             item = self._get(conn, item_id)
             if item is None:
                 return None
+            version = item["review_count"] if expected_review_count is None else int(expected_review_count)
             step_before = item["review_step"]
             step_after, due_at = next_schedule(step_before, result, now=moment)
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE learning_items
                 SET review_step = ?, due_at = ?, last_reviewed_at = ?,
                     review_count = review_count + 1,
                     lapse_count = lapse_count + ?
-                WHERE id = ?
+                WHERE id = ? AND review_count = ? AND review_step = ?
                 """,
-                (step_after, _iso(due_at), _iso(moment), 1 if result == "again" else 0, int(item_id)),
+                (
+                    step_after,
+                    _iso(due_at),
+                    _iso(moment),
+                    1 if result == "again" else 0,
+                    int(item_id),
+                    version,
+                    step_before,
+                ),
             )
+            if cursor.rowcount == 0:
+                conn.rollback()
+                current = self._get(conn, item_id)
+                if current is None:
+                    return None
+                raise StaleReviewError(current)
             conn.execute(
                 """
                 INSERT INTO learning_review_events (item_id, result, step_before, step_after, reviewed_at)

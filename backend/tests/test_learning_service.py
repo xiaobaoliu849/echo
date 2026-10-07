@@ -110,3 +110,48 @@ def test_learning_reads_require_auth_when_enabled(monkeypatch, path: str) -> Non
     monkeypatch.setattr(api_auth_guard, "is_auth_enabled", lambda: True)
     # These GETs return the learner's spoken utterances, like transcripts.
     assert api_auth_guard.should_enforce_auth("GET", path) is True
+
+
+def test_concurrent_duplicate_save_returns_existing(tmp_path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    repo = LearningRepository(db_path=tmp_path / "race.db")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: repo.add_item(text="a real treat", now=NOW), range(16)))
+    assert len({item["id"] for item, _ in results}) == 1
+    assert sum(created for _, created in results) == 1
+
+
+def test_review_rejects_stale_and_duplicate_submissions(tmp_path) -> None:
+    from services.learning_service import StaleReviewError
+
+    repo = LearningRepository(db_path=tmp_path / "stale.db")
+    item, _ = repo.add_item(text="a real treat", now=NOW)
+    first = repo.review(item["id"], "good", expected_review_count=0, now=NOW)
+    assert first is not None and first["review_step"] == 1
+
+    # Retry after a lost response carries the old version: no double promotion.
+    with pytest.raises(StaleReviewError) as excinfo:
+        repo.review(item["id"], "good", expected_review_count=0, now=NOW)
+    assert excinfo.value.item["review_step"] == 1
+    assert repo.stats(now=NOW)["reviewed_today"] == 1
+
+
+def test_router_returns_409_for_stale_review_and_accepts_long_corrections(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(learning_router, "_repository", LearningRepository(db_path=tmp_path / "api409.db"))
+    app = FastAPI()
+    app.include_router(learning_router.router, prefix="/api/learning")
+    client = TestClient(app)
+
+    long_sentence = "word " * 200  # ~1000 chars, longer than the old 300 limit
+    created = client.post(
+        "/api/learning/items", json={"text": long_sentence, "kind": "sentence", "context": long_sentence}
+    )
+    assert created.status_code == 200
+    item_id = created.json()["item"]["id"]
+
+    ok = client.post("/api/learning/reviews", json={"item_id": item_id, "result": "good", "expected_review_count": 0})
+    assert ok.status_code == 200
+    stale = client.post("/api/learning/reviews", json={"item_id": item_id, "result": "good", "expected_review_count": 0})
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["item"]["review_step"] == 1
