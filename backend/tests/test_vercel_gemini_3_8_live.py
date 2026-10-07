@@ -124,7 +124,9 @@ class VercelGemini38LiveTests(unittest.TestCase):
     def test_build_realtime_instructions_includes_canvas_rule(self):
         inst = RealtimeVoiceService._build_realtime_instructions()
         self.assertIn("render_canvas", inst)
-        self.assertIn("HTML or React", inst)
+        self.assertIn("'react' or 'html'", inst)
+        # Describing/discussing a UI must not be treated as a drawing request.
+        self.assertIn("When unsure, ask instead of drawing", inst)
 
 
 try:

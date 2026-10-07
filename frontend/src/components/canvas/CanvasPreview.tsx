@@ -32,6 +32,30 @@ function getReactHtml(code: string) {
       }
       window.addEventListener('error', event => reportError(event.error || event.message));
       window.addEventListener('unhandledrejection', event => reportError(event.reason));
+      // Generated code often names icons that lucide-react doesn't ship
+      // (e.g. "Waveform"); one undefined element type would otherwise blank
+      // the whole preview, so unknown icons fall back to a generic one.
+      const lucideBase = window.LucideReact || {};
+      const lucideFallback = lucideBase.CircleDashed || lucideBase.Circle || (() => null);
+      const LucideIcons = new Proxy(lucideBase, {
+        get(target, prop) {
+          if (prop in target) return target[prop];
+          if (typeof prop === 'string' && /^[A-Z]/.test(prop)) return lucideFallback;
+          return undefined;
+        },
+      });
+      // Last resort for any other undefined component: render a visible
+      // placeholder instead of letting React abort the entire tree.
+      const createElement = React.createElement;
+      React.createElement = function(type) {
+        if (type === undefined || type === null) {
+          return createElement('span', {
+            title: 'Missing component',
+            style: { display: 'inline-block', minWidth: 16, minHeight: 16, border: '1px dashed #f43f5e', borderRadius: 4 },
+          });
+        }
+        return createElement.apply(this, arguments);
+      };
       try {
         // Compile as a module before evaluating: wrapping export/import in a
         // try block makes otherwise valid generated components a syntax error.
@@ -44,7 +68,7 @@ function getReactHtml(code: string) {
         const require = name => {
           if (name === 'react') return React;
           if (name === 'react-dom' || name === 'react-dom/client') return ReactDOM;
-          if (name === 'lucide-react') return LucideReact;
+          if (name === 'lucide-react') return LucideIcons;
           throw new Error('Unsupported canvas import: ' + name + '. Use a self-contained component.');
         };
         const evaluate = new Function('React', 'require',

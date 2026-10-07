@@ -1223,8 +1223,10 @@ class VoiceAgentToolService:
                     "name": "render_canvas",
                     "description": (
                         "Render or update a visual component on the user's canvas side panel. "
-                        "Call this when the user asks to draw, design, build, preview, or change "
-                        "a UI, diagram, or other canvas visual."
+                        "Call it when the user explicitly asks you to draw, design, build, create, "
+                        "or show a UI, diagram, or other visual, or to change the current canvas. "
+                        "Do not call it when the user is "
+                        "merely describing or discussing an interface; ask first if unsure."
                     ),
                     "parameters": {
                         "type": "object",

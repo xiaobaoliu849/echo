@@ -49,7 +49,11 @@ _TOOL_DECLARATIONS: tuple[dict[str, Any], ...] = (
     {
         "name": "render_canvas",
         "description": (
-            "Render, draw, sketch, or update an interactive UI component, canvas diagram, or HTML/React visual mockup directly on the user's screen in real time. Call this tool whenever the user asks to create, draw, sketch, build, preview, or update a UI, component, form, dashboard, game, card, or visual design on the canvas."
+            "Render or update an interactive UI component, diagram, or HTML/React mockup on the user's canvas side panel. "
+            "Call it when the user explicitly asks you to draw, design, sketch, build, create, generate, or show something "
+            "visual, or to change what is already on the canvas. "
+            "Do not call it when the user is merely describing, discussing, or giving feedback about an interface "
+            "(including this app's own UI); ask first if unsure."
         ),
         "parameters": {
             "type": "object",
