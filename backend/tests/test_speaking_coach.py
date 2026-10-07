@@ -308,3 +308,48 @@ def test_vocabulary_echoing_the_utterance_is_dropped() -> None:
     reply = json.dumps({"verdict": "good", "vocabulary": [{"term": "Hello, my coach!", "meaning": "x"}]})
     review = parse_coach_reply(reply, "Hello, my coach.")
     assert review is not None and review["vocabulary"] == []
+
+
+def test_local_providers_honor_coach_config() -> None:
+    import inspect
+
+    from services import realtime_glm4voice_provider, realtime_personaplex_provider
+
+    for module in (realtime_personaplex_provider, realtime_glm4voice_provider):
+        source = inspect.getsource(module)
+        # These providers bypass _handle_common_client_command, so they must
+        # route coach_config themselves or the coach toggle silently no-ops.
+        assert 'command_type == "coach_config"' in source
+        assert "self._apply_coach_config(" in source
+
+
+def test_direct_flush_turn_path_triggers_review(tmp_path) -> None:
+    """DashScope/Google/OpenAI/Qwen-Audio/Vercel complete turns by calling
+    memory_session.flush_turn() directly, bypassing _finalize_realtime_turn."""
+
+    async def scenario() -> FakeWebSocket:
+        service = RealtimeVoiceService()
+        service.speaking_coach = SpeakingCoach(
+            llm_service=FakeLLM(IMPROVE_REPLY),
+            repository=CoachRepository(db_path=tmp_path / "coach.db"),
+        )
+        websocket = FakeWebSocket()
+        memory_session = RealtimeMemorySession()
+        memory_session.configure(None)
+        await service._apply_coach_config(
+            websocket, {"coach": {"enabled": True}}, memory_session=memory_session, recorder=None
+        )
+        memory_session.note_user_transcript("I go to the park yesterday")
+        await memory_session.flush_turn()
+        await asyncio.gather(*list(service._coach_tasks))
+
+        # Disabling detaches the listener: later turns are not reviewed.
+        await service._apply_coach_config(websocket, {"coach": None}, memory_session=memory_session, recorder=None)
+        memory_session.note_user_transcript("She don't like it")
+        await memory_session.flush_turn()
+        assert not service._coach_tasks
+        return websocket
+
+    websocket = asyncio.run(scenario())
+    feedback = [event for event in websocket.sent if event["type"] == "coach_feedback"]
+    assert [event["user_text"] for event in feedback] == ["I go to the park yesterday"]

@@ -8,7 +8,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .evermem_config import EverMemConfig
 from .evermem_service import EverMemService
@@ -264,6 +264,11 @@ class RealtimeMemorySession:
         self._explicitly_configured = False
         self._current_user_text = ""
         self._current_assistant_text = ""
+        # Called with (user_text, assistant_text) whenever a turn is flushed.
+        # Every provider completes turns through flush_turn(), so per-turn
+        # observers (the speaking coach) hook in here rather than at each
+        # provider's completion path.
+        self.turn_listener: Callable[[str, str], None] | None = None
         self._pending_tasks: set[asyncio.Task[None]] = set()
         self._last_retrieved_query = ""
         self._last_memory_context = ""
@@ -402,10 +407,6 @@ class RealtimeMemorySession:
                 self._current_assistant_text, text, cumulative=cumulative
             )
 
-    def peek_turn_texts(self) -> tuple[str, str]:
-        """Current turn's (user, assistant) text without clearing it."""
-        return self._current_user_text.strip(), self._current_assistant_text.strip()
-
     def discard_turn(self) -> None:
         """Drop an interrupted turn without writing partial content to long-term memory."""
         self._current_user_text = ""
@@ -423,6 +424,11 @@ class RealtimeMemorySession:
         assistant_text = self._current_assistant_text.strip()
         self._current_user_text = ""
         self._current_assistant_text = ""
+        if self.turn_listener is not None:
+            try:
+                self.turn_listener(user_text, assistant_text)
+            except Exception:
+                logger.exception("voice_memory_turn_listener_failed")
         self._record_turn_excerpts(user_text, assistant_text)
 
         if not service or not user_text:

@@ -133,6 +133,11 @@ class RealtimeGlm4VoiceMixin:
                         message="GLM-4-Voice 为本地端到端模型，暂不支持工具调用。",
                     )
                     continue
+                if command_type == "coach_config":
+                    await self._apply_coach_config(
+                        websocket, payload, memory_session=memory_session, recorder=recorder
+                    )
+                    continue
                 if command_type == "ping":
                     await self._send_event(websocket, "pong")
                     continue

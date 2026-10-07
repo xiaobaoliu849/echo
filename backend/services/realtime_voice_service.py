@@ -660,9 +660,7 @@ class RealtimeVoiceService(
             return "handled"
 
         if command_type == "coach_config":
-            coach_config = normalize_coach_config(payload.get("coach"))
-            self._coach_state(websocket, create=True)["config"] = coach_config
-            await self._send_event(websocket, "coach_config", enabled=coach_config is not None, coach=coach_config)
+            await self._apply_coach_config(websocket, payload, memory_session=memory_session, recorder=recorder)
             return "handled"
 
         if command_type == "ping":
@@ -760,7 +758,6 @@ class RealtimeVoiceService(
         *,
         gated: bool = False,
     ) -> tuple[dict[str, Any], str]:
-        coach_user_text, coach_assistant_text = self._peek_coach_turn(memory_session)
         memory_result = await memory_session.flush_turn()
         completed_turn_id = ""
         if recorder is not None and not gated:
@@ -781,28 +778,37 @@ class RealtimeVoiceService(
                 turn_id=completed_turn_id,
                 interrupted=False,
             )
-        self._schedule_coach_review(
-            websocket,
-            recorder,
-            user_text=coach_user_text,
-            assistant_text=coach_assistant_text,
-            turn_id=completed_turn_id,
-        )
         return memory_result, completed_turn_id
 
     # -- speaking coach ------------------------------------------------------
 
     MAX_COACH_REVIEWS_IN_FLIGHT = 2
 
-    @staticmethod
-    def _peek_coach_turn(memory_session: RealtimeMemorySession) -> tuple[str, str]:
-        try:
-            user_text, assistant_text = memory_session.peek_turn_texts()
-        except (AttributeError, TypeError, ValueError):
-            return "", ""
-        if not isinstance(user_text, str) or not isinstance(assistant_text, str):
-            return "", ""
-        return user_text, assistant_text
+    async def _apply_coach_config(
+        self,
+        websocket: WebSocket,
+        payload: dict[str, Any],
+        *,
+        memory_session: RealtimeMemorySession,
+        recorder: VoiceAgentSessionRecorder | None,
+    ) -> None:
+        """Handle the ``coach_config`` client command (shared by every provider).
+
+        Reviews are triggered from ``memory_session.flush_turn()``, the one
+        step every provider's turn-completion path goes through.
+        """
+        coach_config = normalize_coach_config(payload.get("coach"))
+        coach_state = self._coach_state(websocket, create=True)
+        if coach_state is not None:
+            coach_state["config"] = coach_config
+
+        def on_turn_flushed(user_text: str, assistant_text: str) -> None:
+            self._schedule_coach_review(
+                websocket, recorder, user_text=user_text, assistant_text=assistant_text, turn_id=""
+            )
+
+        memory_session.turn_listener = on_turn_flushed if coach_config else None
+        await self._send_event(websocket, "coach_config", enabled=coach_config is not None, coach=coach_config)
 
     @staticmethod
     def _coach_state(websocket: WebSocket, *, create: bool = False) -> dict[str, Any] | None:

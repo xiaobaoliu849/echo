@@ -190,6 +190,11 @@ class PersonaPlexRealtimeMixin:
                         message="PersonaPlex 为本地全双工模型，暂不支持长期记忆与工具调用。",
                     )
                     continue
+                if command_type == "coach_config":
+                    await self._apply_coach_config(
+                        websocket, payload, memory_session=memory_session, recorder=recorder
+                    )
+                    continue
                 if command_type == "ping":
                     await self._send_event(websocket, "pong")
                     continue
