@@ -811,6 +811,8 @@ export type VoiceChatServerEvent =
       failed_count: number;
       local_pending_count?: number;
       reason?: string;
+      /** Cloud outcome of a write first reported with reason "saving". */
+      followup?: boolean;
     }
   | { type: "user_transcript"; text: string; turn_id?: string; tentative?: string; final?: boolean; interim?: boolean; cumulative?: boolean; item_id?: string }
   | { type: "translation_preview"; text?: string; tentative?: string; turn_id?: string }

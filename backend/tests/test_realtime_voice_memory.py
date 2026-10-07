@@ -16,6 +16,13 @@ from services.realtime_voice_service import (
 from services.voice_agent_tools import VoiceAgentToolSession
 
 
+
+async def _flush_and_persist(session):
+    """flush_turn() defers the cloud write; wait for it like the provider does."""
+    immediate = await session.flush_turn()
+    task = session.take_persist_task()
+    return (await task) if task is not None else immediate
+
 class _FakeAudioTranscriptionConfig:
     pass
 
@@ -127,7 +134,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
             "add_memory",
             new=AsyncMock(return_value={"status": "success"}),
         ) as add_memory:
-            result = await session.flush_turn()
+            result = await _flush_and_persist(session)
 
         self.assertEqual(add_memory.await_count, 1)
         self.assertEqual(result["saved_count"], 1)
@@ -158,7 +165,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
             "add_memory",
             new=AsyncMock(return_value={"status": "success"}),
         ):
-            await session.flush_turn()
+            await _flush_and_persist(session)
 
         self._flush_mock.assert_awaited_once()
         flush_kwargs = self._flush_mock.await_args.kwargs
@@ -183,7 +190,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
             "add_memory",
             new=AsyncMock(return_value={"status": "success"}),
         ):
-            await session.flush_turn()
+            await _flush_and_persist(session)
 
         self._flush_mock.assert_not_awaited()
 
@@ -212,7 +219,7 @@ class RealtimeMemorySessionTests(unittest.IsolatedAsyncioTestCase):
                 "add_memory",
                 new=AsyncMock(return_value={"status": "success"}),
             ):
-                result = await session.flush_turn()
+                result = await _flush_and_persist(session)
 
         self.assertEqual(result["saved_count"], 1)
         self.assertEqual(result["failed_count"], 0)

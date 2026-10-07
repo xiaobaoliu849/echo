@@ -849,6 +849,35 @@ export default function useVoiceChat({
   }
 
   function describeMemoryWriteResult(event: Extract<VoiceChatServerEvent, { type: "memory_write" }>): string {
+    if (event.followup) {
+      // The cloud outcome can land after the next turn has begun, so it does
+      // not claim to describe "this turn".
+      if (event.attempted_count === 0) {
+        return "";
+      }
+      if (event.saved_count > 0 && event.failed_count === 0) {
+        return t(
+          `已同步 ${event.saved_count} 条记忆到 EverMind`,
+          `Synced ${event.saved_count} memories to EverMind`
+        );
+      }
+      if (event.saved_count > 0) {
+        return t(
+          `记忆部分同步到 EverMind（${event.saved_count}/${event.attempted_count}）`,
+          `Partially synced memories to EverMind (${event.saved_count}/${event.attempted_count})`
+        );
+      }
+      return t(
+        "记忆云端同步失败，已保留在本地待同步缓存",
+        "Memory cloud sync failed; kept in the local pending cache"
+      );
+    }
+    if (event.reason === "saving" && event.attempted_count > 0) {
+      return t(
+        `正在保存本轮 ${event.attempted_count} 条记忆…`,
+        `Saving ${event.attempted_count} memories from this turn…`
+      );
+    }
     if (event.saved_count > 0 && event.failed_count === 0) {
       if ((event.local_pending_count || 0) > 0) {
         return t(
@@ -875,6 +904,12 @@ export default function useVoiceChat({
     }
     if (event.attempted_count === 0) {
       return "";
+    }
+    if ((event.local_pending_count || 0) > 0) {
+      return t(
+        "云端写入 EverMind 失败，记忆已保留在本地待同步缓存",
+        "Failed to write EverMind memories to the cloud; they are kept in the local pending cache"
+      );
     }
     return t("本轮写入 EverMind 失败", "Failed to write EverMind memories for this turn");
   }
@@ -1252,7 +1287,14 @@ export default function useVoiceChat({
         return;
       }
       case "memory_write":
-        currentMemorySavedRef.current = event.saved_count > 0;
+        // A follow-up reports the cloud outcome of an earlier turn and may land
+        // after that turn was committed, so it only updates the status line.
+        // "saving" already counts as saved: the entries are retrievable from
+        // the local pending cache before the cloud write returns.
+        if (!event.followup) {
+          currentMemorySavedRef.current =
+            event.saved_count > 0 || (event.reason === "saving" && event.attempted_count > 0);
+        }
         setVoiceChatMemoryWriteStatus(describeMemoryWriteResult(event));
         return;
       case "assistant_text":

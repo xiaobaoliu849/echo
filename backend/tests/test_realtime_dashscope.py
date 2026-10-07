@@ -668,7 +668,7 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         release = asyncio.Event()
         memory = _MemorySession()
 
-        async def slow_retrieve() -> dict:
+        async def slow_retrieve(*_args: Any, **_kwargs: Any) -> dict:
             await release.wait()
             return {"context": "用户偏好：简短回答", "memories_retrieved": 1, "attempted": True}
 

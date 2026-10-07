@@ -717,15 +717,7 @@ class VercelRealtimeMixin:
                 completed_turn_id = ""
                 if recorder is not None and not gated_tool_turn_id and not tool_session.has_active_task:
                     completed_turn_id = await recorder.complete_turn(memory_result)
-                await self._send_event(
-                    websocket,
-                    "memory_write",
-                    attempted_count=int(memory_result.get("attempted_count", 0)),
-                    saved_count=int(memory_result.get("saved_count", 0)),
-                    failed_count=int(memory_result.get("failed_count", 0)),
-                    local_pending_count=int(memory_result.get("local_pending_count", 0)),
-                    reason=str(memory_result.get("reason", "")),
-                )
+                await self._send_memory_write(websocket, memory_session, memory_result)
                 if not gated_tool_turn_id and not tool_session.has_active_task:
                     await self._send_event(
                         websocket,
@@ -752,30 +744,15 @@ class VercelRealtimeMixin:
                         voice_turn_id = ""
                         if recorder is not None:
                             voice_turn_id = await recorder.note_user_transcript(user_text)
-                        retrieval = await memory_session.retrieve_memory_context()
-                        memory_context = str(retrieval.get("context", ""))
-                        memory_count = int(retrieval.get("memories_retrieved", 0))
-                        local_pending_count = int(retrieval.get("local_pending_count", 0))
-                        cloud_count = int(retrieval.get("cloud_count", 0))
-                        if retrieval.get("attempted"):
-                            await self._send_event(
-                                websocket,
-                                "memory_context",
-                                memories_retrieved=memory_count,
-                                local_pending_count=local_pending_count,
-                                cloud_count=cloud_count,
-                                attempted=True,
-                            )
-                        if memory_context:
-                            logger.info(
-                                "voice_memory_inject provider=Vercel scope=%s count=%s local_pending=%s cloud=%s",
-                                memory_session._config.memory_scope,
-                                memory_count,
-                                local_pending_count,
-                                cloud_count,
-                            )
-                            pending_prefill_context = memory_context
                         await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                        def _set_prefill_context(context: str) -> None:
+                            nonlocal pending_prefill_context
+                            pending_prefill_context = context
+
+                        self._spawn_memory_lookup(
+                            websocket, memory_session, user_text,
+                            provider="Vercel", on_context=_set_prefill_context,
+                        )
 
                         async def on_vercel_tool_result(result: dict[str, Any]) -> None:
                             nonlocal gated_tool_turn_id
@@ -871,30 +848,15 @@ class VercelRealtimeMixin:
                     voice_turn_id = ""
                     if recorder is not None:
                         voice_turn_id = await recorder.note_user_transcript(user_text)
-                    retrieval = await memory_session.retrieve_memory_context()
-                    memory_context = str(retrieval.get("context", ""))
-                    memory_count = int(retrieval.get("memories_retrieved", 0))
-                    local_pending_count = int(retrieval.get("local_pending_count", 0))
-                    cloud_count = int(retrieval.get("cloud_count", 0))
-                    if retrieval.get("attempted"):
-                        await self._send_event(
-                            websocket,
-                            "memory_context",
-                            memories_retrieved=memory_count,
-                            local_pending_count=local_pending_count,
-                            cloud_count=cloud_count,
-                            attempted=True,
-                        )
-                    if memory_context:
-                        logger.info(
-                            "voice_memory_inject provider=Vercel scope=%s count=%s local_pending=%s cloud=%s",
-                            memory_session._config.memory_scope,
-                            memory_count,
-                            local_pending_count,
-                            cloud_count,
-                        )
-                        pending_prefill_context = memory_context
                     await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                    def _set_prefill_context(context: str) -> None:
+                        nonlocal pending_prefill_context
+                        pending_prefill_context = context
+
+                    self._spawn_memory_lookup(
+                        websocket, memory_session, user_text,
+                        provider="Vercel", on_context=_set_prefill_context,
+                    )
 
                     async def on_vercel_tool_result(result: dict[str, Any]) -> None:
                         nonlocal gated_tool_turn_id

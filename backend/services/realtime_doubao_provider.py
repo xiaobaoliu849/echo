@@ -33,6 +33,7 @@ from .realtime_constants import (
     DOUBAO_REALTIME_VOICES,
 )
 from .interruption_classifier import InterruptionDecisionCoordinator
+from .background_tasks import spawn_background_task
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_session_recorder import VoiceAgentSessionRecorder
 from .voice_agent_tools import VoiceAgentToolSession
@@ -306,9 +307,27 @@ class DoubaoRealtimeMixin:
         memory_session: RealtimeMemorySession,
         recorder: VoiceAgentSessionRecorder | None,
         interruption: InterruptionDecisionCoordinator,
+        doubao_ws: Any = None,
     ) -> bool:
         """Handle one 全双工 JSON event. Returns False when the loop should end."""
         event_type = str(event.get("type") or "")
+
+        async def inject_memory_context(memory_context: str) -> None:
+            # Doubao's full-duplex protocol does not support re-configuring
+            # instructions mid-session, so memory rides as a system item. The
+            # same context is sent once per utterance (prefetch + final).
+            if doubao_ws is None or not memory_context or memory_context == state.get("memory_injected"):
+                return
+            state["memory_injected"] = memory_context
+            await doubao_ws.send(json.dumps({
+                "type": "conversation.item.create",
+                "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+                "items": [{
+                    "type": "message",
+                    "role": "system",
+                    "content": [{"type": "input_text", "text": f"以下是从长期记忆中检索到的相关历史信息，请参考这些内容回答用户的问题：\n{memory_context}"}],
+                }],
+            }, ensure_ascii=False))
 
         if event_type == "session.closed":
             return False
@@ -317,6 +336,10 @@ class DoubaoRealtimeMixin:
             # 服务端识别到用户开始说话 —— 打断客户端播报 (barge-in)。
             state["user_acc"] = ""
             state["user_final_sent"] = False
+            state["memory_injected"] = ""
+            begin_utterance = getattr(memory_session, "begin_utterance", None)
+            if callable(begin_utterance):
+                begin_utterance()
             if state.get("tts_active"):
                 # 定向抑制:只丢弃被打断那轮(active_response_id)的残余增量。
                 # 不能开"一刀切"抑制窗——新一轮回复的文本增量常先于它自己的
@@ -350,6 +373,22 @@ class DoubaoRealtimeMixin:
             snapshot = str(event.get("delta") or "")
             if snapshot:
                 state["user_acc"] = snapshot
+                # Search memory while the user is still speaking so the item
+                # lands before the server auto-starts the reply.
+                prefetch = getattr(memory_session, "prefetch_partial", None)
+                prefetch_task = prefetch(snapshot) if callable(prefetch) else None
+                if prefetch_task is not None:
+                    async def inject_prefetched(task: Any = prefetch_task) -> None:
+                        # Announced by the final-transcript lookup, which
+                        # reuses this result: an announcement now would be
+                        # attributed to whichever turn the client has open.
+                        try:
+                            result = await task
+                            await inject_memory_context(str(result.get("context", "")))
+                        except Exception as exc:
+                            logger.debug("doubao_memory_prefetch_skipped: %s", exc)
+
+                    spawn_background_task(inject_prefetched(), name="doubao_memory_prefetch")
                 # 前端约定: interim=True 原位更新预览,否则视为 final 提交
                 await self._send_event(
                     websocket, "user_transcript",
@@ -366,38 +405,6 @@ class DoubaoRealtimeMixin:
                 state["user_final_sent"] = True
                 if memory_session is not None:
                     memory_session.note_user_transcript(transcript)
-                    # Retrieve cloud memories and inject as context before the
-                    # model auto-generates its reply. Doubao's full-duplex
-                    # protocol does not support re-configuring instructions
-                    # mid-session, so we inject retrieved memories as a
-                    # system-side conversation item the model can reference.
-                    try:
-                        retrieval = await memory_session.retrieve_memory_context()
-                        memory_context = str(retrieval.get("context", ""))
-                        memory_count = int(retrieval.get("memories_retrieved", 0))
-                        local_pending_count = int(retrieval.get("local_pending_count", 0))
-                        cloud_count = int(retrieval.get("cloud_count", 0))
-                        if retrieval.get("attempted"):
-                            await self._send_event(
-                                websocket,
-                                "memory_context",
-                                memories_retrieved=memory_count,
-                                local_pending_count=local_pending_count,
-                                cloud_count=cloud_count,
-                                attempted=True,
-                            )
-                        if memory_context:
-                            await doubao_ws.send(json.dumps({
-                                "type": "conversation.item.create",
-                                "event_id": f"evt_{uuid.uuid4().hex[:12]}",
-                                "items": [{
-                                    "type": "message",
-                                    "role": "system",
-                                    "content": [{"type": "input_text", "text": f"以下是从长期记忆中检索到的相关历史信息，请参考这些内容回答用户的问题：\n{memory_context}"}],
-                                }],
-                            }, ensure_ascii=False))
-                    except Exception:
-                        logger.exception("doubao_memory_retrieve_failed")
                 voice_turn_id = ""
                 if recorder is not None:
                     voice_turn_id = await recorder.note_user_transcript(transcript)
@@ -407,6 +414,13 @@ class DoubaoRealtimeMixin:
                     websocket, "user_transcript",
                     text=transcript, turn_id=state.get("active_turn_id"),
                 )
+                if memory_session is not None:
+                    # Off the event loop: awaiting EverOS here held the
+                    # transcript (and every downlink frame) for seconds.
+                    self._spawn_memory_lookup(
+                        websocket, memory_session, transcript,
+                        provider="Doubao", on_context=inject_memory_context,
+                    )
             return True
 
         if event_type == "conversation.item.input_audio_transcription.failed":
@@ -606,6 +620,7 @@ class DoubaoRealtimeMixin:
                 memory_session=memory_session,
                 recorder=recorder,
                 interruption=interruption,
+                doubao_ws=doubao_ws,
             )
             if not keep_going:
                 break

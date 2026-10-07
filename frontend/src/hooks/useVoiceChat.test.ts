@@ -253,6 +253,29 @@ describe("useVoiceChat", () => {
     expect(userCoachIds()).toEqual([1, 2, 3, null]);
   });
 
+  it("marks a turn saved while its memories sync and keeps a late cloud result off the next turn", async () => {
+    const { result, socket } = await startTranscriptTestSession();
+    const savedFlags = () =>
+      result.current.voiceChatMessages.filter(m => m.role === "user").map(m => m.memorySaved);
+
+    act(() => {
+      socket.emitMessage({ type: "user_transcript", text: "以后默认都用中文女声。", turn_id: "t1" });
+      socket.emitMessage({ type: "assistant_text", text: "好的。" });
+      socket.emitMessage({ type: "memory_write", attempted_count: 1, saved_count: 0, failed_count: 0, local_pending_count: 1, reason: "saving" });
+    });
+    expect(result.current.voiceChatMemoryWriteStatus).toContain("正在保存");
+    act(() => {
+      socket.emitMessage({ type: "turn_complete", turn_id: "t1" });
+      socket.emitMessage({ type: "user_transcript", text: "今天天气怎么样？", turn_id: "t2" });
+      // The first turn's cloud outcome lands during the second turn.
+      socket.emitMessage({ type: "memory_write", attempted_count: 1, saved_count: 1, failed_count: 0, local_pending_count: 1, reason: "", followup: true });
+      socket.emitMessage({ type: "assistant_text", text: "晴天。" });
+      socket.emitMessage({ type: "turn_complete", turn_id: "t2" });
+    });
+    expect(savedFlags()).toEqual([true, false]);
+    expect(result.current.voiceChatMemoryWriteStatus).not.toContain("本轮");
+  });
+
   it("shows provisional corrections without archiving them and saves only final words", async () => {
     const { result, socket } = await startTranscriptTestSession();
     act(() => {

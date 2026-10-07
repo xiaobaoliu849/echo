@@ -655,29 +655,14 @@ class GoogleRealtimeMixin:
                     voice_turn_id = await recorder.note_user_transcript(user_text)
                 # Publish confirmed words before potentially slow memory retrieval.
                 await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
-                retrieval = await memory_session.retrieve_memory_context()
-                memory_context = str(retrieval.get("context", ""))
-                memory_count = int(retrieval.get("memories_retrieved", 0))
-                local_pending_count = int(retrieval.get("local_pending_count", 0))
-                cloud_count = int(retrieval.get("cloud_count", 0))
-                if retrieval.get("attempted"):
-                    await self._send_event(
-                        websocket,
-                        "memory_context",
-                        memories_retrieved=memory_count,
-                        local_pending_count=local_pending_count,
-                        cloud_count=cloud_count,
-                        attempted=True,
-                    )
-                if memory_context:
-                    logger.info(
-                        "voice_memory_inject provider=Google scope=%s count=%s local_pending=%s cloud=%s",
-                        memory_session._config.memory_scope,
-                        memory_count,
-                        local_pending_count,
-                        cloud_count,
-                    )
-                    pending_prefill_context = memory_context
+                def _set_prefill_context(context: str) -> None:
+                    nonlocal pending_prefill_context
+                    pending_prefill_context = context
+
+                self._spawn_memory_lookup(
+                    websocket, memory_session, user_text,
+                    provider="Google", on_context=_set_prefill_context,
+                )
 
         send_tool_event = self._tool_event_sender(websocket, recorder)
 
@@ -1251,15 +1236,7 @@ class GoogleRealtimeMixin:
                         memory_result: dict[str, Any] = {}
                         if not is_live_translate:
                             memory_result = await memory_session.flush_turn()
-                            await self._send_event(
-                                websocket,
-                                "memory_write",
-                                attempted_count=int(memory_result.get("attempted_count", 0)),
-                                saved_count=int(memory_result.get("saved_count", 0)),
-                                failed_count=int(memory_result.get("failed_count", 0)),
-                                local_pending_count=int(memory_result.get("local_pending_count", 0)),
-                                reason=str(memory_result.get("reason", "")),
-                            )
+                            await self._send_memory_write(websocket, memory_session, memory_result)
                         if pending_prefill_context and not is_live_translate:
                             await self._apply_google_memory_prefill(session, pending_prefill_context)
                             pending_prefill_context = ""

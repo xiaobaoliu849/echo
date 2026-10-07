@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
     MultiModality = None
     OmniRealtimeConversation = None
 
+from .realtime_memory_injector import RealtimeMemoryInjector
 from .realtime_constants import (
     DEFAULT_DASHSCOPE_REALTIME_MODEL,
     DEFAULT_DASHSCOPE_REALTIME_VOICE,
@@ -288,68 +289,6 @@ class DashScopeRealtimeMixin:
             enable_voice_clone=enable_voice_clone,
             voice_clone_frequency=voice_clone_frequency,
         )
-    async def _inject_dashscope_memory(
-        self,
-        websocket: WebSocket,
-        conversation: Any,
-        voice: str,
-        memory_session: RealtimeMemorySession,
-        user_text: str,
-        *,
-        previous: "asyncio.Task[Any] | None" = None,
-        settle: bool = False,
-    ) -> None:
-        """Retrieve memory for one user turn and push it as instructions."""
-        if previous is not None and not previous.done():
-            try:
-                await previous
-            except Exception:
-                pass
-        if settle:
-            # Let the barge-in cancel land before the session is updated.
-            await asyncio.sleep(0.2)
-        try:
-            retrieval = await memory_session.retrieve_memory_context()
-            memory_context = str(retrieval.get("context", ""))
-            memory_count = int(retrieval.get("memories_retrieved", 0))
-            local_pending_count = int(retrieval.get("local_pending_count", 0))
-            cloud_count = int(retrieval.get("cloud_count", 0))
-            if retrieval.get("attempted"):
-                await self._send_event(
-                    websocket,
-                    "memory_context",
-                    memories_retrieved=memory_count,
-                    local_pending_count=local_pending_count,
-                    cloud_count=cloud_count,
-                    attempted=True,
-                )
-            if memory_context:
-                logger.info(
-                    "voice_memory_inject provider=DashScope scope=%s count=%s local_pending=%s cloud=%s",
-                    memory_session._config.memory_scope,
-                    memory_count,
-                    local_pending_count,
-                    cloud_count,
-                )
-                self._configure_dashscope_conversation(
-                    conversation,
-                    voice=voice,
-                    instructions=self._build_realtime_instructions(memory_context),
-                )
-            elif memory_session.is_forced_recall_query(user_text):
-                logger.info(
-                    "voice_memory_inject provider=DashScope scope=%s count=0 forced_recall=true",
-                    memory_session._config.memory_scope,
-                )
-                self._configure_dashscope_conversation(
-                    conversation,
-                    voice=voice,
-                    instructions=self._build_recall_miss_instructions(user_text),
-                )
-        except Exception as exc:
-            # The session may have closed while the lookup was in flight.
-            logger.debug("dashscope_memory_injection_skipped: %s", exc)
-
     async def _client_to_dashscope_loop(
         self,
         websocket: WebSocket,
@@ -450,12 +389,30 @@ class DashScopeRealtimeMixin:
         cannot_create_response_retries = 0
         gated_tool_turn_id = ""
         previewed_item_ids: dict[str, None] = {}
-        memory_injection_task: asyncio.Task[Any] | None = None
+
+        async def push_memory_instructions(instructions: str) -> None:
+            self._configure_dashscope_conversation(
+                conversation, voice=voice, instructions=instructions,
+            )
+
+        async def send_memory_event(event_type: str, payload: dict[str, Any]) -> None:
+            await self._send_event(websocket, event_type, **payload)
+
+        memory_injector = RealtimeMemoryInjector(
+            memory_session,
+            build_instructions=self._build_realtime_instructions,
+            build_recall_miss=self._build_recall_miss_instructions,
+            push_instructions=push_memory_instructions,
+            send_event=send_memory_event,
+        )
         while True:
             event = await queue.get()
             event_type = str(event.get("type", "")).strip()
             if event_type == "user_transcript_preview":
                 previewed_item_ids[str(event.get("item_id", ""))] = None
+                memory_injector.on_partial(
+                    str(event.get("text", "")), str(event.get("item_id", "")),
+                )
                 if len(previewed_item_ids) > 16:
                     previewed_item_ids.pop(next(iter(previewed_item_ids)))
                 await self._send_event(
@@ -504,6 +461,7 @@ class DashScopeRealtimeMixin:
                     )
                 continue
             if event_type == "response_started":
+                memory_injector.note_response_started()
                 interruption.active_response_id = (
                     str(event.get("response_id", "")) or interruption.active_response_id or "active"
                 )
@@ -694,11 +652,7 @@ class DashScopeRealtimeMixin:
                             recorder,
                             gated=False,
                         )
-                        self._configure_dashscope_conversation(
-                            conversation,
-                            voice=voice,
-                            instructions=self._build_realtime_instructions(),
-                        )
+                        await memory_injector.on_turn_complete()
                     continue
                 if InterruptionClassifier.classify_interruption(user_text) == InterruptionIntent.NOISE_OR_SILENCE:
                     if had_preview:
@@ -715,25 +669,13 @@ class DashScopeRealtimeMixin:
                 # so calling create_response() here is redundant and causes collision errors.
                 # conversation.create_response()
                 await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
-                # Memory lookup runs off this loop. Awaiting it here held the
-                # final transcript (and every queued preview / reply audio
-                # frame behind it) for the startup wait plus the cloud search,
-                # several seconds per turn, although the server had already
-                # transcribed the speech in ~200 ms. Server VAD has already
-                # started the reply, so the injected instructions only steer
-                # later turns either way. Lookups are chained so they still
-                # apply in turn order.
-                memory_injection_task = spawn_background_task(
-                    self._inject_dashscope_memory(
-                        websocket,
-                        conversation,
-                        voice,
-                        memory_session,
-                        user_text,
-                        previous=memory_injection_task,
-                        settle=bool(interrupted_response_id and not had_deferred_terminal),
-                    ),
-                    name="dashscope_memory_injection",
+                # Memory lookup runs off this loop (see RealtimeMemoryInjector):
+                # awaiting EverOS here held this transcript and every queued
+                # preview / reply frame behind it for seconds.
+                memory_injector.on_final(
+                    user_text,
+                    item_id,
+                    settle=bool(interrupted_response_id and not had_deferred_terminal),
                 )
                 continue
             elif event_type == "assistant_text":
@@ -807,20 +749,8 @@ class DashScopeRealtimeMixin:
                     completed_turn_id = ""
                     if recorder is not None:
                         completed_turn_id = await recorder.complete_turn(memory_result)
-                    await self._send_event(
-                        websocket,
-                        "memory_write",
-                        attempted_count=int(memory_result.get("attempted_count", 0)),
-                        saved_count=int(memory_result.get("saved_count", 0)),
-                        failed_count=int(memory_result.get("failed_count", 0)),
-                        local_pending_count=int(memory_result.get("local_pending_count", 0)),
-                        reason=str(memory_result.get("reason", "")),
-                    )
-                    self._configure_dashscope_conversation(
-                        conversation,
-                        voice=voice,
-                        instructions=self._build_realtime_instructions(),
-                    )
+                    await self._send_memory_write(websocket, memory_session, memory_result)
+                    await memory_injector.on_turn_complete()
                     await self._send_event(
                         websocket,
                         "turn_complete",

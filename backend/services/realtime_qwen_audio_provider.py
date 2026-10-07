@@ -24,6 +24,7 @@ from .realtime_constants import (
     _merge_streaming_text,
 )
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
+from .realtime_memory_injector import RealtimeMemoryInjector
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_session_recorder import VoiceAgentSessionRecorder
 from .voice_agent_tools import VoiceAgentToolService, VoiceAgentToolSession, VoiceToolRequest
@@ -267,6 +268,29 @@ class QwenAudioRealtimeMixin:
         interruption = interruption or InterruptionDecisionCoordinator()
         suppressed_response_ids: set[str] = set()
 
+        async def push_memory_instructions(instructions: str) -> None:
+            await dash_ws.send(json.dumps({
+                "type": "session.update",
+                "session": {"instructions": instructions},
+            }))
+
+        async def send_memory_event(event_type: str, payload: dict[str, Any]) -> None:
+            await self._send_event(websocket, event_type, **payload)
+
+        # Recalled memory used to be fetched here inline (holding the user
+        # transcript and buffered reply for up to 5 s) and then never sent to
+        # the session at all; the injector prefetches from interim ASR and
+        # pushes it before server VAD starts the reply.
+        memory_injector = RealtimeMemoryInjector(
+            memory_session,
+            build_instructions=self._build_qwen_audio_instructions,
+            build_recall_miss=lambda query: (
+                f"{self._build_qwen_audio_instructions()}\n\n{self._recall_miss_note(query)}"
+            ),
+            push_instructions=push_memory_instructions,
+            send_event=send_memory_event,
+        )
+
         async def _process_response_done(response_done_event: dict[str, Any]) -> None:
             """Process a response.done event (original inline logic extracted here
             so it can be reused for deferred and timeout paths)."""
@@ -304,18 +328,8 @@ class QwenAudioRealtimeMixin:
             completed_turn_id = ""
             if recorder is not None and not gated_tool_turn_id:
                 completed_turn_id = await recorder.complete_turn(memory_result)
-            await self._send_event(
-                websocket, "memory_write",
-                attempted_count=int(memory_result.get("attempted_count", 0)),
-                saved_count=int(memory_result.get("saved_count", 0)),
-                failed_count=int(memory_result.get("failed_count", 0)),
-                local_pending_count=int(memory_result.get("local_pending_count", 0)),
-                reason=str(memory_result.get("reason", "")),
-            )
-            await dash_ws.send(json.dumps({
-                "type": "session.update",
-                "session": {"instructions": self._build_qwen_audio_instructions()},
-            }))
+            await self._send_memory_write(websocket, memory_session, memory_result)
+            await memory_injector.on_turn_complete()
             if not gated_tool_turn_id:
                 await self._send_event(
                     websocket, "turn_complete",
@@ -435,6 +449,7 @@ class QwenAudioRealtimeMixin:
                 interruption.active_response_id = (
                     str((event.get("response") or {}).get("id", "")) or interruption.active_response_id or "active"
                 )
+                memory_injector.note_response_started()
                 # New response round begins; reset the per-response function_call marker.
                 current_response_has_function_call = False
                 # Buffer this round's AI output ONLY if the user turn's final
@@ -467,6 +482,7 @@ class QwenAudioRealtimeMixin:
                     # Bound the map: drop the oldest item's state.
                     _interim_transcripts.pop(next(iter(_interim_transcripts)), None)
                 if interim_text.strip():
+                    memory_injector.on_partial(interim_text, item_id)
                     await self._send_event(
                         websocket, "user_transcript", text=interim_text, interim=True,
                     )
@@ -484,7 +500,8 @@ class QwenAudioRealtimeMixin:
                     )
                 continue
             if event_type == "conversation.item.input_audio_transcription.completed":
-                _interim_transcripts.pop(str(event.get("item_id", "")), None)
+                final_item_id = str(event.get("item_id", ""))
+                _interim_transcripts.pop(final_item_id, None)
                 user_text = str(event.get("transcript", "")).strip()
                 if turn_detection_mode == "smart_turn" and user_text and interruption.pending is not None:
                     # A normal transcription (rather than an ambient one) is
@@ -554,10 +571,7 @@ class QwenAudioRealtimeMixin:
                             await self._finalize_realtime_turn(
                                 websocket, memory_session, recorder, gated=bool(gated_tool_turn_id),
                             )
-                            await dash_ws.send(json.dumps({
-                                "type": "session.update",
-                                "session": {"instructions": self._build_qwen_audio_instructions()},
-                            }))
+                            await memory_injector.on_turn_complete()
                         continue
                     if InterruptionClassifier.classify_interruption(user_text) == InterruptionIntent.NOISE_OR_SILENCE:
                         continue
@@ -568,22 +582,7 @@ class QwenAudioRealtimeMixin:
                 voice_turn_id = ""
                 if recorder is not None:
                     voice_turn_id = await recorder.note_user_transcript(user_text)
-                retrieval = await memory_session.retrieve_memory_context()
-                memory_context = str(retrieval.get("context", ""))
-                memory_count = int(retrieval.get("memories_retrieved", 0))
-                local_pending_count = int(retrieval.get("local_pending_count", 0))
-                cloud_count = int(retrieval.get("cloud_count", 0))
-                if retrieval.get("attempted"):
-                    await self._send_event(
-                        websocket, "memory_context",
-                        memories_retrieved=memory_count,
-                        local_pending_count=local_pending_count,
-                        cloud_count=cloud_count,
-                        attempted=True,
-                    )
-                base_instructions = self._build_qwen_audio_instructions(memory_context)
-                if not memory_context and memory_session.is_forced_recall_query(user_text):
-                    base_instructions = self._build_recall_miss_instructions(user_text)
+                memory_injector.on_final(user_text, final_item_id)
                 async def on_qwen_audio_tool_result(result: dict[str, Any]) -> None:
                     nonlocal gated_tool_turn_id
                     gated_tool_turn_id = ""

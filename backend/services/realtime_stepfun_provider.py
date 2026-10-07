@@ -260,30 +260,21 @@ class StepFunRealtimeMixin:
                     voice_turn_id = ""
                     if recorder is not None:
                         voice_turn_id = await recorder.note_user_transcript(user_text)
-                    retrieval = await memory_session.retrieve_memory_context()
-                    memory_context = str(retrieval.get("context", ""))
-                    memory_count = int(retrieval.get("memories_retrieved", 0))
-                    local_pending_count = int(retrieval.get("local_pending_count", 0))
-                    cloud_count = int(retrieval.get("cloud_count", 0))
-                    if retrieval.get("attempted"):
-                        await self._send_event(
-                            websocket,
-                            "memory_context",
-                            memories_retrieved=memory_count,
-                            local_pending_count=local_pending_count,
-                            cloud_count=cloud_count,
-                            attempted=True,
-                        )
-                    if memory_context:
-                        logger.info(
-                            "voice_memory_inject provider=StepFun scope=%s count=%s local_pending=%s cloud=%s",
-                            memory_session._config.memory_scope,
-                            memory_count,
-                            local_pending_count,
-                            cloud_count,
-                        )
-                        pending_prefill_context = memory_context
                     await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                    async def _set_prefill_context(context: str) -> None:
+                        nonlocal pending_prefill_context
+                        if interruption.active_response_id:
+                            # Added once the reply in flight is done.
+                            pending_prefill_context = context
+                            return
+                        # The lookup outlasted the reply: add the note now so
+                        # it still serves the user's next turn.
+                        await stepfun_ws.send(self._memory_note_event(context))
+
+                    self._spawn_memory_lookup(
+                        websocket, memory_session, user_text,
+                        provider="StepFun", on_context=_set_prefill_context,
+                    )
 
                     # Tool detection
                     async def on_stepfun_tool_result(result: dict[str, Any]) -> None:
@@ -378,6 +369,10 @@ class StepFunRealtimeMixin:
                     suppressed_response_ids.discard(response_id)
                     continue
                 interruption.active_response_id = ""
+                if pending_prefill_context:
+                    # Recalled memory used to be stored here and never sent.
+                    await stepfun_ws.send(self._memory_note_event(pending_prefill_context))
+                    pending_prefill_context = ""
                 if not gated_tool_turn_id:
                     if interruption.pending is not None:
                         interruption.defer_terminal_event(event)

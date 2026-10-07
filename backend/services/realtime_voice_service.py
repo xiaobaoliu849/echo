@@ -44,6 +44,7 @@ from .realtime_tool_protocol import (
     tool_error_payload,
     tool_result_payload,
 )
+from .background_tasks import spawn_background_task
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_dashscope_client import DashScopeRealtimeCallback, DashScopeAudioRealtimeConversation
 from .realtime_session_recorder import VoiceAgentSessionRecorder, run_db_call
@@ -260,8 +261,11 @@ class RealtimeVoiceService(
     @staticmethod
     def _build_recall_miss_instructions(user_query: str) -> str:
         base_inst = RealtimeVoiceService._get_base_instructions()
+        return f"{base_inst}\n\n{RealtimeVoiceService._recall_miss_note(user_query)}"
+
+    @staticmethod
+    def _recall_miss_note(user_query: str) -> str:
         return (
-            f"{base_inst}\n\n"
             "The user is explicitly asking you to recall prior conversation memory, but the memory search "
             "returned no matching results. This may mean the earlier conversation has not yet been indexed "
             "into long-term memory, or no relevant memory was stored. Do not pretend you remember specific "
@@ -750,6 +754,118 @@ class RealtimeVoiceService(
 
     # -- turn / memory finalization ----------------------------------------
 
+    @staticmethod
+    def _memory_note_event(memory_context: str) -> str:
+        """OpenAI-style hidden user item carrying recalled memory."""
+        return json.dumps({
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [{
+                    "type": "input_text",
+                    "text": (
+                        "Context note for personalization only. These long-term memories may help with "
+                        "the user's next turn. Use them only when relevant, and do not mention this note.\n"
+                        f"{memory_context}"
+                    ),
+                }],
+            },
+        })
+
+    def _spawn_memory_lookup(
+        self,
+        websocket: WebSocket,
+        memory_session: RealtimeMemorySession,
+        user_text: str,
+        *,
+        provider: str,
+        on_context: Callable[[str], Awaitable[None] | None],
+        utterance_id: str = "",
+    ) -> None:
+        """Retrieve memory for a finished user turn without blocking the caller.
+
+        Awaiting EverOS inline held the transcript and every provider event
+        queued behind it for seconds. The caller emits the user transcript
+        first; ``memory_context`` follows once the lookup lands, and
+        ``on_context`` receives the context for the provider to inject.
+        """
+
+        async def run() -> None:
+            try:
+                retrieval = await memory_session.retrieve_memory_context(utterance_id, query=user_text)
+                memory_context = str(retrieval.get("context", ""))
+                memory_count = int(retrieval.get("memories_retrieved", 0))
+                local_pending_count = int(retrieval.get("local_pending_count", 0))
+                cloud_count = int(retrieval.get("cloud_count", 0))
+                if retrieval.get("attempted"):
+                    await self._send_event(
+                        websocket,
+                        "memory_context",
+                        memories_retrieved=memory_count,
+                        local_pending_count=local_pending_count,
+                        cloud_count=cloud_count,
+                        attempted=True,
+                    )
+                if memory_context:
+                    logger.info(
+                        "voice_memory_inject provider=%s scope=%s count=%s local_pending=%s cloud=%s",
+                        provider,
+                        memory_session._config.memory_scope,
+                        memory_count,
+                        local_pending_count,
+                        cloud_count,
+                    )
+                    outcome = on_context(memory_context)
+                    if asyncio.iscoroutine(outcome):
+                        await outcome
+            except Exception as exc:
+                # The session may have closed while the lookup was in flight.
+                logger.debug("voice_memory_lookup_skipped provider=%s: %s", provider, exc)
+
+        spawn_background_task(run(), name=f"voice_memory_lookup_{provider}")
+
+    async def _send_memory_write(
+        self,
+        websocket: WebSocket,
+        memory_session: RealtimeMemorySession,
+        memory_result: dict[str, Any],
+    ) -> None:
+        """Report a flushed turn's memory write, then its cloud outcome.
+
+        flush_turn() only queues the cloud write, so the first event says
+        "saving"; the real counts follow once EverOS answers, without holding
+        turn completion (or the next turn's events) on the network.
+        """
+
+        async def send(result: dict[str, Any], **extra: Any) -> None:
+            await self._send_event(
+                websocket,
+                "memory_write",
+                **extra,
+                attempted_count=int(result.get("attempted_count", 0)),
+                saved_count=int(result.get("saved_count", 0)),
+                failed_count=int(result.get("failed_count", 0)),
+                local_pending_count=int(result.get("local_pending_count", 0)),
+                reason=str(result.get("reason", "")),
+            )
+
+        await send(memory_result)
+        take_persist_task = getattr(memory_session, "take_persist_task", None)
+        task = take_persist_task() if callable(take_persist_task) else None
+        if not isinstance(task, asyncio.Future):
+            return
+
+        async def report_outcome() -> None:
+            try:
+                outcome = await task
+                await send(outcome, followup=True)
+            except Exception as exc:
+                # The client may have hung up while the write was in flight.
+                logger.debug("voice_memory_write_followup_skipped: %s", exc)
+
+        spawn_background_task(report_outcome(), name="voice_memory_write_followup")
+
     async def _finalize_realtime_turn(
         self,
         websocket: WebSocket,
@@ -762,15 +878,7 @@ class RealtimeVoiceService(
         completed_turn_id = ""
         if recorder is not None and not gated:
             completed_turn_id = await recorder.complete_turn(memory_result)
-        await self._send_event(
-            websocket,
-            "memory_write",
-            attempted_count=int(memory_result.get("attempted_count", 0)),
-            saved_count=int(memory_result.get("saved_count", 0)),
-            failed_count=int(memory_result.get("failed_count", 0)),
-            local_pending_count=int(memory_result.get("local_pending_count", 0)),
-            reason=str(memory_result.get("reason", "")),
-        )
+        await self._send_memory_write(websocket, memory_session, memory_result)
         if not gated:
             await self._send_event(
                 websocket,

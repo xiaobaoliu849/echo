@@ -67,7 +67,7 @@ class FakeMemorySession:
     def note_assistant_text(self, text: str, *, cumulative: bool = False, replace: bool = False) -> None:
         self.assistant_texts.append(text)
 
-    async def retrieve_memory_context(self) -> dict:
+    async def retrieve_memory_context(self, *_args, **_kwargs) -> dict:
         return {
             "context": "",
             "memories_retrieved": 0,
@@ -712,7 +712,7 @@ class RealtimeProviderReplayTests(unittest.IsolatedAsyncioTestCase):
         lookup_started = asyncio.Event()
         release_lookup = asyncio.Event()
 
-        async def blocking_lookup():
+        async def blocking_lookup(*_args, **_kwargs):
             lookup_started.set()
             await release_lookup.wait()
             return {}
@@ -1438,3 +1438,106 @@ class DashScopeOmniTextDedupTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _GatedUpstream(FakeOpenAIWebSocket):
+    """Yields events in order; an ``asyncio.Event`` in the list pauses until set."""
+
+    def __aiter__(self):
+        async def iterator():
+            for event in self.events:
+                if isinstance(event, asyncio.Event):
+                    await event.wait()
+                    for _ in range(10):
+                        await asyncio.sleep(0)
+                    continue
+                yield json.dumps(event)
+
+        return iterator()
+
+
+class _SlowMemorySession(FakeMemorySession):
+    def __init__(self, release: asyncio.Event) -> None:
+        super().__init__()
+        self._release = release
+        self.lookup_done = asyncio.Event()
+
+    async def retrieve_memory_context(self, *_args, **_kwargs) -> dict:
+        await self._release.wait()
+        self.lookup_done.set()
+        return {
+            "context": "1. [云端长期记忆] 默认使用中文女声播报",
+            "memories_retrieved": 1,
+            "local_pending_count": 0,
+            "cloud_count": 1,
+            "attempted": True,
+        }
+
+
+def _memory_notes(sent: list[dict]) -> list[dict]:
+    return [
+        item for item in sent
+        if item.get("type") == "conversation.item.create"
+        and "默认使用中文女声播报" in json.dumps(item, ensure_ascii=False)
+    ]
+
+
+class RealtimeMemoryPrefillReplayTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.repository = VoiceAgentSessionRepository(Path(self.temp_dir.name) / "voice.db")
+        self.service = RealtimeVoiceService(voice_session_repository=self.repository)
+
+    async def asyncTearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    async def test_openai_lookup_that_outlasts_the_reply_is_added_at_once(self) -> None:
+        release = asyncio.Event()
+        memory = _SlowMemorySession(release)
+        websocket = CollectingWebSocket()
+        upstream = _GatedUpstream([
+            {"type": "conversation.item.input_audio_transcription.completed", "transcript": "你还记得我之前默认用什么声音吗"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ])
+        loop = asyncio.create_task(self.service._openai_to_client_loop(
+            websocket, upstream, memory, RecordingToolSession(active=False), None,
+        ))
+        await asyncio.wait_for(loop, timeout=2)
+        self.assertEqual(_memory_notes(upstream.sent), [])
+        transcripts = [e for e in websocket.events if e["type"] == "user_transcript"]
+        self.assertTrue(transcripts, "the transcript must not wait for the memory lookup")
+        # The reply is over, so waiting for the next response.done would push
+        # the memory a whole turn further out.
+        release.set()
+        await asyncio.wait_for(memory.lookup_done.wait(), timeout=1)
+        for _ in range(10):
+            await asyncio.sleep(0)
+        self.assertEqual(len(_memory_notes(upstream.sent)), 1)
+
+    async def test_stepfun_sends_recalled_memory_after_the_reply(self) -> None:
+        # pending_prefill_context used to be stored and never sent on StepFun.
+        release = asyncio.Event()
+        memory = _SlowMemorySession(release)
+        lookup_landed = asyncio.Event()
+        websocket = CollectingWebSocket()
+        upstream = _GatedUpstream([
+            {"type": "conversation.item.input_audio_transcription.completed", "transcript": "你还记得我之前默认用什么声音吗"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            lookup_landed,
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ])
+        loop = asyncio.create_task(self.service._stepfun_to_client_loop(
+            websocket, upstream, memory, RecordingToolSession(active=False), None,
+        ))
+        for _ in range(10):
+            await asyncio.sleep(0)
+        release.set()
+        await asyncio.wait_for(memory.lookup_done.wait(), timeout=1)
+        for _ in range(10):
+            await asyncio.sleep(0)
+        # Reply r1 still in flight: the note waits for it.
+        self.assertEqual(_memory_notes(upstream.sent), [])
+        lookup_landed.set()
+        await asyncio.wait_for(loop, timeout=2)
+        self.assertEqual(len(_memory_notes(upstream.sent)), 1)

@@ -290,6 +290,17 @@ class RealtimeMemorySession:
         self._startup_count = 0
         self._startup_consumed = False
         self._session_finalized = False
+        # Speculative per-utterance search started from interim ASR, so the
+        # result is ready (and injectable) before server VAD starts the reply.
+        self._prefetch_query = ""
+        self._prefetch_utterance_id = ""
+        self._prefetch_task: asyncio.Task[dict[str, Any]] | None = None
+        # Kept apart from _pending_tasks: drain() cancels speculative searches
+        # instead of holding session teardown on them.
+        self._prefetch_tasks: set[asyncio.Task[dict[str, Any]]] = set()
+        # Cloud writes run in the background so turn completion never waits
+        # on EverOS; providers report the outcome with a follow-up event.
+        self._last_persist_task: asyncio.Task[dict[str, Any]] | None = None
 
     def _pending_cache_key(self) -> str:
         return str(self._config.group_id or self._config.memory_scope).strip()
@@ -468,9 +479,28 @@ class RealtimeMemorySession:
         if scope_key and scope_key != cache_key:
             self._queue_pending_entries(scope_key, memory_entries)
         self._note_key_entries(memory_entries)
-        result = await self._persist_entries(entries=memory_entries)
+        # The entries are already retrievable from the local pending cache, so
+        # the cloud write (add_memory per entry + flush, often seconds) must not
+        # hold turn completion. take_persist_task() hands its outcome to the
+        # provider for a follow-up memory_write event; drain() awaits it.
+        task = asyncio.create_task(self._persist_and_log(memory_entries, queued_count))
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
+        self._last_persist_task = task
+        return {
+            "enabled": True,
+            "attempted_count": len(memory_entries),
+            "saved_count": 0,
+            "failed_count": 0,
+            "local_pending_count": queued_count,
+            "reason": "saving",
+        }
+
+    async def _persist_and_log(self, entries: list[str], queued_count: int) -> dict[str, Any]:
+        result = await self._persist_entries(entries=entries)
         result["enabled"] = True
         result["local_pending_count"] = queued_count
+        result["reason"] = ""
         logger.info(
             "voice_memory_write scope=%s group=%s attempted=%s saved=%s failed=%s local_pending=%s entries=%s",
             self._config.memory_scope,
@@ -479,9 +509,15 @@ class RealtimeMemorySession:
             result.get("saved_count", 0),
             result.get("failed_count", 0),
             queued_count,
-            memory_entries,
+            entries,
         )
         return result
+
+    def take_persist_task(self) -> "asyncio.Task[dict[str, Any]] | None":
+        """Return (once) the cloud write scheduled by the last flush_turn()."""
+        task = self._last_persist_task
+        self._last_persist_task = None
+        return task
 
     # -- session-level accumulation -----------------------------------------
 
@@ -674,6 +710,12 @@ class RealtimeMemorySession:
         return self._startup_context
 
     async def drain(self) -> None:
+        prefetches = list(self._prefetch_tasks)
+        for task in prefetches:
+            task.cancel()
+        self._clear_prefetch()
+        if prefetches:
+            await asyncio.gather(*prefetches, return_exceptions=True)
         try:
             await self.finalize_session()
         except Exception:
@@ -729,7 +771,7 @@ class RealtimeMemorySession:
             "failed_count": failed_count,
         }
 
-    def should_retrieve_context(self, text: str | None = None) -> bool:
+    def should_retrieve_context(self, text: str | None = None, *, quiet: bool = False) -> bool:
         """Gate per-turn automatic recall.
 
         Recall is an explicit act: only fire when the user expresses a memory
@@ -738,10 +780,11 @@ class RealtimeMemorySession:
         classifiable-but-non-question utterances — those are worth *storing*,
         not worth interrupting the reply with a (usually empty) recall.
         """
+        _log = (lambda *_args: None) if quiet else logger.info
         service = self._config.get_service()
         candidate = str(text or self._current_user_text or "").strip()
         if not service or not candidate:
-            logger.info(
+            _log(
                 "voice_memory_retrieve skipped reason=%s scope=%s query=%r",
                 "disabled_or_empty",
                 self._config.memory_scope,
@@ -749,7 +792,7 @@ class RealtimeMemorySession:
             )
             return False
         if service.should_skip_memory(candidate):
-            logger.info(
+            _log(
                 "voice_memory_retrieve skipped reason=%s scope=%s query=%r",
                 "trivial_message",
                 self._config.memory_scope,
@@ -757,7 +800,7 @@ class RealtimeMemorySession:
             )
             return False
         if self._matches_any(candidate, self._RETRIEVE_HINT_PATTERNS):
-            logger.info(
+            _log(
                 "voice_memory_retrieve trigger=hint scope=%s query=%r",
                 self._config.memory_scope,
                 candidate[:120],
@@ -772,20 +815,20 @@ class RealtimeMemorySession:
                 or self._matches_any(candidate, self._CONSTRAINT_PATTERNS)
             )
             if question_targets_memory and len(candidate) >= 8:
-                logger.info(
+                _log(
                     "voice_memory_retrieve trigger=question_target scope=%s query=%r",
                     self._config.memory_scope,
                     candidate[:120],
                 )
                 return True
-            logger.info(
+            _log(
                 "voice_memory_retrieve skipped reason=%s scope=%s query=%r",
                 "question_without_memory_target",
                 self._config.memory_scope,
                 candidate[:120],
             )
             return False
-        logger.info(
+        _log(
             "voice_memory_retrieve skipped reason=%s scope=%s query=%r",
             "non_question_statement",
             self._config.memory_scope,
@@ -802,7 +845,7 @@ class RealtimeMemorySession:
         # longer cloud timeout instead of timing out at the trivial budget.
         return self._matches_any(candidate, self._RETRIEVE_HINT_PATTERNS)
 
-    async def retrieve_memory_context(self) -> dict[str, Any]:
+    async def retrieve_memory_context(self, utterance_id: str = "", *, query: str | None = None) -> dict[str, Any]:
         """Per-turn memory context, with the session-start block prepended once.
 
         The startup block (recent summaries / preferences fetched when the
@@ -812,7 +855,7 @@ class RealtimeMemorySession:
         ``recall`` command stages a one-shot block consumed here as well.
         """
         startup_context = await self._consume_startup_context()
-        result = await self._retrieve_turn_context()
+        result = await self._retrieve_turn_context(utterance_id, query=query)
         recall_context, recall_count = self._consume_recall_context()
         if startup_context:
             turn_context = str(result.get("context", ""))
@@ -928,9 +971,82 @@ class RealtimeMemorySession:
         self._pending_recall_count = 0
         return context, count
 
-    async def _retrieve_turn_context(self) -> dict[str, Any]:
+    # -- speculative prefetch from interim ASR ---------------------------------
+
+    def prefetch_partial(self, text: str, utterance_id: str = "") -> "asyncio.Task[dict[str, Any]] | None":
+        """Start the memory search for an utterance the user is still speaking.
+
+        Server-VAD providers begin the reply the moment speech ends, so a search
+        started from the final transcript can only ever steer the *next* reply.
+        Starting it from the first interim transcript that passes the recall
+        gate gives it the rest of the utterance to finish. At most one search
+        runs per utterance; the final ``retrieve_memory_context`` reuses it.
+        Returns the new task, or None when nothing was started.
+        """
+        cleaned = str(text or "").strip()
+        utterance_id = str(utterance_id or "")
+        if not cleaned or self._config.get_service() is None:
+            return None
+        if self._prefetch_task is not None:
+            if utterance_id == self._prefetch_utterance_id:
+                return None
+            self._clear_prefetch()
+        if not self.should_retrieve_context(cleaned, quiet=True):
+            return None
+        task = asyncio.create_task(self._search_turn_memories(cleaned))
+        self._prefetch_tasks.add(task)
+        task.add_done_callback(self._prefetch_tasks.discard)
+        self._prefetch_task = task
+        self._prefetch_query = cleaned
+        self._prefetch_utterance_id = utterance_id
+        logger.info(
+            "voice_memory_prefetch start scope=%s query=%r",
+            self._config.memory_scope,
+            cleaned[:120],
+        )
+        return task
+
+    def begin_utterance(self) -> None:
+        """Forget an unconsumed prefetch when a new utterance starts.
+
+        For providers without per-utterance ids: a prefetch whose utterance
+        never produced a final transcript would otherwise block the next one.
+        """
+        self._clear_prefetch()
+
+    def _clear_prefetch(self) -> None:
+        self._prefetch_task = None
+        self._prefetch_query = ""
+        self._prefetch_utterance_id = ""
+
+    def _take_matching_prefetch(
+        self, query: str, utterance_id: str = ""
+    ) -> "tuple[asyncio.Task[dict[str, Any]], str] | None":
+        """Hand over (once) the prefetch started for this same utterance."""
+        task = self._prefetch_task
+        prefetch_query = self._prefetch_query
+        prefetch_id = self._prefetch_utterance_id
+        self._clear_prefetch()
+        if task is None or task.cancelled():
+            return None
+        if utterance_id and prefetch_id:
+            return (task, prefetch_query) if utterance_id == prefetch_id else None
+        partial = self._search_text(prefetch_query)
+        final = self._search_text(query)
+        if not partial or not final:
+            return None
+        if partial in final:
+            return task, prefetch_query
+        partial_grams = self._bigrams(partial)
+        overlap = len(partial_grams & self._bigrams(final)) / max(1, len(partial_grams))
+        return (task, prefetch_query) if overlap >= 0.6 else None
+
+    async def _retrieve_turn_context(self, utterance_id: str = "", *, query: str | None = None) -> dict[str, Any]:
+        # Callers that run off the event loop pass the utterance explicitly:
+        # by the time they run, flush_turn() may have cleared the current text.
         service = self._config.get_service()
-        query = self._current_user_text.strip()
+        query = (self._current_user_text if query is None else str(query)).strip()
+        prefetch = self._take_matching_prefetch(query, utterance_id) if query else None
         if not service or not query or not self.should_retrieve_context(query):
             return {
                 "context": "",
@@ -954,6 +1070,51 @@ class RealtimeMemorySession:
                 "attempted": self._last_retrieve_attempted,
             }
 
+        result: dict[str, Any] | None = None
+        if prefetch is not None:
+            task, prefetch_query = prefetch
+            try:
+                result = dict(await task)
+            except asyncio.CancelledError:
+                # Only a cancelled prefetch falls back; our own cancellation
+                # must propagate.
+                if not task.cancelled():
+                    raise
+                result = None
+            except Exception:
+                result = None
+            # A partial query that found nothing is not authoritative: the
+            # rest of the sentence may carry the words that match.
+            if result is not None and not result.get("memories_retrieved") and (
+                self._search_text(query) != self._search_text(prefetch_query)
+            ):
+                result = None
+            elif result is not None:
+                result["prefetched"] = True
+        if result is None:
+            result = await self._search_turn_memories(query)
+
+        # Only cache when the user text has not moved on while we waited.
+        if self._current_user_text.strip() == query:
+            self._last_retrieved_query = query
+            self._last_memory_context = str(result.get("context", ""))
+            self._last_memory_count = int(result.get("memories_retrieved", 0))
+            self._last_local_pending_count = int(result.get("local_pending_count", 0))
+            self._last_cloud_count = int(result.get("cloud_count", 0))
+            self._last_retrieve_attempted = True
+        return result
+
+    async def _search_turn_memories(self, query: str) -> dict[str, Any]:
+        """Search local pending + cloud memories for *query* (no caching)."""
+        service = self._config.get_service()
+        if not service:
+            return {
+                "context": "",
+                "memories_retrieved": 0,
+                "local_pending_count": 0,
+                "cloud_count": 0,
+                "attempted": False,
+            }
         cache_key = self._pending_cache_key()
         local_memories = self._search_pending_entries(cache_key, query)
         scope_key = self._scope_pending_cache_key()
@@ -1012,23 +1173,17 @@ class RealtimeMemorySession:
             else:
                 lines.append(f"{idx}. [云端长期记忆] {content[:180]}")
 
-        self._last_retrieved_query = query
-        self._last_memory_context = "\n".join(lines)
-        self._last_memory_count = len(lines)
-        self._last_local_pending_count = local_count
-        self._last_cloud_count = cloud_count
-        self._last_retrieve_attempted = True
         logger.info(
             "voice_memory_retrieve result scope=%s count=%s local_pending=%s cloud=%s query=%r",
             self._config.memory_scope,
-            self._last_memory_count,
+            len(lines),
             local_count,
             cloud_count,
             query[:120],
         )
         return {
-            "context": self._last_memory_context,
-            "memories_retrieved": self._last_memory_count,
+            "context": "\n".join(lines),
+            "memories_retrieved": len(lines),
             "local_pending_count": local_count,
             "cloud_count": cloud_count,
             "attempted": True,

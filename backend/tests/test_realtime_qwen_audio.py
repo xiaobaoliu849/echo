@@ -90,7 +90,7 @@ class FakeMemorySession:
     def note_assistant_text(self, text: str, *, cumulative: bool = False) -> None:
         self.assistant_texts.append(text)
 
-    async def retrieve_memory_context(self) -> dict:
+    async def retrieve_memory_context(self, *_args, **_kwargs) -> dict:
         return {
             "context": "",
             "memories_retrieved": 0,
@@ -1751,3 +1751,82 @@ class TestQwenAudioRealtime(unittest.IsolatedAsyncioTestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+
+class TestQwenAudioMemoryInjection(unittest.IsolatedAsyncioTestCase):
+    """Recalled memory reaches the Qwen-Audio session before the reply starts.
+
+    It used to be fetched inline (holding the transcript) and then never sent.
+    """
+
+    async def test_memory_found_while_speaking_is_in_the_session_before_the_reply(self):
+        import tempfile
+        from pathlib import Path
+
+        from services.evermem_service import EverMemService
+        from services.realtime_memory_session import RealtimeMemorySession
+
+        temp_dir = tempfile.TemporaryDirectory()
+        saved_path = RealtimeMemorySession._PENDING_CACHE_PATH
+        RealtimeMemorySession._PENDING_CACHE_PATH = Path(temp_dir.name) / "pending.json"
+        RealtimeMemorySession._PENDING_MEMORY_CACHE.clear()
+        self.addCleanup(temp_dir.cleanup)
+        self.addCleanup(setattr, RealtimeMemorySession, "_PENDING_CACHE_PATH", saved_path)
+        self.addCleanup(RealtimeMemorySession._PENDING_MEMORY_CACHE.clear)
+
+        memory = RealtimeMemorySession()
+        memory.configure({
+            "enabled": True, "api_url": "https://memory.example.com",
+            "api_key": "memory-key", "scope_id": "voice-demo",
+        })
+        sent_before_reply: list[int] = []
+
+        class _Upstream(FakeDashWs):
+            async def recv(self) -> str:
+                if self._events and self._events[0].get("type") == "response.created":
+                    # Give the prefetch time to land, as speech would.
+                    for _ in range(20):
+                        await asyncio.sleep(0)
+                    sent_before_reply.append(len(self.sent))
+                return await super().recv()
+
+        dash_ws = _Upstream([
+            {"type": "conversation.item.input_audio_transcription.delta",
+             "item_id": "u1", "delta": "你还记得我之前默认用"},
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "conversation.item.input_audio_transcription.completed",
+             "item_id": "u1", "transcript": "你还记得我之前默认用什么声音吗？"},
+            {"type": "response.done", "response": {"id": "r1", "status": "completed"}},
+        ])
+        ws = CollectingWebSocket()
+        search = AsyncMock(return_value=[{"content": "[语音偏好] 默认使用中文女声播报", "score": 0.9}])
+        with patch.object(EverMemService, "search_memories", new=search):
+            await self.service_loop(ws, dash_ws, memory)
+
+        updates = [
+            (index, payload) for index, payload in enumerate(dash_ws.sent_payloads())
+            if payload.get("type") == "session.update"
+        ]
+        memory_updates = [
+            index for index, payload in updates
+            if "默认使用中文女声播报" in payload["session"]["instructions"]
+        ]
+        self.assertTrue(memory_updates, "recalled memory was never sent to the session")
+        self.assertLess(memory_updates[0], sent_before_reply[0])
+        self.assertEqual(search.await_count, 1)
+        # Restored to the base prompt once the reply that used it finished.
+        self.assertNotIn("默认使用中文女声播报", updates[-1][1]["session"]["instructions"])
+        types = [event["type"] for event in ws.events]
+        self.assertLess(
+            types.index("user_transcript"),
+            types.index("memory_context"),
+        )
+
+    async def service_loop(self, ws, dash_ws, memory):
+        service = RealtimeVoiceService()
+        await service._qwen_audio_to_client_loop(
+            ws, dash_ws, memory, "test-voice", VoiceAgentToolSession(), None,
+            InterruptionDecisionCoordinator(),
+        )
+        for _ in range(20):
+            await asyncio.sleep(0)

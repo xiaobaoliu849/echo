@@ -252,30 +252,21 @@ class OpenAIRealtimeMixin:
                     voice_turn_id = ""
                     if recorder is not None:
                         voice_turn_id = await recorder.note_user_transcript(user_text)
-                    retrieval = await memory_session.retrieve_memory_context()
-                    memory_context = str(retrieval.get("context", ""))
-                    memory_count = int(retrieval.get("memories_retrieved", 0))
-                    local_pending_count = int(retrieval.get("local_pending_count", 0))
-                    cloud_count = int(retrieval.get("cloud_count", 0))
-                    if retrieval.get("attempted"):
-                        await self._send_event(
-                            websocket,
-                            "memory_context",
-                            memories_retrieved=memory_count,
-                            local_pending_count=local_pending_count,
-                            cloud_count=cloud_count,
-                            attempted=True,
-                        )
-                    if memory_context:
-                        logger.info(
-                            "voice_memory_inject provider=OpenAI scope=%s count=%s local_pending=%s cloud=%s",
-                            memory_session._config.memory_scope,
-                            memory_count,
-                            local_pending_count,
-                            cloud_count,
-                        )
-                        pending_prefill_context = memory_context
                     await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                    async def _set_prefill_context(context: str) -> None:
+                        nonlocal pending_prefill_context
+                        if interruption.active_response_id:
+                            # Added once the reply in flight is done.
+                            pending_prefill_context = context
+                            return
+                        # The lookup outlasted the reply: add the note now so
+                        # it still serves the user's next turn.
+                        await openai_ws.send(self._memory_note_event(context))
+
+                    self._spawn_memory_lookup(
+                        websocket, memory_session, user_text,
+                        provider="OpenAI", on_context=_set_prefill_context,
+                    )
                     # Tool detection
                     async def on_openai_tool_result(result: dict[str, Any]) -> None:
                         nonlocal gated_tool_turn_id
@@ -372,35 +363,13 @@ class OpenAIRealtimeMixin:
                     continue
                 if pending_prefill_context:
                     # Inject memory context as a hidden user message
-                    await openai_ws.send(json.dumps({
-                        "type": "conversation.item.create",
-                        "item": {
-                            "type": "message",
-                            "role": "user",
-                            "content": [{
-                                "type": "input_text",
-                                "text": (
-                                    "Context note for personalization only. These long-term memories may help with "
-                                    "the user's next turn. Use them only when relevant, and do not mention this note.\n"
-                                    f"{pending_prefill_context}"
-                                ),
-                            }],
-                        },
-                    }))
+                    await openai_ws.send(self._memory_note_event(pending_prefill_context))
                     pending_prefill_context = ""
                 memory_result = await memory_session.flush_turn()
                 completed_turn_id = ""
                 if recorder is not None and not gated_tool_turn_id:
                     completed_turn_id = await recorder.complete_turn(memory_result)
-                await self._send_event(
-                    websocket,
-                    "memory_write",
-                    attempted_count=int(memory_result.get("attempted_count", 0)),
-                    saved_count=int(memory_result.get("saved_count", 0)),
-                    failed_count=int(memory_result.get("failed_count", 0)),
-                    local_pending_count=int(memory_result.get("local_pending_count", 0)),
-                    reason=str(memory_result.get("reason", "")),
-                )
+                await self._send_memory_write(websocket, memory_session, memory_result)
                 if not gated_tool_turn_id:
                     await self._send_event(
                         websocket,
