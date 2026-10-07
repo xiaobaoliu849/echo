@@ -156,10 +156,14 @@ def build_coach_instructions(config: dict[str, Any]) -> str:
     level_hint = {
         "beginner": "The learner is a beginner: flag only clear errors and keep explanations very simple.",
         "intermediate": "The learner is intermediate: flag errors and the most unnatural phrasing.",
-        "advanced": "The learner is advanced: also flag subtle unnaturalness and suggest more idiomatic wording.",
+        "advanced": (
+            "The learner is advanced: also flag subtle unnaturalness. Put more idiomatic alternatives in "
+            "\"vocabulary\", not in \"issues\"."
+        ),
         "ielts": (
-            "The learner is preparing for the IELTS Speaking test: also suggest higher-band vocabulary, "
-            "collocations and cohesive devices where they fit naturally."
+            "The learner is preparing for the IELTS Speaking test. Put higher-band vocabulary, collocations and "
+            "cohesive devices in \"vocabulary\" only; they are upgrades, NOT errors, and never make the verdict "
+            "\"improve\" on their own."
         ),
     }[config["level"]]
     target = config["target_language"]
@@ -170,8 +174,16 @@ def build_coach_instructions(config: dict[str, Any]) -> str:
         "Rules:\n"
         f"- Only judge the learner's {target}. If the utterance is not in {target}, or is a filler/backchannel "
         "(e.g. 'ok', 'yeah', 'hmm'), return verdict \"skip\".\n"
-        "- Ignore punctuation, capitalization and obvious speech-recognition artifacts.\n"
-        "- If the utterance is already correct and natural, return verdict \"good\" with no issues.\n"
+        "- Punctuation and capitalization come from the speech recognizer, not the learner: NEVER comment on "
+        "or change them. Also ignore obvious speech-recognition artifacts.\n"
+        "- Only flag REAL problems: a grammar error, a wrong word, or phrasing a native speaker would find "
+        "clearly unnatural. Do NOT flag stylistic preferences, synonyms, making it more formal/enthusiastic/"
+        "specific, or adding information the learner did not say. Short, simple sentences can be perfect.\n"
+        "- Every issue has a severity: \"error\" = actually incorrect (grammar mistake, wrong word, clearly "
+        "unnatural to a native speaker); \"style\" = the original is acceptable and yours is only an alternative. "
+        "The verdict is \"improve\" only if there is at least one \"error\".\n"
+        "- If the utterance is already correct and natural, return verdict \"good\" with no issues. "
+        "When in doubt, choose \"good\" — a false correction hurts the learner more than a missed one.\n"
         f"- At most {MAX_ISSUES} issues and {MAX_VOCABULARY} vocabulary items, most important first.\n"
         f"- LANGUAGE: every \"explanation\", \"meaning\" and \"tip\" MUST be written in {native} "
         f"(the learner's native language), never in {target}; keep each under 30 words. "
@@ -179,7 +191,7 @@ def build_coach_instructions(config: dict[str, Any]) -> str:
         "Return ONLY a JSON object, no markdown:\n"
         '{"verdict": "good" | "improve" | "skip", '
         '"corrected": "the full utterance rewritten correctly and naturally (empty if good/skip)", '
-        '"issues": [{"type": "grammar" | "word_choice" | "naturalness" | "fluency", '
+        '"issues": [{"severity": "error" | "style", "type": "grammar" | "word_choice" | "naturalness" | "fluency", '
         f'"original": "exact fragment", "suggestion": "better fragment", "explanation": "why, in {native}"}}], '
         f'"vocabulary": [{{"term": "useful word or phrase for this context", "meaning": "short gloss in {native}"}}], '
         f'"tip": "one short encouraging tip in {native}, may be empty"}}'
@@ -197,7 +209,12 @@ def _strip_code_fence(text: str) -> str:
     return cleaned
 
 
-def parse_coach_reply(reply: str) -> dict[str, Any] | None:
+def _surface_key(text: str) -> str:
+    """Comparison key ignoring case, punctuation and spacing."""
+    return re.sub(r"[\W_]+", " ", str(text or "").casefold()).strip()
+
+
+def parse_coach_reply(reply: str, user_text: str = "") -> dict[str, Any] | None:
     """Parse and sanitize the model's JSON review. Returns None when unusable."""
     try:
         data = json.loads(_strip_code_fence(str(reply or "")))
@@ -211,17 +228,28 @@ def parse_coach_reply(reply: str) -> dict[str, Any] | None:
         return None
 
     issues: list[dict[str, str]] = []
+    style_vocabulary: list[dict[str, str]] = []
     for raw in data.get("issues") or []:
         if not isinstance(raw, dict):
             continue
         suggestion = str(raw.get("suggestion") or "").strip()
         if not suggestion:
             continue
+        original = str(raw.get("original") or "").strip()
+        # Punctuation/case come from ASR, not the learner: drop cosmetic "fixes".
+        if original and _surface_key(original) == _surface_key(suggestion):
+            continue
         issue_type = str(raw.get("type") or "").strip().lower()
+        if str(raw.get("severity") or "error").strip().lower() == "style":
+            # Acceptable as said: offer the alternative as a phrase, not a mistake.
+            style_vocabulary.append(
+                {"term": suggestion[:80], "meaning": str(raw.get("explanation") or "").strip()[:160]}
+            )
+            continue
         issues.append(
             {
                 "type": issue_type if issue_type in ISSUE_TYPES else "naturalness",
-                "original": str(raw.get("original") or "").strip()[:200],
+                "original": original[:200],
                 "suggestion": suggestion[:200],
                 "explanation": str(raw.get("explanation") or "").strip()[:240],
             }
@@ -230,19 +258,25 @@ def parse_coach_reply(reply: str) -> dict[str, Any] | None:
             break
 
     vocabulary: list[dict[str, str]] = []
-    for raw in data.get("vocabulary") or []:
+    for raw in [*style_vocabulary, *(data.get("vocabulary") or [])]:
         if not isinstance(raw, dict):
             continue
         term = str(raw.get("term") or "").strip()
-        if not term:
+        if not term or any(_surface_key(term) == _surface_key(v["term"]) for v in vocabulary):
+            continue
+        if user_text and _surface_key(term) == _surface_key(user_text):
             continue
         vocabulary.append({"term": term[:80], "meaning": str(raw.get("meaning") or "").strip()[:160]})
         if len(vocabulary) >= MAX_VOCABULARY:
             break
 
-    if verdict == "improve" and not issues:
+    corrected = str(data.get("corrected") or "").strip()[:MAX_REVIEW_CHARS]
+    if verdict == "improve" and (
+        not issues or (user_text and _surface_key(corrected) == _surface_key(user_text))
+    ):
         verdict = "good"
-    corrected = str(data.get("corrected") or "").strip()[:MAX_REVIEW_CHARS] if verdict == "improve" else ""
+    if verdict != "improve":
+        corrected = ""
     return {
         "verdict": verdict,
         "corrected": corrected,
@@ -476,7 +510,10 @@ class SpeakingCoach:
             max_tokens=600,
             use_memory=False,
         )
-        review = parse_coach_reply(str(result.get("reply", "")))
+        review = parse_coach_reply(str(result.get("reply", "")), text)
         if review is None:
             logger.info("speaking_coach unparsable reply provider=%s model=%s", provider, model)
+            return None
+        # Shown on the card so it's clear a separate text model wrote the review.
+        review["reviewer"] = model
         return review

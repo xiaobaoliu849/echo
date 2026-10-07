@@ -107,6 +107,7 @@ export default function CoachFeedbackCard({ feedback, t, onDismiss, onSave }: Pr
           {improve && feedback.corrected ? (
             <div className="vsCoachVocab">
               <span className="vsCoachIssueType">{t("正确说法", "Corrected sentence")}</span>
+              <span className="vsCoachIssueChange"><ins>{feedback.corrected}</ins></span>
               {saveButton(
                 "sentence",
                 { text: feedback.corrected, kind: "sentence", context: feedback.user_text },
@@ -131,6 +132,14 @@ export default function CoachFeedbackCard({ feedback, t, onDismiss, onSave }: Pr
             </div>
           ) : null}
           {improve && feedback.tip ? <div className="vsCoachTip">{feedback.tip}</div> : null}
+          <div className="vsCoachSource">
+            {feedback.reviewer
+              ? t(
+                  `由文字模型 ${feedback.reviewer} 根据语音转写点评，听不到发音`,
+                  `Reviewed by text model ${feedback.reviewer} from the transcript — it can't hear pronunciation`
+                )
+              : t("由文字模型根据语音转写点评，听不到发音", "Reviewed by a text model from the transcript — it can't hear pronunciation")}
+          </div>
           {onDismiss && feedback.id > 0 ? (
             <button type="button" className="vsCoachDismiss" onClick={() => onDismiss(feedback.id)}>
               {t("识别有误 / 不准确，移除这条", "Misheard or wrong — remove")}

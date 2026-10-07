@@ -673,6 +673,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       />
                       <span style={{ fontWeight: 600 }}>{t("🎓 口语教练（纠错卡片）", "🎓 Speaking coach (feedback cards)")}</span>
                     </label>
+                    <span className="vsCoachHint">
+                      {t(
+                        "另一个文字模型根据转写给你写点评，不改变语音 AI 的行为",
+                        "A separate text model reviews your transcript; it doesn't change how the voice AI talks"
+                      )}
+                    </span>
                     <label
                       className="vsVoiceSettingsEcho"
                       title={t(
@@ -687,6 +693,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       />
                       <span style={{ fontWeight: 600 }}>{t("🧑‍🏫 陪练模式（AI 当语言老师）", "🧑‍🏫 Tutor mode (AI language partner)")}</span>
                     </label>
+                    <span className="vsCoachHint">
+                      {t(
+                        "让实时语音 AI 本身扮演老师、按场景陪你说；下次通话生效",
+                        "Makes the realtime voice AI itself act as your teacher; applies from the next call"
+                      )}
+                    </span>
                     {voiceChat.voiceChatCoachConfig.tutor ? (
                       <label className="vsGeminiAccentField">
                         <span>{t("练习场景", "Scenario")}</span>
@@ -699,11 +711,6 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                           ))}
                         </select>
                       </label>
-                    ) : null}
-                    {voiceChat.voiceChatCoachConfig.tutor && voiceChat.voiceChatRecording ? (
-                      <span className="vsCoachHint">
-                        {t("陪练模式的设置在下次开始通话时生效", "Tutor settings apply when the next call starts")}
-                      </span>
                     ) : null}
                     {voiceChat.voiceChatCoachConfig.enabled || voiceChat.voiceChatCoachConfig.tutor ? (
                       <>

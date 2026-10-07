@@ -253,3 +253,58 @@ def test_tutor_session_is_isolated_per_task() -> None:
     tutored, plain = asyncio.run(main())
     assert "[Language Tutor Mode]" in tutored
     assert "[Language Tutor Mode]" not in plain
+
+
+def test_parse_drops_cosmetic_and_no_op_corrections() -> None:
+    punctuation_only = json.dumps(
+        {
+            "verdict": "improve",
+            "corrected": "Hello, my coach!",
+            "issues": [
+                {"type": "naturalness", "original": "Hello, my coach.", "suggestion": "Hello, my coach!", "explanation": "x"}
+            ],
+        }
+    )
+    review = parse_coach_reply(punctuation_only, "Hello, my coach.")
+    assert review is not None and review["verdict"] == "good" and review["issues"] == []
+
+    # A real issue whose rewrite is identical to the utterance is still a no-op.
+    no_op = json.dumps(
+        {
+            "verdict": "improve",
+            "corrected": "hello my coach",
+            "issues": [{"type": "word_choice", "original": "coach", "suggestion": "speaking coach", "explanation": "x"}],
+        }
+    )
+    review = parse_coach_reply(no_op, "Hello, my coach.")
+    assert review is not None and review["verdict"] == "good" and review["corrected"] == ""
+
+
+def test_review_reports_reviewer_model() -> None:
+    coach = SpeakingCoach(llm_service=FakeLLM(IMPROVE_REPLY))
+    cfg = normalize_coach_config({"enabled": True})
+    review = asyncio.run(coach.review(cfg, "I go to the park yesterday"))
+    assert review is not None and review["reviewer"] == "qwen-flash"
+
+
+def test_style_issues_become_vocabulary_not_errors() -> None:
+    reply = json.dumps(
+        {
+            "verdict": "improve",
+            "corrected": "Hi, my coach.",
+            "issues": [
+                {"severity": "style", "type": "naturalness", "original": "Hello", "suggestion": "Hi", "explanation": "更随意"}
+            ],
+            "vocabulary": [{"term": "hi", "meaning": "dup"}, {"term": "hey", "meaning": "打招呼"}],
+        }
+    )
+    review = parse_coach_reply(reply, "Hello, my coach.")
+    assert review is not None
+    assert review["verdict"] == "good" and review["issues"] == [] and review["corrected"] == ""
+    assert review["vocabulary"] == [{"term": "Hi", "meaning": "更随意"}, {"term": "hey", "meaning": "打招呼"}]
+
+
+def test_vocabulary_echoing_the_utterance_is_dropped() -> None:
+    reply = json.dumps({"verdict": "good", "vocabulary": [{"term": "Hello, my coach!", "meaning": "x"}]})
+    review = parse_coach_reply(reply, "Hello, my coach.")
+    assert review is not None and review["vocabulary"] == []
