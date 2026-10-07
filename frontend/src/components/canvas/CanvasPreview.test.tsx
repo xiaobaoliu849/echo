@@ -65,6 +65,29 @@ describe("CanvasPreview React execution", () => {
     } finally { preview.dispose(); }
   });
   it.each([
+    ["named", "import { Waveform, Mic } from 'lucide-react'; export default () => <div><Waveform /><Mic /></div>;"],
+    ["namespace", "import * as Icons from 'lucide-react'; export default () => <div><Icons.Waveform /><Icons.Mic /></div>;"],
+  ])("falls back to a generic icon for an icon lucide-react does not ship (%s import)", (_kind, code) => {
+    const preview = executePreview(code);
+    try {
+      expect(preview.target.querySelectorAll("svg")).toHaveLength(2);
+      expect(preview.postMessage).not.toHaveBeenCalled();
+    } finally { preview.dispose(); }
+  });
+
+  it("renders a placeholder instead of blanking on an undefined component", () => {
+    const preview = executePreview(`
+      const parts = {};
+      export default () => <section><h1>Still here</h1><parts.Missing /></section>;
+    `);
+    try {
+      expect(preview.target.textContent).toBe("Still here");
+      expect(preview.target.querySelector('[title="Missing component"]')).toBeInTheDocument();
+      expect(preview.postMessage).not.toHaveBeenCalled();
+    } finally { preview.dispose(); }
+  });
+
+  it.each([
     "export default function Cat() { return <h1>Canvas cat</h1>; }",
     "export default () => <h1>Canvas cat</h1>;",
     "const Cat = () => <h1>Canvas cat</h1>; export default Cat;",
