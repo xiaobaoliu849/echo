@@ -49,6 +49,9 @@ export default function ReviewPage() {
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  // Bumped on every stop/new request so a slow TTS response can't start
+  // playing after the learner moved on or left the page.
+  const playbackGenRef = useRef(0);
 
   const current = queue[0] ?? null;
 
@@ -73,6 +76,7 @@ export default function ReviewPage() {
   }, [load]);
 
   const stopAudio = useCallback(() => {
+    playbackGenRef.current += 1;
     audioRef.current?.pause();
     audioRef.current = null;
     if (audioUrlRef.current) {
@@ -87,6 +91,7 @@ export default function ReviewPage() {
   const speak = useCallback(
     async (item: LearningItem) => {
       stopAudio();
+      const generation = playbackGenRef.current;
       setSpeaking(true);
       try {
         const res = await fetchSpeakAudio({
@@ -94,6 +99,7 @@ export default function ReviewPage() {
           engine: "edge",
           voice: EDGE_VOICES[item.language] || EDGE_VOICES.English,
         });
+        if (generation !== playbackGenRef.current) return;
         const url = URL.createObjectURL(res.blob);
         audioUrlRef.current = url;
         const audio = new Audio(url);
@@ -102,6 +108,7 @@ export default function ReviewPage() {
         audio.onerror = stopAudio;
         await audio.play();
       } catch (err) {
+        if (generation !== playbackGenRef.current) return;
         stopAudio();
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -112,22 +119,33 @@ export default function ReviewPage() {
   const grade = useCallback(
     async (result: "again" | "good") => {
       if (!current || submitting) return;
+      const graded = current;
       setSubmitting(true);
       setError("");
       try {
-        const res = await submitReview(current.id, result);
+        // A stale result means the card was already graded (e.g. a retry after
+        // a lost response); either way it leaves the queue without re-grading.
+        const res = await submitReview(graded.id, result, graded.review_count);
         setStats(res.stats);
         setItems((prev) => prev.map((item) => (item.id === res.item.id ? res.item : item)));
-        setQueue((prev) => prev.slice(1));
+        // Remove by id: the queue may have changed (e.g. a delete) while waiting.
+        setQueue((prev) => prev.filter((item) => item.id !== graded.id));
         setRevealed(false);
         stopAudio();
+        const remaining = queue.filter((item) => item.id !== graded.id).length;
+        if (remaining === 0 && res.stats.due_now > 0) {
+          // The first batch is capped; fetch the rest instead of claiming "done".
+          const next = await fetchDueReviews(50);
+          setQueue(next.items);
+          setStats(next.stats);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setSubmitting(false);
       }
     },
-    [current, submitting, stopAudio]
+    [current, queue, submitting, stopAudio]
   );
 
   const remove = useCallback(async (id: number) => {

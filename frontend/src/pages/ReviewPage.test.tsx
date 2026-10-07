@@ -54,8 +54,8 @@ describe("ReviewPage", () => {
     vi.mocked(fetchDueReviews).mockResolvedValue({ items: [phrase, sentence], stats: STATS });
     vi.mocked(fetchLearningItems).mockResolvedValue([phrase, sentence]);
     vi.mocked(submitReview)
-      .mockResolvedValueOnce({ item: { ...phrase, review_step: 1 }, stats: { ...STATS, due_now: 1, reviewed_today: 1 } })
-      .mockResolvedValueOnce({ item: { ...sentence, review_step: 0 }, stats: { ...STATS, due_now: 0, reviewed_today: 2 } });
+      .mockResolvedValueOnce({ item: { ...phrase, review_step: 1 }, stats: { ...STATS, due_now: 1, reviewed_today: 1 }, stale: false })
+      .mockResolvedValueOnce({ item: { ...sentence, review_step: 0 }, stats: { ...STATS, due_now: 0, reviewed_today: 2 }, stale: false });
 
     render(<ReviewPage />);
 
@@ -66,15 +66,57 @@ describe("ReviewPage", () => {
     fireEvent.keyDown(window, { key: " " });
     expect(screen.getByText("thoroughly enjoyed")).toBeTruthy();
     fireEvent.keyDown(window, { key: "2" });
-    await waitFor(() => expect(submitReview).toHaveBeenCalledWith(1, "good"));
+    await waitFor(() => expect(submitReview).toHaveBeenCalledWith(1, "good", 0));
 
     // Sentence card prompts with the learner's original mistake.
     expect(await screen.findByText("I go to the park yesterday")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Show answer|显示答案/ }));
     fireEvent.click(screen.getByRole("button", { name: /Again|没记住/ }));
-    await waitFor(() => expect(submitReview).toHaveBeenCalledWith(2, "again"));
+    await waitFor(() => expect(submitReview).toHaveBeenCalledWith(2, "again", 0));
 
     expect(await screen.findByText(/All caught up|今天的复习都完成了/)).toBeTruthy();
+  });
+
+  it("fetches the next batch instead of claiming done while items are still due", async () => {
+    const first = makeItem({ id: 1 });
+    const overflow = makeItem({ id: 2, text: "a real treat", meaning: "一次享受" });
+    vi.mocked(fetchDueReviews)
+      .mockResolvedValueOnce({ items: [first], stats: { ...STATS, due_now: 2 } })
+      .mockResolvedValueOnce({ items: [overflow], stats: { ...STATS, due_now: 1 } });
+    vi.mocked(fetchLearningItems).mockResolvedValue([first, overflow]);
+    vi.mocked(submitReview).mockResolvedValueOnce({
+      item: { ...first, review_step: 1 }, stats: { ...STATS, due_now: 1 }, stale: false,
+    });
+    render(<ReviewPage />);
+
+    await screen.findByText("非常享受");
+    fireEvent.click(screen.getByRole("button", { name: /Show answer|显示答案/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Got it|记住了/ }));
+    expect(await screen.findByText("一次享受")).toBeTruthy();
+    expect(screen.queryByText(/All caught up|今天的复习都完成了/)).toBeNull();
+  });
+
+  it("keeps the next card when the graded card is deleted while grading is in flight", async () => {
+    const a = makeItem({ id: 1 });
+    const b = makeItem({ id: 2, text: "a real treat", meaning: "一次享受" });
+    vi.mocked(fetchDueReviews).mockResolvedValue({ items: [a, b], stats: STATS });
+    vi.mocked(fetchLearningItems).mockResolvedValue([a, b]);
+    vi.mocked(deleteLearningItem).mockResolvedValue();
+    let resolveGrade: (value: Awaited<ReturnType<typeof submitReview>>) => void = () => {};
+    vi.mocked(submitReview).mockReturnValueOnce(new Promise((resolve) => { resolveGrade = resolve; }));
+    render(<ReviewPage />);
+
+    await screen.findByText("非常享受");
+    fireEvent.click(screen.getByRole("button", { name: /Show answer|显示答案/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Got it|记住了/ }));
+    fireEvent.click(screen.getByRole("button", { name: /All saved|全部收藏/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Delete "thoroughly enjoyed"|删除「thoroughly enjoyed」/ }));
+    await waitFor(() => expect(deleteLearningItem).toHaveBeenCalledWith(1));
+    resolveGrade({ item: { ...a, review_step: 1 }, stats: { ...STATS, due_now: 1 }, stale: false });
+
+    // Card B must still be up for review.
+    expect(await screen.findAllByText("一次享受")).not.toHaveLength(0);
+    expect(screen.queryByText(/All caught up|今天的复习都完成了/)).toBeNull();
   });
 
   it("shows onboarding hint when nothing is saved and deletes from the list", async () => {

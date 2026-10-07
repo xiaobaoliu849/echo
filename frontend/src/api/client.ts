@@ -979,19 +979,32 @@ export async function fetchDueReviews(limit = 20): Promise<{ items: LearningItem
   return (await response.json()) as { items: LearningItem[]; stats: LearningStats };
 }
 
+/**
+ * Grade a card. `expectedReviewCount` is the card version the learner saw; if
+ * the card was graded since (lost-response retry, second tab), the server
+ * answers 409 and this resolves with `stale: true` and the current card.
+ */
 export async function submitReview(
   itemId: number,
-  result: "again" | "good"
-): Promise<{ item: LearningItem; stats: LearningStats }> {
+  result: "again" | "good",
+  expectedReviewCount?: number
+): Promise<{ item: LearningItem; stats: LearningStats; stale: boolean }> {
   const response = await apiFetch(`${API_BASE_URL}/api/learning/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ item_id: itemId, result }),
+    body: JSON.stringify({ item_id: itemId, result, expected_review_count: expectedReviewCount ?? null }),
   });
+  if (response.status === 409) {
+    const data = (await response.json()) as { detail?: { item?: LearningItem; stats?: LearningStats } };
+    if (data.detail?.item && data.detail.stats) {
+      return { item: data.detail.item, stats: data.detail.stats, stale: true };
+    }
+  }
   if (!response.ok) {
     await throwApiError(response);
   }
-  return (await response.json()) as { item: LearningItem; stats: LearningStats };
+  const data = (await response.json()) as { item: LearningItem; stats: LearningStats };
+  return { ...data, stale: false };
 }
 
 export async function fetchApiRuntimeInfo(): Promise<ApiRuntimeInfo> {
