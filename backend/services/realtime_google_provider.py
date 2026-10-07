@@ -67,6 +67,7 @@ from .realtime_constants import (
 from .interruption_classifier import InterruptionClassifier, InterruptionDecisionCoordinator, InterruptionIntent
 from .realtime_memory_session import RealtimeMemorySession, _merge_memory_text
 from .google_live_errors import format_avatar_error
+from .google_live_resumption import ResumableGoogleLiveSession, is_google_live_connection_end
 from .live_screen_input import decode_screen_frame
 from .realtime_session_recorder import VoiceAgentSessionRecorder
 from .realtime_tool_protocol import (
@@ -351,6 +352,14 @@ class GoogleRealtimeMixin:
             if not hasattr(types, "AvatarConfig"):
                 raise RuntimeError("Live Avatar requires a google-genai SDK with AvatarConfig support. 请更新 google-genai。")
             live_kwargs["avatar_config"] = types.AvatarConfig(avatar_name=avatar_name)
+        else:
+            # A Live connection ends with GoAway after a fixed lifetime. The
+            # resumption handle lets us reconnect into the same conversation,
+            # and the sliding window lifts the per-session context/duration cap.
+            live_kwargs["session_resumption"] = types.SessionResumptionConfig()
+            live_kwargs["context_window_compression"] = types.ContextWindowCompressionConfig(
+                sliding_window=types.SlidingWindow()
+            )
 
         return types.LiveConnectConfig(**live_kwargs)
     @staticmethod
@@ -1403,8 +1412,26 @@ class GoogleRealtimeMixin:
             model=settings["model"],
             voice=voice,
         )
+        if getattr(live_config, "session_resumption", None) is not None:
+            def _connect_live(handle: str | None):
+                config = live_config.model_copy(
+                    update={"session_resumption": types.SessionResumptionConfig(handle=handle)}
+                )
+                return client.aio.live.connect(model=live_model, config=config)
+
+            def _connect_live_plain():
+                config = live_config.model_copy(
+                    update={"session_resumption": None, "context_window_compression": None}
+                )
+                return client.aio.live.connect(model=live_model, config=config)
+
+            live_session_cm = ResumableGoogleLiveSession(_connect_live, _connect_live_plain)
+        else:
+            live_session_cm = client.aio.live.connect(model=live_model, config=live_config)
+        session_opened = False
         try:
-            async with client.aio.live.connect(model=live_model, config=live_config) as session:
+            async with live_session_cm as session:
+                session_opened = True
                 await self._send_event(
                     websocket,
                     "session_open",
@@ -1470,6 +1497,13 @@ class GoogleRealtimeMixin:
                     "Google 官方尚未在企业级 Agent Platform (Vertex AI) 中开放同传参数。"
                     "请在设置中心配置「Google」API Key，并将供应商直接选择为「Google」即可畅快同传。"
                 )
+            elif session_opened and is_google_live_connection_end(e):
+                error_msg = (
+                    "Google 实时会话已达到服务端连接时长上限，且未能自动续接，请重新开始通话。"
+                    f"（{error_text}）"
+                )
+            elif session_opened:
+                error_msg = f"Google 实时会话中断: {error_text}"
             else:
                 error_msg = f"Google 实时会话启动失败: {error_text}"
             await self._send_event(websocket, "error", message=error_msg)
