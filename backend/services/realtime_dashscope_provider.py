@@ -288,6 +288,68 @@ class DashScopeRealtimeMixin:
             enable_voice_clone=enable_voice_clone,
             voice_clone_frequency=voice_clone_frequency,
         )
+    async def _inject_dashscope_memory(
+        self,
+        websocket: WebSocket,
+        conversation: Any,
+        voice: str,
+        memory_session: RealtimeMemorySession,
+        user_text: str,
+        *,
+        previous: "asyncio.Task[Any] | None" = None,
+        settle: bool = False,
+    ) -> None:
+        """Retrieve memory for one user turn and push it as instructions."""
+        if previous is not None and not previous.done():
+            try:
+                await previous
+            except Exception:
+                pass
+        if settle:
+            # Let the barge-in cancel land before the session is updated.
+            await asyncio.sleep(0.2)
+        try:
+            retrieval = await memory_session.retrieve_memory_context()
+            memory_context = str(retrieval.get("context", ""))
+            memory_count = int(retrieval.get("memories_retrieved", 0))
+            local_pending_count = int(retrieval.get("local_pending_count", 0))
+            cloud_count = int(retrieval.get("cloud_count", 0))
+            if retrieval.get("attempted"):
+                await self._send_event(
+                    websocket,
+                    "memory_context",
+                    memories_retrieved=memory_count,
+                    local_pending_count=local_pending_count,
+                    cloud_count=cloud_count,
+                    attempted=True,
+                )
+            if memory_context:
+                logger.info(
+                    "voice_memory_inject provider=DashScope scope=%s count=%s local_pending=%s cloud=%s",
+                    memory_session._config.memory_scope,
+                    memory_count,
+                    local_pending_count,
+                    cloud_count,
+                )
+                self._configure_dashscope_conversation(
+                    conversation,
+                    voice=voice,
+                    instructions=self._build_realtime_instructions(memory_context),
+                )
+            elif memory_session.is_forced_recall_query(user_text):
+                logger.info(
+                    "voice_memory_inject provider=DashScope scope=%s count=0 forced_recall=true",
+                    memory_session._config.memory_scope,
+                )
+                self._configure_dashscope_conversation(
+                    conversation,
+                    voice=voice,
+                    instructions=self._build_recall_miss_instructions(user_text),
+                )
+        except Exception as exc:
+            # The session may have closed while the lookup was in flight.
+            logger.debug("dashscope_memory_injection_skipped: %s", exc)
+
     async def _client_to_dashscope_loop(
         self,
         websocket: WebSocket,
@@ -388,6 +450,7 @@ class DashScopeRealtimeMixin:
         cannot_create_response_retries = 0
         gated_tool_turn_id = ""
         previewed_item_ids: dict[str, None] = {}
+        memory_injection_task: asyncio.Task[Any] | None = None
         while True:
             event = await queue.get()
             event_type = str(event.get("type", "")).strip()
@@ -648,49 +711,30 @@ class DashScopeRealtimeMixin:
                 voice_turn_id = ""
                 if recorder is not None:
                     voice_turn_id = await recorder.note_user_transcript(user_text)
-                retrieval = await memory_session.retrieve_memory_context()
-                memory_context = str(retrieval.get("context", ""))
-                memory_count = int(retrieval.get("memories_retrieved", 0))
-                local_pending_count = int(retrieval.get("local_pending_count", 0))
-                cloud_count = int(retrieval.get("cloud_count", 0))
-                if retrieval.get("attempted"):
-                    await self._send_event(
-                        websocket,
-                        "memory_context",
-                        memories_retrieved=memory_count,
-                        local_pending_count=local_pending_count,
-                        cloud_count=cloud_count,
-                        attempted=True,
-                    )
-                if memory_context:
-                    logger.info(
-                        "voice_memory_inject provider=DashScope scope=%s count=%s local_pending=%s cloud=%s",
-                        memory_session._config.memory_scope,
-                        memory_count,
-                        local_pending_count,
-                        cloud_count,
-                    )
-                    self._configure_dashscope_conversation(
-                        conversation,
-                        voice=voice,
-                        instructions=self._build_realtime_instructions(memory_context),
-                    )
-                elif memory_session.is_forced_recall_query(user_text):
-                    logger.info(
-                        "voice_memory_inject provider=DashScope scope=%s count=0 forced_recall=true",
-                        memory_session._config.memory_scope,
-                    )
-                    self._configure_dashscope_conversation(
-                        conversation,
-                        voice=voice,
-                        instructions=self._build_recall_miss_instructions(user_text),
-                    )
-                if interrupted_response_id and not had_deferred_terminal:
-                    await asyncio.sleep(0.2)
                 # Note: Qwen Server VAD automatically triggers response generation when speech ends,
                 # so calling create_response() here is redundant and causes collision errors.
                 # conversation.create_response()
                 await self._send_event(websocket, "user_transcript", text=user_text, turn_id=voice_turn_id)
+                # Memory lookup runs off this loop. Awaiting it here held the
+                # final transcript (and every queued preview / reply audio
+                # frame behind it) for the startup wait plus the cloud search,
+                # several seconds per turn, although the server had already
+                # transcribed the speech in ~200 ms. Server VAD has already
+                # started the reply, so the injected instructions only steer
+                # later turns either way. Lookups are chained so they still
+                # apply in turn order.
+                memory_injection_task = spawn_background_task(
+                    self._inject_dashscope_memory(
+                        websocket,
+                        conversation,
+                        voice,
+                        memory_session,
+                        user_text,
+                        previous=memory_injection_task,
+                        settle=bool(interrupted_response_id and not had_deferred_terminal),
+                    ),
+                    name="dashscope_memory_injection",
+                )
                 continue
             elif event_type == "assistant_text":
                 response_id = str(event.get("response_id", ""))

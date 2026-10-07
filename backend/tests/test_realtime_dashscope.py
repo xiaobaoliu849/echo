@@ -5,7 +5,7 @@ import json
 from typing import Any
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from services.realtime_voice_service import (
     DashScopeAudioRealtimeConversation,
@@ -654,6 +654,48 @@ class TestRealtimeNativeToolDelivery(unittest.IsolatedAsyncioTestCase):
         texts = [event for event in websocket.sent_events if event["type"] == "assistant_text"]
         self.assertEqual([event["text"] for event in texts], ["Book Austin", "Book Boston"])
         self.assertTrue(texts[1]["replace"])
+
+    async def test_slow_memory_lookup_does_not_hold_the_final_transcript(self) -> None:
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+        callback = DashScopeRealtimeCallback(loop=asyncio.get_running_loop(), queue=queue)
+        callback.on_event({
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "帮我记一下明天开会", "item_id": "item-1",
+        })
+        callback.on_event({"type": "response.audio_transcript.delta", "response_id": "r1", "delta": "好的"})
+        callback.on_close(1000, "")
+
+        release = asyncio.Event()
+        memory = _MemorySession()
+
+        async def slow_retrieve() -> dict:
+            await release.wait()
+            return {"context": "用户偏好：简短回答", "memories_retrieved": 1, "attempted": True}
+
+        memory.retrieve_memory_context = slow_retrieve
+        memory.is_forced_recall_query = lambda _text: False
+        conversation = MagicMock()
+        websocket = _FakeWebSocket()
+        await asyncio.wait_for(
+            self.service._dashscope_to_client_loop(
+                websocket, queue, memory, conversation, "Tina",
+                VoiceAgentToolSession(default_provider="DashScope"),
+                recorder=None, interruption=InterruptionDecisionCoordinator(),
+            ),
+            timeout=2,
+        )
+        sent_types = [event["type"] for event in websocket.sent_events]
+        # Transcript and reply text are forwarded while memory is still pending.
+        self.assertIn("user_transcript", sent_types)
+        self.assertIn("assistant_text", sent_types)
+        self.assertNotIn("memory_context", sent_types)
+
+        with patch.object(self.service, "_configure_dashscope_conversation") as configure:
+            release.set()
+            for _ in range(10):
+                await asyncio.sleep(0)
+        self.assertIn("memory_context", [event["type"] for event in websocket.sent_events])
+        configure.assert_called_once()
 
     async def test_empty_omni_final_keeps_streamed_reply(self) -> None:
         queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
