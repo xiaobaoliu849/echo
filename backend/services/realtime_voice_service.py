@@ -897,6 +897,9 @@ class RealtimeVoiceService(
                 id=feedback_id,
                 turn_id=turn_id,
                 user_text=user_text,
+                # Saved phrases keep the language they were practised in, even
+                # if the learner switches practice language before saving.
+                target_language=config["target_language"],
                 **review,
             )
         except Exception as exc:

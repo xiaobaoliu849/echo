@@ -289,6 +289,8 @@ export type CoachFeedback = {
   tip: string;
   /** Text model that wrote the review (not the realtime voice model). */
   reviewer?: string;
+  /** Practice language the review was made for. */
+  target_language?: string;
   turn_id?: string;
   created_at?: string;
 };

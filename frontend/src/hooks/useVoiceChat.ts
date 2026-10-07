@@ -242,8 +242,16 @@ export default function useVoiceChat({
   }, []);
 
   const saveCoachItem = useCallback(
-    async (item: { text: string; kind: LearningItemKind; meaning?: string; context?: string; sourceFeedbackId?: number }) => {
-      await saveLearningItem({ ...item, language: coachConfigRef.current.target_language });
+    async (item: {
+      text: string;
+      kind: LearningItemKind;
+      meaning?: string;
+      context?: string;
+      language?: string;
+      sourceFeedbackId?: number;
+    }) => {
+      // Prefer the language the review was made in over the current setting.
+      await saveLearningItem({ ...item, language: item.language || coachConfigRef.current.target_language });
     },
     []
   );

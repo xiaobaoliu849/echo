@@ -8,6 +8,7 @@ export type CoachSaveHandler = (item: {
   kind: LearningItemKind;
   meaning?: string;
   context?: string;
+  language?: string;
   sourceFeedbackId?: number;
 }) => Promise<void>;
 
@@ -42,7 +43,11 @@ export default function CoachFeedbackCard({ feedback, t, onDismiss, onSave }: Pr
   const save = (key: string, item: Parameters<CoachSaveHandler>[0]) => {
     if (!onSave || saveStates[key] === "saving" || saveStates[key] === "saved") return;
     setSaveStates((prev) => ({ ...prev, [key]: "saving" }));
-    onSave({ ...item, sourceFeedbackId: feedback.id > 0 ? feedback.id : undefined }).then(
+    onSave({
+      ...item,
+      language: feedback.target_language || undefined,
+      sourceFeedbackId: feedback.id > 0 ? feedback.id : undefined,
+    }).then(
       () => setSaveStates((prev) => ({ ...prev, [key]: "saved" })),
       () => setSaveStates((prev) => ({ ...prev, [key]: "error" }))
     );
