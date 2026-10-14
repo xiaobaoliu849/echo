@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { IS_HOSTED_BUILD } from "../hosted";
 import { fetchSpeakAudio, translateText, type ChatMessage, type TtsEngine } from "../api";
 import ErrorNotice from "../components/ErrorNotice";
 import ChatInputBar from "../components/chat/ChatInputBar";
@@ -952,7 +953,7 @@ export default function ChatPage({
               </div>
               <div>
                 <h1 className="vsWelcomeHeroTitle">{t("Echo · 回声", "Echo")}</h1>
-                <p className="vsWelcomeHeroSubtitle">{t("开箱即用的实时语音 AI 助手", "Out-of-the-box realtime voice AI assistant")}</p>
+                <p className="vsWelcomeHeroSubtitle">{IS_HOSTED_BUILD ? "AI 英语口语陪练 · 点电话按钮开始练习" : t("开箱即用的实时语音 AI 助手", "Out-of-the-box realtime voice AI assistant")}</p>
               </div>
             </div>
 

@@ -86,6 +86,7 @@ import {
   type VoiceChatMetrics
 } from "./useVoiceChatHelpers";
 import { serializeSelectionTrace, traceSelection } from "./voiceSelectionTrace";
+import { publishHostedBalance } from "../hosted";
 import { GEMINI_LIVE_ACCENTS, supportsGeminiAccent } from "../utils/geminiLivePreferences";
 import useLiveScreenShare from "./useLiveScreenShare";
 import { supportsLiveScreenShare } from "../utils/liveScreenShare";
@@ -1822,6 +1823,19 @@ export default function useVoiceChat({
         attachCoachFeedback(feedback);
         return;
       }
+      case "billing":
+        publishHostedBalance(event.remaining_seconds);
+        return;
+      case "billing_warning":
+        publishHostedBalance(event.remaining_seconds);
+        setVoiceChatStatus(event.message);
+        return;
+      case "billing_end":
+        // The server hangs up right after this; show why instead of the
+        // generic "connection closed" message.
+        setVoiceChatError(event.message);
+        setVoiceChatStatus(event.message);
+        return;
       case "coach_config":
       case "pong":
       default:

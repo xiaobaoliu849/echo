@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from services import hosted_mode
 from services.user_auth_service import (
     AuthRateLimitError,
     auth_rate_limiter,
@@ -89,7 +90,15 @@ def _extract_client_id(client_id: str | None) -> str:
 
 
 def _request_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    host = request.client.host if request.client else "unknown"
+    # Hosted mode sits behind nginx on loopback, so every client would share
+    # one rate-limit bucket. nginx overwrites X-Real-IP, and uvicorn only
+    # listens on loopback there, so the header cannot be forged.
+    if hosted_mode.is_hosted_mode() and host in {"127.0.0.1", "::1"}:
+        forwarded = request.headers.get("X-Real-IP", "").strip()
+        if forwarded:
+            return forwarded
+    return host
 
 
 def _rate_limited_exception(exc: AuthRateLimitError) -> HTTPException:
@@ -139,6 +148,12 @@ async def register(
     request: Request,
     x_client_id: str | None = Header(default=None, alias="X-Client-ID"),
 ) -> AuthSessionResponse:
+    if hosted_mode.is_hosted_mode():
+        # Accounts on the shared server are created by the operator.
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "AUTH_REGISTER_DISABLED", "message": "Registration is closed.", "meta": {}},
+        )
     try:
         auth_rate_limiter.hit_ip(_request_ip(request))
         user = user_auth_service.register_user(payload.email, payload.password)
@@ -171,15 +186,20 @@ async def login(
 ) -> AuthSessionResponse:
     try:
         auth_rate_limiter.hit_ip(_request_ip(request))
-        retry_after = auth_rate_limiter.lockout_remaining(payload.email)
+        login_id = (
+            hosted_mode.normalize_account_id(payload.email)
+            if hosted_mode.is_hosted_mode()
+            else payload.email
+        )
+        retry_after = auth_rate_limiter.lockout_remaining(login_id)
         if retry_after > 0:
             raise AuthRateLimitError(
                 retry_after,
                 "Account temporarily locked after repeated failed logins.",
             )
-        user = user_auth_service.authenticate_user(payload.email, payload.password)
+        user = user_auth_service.authenticate_user(login_id, payload.password)
         if user is None:
-            auth_rate_limiter.record_login_failure(payload.email)
+            auth_rate_limiter.record_login_failure(login_id)
     except AuthRateLimitError as exc:
         raise _rate_limited_exception(exc) from exc
     if user is None:
@@ -191,7 +211,7 @@ async def login(
                 "meta": {},
             },
         )
-    auth_rate_limiter.clear_login_failures(payload.email)
+    auth_rate_limiter.clear_login_failures(login_id)
     return _build_session(user, _extract_client_id(x_client_id))
 
 

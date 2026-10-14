@@ -360,6 +360,12 @@ class RealtimeMemorySession:
         """
         if self._explicitly_configured or self._config.get_service() is not None:
             return False
+        from .hosted_mode import is_hosted_mode
+
+        if is_hosted_mode():
+            # One memory store shared by every account would leak one
+            # neighbour's conversations into another's calls.
+            return False
         from .evermem_config import _load_server_evermem_settings, DEFAULT_EVERMEM_URL
 
         try:
@@ -406,6 +412,10 @@ class RealtimeMemorySession:
 
     def configure(self, payload: dict[str, Any] | None) -> None:
         self._explicitly_configured = True
+        from .hosted_mode import is_hosted_mode
+
+        if is_hosted_mode():
+            payload = None  # memory is not per-account yet; see configure_from_server
         if not isinstance(payload, dict) or not payload.get("enabled"):
             self._config = EverMemConfig()
             self._current_user_text = ""

@@ -9,7 +9,10 @@ logger = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from services.api_auth_guard import validate_websocket_token
+from services.api_auth_guard import validate_auth_header, validate_websocket_token
+from services.billing_service import billing_service
+from services import hosted_mode
+from services.session_meter import SessionMeter
 from services.realtime_session_recorder import run_db_call
 from services.speaking_coach import normalize_tutor_config, reset_tutor_session, set_tutor_session
 from services.realtime_voice_service import (
@@ -254,8 +257,18 @@ async def voice_chat_ws(
     # during the handshake itself. The browser passes the bearer token as the
     # ``token`` query parameter because custom headers are unavailable there.
     client_host = websocket.client.host if websocket.client else ""
+    hosted_user_email = ""
     try:
-        validate_websocket_token(token, client_host=client_host)
+        if hosted_mode.is_hosted_mode():
+            # Behind nginx every client is 127.0.0.1, so the loopback
+            # exemption must not apply; billing also needs a real account.
+            cleaned_token = str(token or "").strip()
+            auth_user = validate_auth_header(f"Bearer {cleaned_token}" if cleaned_token else None)
+            hosted_user_email = str((auth_user or {}).get("email", "")).strip().lower()
+            if not hosted_user_email:
+                raise HTTPException(status_code=403, detail="Hosted calls require a user account.")
+        else:
+            validate_websocket_token(token, client_host=client_host)
     except HTTPException:
         # Closing before accept() rejects the handshake (HTTP 403 upstream).
         await websocket.close(code=1008)
@@ -303,6 +316,33 @@ async def voice_chat_ws(
         )
         await websocket.close(code=1003)
         return
+
+    session_meter: SessionMeter | None = None
+    if hosted_user_email:
+        model = hosted_mode.resolve_hosted_model(selected_provider, model)
+        multiplier = hosted_mode.resolve_billing_multiplier(selected_provider, model)
+        hosted_error = ""
+        if multiplier is None:
+            hosted_error = "当前账号不支持该模型，请选择其他模型。"
+        elif billing_service.get_balance(hosted_user_email) <= 0:
+            hosted_error = "时长已用完，请联系管理员充值。"
+        if hosted_error:
+            await websocket.send_json(
+                {"type": "error", "message": hosted_error, "provider": selected_provider}
+            )
+            await websocket.close(code=1003 if multiplier is None else 4402)
+            return
+        session_meter = SessionMeter(
+            websocket,
+            billing=billing_service,
+            user_email=hosted_user_email,
+            provider=selected_provider,
+            model=str(model or ""),
+            multiplier=float(multiplier or 1.0),
+            idle_timeout=hosted_mode.idle_timeout_seconds(),
+            warning_threshold=hosted_mode.low_balance_warning_seconds(),
+            max_session=hosted_mode.max_session_seconds(),
+        )
 
     # ── Pre-validate that the provider's required credentials are present ──
     # Without this check, sessions connect successfully but silently fail to
@@ -373,6 +413,9 @@ async def voice_chat_ws(
         await websocket.close(code=1003)
         return
 
+    meter_task: asyncio.Task[None] | None = (
+        asyncio.create_task(session_meter.run()) if session_meter is not None else None
+    )
     # Tutor mode is bound to this session's task context before the provider
     # connects, so every provider's system prompt picks it up at session start.
     tutor_token = set_tutor_session(
@@ -484,3 +527,15 @@ async def voice_chat_ws(
             pass
     finally:
         reset_tutor_session(tutor_token)
+        if meter_task is not None:
+            meter_task.cancel()
+        if session_meter is not None:
+            # Synchronous on purpose: if this handler is itself being
+            # cancelled, any further await here could be skipped and the
+            # tail of the call would go unbilled.
+            session_meter.finalize()
+        if meter_task is not None:
+            try:
+                await meter_task
+            except (asyncio.CancelledError, Exception):
+                pass

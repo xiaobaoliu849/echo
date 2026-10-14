@@ -1,0 +1,135 @@
+/* Hosted (paid) build: login screen and balance bar. Uses foundation tokens. */
+
+.hostedLogin {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--canvas);
+  font-family: var(--body-font);
+  color: var(--text-primary);
+}
+
+.hostedLoginCard {
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 32px 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.hostedLoginIcon {
+  width: 56px;
+  height: 56px;
+  align-self: center;
+  border-radius: 14px;
+}
+
+.hostedLoginCard h1 {
+  margin: 0;
+  text-align: center;
+  font-size: var(--step-2);
+}
+
+.hostedLoginLead {
+  margin: -6px 0 6px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--step-0);
+}
+
+.hostedLoginCard label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--step--1);
+  color: var(--text-secondary);
+}
+
+.hostedLoginCard input {
+  padding: 11px 12px;
+  font-size: var(--step-1);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.hostedLoginCard input:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.hostedLoginCard button {
+  margin-top: 6px;
+  padding: 12px;
+  font-size: var(--step-1);
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.hostedLoginCard button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.hostedLoginError {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: 8px;
+  font-size: var(--step--1);
+}
+
+.hostedLoginHint {
+  margin: 0;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: var(--step--1);
+}
+
+.hostedBalanceBar {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 14px;
+  font-family: var(--body-font);
+  font-size: var(--step--1);
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+}
+
+.hostedBalanceMinutes {
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+
+.hostedBalanceMinutes.is-low {
+  color: var(--danger);
+}
+
+.hostedBalanceBar button {
+  padding: 4px 10px;
+  font-size: var(--step--1);
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  cursor: pointer;
+}

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatModelHint, type UseChatResult } from "../../hooks/useChat";
+import { HOSTED_MODEL_LABELS, IS_HOSTED_BUILD } from "../../hosted";
+
+function hostedModelLabel(model: string): string {
+  return HOSTED_MODEL_LABELS[model] || model;
+}
 import { getProviderBadge, getProviderDisplayName, getProviderSortOrder } from "../../hooks/useVoiceChatHelpers";
 import { useProviderFlyoutTop } from "../../hooks/useProviderFlyoutTop";
 
@@ -56,7 +61,9 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
   const activeGroup = groups.find((g) => g.provider === activeProvider) || null;
 
   const summaryText = chat.chatModel.trim()
-    ? `${getProviderDisplayName(chat.chatProvider, "short", t)} / ${chat.chatModel}`
+    ? IS_HOSTED_BUILD
+      ? hostedModelLabel(chat.chatModel)
+      : `${getProviderDisplayName(chat.chatProvider, "short", t)} / ${chat.chatModel}`
     : t("选择模型", "Select model");
 
   function handleToggle() {
@@ -210,7 +217,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
                       setOpen(false);
                     }}
                   >
-                    <span className="vsVoiceSettingsRowLabel" title={choice.model}>{choice.model}</span>
+                    <span className="vsVoiceSettingsRowLabel" title={choice.model}>{IS_HOSTED_BUILD ? hostedModelLabel(choice.model) : choice.model}</span>
                     {hint ? <span className="vsVoiceSettingsRowHint">{hint}</span> : null}
                   </button>
                 );

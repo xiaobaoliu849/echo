@@ -1,4 +1,5 @@
 import type { UiLanguage } from "../i18n";
+import { IS_HOSTED_BUILD } from "../hosted";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
 
 export type ProviderModelCatalog = Record<
@@ -753,6 +754,10 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   const preferred = preferredProvider ? normalizeProviderKey(preferredProvider) : preferredProvider;
   if (preferred && realtimeProviders.includes(preferred) && providerOptions.includes(preferred)) {
     return preferred;
+  }
+  // A hosted server lists what it sells in priority order (Gemini first).
+  if (IS_HOSTED_BUILD && providerOptions.length > 0) {
+    return providerOptions[0];
   }
   if (providerOptions.includes(DASHSCOPE_PROVIDER)) {
     return DASHSCOPE_PROVIDER;

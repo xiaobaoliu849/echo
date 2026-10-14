@@ -71,8 +71,12 @@ export class ApiRequestError extends Error {
   }
 }
 
+// Hosted builds are served by the backend they talk to, so they follow the
+// page's own origin (whatever IP/port the operator deployed on).
 export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+  import.meta.env.VITE_HOSTED === "true" && typeof window !== "undefined"
+    ? window.location.origin
+    : import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 export const API_TOKEN = import.meta.env.VITE_API_TOKEN || "";
 export const API_ADMIN_TOKEN = import.meta.env.VITE_API_ADMIN_TOKEN || "";
 const API_TOKEN_STORAGE_KEY = "voicespirit_api_token";
@@ -1593,7 +1597,44 @@ export async function deleteCustomVoice(
   invalidateVoiceCatalog();
 }
 
+export type HostedInfo = {
+  hosted: boolean;
+  providers: { provider: string; models: string[] }[];
+};
+
+export async function fetchHostedInfo(): Promise<HostedInfo> {
+  const response = await apiFetch(`${API_BASE_URL}/api/billing/hosted-info`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function fetchHostedBalance(): Promise<{ account: string; remaining_seconds: number }> {
+  const response = await apiFetch(`${API_BASE_URL}/api/billing/me`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
 export async function fetchSettings(): Promise<SettingsResponse> {
+  if (import.meta.env.VITE_HOSTED === "true") {
+    // The settings API is closed on a hosted server; the only "settings" a
+    // user has are the realtime models the operator sells.
+    const info = await fetchHostedInfo();
+    const defaultModels = Object.fromEntries(
+      info.providers.map(({ provider, models }) => [
+        provider,
+        { default: models[0] || "", available: models, enabled: models },
+      ]),
+    );
+    return {
+      config_path: "",
+      providers: info.providers.map((item) => item.provider),
+      settings: { default_models: defaultModels } as unknown as SettingsResponse["settings"],
+    };
+  }
   const response = await apiFetch(`${API_BASE_URL}/api/settings/`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);

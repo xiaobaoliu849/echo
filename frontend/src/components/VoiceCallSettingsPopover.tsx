@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { HOSTED_MODEL_LABELS, IS_HOSTED_BUILD } from "../hosted";
 import { createPortal } from "react-dom";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
@@ -449,7 +450,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     : voiceChat.voiceChatLiveAvatar && currentProviderName === committedProvider && currentModelName === committedModel
     ? formatAvatarCallLabel(voiceChat.voiceChatAvatarName, voiceChat.voiceChatVoice, t)
     : isCurrentModelRealtime
-    ? `${currentModelName} · ${secondaryLabel}`
+    ? `${IS_HOSTED_BUILD ? HOSTED_MODEL_LABELS[currentModelName] || currentModelName : currentModelName} · ${secondaryLabel}`
     : currentModelName.trim()
     ? `${getProviderDisplayName(currentProviderName, "short", t)} / ${currentModelName}`
     : t("选择模型", "Select model");

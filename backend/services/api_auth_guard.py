@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import Header, HTTPException, status
 
+from . import hosted_mode
 from .config_loader import BackendConfig
 from .user_auth_service import user_auth_service
 
@@ -73,6 +74,10 @@ def is_auth_enabled() -> bool:
 
 
 def should_enforce_auth(method: str, path: str) -> bool:
+    if hosted_mode.is_hosted_mode():
+        # Shared server: every API call except the login form needs a token,
+        # including reads — even before the first account exists.
+        return path.startswith("/api/") and not hosted_mode.is_public_path(path)
     if not is_auth_enabled():
         return False
     if path.startswith("/api/auth/"):
@@ -105,6 +110,8 @@ def should_enforce_auth(method: str, path: str) -> bool:
 def should_require_admin_auth(method: str, path: str) -> bool:
     if not should_enforce_auth(method, path):
         return False
+    if hosted_mode.is_hosted_mode():
+        return hosted_mode.is_admin_path(path)
     if not resolve_admin_token() and not user_auth_service.has_users():
         return False
     return path.startswith("/api/settings")
@@ -170,7 +177,7 @@ def validate_auth_header(authorization: str | None, *, require_admin: bool = Fal
     expected_api = resolve_api_token()
     expected_admin = resolve_admin_token()
     has_user_auth = user_auth_service.has_users()
-    if not expected_api and not expected_admin and not has_user_auth:
+    if not expected_api and not expected_admin and not has_user_auth and not hosted_mode.is_hosted_mode():
         return
 
     if require_admin:

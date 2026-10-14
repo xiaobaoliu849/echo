@@ -467,6 +467,42 @@ class UserAuthService:
             raise RuntimeError("Failed to reload user after password change.")
         return user
 
+    # ── operator helpers (hosted mode admin) ─────────────────────────────
+
+    def list_users(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM auth_users ORDER BY id").fetchall()
+        return [user for user in (self._row_to_user(row) for row in rows) if user is not None]
+
+    def set_password(self, email: str, new_password: str) -> None:
+        """Operator password reset; revokes every session of that user."""
+        normalized = self._normalize_email(email)
+        if len(str(new_password or "")) < 6:
+            raise ValueError("Password must contain at least 6 characters.")
+        salt_hex, digest_hex = self._hash_password(str(new_password))
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "UPDATE auth_users SET password_hash = ?, password_salt = ? WHERE email = ?",
+                (digest_hex, salt_hex, normalized),
+            )
+            conn.commit()
+        if cursor.rowcount == 0:
+            raise ValueError("User not found.")
+        self.revoke_other_sessions(normalized)
+
+    def set_active(self, email: str, active: bool) -> None:
+        normalized = self._normalize_email(email)
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "UPDATE auth_users SET is_active = ? WHERE email = ?",
+                (1 if active else 0, normalized),
+            )
+            conn.commit()
+        if cursor.rowcount == 0:
+            raise ValueError("User not found.")
+        if not active:
+            self.revoke_other_sessions(normalized)
+
 
 user_auth_service = UserAuthService()
 auth_rate_limiter = AuthRateLimiter()

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { IS_HOSTED_BUILD } from "../../hosted";
 import { extractPdfText } from "../../api";
 import VoiceCallSettingsPopover from "../VoiceCallSettingsPopover";
 import { isVoiceRealtimeModel } from "../../hooks/useChat";
@@ -328,7 +329,8 @@ export default function ChatInputBar({ chat, voiceChat, onOpenSettings, onOpenPa
       multiple
     />
   );
-  const attachButton = (
+  // Attachments go through endpoints a hosted server does not sell.
+  const attachButton = IS_HOSTED_BUILD ? null : (
     <button
       type="button"
       className={isVoiceActive ? "vsCallIconBtn vsCallAttachBtn" : "vsToolbarBtn"}

@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { IS_HOSTED_BUILD } from "../hosted";
 import {
   configureEverMemRuntime,
   fetchDesktopStatus,
@@ -105,7 +106,8 @@ export default function useSettings({ formatErrorMessage }: Options) {
   const [settingsConfigPath, setSettingsConfigPath] = useState("");
   const [settingsProviders, setSettingsProviders] = useState<string[]>([]);
   const [settingsData, setSettingsData] = useState<AppSettings | null>(null);
-  const [settingsProvider, setSettingsProvider] = useState("DashScope");
+  // Hosted builds lead with the server's main product, Gemini via Vercel.
+  const [settingsProvider, setSettingsProvider] = useState(IS_HOSTED_BUILD ? "Vercel" : "DashScope");
   const [settingsApiKey, setSettingsApiKey] = useState("");
   const [settingsCloudProjectId, setSettingsCloudProjectId] = useState("");
   const [settingsCloudLocation, setSettingsCloudLocation] = useState("us-central1");

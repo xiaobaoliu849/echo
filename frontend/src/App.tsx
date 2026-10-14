@@ -18,6 +18,7 @@ import AuthDialog from "./components/AuthDialog";
 import AppSidebar from "./components/AppSidebar";
 import AppUpdateNotice from "./components/AppUpdateNotice";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
+import { IS_HOSTED_BUILD } from "./hosted";
 const SettingsModal = lazyWithRetry(() => import("./components/SettingsModal"));
 import useChat from "./hooks/useChat";
 import useAudioOverview from "./hooks/useAudioOverview";
@@ -141,6 +142,9 @@ export default function App() {
   const onProviderChangeRef = useRef(settings.onProviderChange);
   onProviderChangeRef.current = settings.onProviderChange;
   useEffect(() => {
+    if (IS_HOSTED_BUILD) {
+      return; // no settings on a hosted server
+    }
     const handleOpenSettings = (e: Event) => {
       const customEvent = e as CustomEvent<{ category?: string; provider?: string }>;
       const { provider } = customEvent.detail || {};
@@ -410,7 +414,7 @@ export default function App() {
 
   return (
     <I18nProvider language={uiLanguage}>
-      <AppUpdateNotice hidden={isSettingsOpen} onOpenUpdates={() => {
+      <AppUpdateNotice hidden={isSettingsOpen || IS_HOSTED_BUILD} onOpenUpdates={() => {
         setSettingsInitialCategory("desktop");
         setIsSettingsOpen(true);
       }} />
@@ -441,8 +445,8 @@ export default function App() {
                     voiceChat={voiceChat}
                     settings={settings}
                     errorRuntimeContext={errorRuntimeContext}
-                    onOpenSettings={() => setIsSettingsOpen(true)}
-                    onOpenPal={() => setActiveTab("pal")}
+                    onOpenSettings={IS_HOSTED_BUILD ? undefined : () => setIsSettingsOpen(true)}
+                    onOpenPal={IS_HOSTED_BUILD ? undefined : () => setActiveTab("pal")}
                   />
                 ) : null}
 
@@ -488,7 +492,7 @@ export default function App() {
           </div>
         </section>
       </main>
-      <Suspense fallback={null}>
+      {IS_HOSTED_BUILD ? null : <Suspense fallback={null}>
         <SettingsModal
           open={isSettingsOpen}
           initialCategory={settingsInitialCategory}
@@ -496,15 +500,15 @@ export default function App() {
           settings={settings}
           errorRuntimeContext={errorRuntimeContext}
         />
-      </Suspense>
-      <AuthDialog
+      </Suspense>}
+      {IS_HOSTED_BUILD ? null : <AuthDialog
         open={authDialogOpen}
         auth={authRuntime}
         onClose={() => setAuthDialogOpen(false)}
         onLogin={handleAuthLogin}
         onRegister={handleAuthRegister}
         onLogout={handleAuthLogout}
-      />
+      />}
     </I18nProvider>
   );
 }

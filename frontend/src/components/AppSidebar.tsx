@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { IS_HOSTED_BUILD } from "../hosted";
 import {
   getSidebarItems,
   type ActiveTab,
@@ -125,7 +126,8 @@ function AppSidebar({
     window.addEventListener("resize", syncSidebarWithViewport);
     return () => window.removeEventListener("resize", syncSidebarWithViewport);
   }, []);
-  const navigationItems = getSidebarItems(t).filter((item) => item.tab !== "chat");
+  // The hosted (paid) build sells only the voice coach on the chat tab.
+  const navigationItems = IS_HOSTED_BUILD ? [] : getSidebarItems(t).filter((item) => item.tab !== "chat");
   const hasHistoryItems = chatHistoryItems.length > 0;
   const isVoiceCenterActive =
     activeTab === "voice_center" ||
@@ -496,6 +498,7 @@ function AppSidebar({
               tabIndex={-1}
               onClick={() => onTabChange("transcription")}
             />
+            {IS_HOSTED_BUILD ? null : <>
             <button
               type="button"
               className={`vsFooterAction vsLoginBtn ${authReady ? "active" : ""}`}
@@ -516,6 +519,7 @@ function AppSidebar({
               <Settings size={18} />
               <span>{t("设置", "Settings")}</span>
             </button>
+            </>}
           </div>
         </div>
       </aside>

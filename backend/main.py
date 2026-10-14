@@ -12,7 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from routers import agent_runs, audio_agent, audio_overview, auth, chat, coach, documents, evermem, learning, realtime_local, settings, tavus, transcription, translate, tts, voice_chat, voices
+from routers import agent_runs, audio_agent, audio_overview, auth, billing, chat, coach, documents, evermem, learning, realtime_local, settings, tavus, transcription, translate, tts, voice_chat, voices
+from services import hosted_mode
 from services.api_auth_guard import (
     is_auth_enabled,
     should_enforce_auth,
@@ -41,11 +42,16 @@ def create_app() -> FastAPI:
         from services.local_voice_runtime import runtime as local_runtime
         await local_runtime.shutdown()
 
+    hosted = hosted_mode.is_hosted_mode()
     app = FastAPI(
         title="Echo API",
         description="Echo — local-first realtime voice AI assistant backend",
         version="0.1.0",
         lifespan=lifespan,
+        # A shared server should not publish its route map.
+        docs_url=None if hosted else "/docs",
+        redoc_url=None if hosted else "/redoc",
+        openapi_url=None if hosted else "/openapi.json",
     )
 
     # NOTE: no "null" origin here — sandboxed iframes send Origin: null, and
@@ -204,6 +210,13 @@ def create_app() -> FastAPI:
         request.state.request_id = request_id
         method = request.method.upper()
         path = request.url.path
+        if hosted_mode.is_hosted_mode() and hosted_mode.is_blocked_path(path):
+            response = JSONResponse(
+                status_code=404,
+                content={"detail": {"code": "NOT_AVAILABLE", "message": "Not available.", "meta": {"request_id": request_id}}},
+            )
+            response.headers["X-Request-ID"] = request_id
+            return response
         if should_enforce_auth(request.method, request.url.path):
             try:
                 auth_header = request.headers.get("Authorization")
@@ -312,9 +325,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(hosted_mode.HostedWebSocketGuard)
     app.include_router(tts.router, prefix="/api/tts", tags=["tts"])
     app.include_router(documents.router, prefix="/api/tts", tags=["documents"])
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+    app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
     app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
     app.include_router(coach.router, prefix="/api/coach", tags=["coach"])
     app.include_router(learning.router, prefix="/api/learning", tags=["learning"])
