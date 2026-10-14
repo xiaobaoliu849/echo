@@ -1,41 +1,59 @@
 <#
 .SYNOPSIS
-  Build the community installer: a thin Electron window onto a hosted Echo server.
+  Build the community installer: Echo desktop running as a client of a hosted server.
 
 .DESCRIPTION
-  Writes electron/remote-config.json (gitignored) with the server URL and the
-  pinned certificate fingerprint, then packages electron-builder.community.yml.
-  Get the fingerprint on the server with:
+  The installed app logs in against the operator's hosted Echo server, which
+  owns accounts and minutes and issues short-lived provider client secrets.
+  Call audio goes from the user's own network straight to the provider; the
+  operator's provider keys never leave the server.
 
-    echo -n sha256/; openssl x509 -in /etc/nginx/echo/cert.pem -outform DER | openssl dgst -sha256 -binary | base64
-
-  The installer contains no backend, keys or frontend bundle; the server
-  serves the UI, so server updates reach every installed copy.
+  Writes electron/community-config.json and electron/community-server.pem
+  (both gitignored), builds the hosted-mode frontend, freezes the backend
+  with the packaging venv, and packages electron-builder.community.yml.
+  Run scripts/build_desktop.ps1 once first so .packaging-venv exists.
 
 .EXAMPLE
-  ./scripts/build_community.ps1 -ServerUrl https://203.0.113.5:8443/app/ -CertFingerprint sha256/AbC...=
+  ./scripts/build_community.ps1 -Server https://203.0.113.5:8443 -CertFile C:\path\server-cert.pem
 #>
 param(
-  [Parameter(Mandatory = $true)][string]$ServerUrl,
-  [Parameter(Mandatory = $true)][string]$CertFingerprint
+  [Parameter(Mandatory = $true)][string]$Server,
+  [Parameter(Mandatory = $true)][string]$CertFile
 )
 
 $ErrorActionPreference = "Stop"
-$electronDir = Join-Path $PSScriptRoot "..\electron" | Resolve-Path
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location -LiteralPath $repoRoot
 
-if (-not $ServerUrl.StartsWith("https://")) { throw "ServerUrl must start with https://" }
-if ($CertFingerprint -notmatch '^sha256/[A-Za-z0-9+/]{43}=$') { throw "CertFingerprint must look like sha256/<base64>" }
+function Invoke-Checked {
+  param([string]$Command, [string[]]$Arguments)
+  & $Command @Arguments
+  if ($LASTEXITCODE -ne 0) { throw "$Command failed with exit code $LASTEXITCODE" }
+}
 
-$config = @{ url = $ServerUrl; certFingerprint = $CertFingerprint } | ConvertTo-Json
-[System.IO.File]::WriteAllText((Join-Path $electronDir "remote-config.json"), $config, (New-Object System.Text.UTF8Encoding $false))
+if (-not $Server.StartsWith("https://")) { throw "Server must start with https://" }
+$certText = Get-Content -LiteralPath $CertFile -Raw
+if ($certText -notmatch "BEGIN CERTIFICATE" -or $certText -match "PRIVATE KEY") {
+  throw "CertFile must be the server's public certificate only (no private key)."
+}
+$buildPython = Join-Path $repoRoot ".packaging-venv/Scripts/python.exe"
+if (-not (Test-Path -LiteralPath $buildPython)) { throw "Run scripts/build_desktop.ps1 first to create .packaging-venv." }
 
-Push-Location $electronDir
+$utf8 = New-Object System.Text.UTF8Encoding $false
+[IO.File]::WriteAllText((Join-Path $repoRoot "electron/community-config.json"), (@{ server = $Server } | ConvertTo-Json), $utf8)
+[IO.File]::WriteAllText((Join-Path $repoRoot "electron/community-server.pem"), $certText, $utf8)
+
+$env:VITE_APP_VERSION = (Get-Content electron/package.json -Raw | ConvertFrom-Json).version
+Invoke-Checked "npm.cmd" @("--prefix", "frontend", "run", "build", "--", "--mode", "hosted")
+Push-Location backend
 try {
-  if (-not (Test-Path node_modules)) { npm ci }
-  npx electron-builder --config electron-builder.community.yml --win nsis --publish never
-  if ($LASTEXITCODE -ne 0) { throw "electron-builder failed ($LASTEXITCODE)" }
+  Invoke-Checked $buildPython @("-m", "pip", "install", "-q", "-r", "requirements-packaging.lock")
+  Invoke-Checked $buildPython @("-m", "PyInstaller", "--noconfirm", "--clean", "voicespirit-backend.spec")
+} finally { Pop-Location }
+
+Push-Location electron
+try {
+  Invoke-Checked "npx.cmd" @("electron-builder", "--config", "electron-builder.community.yml", "--win", "nsis", "--publish", "never")
   Get-ChildItem dist-community -Filter "*.exe" | Select-Object Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB, 1) } }
-}
-finally {
-  Pop-Location
-}
+} finally { Pop-Location }
+Write-Host "Community installer built in electron/dist-community. Note: frontend/dist now holds the hosted build; run build_desktop.ps1 before a regular release."

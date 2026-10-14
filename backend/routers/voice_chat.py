@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from services.api_auth_guard import validate_auth_header, validate_websocket_token
 from services.billing_service import billing_service
-from services import hosted_mode
+from services import community_client, hosted_mode
 from services.session_meter import SessionMeter
 from services.realtime_session_recorder import run_db_call
 from services.speaking_coach import normalize_tutor_config, reset_tutor_session, set_tutor_session
@@ -258,8 +258,14 @@ async def voice_chat_ws(
     # ``token`` query parameter because custom headers are unavailable there.
     client_host = websocket.client.host if websocket.client else ""
     hosted_user_email = ""
+    community_token = ""
     try:
-        if hosted_mode.is_hosted_mode():
+        if community_client.is_community_client():
+            # The hosted server validates this token when the call starts.
+            community_token = str(token or "").strip()
+            if not community_token:
+                raise HTTPException(status_code=403, detail="Login required.")
+        elif hosted_mode.is_hosted_mode():
             # Behind nginx every client is 127.0.0.1, so the loopback
             # exemption must not apply; billing also needs a real account.
             cleaned_token = str(token or "").strip()
@@ -344,6 +350,38 @@ async def voice_chat_ws(
             max_session=hosted_mode.max_session_seconds(),
         )
 
+    community_meter: community_client.CommunityCallMeter | None = None
+    direct_grant: dict[str, str] | None = None
+    if community_token:
+        # Community client: the hosted server authorises and bills the call,
+        # and this machine talks to the provider over its own network.
+        try:
+            if selected_provider != "Vercel":
+                raise community_client.CommunityServerError(
+                    400, {"message": "该模型暂不支持，请选择 Gemini。"}
+                )
+            grant = await community_client.start_direct_call(community_token, selected_provider, model)
+        except community_client.CommunityServerError as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "message": str(detail.get("message") or "无法开始通话，请稍后再试。"),
+                    "provider": selected_provider,
+                }
+            )
+            await websocket.close(code=4402 if exc.status_code == 402 else 1011)
+            return
+        direct_grant = {key: str(grant[key]) for key in ("client_secret", "model", "ws_url")}
+        model = direct_grant["model"]
+        community_meter = community_client.CommunityCallMeter(
+            websocket,
+            token=community_token,
+            call_id=str(grant["call_id"]),
+            heartbeat_seconds=float(grant.get("heartbeat_seconds") or 15),
+        )
+        await websocket.send_json({"type": "billing", "remaining_seconds": int(grant.get("remaining_seconds", 0))})
+
     # ── Pre-validate that the provider's required credentials are present ──
     # Without this check, sessions connect successfully but silently fail to
     # produce responses — the user speaks but nothing happens.
@@ -395,7 +433,7 @@ async def voice_chat_ws(
         if not _cfg.get_setting("gradium_api_key"):
             _missing.append("Gradium API Key")
     elif selected_provider == "Vercel":
-        if not _cfg.get_setting("vercel_api_key"):
+        if direct_grant is None and not _cfg.get_setting("vercel_api_key"):
             _missing.append("Vercel AI Gateway API Key")
     elif selected_provider == "StepFun":
         if not _cfg.get_setting("stepfun_api_key"):
@@ -413,8 +451,9 @@ async def voice_chat_ws(
         await websocket.close(code=1003)
         return
 
+    active_meter = session_meter or community_meter
     meter_task: asyncio.Task[None] | None = (
-        asyncio.create_task(session_meter.run()) if session_meter is not None else None
+        asyncio.create_task(active_meter.run()) if active_meter is not None else None
     )
     # Tutor mode is bound to this session's task context before the provider
     # connects, so every provider's system prompt picks it up at session start.
@@ -486,6 +525,7 @@ async def voice_chat_ws(
                 websocket,
                 model=model,
                 voice=(voice or DEFAULT_VERCEL_REALTIME_VOICE).strip(),
+                direct_grant=direct_grant,
             )
         elif selected_provider == "PersonaPlex":
             await voice_chat_service.stream_personaplex_session(
@@ -539,3 +579,5 @@ async def voice_chat_ws(
                 await meter_task
             except (asyncio.CancelledError, Exception):
                 pass
+        if community_meter is not None:
+            await community_meter.finalize()

@@ -40,6 +40,32 @@ ACTIVITY_EVENT_TYPES = frozenset(
 _TYPE_RE = re.compile(r'"type"\s*:\s*"([A-Za-z0-9_.]+)"')
 
 
+def is_activity_message(message: Any) -> bool:
+    """True when an outgoing ASGI websocket message carries conversation."""
+    if not isinstance(message, dict):
+        return False
+    if message.get("bytes") is not None:
+        return True
+    text = message.get("text")
+    if not isinstance(text, str):
+        return False
+    match = _TYPE_RE.search(text[:200])
+    return bool(match and match.group(1) in ACTIVITY_EVENT_TYPES)
+
+
+def install_activity_hook(websocket: WebSocket, on_activity: Any) -> None:
+    """Call ``on_activity()`` whenever the backend sends conversation to the client."""
+    original_send = websocket.send
+
+    async def observed_send(message: Any) -> None:
+        if is_activity_message(message):
+            on_activity()
+        await original_send(message)
+
+    # Every send_json/send_text/send_bytes funnels through ``send``.
+    websocket.send = observed_send  # type: ignore[method-assign]
+
+
 class SessionMeter:
     def __init__(
         self,
@@ -77,27 +103,14 @@ class SessionMeter:
     # ── activity tracking ────────────────────────────────────────────────
 
     def _install_send_hook(self) -> None:
-        original_send = self._ws.send
+        install_activity_hook(self._ws, self._touch)
 
-        async def metered_send(message: Any) -> None:
-            self._observe(message)
-            await original_send(message)
-
-        # Every send_json/send_text/send_bytes funnels through ``send``.
-        self._ws.send = metered_send  # type: ignore[method-assign]
+    def _touch(self) -> None:
+        self._last_activity = time.monotonic()
 
     def _observe(self, message: Any) -> None:
-        if not isinstance(message, dict):
-            return
-        if message.get("bytes") is not None:
-            self._last_activity = time.monotonic()
-            return
-        text = message.get("text")
-        if not isinstance(text, str):
-            return
-        match = _TYPE_RE.search(text[:200])
-        if match and match.group(1) in ACTIVITY_EVENT_TYPES:
-            self._last_activity = time.monotonic()
+        if is_activity_message(message):
+            self._touch()
 
     # ── charging ─────────────────────────────────────────────────────────
 

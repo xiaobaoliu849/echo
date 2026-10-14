@@ -283,7 +283,7 @@ class HostedApiTests(unittest.TestCase):
         self.billing.grant(USER[0], 600)
         captured: dict[str, Any] = {}
 
-        async def fake_session(websocket: Any, model: str | None = None, voice: str | None = None) -> None:
+        async def fake_session(websocket: Any, model: str | None = None, voice: str | None = None, **_: Any) -> None:
             captured["model"] = model
             await websocket.send_json({"type": "assistant_text", "text": "Hello!"})
             await asyncio.sleep(0.1)
@@ -319,3 +319,196 @@ class HostedApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DirectCallRegistryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from services.direct_calls import DirectCallRegistry
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.billing = BillingService(db_path=Path(self._tmp.name) / "b.db")
+        self.now = 1000.0
+        self.reg = DirectCallRegistry(
+            billing=self.billing, idle_timeout=60, max_session=1800, clock=lambda: self.now
+        )
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _start(self, multiplier: float = 1.0):
+        return self.reg.start("u@x", provider="Vercel", model="m", multiplier=multiplier)
+
+    def test_heartbeats_bill_server_time(self) -> None:
+        self.billing.grant("u@x", 600)
+        call = self._start()
+        self.now += 15
+        self.assertEqual(self.reg.heartbeat("u@x", call.call_id, active=True, final=False).remaining_seconds, 585)
+        self.now += 15
+        result = self.reg.heartbeat("u@x", call.call_id, active=True, final=True)
+        self.assertTrue(result.stop)
+        self.assertEqual(result.remaining_seconds, 570)
+        self.assertEqual(self.reg.open_calls(), 0)
+
+    def test_no_balance_no_call(self) -> None:
+        with self.assertRaises(ValueError):
+            self._start()
+
+    def test_balance_runs_out_mid_call(self) -> None:
+        self.billing.grant("u@x", 20)
+        call = self._start(multiplier=2.0)
+        self.now += 15
+        result = self.reg.heartbeat("u@x", call.call_id, active=True, final=False)
+        self.assertEqual((result.stop, result.reason, result.remaining_seconds), (True, "balance_exhausted", 0))
+
+    def test_idle_call_is_stopped(self) -> None:
+        self.billing.grant("u@x", 600)
+        call = self._start()
+        for _ in range(4):
+            self.now += 15
+            result = self.reg.heartbeat("u@x", call.call_id, active=False, final=False)
+        self.assertEqual((result.stop, result.reason), (True, "idle"))
+
+    def test_silent_client_is_reaped_and_billed(self) -> None:
+        self.billing.grant("u@x", 600)
+        self._start()
+        self.now += 10  # last sign of life is the start itself
+        self.now += 120  # then nothing: reaped on the next registry call
+        self.reg.reap_stale()
+        self.assertEqual(self.reg.open_calls(), 0)
+        # Billed up to last_seen + one heartbeat interval, not the whole silence.
+        self.assertEqual(self.billing.get_balance("u@x"), 600 - 15)
+
+    def test_heartbeat_for_someone_elses_call_is_refused(self) -> None:
+        self.billing.grant("u@x", 600)
+        call = self._start()
+        result = self.reg.heartbeat("other@x", call.call_id, active=True, final=False)
+        self.assertEqual((result.stop, result.reason), (True, "unknown_call"))
+        self.assertEqual(self.reg.open_calls(), 1)
+
+    def test_new_call_settles_the_previous_one(self) -> None:
+        self.billing.grant("u@x", 600)
+        first = self._start()
+        self.now += 30
+        self._start()
+        self.assertEqual(self.reg.open_calls(), 1)
+        self.assertEqual(self.billing.get_balance("u@x"), 570)
+        self.assertTrue(self.reg.heartbeat("u@x", first.call_id, active=True, final=False).stop)
+
+
+class CommunityClientTests(unittest.TestCase):
+    """Local backend deferring to a hosted server (ECHO_COMMUNITY_SERVER)."""
+
+    def setUp(self) -> None:
+        from services import community_client
+
+        self.cc = community_client
+        self.calls: list[tuple[str, str, Any]] = []
+        self.heartbeat_verdicts: list[dict[str, Any]] = []
+
+        async def fake_forward(method: str, path: str, *, token: str = "", json: Any = None, client_id: str = ""):
+            self.calls.append((method, path, json))
+            if path == "/api/auth/login":
+                if json["password"] != "pw":
+                    raise community_client.CommunityServerError(401, {"code": "AUTH_LOGIN_FAILED", "message": "bad"})
+                return {"access_token": "remote-token", "token_type": "bearer", "user": {"email": "1203@echo.local"}}
+            if path == "/api/billing/hosted-info":
+                return {"hosted": True, "providers": [{"provider": "Vercel", "models": ["google/gemini-3.8-live"]},
+                                                      {"provider": "DashScope", "models": ["q"]}]}
+            if path == "/api/billing/me":
+                return {"account": "1203", "remaining_seconds": 300}
+            if path == "/api/billing/direct/start":
+                if token != "remote-token":
+                    raise community_client.CommunityServerError(401, {"message": "login"})
+                return {"call_id": "c1", "client_secret": "vcst_x", "model": "google/gemini-3.8-live",
+                        "ws_url": "wss://gw/realtime", "heartbeat_seconds": 0.05, "remaining_seconds": 300}
+            if path == "/api/billing/direct/heartbeat":
+                return self.heartbeat_verdicts.pop(0) if self.heartbeat_verdicts else {"remaining_seconds": 290, "stop": False}
+            raise AssertionError(path)
+
+        self._patches = [
+            patch.dict(os.environ, {"ECHO_COMMUNITY_SERVER": "https://hosted.test:8443", "ECHO_HOSTED_MODE": ""}),
+            patch.object(community_client, "forward", side_effect=fake_forward),
+        ]
+        for p in self._patches:
+            p.start()
+        self.app = create_app()
+
+    def tearDown(self) -> None:
+        for p in reversed(self._patches):
+            p.stop()
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        async def run() -> httpx.Response:
+            transport = httpx.ASGITransport(app=self.app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                return await client.request(method, path, **kwargs)
+
+        return asyncio.run(run())
+
+    def test_local_features_stay_blocked(self) -> None:
+        self.assertEqual(self._request("GET", "/api/settings/").status_code, 404)
+        self.assertEqual(self._request("GET", "/docs").status_code, 404)
+
+    def test_login_is_answered_by_the_hosted_server(self) -> None:
+        ok = self._request("POST", "/api/auth/login", json={"email": "1203", "password": "pw"})
+        self.assertEqual(ok.json()["access_token"], "remote-token")
+        bad = self._request("POST", "/api/auth/login", json={"email": "1203", "password": "nope"})
+        self.assertEqual(bad.status_code, 401)
+        self.assertEqual(bad.json()["detail"]["code"], "AUTH_LOGIN_FAILED")
+
+    def test_only_direct_capable_models_are_offered(self) -> None:
+        body = self._request("GET", "/api/billing/hosted-info").json()
+        self.assertEqual([p["provider"] for p in body["providers"]], ["Vercel"])
+
+    def test_balance_is_forwarded_with_the_token(self) -> None:
+        body = self._request("GET", "/api/billing/me", headers={"Authorization": "Bearer remote-token"}).json()
+        self.assertEqual(body["remaining_seconds"], 300)
+
+    def test_call_uses_the_server_grant_and_heartbeats(self) -> None:
+        captured: dict[str, Any] = {}
+        self.heartbeat_verdicts = [
+            {"remaining_seconds": 290, "stop": False},
+            {"remaining_seconds": 0, "stop": True, "reason": "balance_exhausted", "message": "时长已用完"},
+        ]
+
+        async def fake_session(websocket: Any, **kwargs: Any) -> None:
+            from starlette.websockets import WebSocketState
+
+            captured.update(kwargs)
+            await websocket.send_json({"type": "assistant_text", "text": "hi"})
+            # Talk until the meter hangs up (heartbeats are >= 1 s apart).
+            for _ in range(200):
+                if websocket.application_state != WebSocketState.CONNECTED:
+                    return
+                await asyncio.sleep(0.05)
+
+        with patch.object(
+            voice_chat_router.voice_chat_service, "stream_vercel_session", AsyncMock(side_effect=fake_session)
+        ):
+            client = TestClient(self.app)
+            events = []
+            with client.websocket_connect("/api/voice-chat/ws?provider=Vercel&token=remote-token") as ws:
+                try:
+                    while True:
+                        events.append(ws.receive_json())
+                except WebSocketDisconnect:
+                    pass
+        # No local Gateway key was needed: the grant came from the server.
+        self.assertEqual(captured["direct_grant"]["client_secret"], "vcst_x")
+        self.assertEqual(captured["model"], "google/gemini-3.8-live")
+        self.assertEqual(events[0], {"type": "billing", "remaining_seconds": 300})
+        self.assertEqual(events[-1]["type"], "billing_end")
+        self.assertEqual(events[-1]["reason"], "balance_exhausted")
+        beats = [c for c in self.calls if c[1] == "/api/billing/direct/heartbeat"]
+        self.assertTrue(beats[0][2]["active"])  # the assistant spoke before the first beat
+        self.assertTrue(any(b[2]["final"] for b in beats))
+
+    def test_call_refused_by_server_shows_its_reason(self) -> None:
+        client = TestClient(self.app)
+        with client.websocket_connect("/api/voice-chat/ws?provider=Vercel&token=wrong") as ws:
+            self.assertEqual(ws.receive_json()["type"], "error")
+
+    def test_qwen_is_not_offered_directly(self) -> None:
+        client = TestClient(self.app)
+        with client.websocket_connect("/api/voice-chat/ws?provider=DashScope&token=remote-token") as ws:
+            self.assertIn("Gemini", ws.receive_json()["message"])

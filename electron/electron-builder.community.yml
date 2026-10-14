@@ -1,8 +1,8 @@
-# Community installer: a thin window onto the operator's hosted server.
-# Built by scripts/build_community.ps1, which writes remote-config.json
-# (server URL + pinned certificate fingerprint) next to this file first.
-# No Python backend, ffmpeg or frontend bundle ships inside: the server
-# serves the UI, so updating the server updates every installed copy.
+# Community installer: the regular Echo desktop app (bundled backend) running
+# as a community client of the operator's hosted server. Accounts, minutes
+# and call authorisation live on the server; call audio goes straight from
+# the user's machine to the provider. Built by scripts/build_community.ps1,
+# which writes community-config.json and community-server.pem first.
 appId: com.echo.community
 productName: Echo 口语陪练
 artifactName: Echo-Community-Setup-${version}.${ext}
@@ -18,20 +18,37 @@ files:
   - main.js
   - backend-runtime.js
   - update-controller.js
-  - remote-mode.js
+  - community-mode.js
   - screen-sharing.js
+  - screen-sharing-preload.js
+  - screen-sharing-picker.html
+  - screen-sharing-picker.js
   - preload.js
   - package.json
   - node_modules/**
 
 extraResources:
-  - from: remote-config.json
-    to: remote-config.json
+  - from: community-config.json
+    to: community-config.json
+  - from: community-server.pem
+    to: community-server.pem
+  - from: ../frontend/dist
+    to: frontend/dist
   - from: ../resources
     to: resources
     filter:
       - icons/logo.ico
       - icons/logo.png
+  - from: ../backend/dist/voicespirit-backend
+    to: backend-dist
+  - from: node_modules/ffmpeg-static/ffmpeg.exe
+    to: media-tools/ffmpeg.exe
+  - from: node_modules/ffprobe-static/bin/win32/x64/ffprobe.exe
+    to: media-tools/ffprobe.exe
+  - from: node_modules/ffmpeg-static/ffmpeg.exe.LICENSE
+    to: media-tools/ffmpeg.LICENSE
+  - from: node_modules/ffprobe-static/LICENSE
+    to: media-tools/ffprobe.LICENSE
 
 win:
   icon: ../resources/icons/logo.ico

@@ -360,9 +360,9 @@ class RealtimeMemorySession:
         """
         if self._explicitly_configured or self._config.get_service() is not None:
             return False
-        from .hosted_mode import is_hosted_mode
+        from .hosted_mode import is_locked_down
 
-        if is_hosted_mode():
+        if is_locked_down():
             # One memory store shared by every account would leak one
             # neighbour's conversations into another's calls.
             return False
@@ -412,9 +412,9 @@ class RealtimeMemorySession:
 
     def configure(self, payload: dict[str, Any] | None) -> None:
         self._explicitly_configured = True
-        from .hosted_mode import is_hosted_mode
+        from .hosted_mode import is_locked_down
 
-        if is_hosted_mode():
+        if is_locked_down():
             payload = None  # memory is not per-account yet; see configure_from_server
         if not isinstance(payload, dict) or not payload.get("enabled"):
             self._config = EverMemConfig()

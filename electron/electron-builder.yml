@@ -18,7 +18,7 @@ files:
   - main.js
   - backend-runtime.js
   - update-controller.js
-  - remote-mode.js
+  - community-mode.js
   - screen-sharing.js
   - screen-sharing-preload.js
   - screen-sharing-picker.html

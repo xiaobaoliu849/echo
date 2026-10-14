@@ -9,16 +9,29 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from services import hosted_mode
+from services import community_client, hosted_mode
 from services.billing_service import billing_service
+from services.direct_calls import HEARTBEAT_SECONDS, DirectCallRegistry
 from services.user_auth_service import user_auth_service
 
 router = APIRouter()
 
 MAX_GRANT_MINUTES = 100_000
+
+
+class DirectStartRequest(BaseModel):
+    provider: str = Field(min_length=1, max_length=40)
+    model: str = Field(default="", max_length=120)
+
+
+class DirectHeartbeatRequest(BaseModel):
+    call_id: str = Field(min_length=1, max_length=64)
+    active: bool = False
+    final: bool = False
 
 
 class CreateAccountRequest(BaseModel):
@@ -61,8 +74,21 @@ def _bad_request(exc: Exception) -> HTTPException:
     return HTTPException(status_code=400, detail={"code": "BILLING_REQUEST_FAILED", "message": str(exc), "meta": {}})
 
 
-@router.get("/hosted-info")
-async def hosted_info() -> dict[str, Any]:
+def _bearer(authorization: str | None) -> str:
+    value = str(authorization or "").strip()
+    return value[7:].strip() if value.lower().startswith("bearer ") else ""
+
+
+@router.get("/hosted-info", response_model=None)
+async def hosted_info() -> dict[str, Any] | JSONResponse:
+    if community_client.is_community_client():
+        # Only providers that can go direct are offered on a community client.
+        try:
+            info = await community_client.forward("GET", "/api/billing/hosted-info")
+        except community_client.CommunityServerError as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        info["providers"] = [p for p in info.get("providers", []) if p.get("provider") in DIRECT_PROVIDERS]
+        return info
     if not hosted_mode.is_hosted_mode():
         return {"hosted": False, "providers": []}
     return {
@@ -74,13 +100,97 @@ async def hosted_info() -> dict[str, Any]:
     }
 
 
-@router.get("/me")
-async def my_balance(request: Request) -> dict[str, Any]:
+@router.get("/me", response_model=None)
+async def my_balance(
+    request: Request, authorization: str | None = Header(default=None, alias="Authorization")
+) -> dict[str, Any] | JSONResponse:
+    if community_client.is_community_client():
+        try:
+            return await community_client.forward("GET", "/api/billing/me", token=_bearer(authorization))
+        except community_client.CommunityServerError as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     _require_hosted()
     email = _current_email(request)
     return {
         "account": hosted_mode.display_account_id(email),
         "remaining_seconds": billing_service.get_balance(email),
+    }
+
+
+# ── direct calls: the user's machine talks to the provider itself ────────
+
+# Only providers that can mint short-lived client secrets can go direct; the
+# operator's real key must never leave this server.
+DIRECT_PROVIDERS = frozenset({"Vercel"})
+_direct_registry: DirectCallRegistry | None = None
+
+
+def _registry() -> DirectCallRegistry:
+    global _direct_registry
+    if _direct_registry is None:
+        _direct_registry = DirectCallRegistry(
+            billing=billing_service,
+            idle_timeout=hosted_mode.idle_timeout_seconds(),
+            max_session=hosted_mode.max_session_seconds(),
+        )
+    return _direct_registry
+
+
+async def _mint_direct_secret(model: str) -> dict[str, str]:
+    # Imported lazily: the realtime service pulls in every provider SDK.
+    from routers.voice_chat import voice_chat_service
+
+    settings = voice_chat_service._resolve_vercel_settings(model)
+    # The secret only has to outlive the client's connect handshake; an
+    # established provider session is not cut off when it expires.
+    secret = await voice_chat_service._mint_vercel_client_secret(settings, expires_after_seconds=60)
+    return {
+        "client_secret": secret,
+        "model": settings["model"],
+        "ws_url": voice_chat_service._vercel_ws_url(settings),
+    }
+
+
+@router.post("/direct/start")
+async def direct_start(payload: DirectStartRequest, request: Request) -> dict[str, Any]:
+    _require_hosted()
+    email = _current_email(request)
+    provider = payload.provider.strip()
+    model = hosted_mode.resolve_hosted_model(provider, payload.model)
+    multiplier = hosted_mode.resolve_billing_multiplier(provider, model)
+    if provider not in DIRECT_PROVIDERS or multiplier is None or not model:
+        raise _bad_request(ValueError("该模型不支持直连。"))
+    try:
+        call = _registry().start(email, provider=provider, model=model, multiplier=multiplier)
+    except ValueError as exc:
+        raise HTTPException(status_code=402, detail={"code": "BILLING_DENIED", "message": str(exc), "meta": {}}) from exc
+    try:
+        minted = await _mint_direct_secret(model)
+    except Exception as exc:
+        # Never bill a call the provider refused to authorise.
+        _registry().heartbeat(email, call.call_id, active=False, final=True)
+        raise HTTPException(
+            status_code=502, detail={"code": "PROVIDER_AUTH_FAILED", "message": str(exc)[:200], "meta": {}}
+        ) from exc
+    return {
+        "call_id": call.call_id,
+        "provider": provider,
+        "heartbeat_seconds": HEARTBEAT_SECONDS,
+        "remaining_seconds": billing_service.get_balance(email),
+        **minted,
+    }
+
+
+@router.post("/direct/heartbeat")
+async def direct_heartbeat(payload: DirectHeartbeatRequest, request: Request) -> dict[str, Any]:
+    _require_hosted()
+    email = _current_email(request)
+    result = _registry().heartbeat(email, payload.call_id, active=payload.active, final=payload.final)
+    return {
+        "remaining_seconds": result.remaining_seconds,
+        "stop": result.stop,
+        "reason": result.reason,
+        "message": result.message,
     }
 
 

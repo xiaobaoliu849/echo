@@ -118,5 +118,6 @@ film-echo/
 /timeline.json
 
 # Community build: names the operator server; generated per build
-electron/remote-config.json
+electron/community-config.json
+electron/community-server.pem
 electron/dist-community/

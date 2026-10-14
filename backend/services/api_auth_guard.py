@@ -74,6 +74,12 @@ def is_auth_enabled() -> bool:
 
 
 def should_enforce_auth(method: str, path: str) -> bool:
+    from .community_client import is_community_client
+
+    if is_community_client():
+        # Accounts live on the hosted server, which checks every forwarded
+        # token itself; everything else on this machine is blocked anyway.
+        return False
     if hosted_mode.is_hosted_mode():
         # Shared server: every API call except the login form needs a token,
         # including reads — even before the first account exists.

@@ -57,6 +57,13 @@ def is_hosted_mode() -> bool:
     return os.getenv("ECHO_HOSTED_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def is_locked_down() -> bool:
+    """Hosted server, or a community client deferring to one: coach only."""
+    from .community_client import is_community_client
+
+    return is_hosted_mode() or is_community_client()
+
+
 def _hosted_settings() -> dict[str, Any]:
     try:
         _config.reload()
@@ -160,7 +167,7 @@ class HostedWebSocketGuard:
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if (
             scope.get("type") == "websocket"
-            and is_hosted_mode()
+            and is_locked_down()
             and not is_path_allowed(str(scope.get("path", "")))
         ):
             await send({"type": "websocket.close", "code": 1008})

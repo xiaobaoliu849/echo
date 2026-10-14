@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
         from services.local_voice_runtime import runtime as local_runtime
         await local_runtime.shutdown()
 
-    hosted = hosted_mode.is_hosted_mode()
+    hosted = hosted_mode.is_locked_down()
     app = FastAPI(
         title="Echo API",
         description="Echo — local-first realtime voice AI assistant backend",
@@ -210,7 +210,7 @@ def create_app() -> FastAPI:
         request.state.request_id = request_id
         method = request.method.upper()
         path = request.url.path
-        if hosted_mode.is_hosted_mode() and hosted_mode.is_blocked_path(path):
+        if hosted_mode.is_locked_down() and hosted_mode.is_blocked_path(path):
             response = JSONResponse(
                 status_code=404,
                 content={"detail": {"code": "NOT_AVAILABLE", "message": "Not available.", "meta": {"request_id": request_id}}},

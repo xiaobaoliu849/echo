@@ -5,7 +5,9 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from services import hosted_mode
+from fastapi.responses import JSONResponse
+
+from services import community_client, hosted_mode
 from services.user_auth_service import (
     AuthRateLimitError,
     auth_rate_limiter,
@@ -148,7 +150,7 @@ async def register(
     request: Request,
     x_client_id: str | None = Header(default=None, alias="X-Client-ID"),
 ) -> AuthSessionResponse:
-    if hosted_mode.is_hosted_mode():
+    if hosted_mode.is_locked_down():
         # Accounts on the shared server are created by the operator.
         raise HTTPException(
             status_code=403,
@@ -183,7 +185,19 @@ async def login(
     payload: LoginRequest,
     request: Request,
     x_client_id: str | None = Header(default=None, alias="X-Client-ID"),
-) -> AuthSessionResponse:
+) -> AuthSessionResponse | JSONResponse:
+    if community_client.is_community_client():
+        # The hosted server owns the accounts; hand its answer back verbatim.
+        try:
+            body = await community_client.forward(
+                "POST",
+                "/api/auth/login",
+                json={"email": payload.email, "password": payload.password},
+                client_id=_extract_client_id(x_client_id),
+            )
+        except community_client.CommunityServerError as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        return JSONResponse(content=body)
     try:
         auth_rate_limiter.hit_ip(_request_ip(request))
         login_id = (

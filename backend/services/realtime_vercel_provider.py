@@ -987,8 +987,18 @@ class VercelRealtimeMixin:
         *,
         model: str | None = None,
         voice: str = DEFAULT_VERCEL_REALTIME_VOICE,
+        direct_grant: dict[str, str] | None = None,
     ) -> None:
-        settings = self._resolve_vercel_settings(model)
+        """Run one Vercel realtime call.
+
+        ``direct_grant`` (community client mode) carries a client secret,
+        model and WebSocket URL issued by the hosted server, so this machine
+        needs no Gateway key of its own.
+        """
+        if direct_grant:
+            settings = {"model": direct_grant["model"], "base_url": VERCEL_GATEWAY_BASE_URL, "api_key": ""}
+        else:
+            settings = self._resolve_vercel_settings(model)
         resolved_voice = _normalize_vercel_voice(settings["model"], voice)
         memory_session = RealtimeMemorySession()
         tool_session = VoiceAgentToolSession(default_provider="Vercel")
@@ -1001,14 +1011,17 @@ class VercelRealtimeMixin:
         self._current_vercel_model = settings["model"]
         self._current_vercel_voice = resolved_voice
 
-        try:
-            client_secret = await self._mint_vercel_client_secret(settings)
-        except Exception as e:
-            logger.exception("Vercel realtime client-secret mint failed: %s", e)
-            await self._send_event(websocket, "error", message=f"Vercel AI Gateway 鉴权失败: {str(e)}")
-            return
-
-        ws_url = self._vercel_ws_url(settings)
+        if direct_grant:
+            client_secret = direct_grant["client_secret"]
+            ws_url = direct_grant["ws_url"]
+        else:
+            try:
+                client_secret = await self._mint_vercel_client_secret(settings)
+            except Exception as e:
+                logger.exception("Vercel realtime client-secret mint failed: %s", e)
+                await self._send_event(websocket, "error", message=f"Vercel AI Gateway 鉴权失败: {str(e)}")
+                return
+            ws_url = self._vercel_ws_url(settings)
         protocols = self._vercel_ws_protocols(client_secret)
 
         try:
