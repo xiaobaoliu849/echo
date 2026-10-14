@@ -5,6 +5,7 @@ const { BackendRuntime } = require('./backend-runtime');
 const { autoUpdater } = require('electron-updater');
 const { UpdateController, isTrustedUpdateSender } = require('./update-controller');
 const { installScreenSharing } = require('./screen-sharing');
+const { loadRemoteConfig, makeCertificateVerifier, isRemoteOrigin } = require('./remote-mode');
 
 // Allows smoke tests and portable profiles to avoid the installed user's data.
 if (process.env.ECHO_DESKTOP_USER_DATA_DIR) {
@@ -15,8 +16,13 @@ if (process.env.ECHO_DESKTOP_USER_DATA_DIR) {
 
 // Check DEV_MODE
 const DEV_MODE = !app.isPackaged;
+// Community build: show the operator's hosted server instead of a local backend.
+const REMOTE = loadRemoteConfig({ resourcesPath: process.resourcesPath, appDir: __dirname });
 
 function getFrontendUrl() {
+  if (REMOTE) {
+    return REMOTE.url;
+  }
   if (DEV_MODE) {
     return 'http://localhost:5173';
   }
@@ -213,19 +219,31 @@ async function createWindow() {
     show: false,
     // Keep the native Windows title bar and menu outside the renderer so
     // caption buttons never cover app controls.
+    // Remote pages get no preload bridge: the IPC surface (file saving,
+    // updates) belongs to the local build only.
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      ...(REMOTE ? {} : { preload: path.join(__dirname, 'preload.js') }),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: Boolean(REMOTE)
     }
   });
+  if (REMOTE) {
+    // Never let the hosted page navigate the app window anywhere else.
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+      if (!isRemoteOrigin(REMOTE, url)) event.preventDefault();
+    });
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  }
 
   mainWindow.once('ready-to-show', () => {
     if (process.argv.includes('--smoke-test')) return;
     mainWindow.show();
     mainWindow.focus();
   });
-  installScreenSharing(mainWindow, { desktopCapturer, BrowserWindow, ipcMain, appUrl: getFrontendUrl() });
+  if (!REMOTE) {
+    installScreenSharing(mainWindow, { desktopCapturer, BrowserWindow, ipcMain, appUrl: getFrontendUrl() });
+  }
 
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
@@ -424,18 +442,37 @@ if (!gotTheLock) {
       }
     });
     try {
-      await startBackend();
-      await waitForBackend(60000);
-      setupAutoUpdaterEvents();
-      setupIpcHandlers();
-      await createWindow();
-      createTray();
-      setupMenus();
-      if (!process.argv.includes('--smoke-test')) updateController.start();
+      if (REMOTE) {
+        // Trust exactly the pinned server certificate; the UI and its updates
+        // come from the server, so there is no backend or updater to run.
+        const { session } = require('electron');
+        session.defaultSession.setCertificateVerifyProc(makeCertificateVerifier(REMOTE));
+        session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+          const fromServer = isRemoteOrigin(REMOTE, details.requestingUrl || webContents.getURL());
+          callback(fromServer && (permission === 'media' || permission === 'clipboard-sanitized-write'));
+        });
+        await createWindow();
+        createTray();
+        setupMenus();
+      } else {
+        await startBackend();
+        await waitForBackend(60000);
+        setupAutoUpdaterEvents();
+        setupIpcHandlers();
+        await createWindow();
+        createTray();
+        setupMenus();
+        if (!process.argv.includes('--smoke-test')) updateController.start();
+      }
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       console.error('Backend startup failed:', message);
-      dialog.showErrorBox('Echo 启动失败 / Startup failed', `${message}\n\n日志 / Log: ${backendRuntime.logPath}`);
+      dialog.showErrorBox(
+        'Echo 启动失败 / Startup failed',
+        REMOTE
+          ? `连接服务器失败，请检查网络后重试。\n\n${message}`
+          : `${message}\n\n日志 / Log: ${backendRuntime.logPath}`
+      );
       app.isQuiting = true;
       app.quit();
       return;

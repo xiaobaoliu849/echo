@@ -1,0 +1,48 @@
+# Community installer: a thin window onto the operator's hosted server.
+# Built by scripts/build_community.ps1, which writes remote-config.json
+# (server URL + pinned certificate fingerprint) next to this file first.
+# No Python backend, ffmpeg or frontend bundle ships inside: the server
+# serves the UI, so updating the server updates every installed copy.
+appId: com.echo.community
+productName: Echo 口语陪练
+artifactName: Echo-Community-Setup-${version}.${ext}
+copyright: Copyright © 2026 Echo Team
+
+publish: null
+
+directories:
+  output: dist-community
+  buildResources: .
+
+files:
+  - main.js
+  - backend-runtime.js
+  - update-controller.js
+  - remote-mode.js
+  - screen-sharing.js
+  - preload.js
+  - package.json
+  - node_modules/**
+
+extraResources:
+  - from: remote-config.json
+    to: remote-config.json
+  - from: ../resources
+    to: resources
+    filter:
+      - icons/logo.ico
+      - icons/logo.png
+
+win:
+  icon: ../resources/icons/logo.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: true
+  createDesktopShortcut: always
+  shortcutName: Echo 口语陪练

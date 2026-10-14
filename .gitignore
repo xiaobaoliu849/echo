@@ -116,3 +116,7 @@ echo.log
 # Promo video project (local only) and its stats export
 film-echo/
 /timeline.json
+
+# Community build: names the operator server; generated per build
+electron/remote-config.json
+electron/dist-community/
