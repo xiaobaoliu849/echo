@@ -57,6 +57,8 @@ class FakeGainNode extends FakeAudioNode {
   gain = {
     value: 1,
     cancelScheduledValues: vi.fn(),
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
     setTargetAtTime: vi.fn((value: number) => {
       this.gain.value = value;
     }),
@@ -2055,6 +2057,45 @@ describe("useVoiceChat", () => {
     });
     expect(FakeAudioContext.bufferSources[0].stop).toHaveBeenCalledTimes(1);
     expect(result.current.voiceChatAssistantSpeaking).toBe(false);
+  });
+
+  it("fades only the edges of playback gaps so chunk seams do not click", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["Google"],
+      preferredProvider: "Google",
+      preferredModel: "gemini-3.8-live",
+      providerModelCatalog: {
+        Google: { defaultModel: "gemini-3.8-live", availableModels: ["gemini-3.8-live"] },
+      },
+    }));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const socket = FakeWebSocket.instances[0];
+    const context = FakeAudioContext.instances[FakeAudioContext.instances.length - 1];
+    // 100 ms of 24 kHz PCM16, long enough to carry fade ramps.
+    const chunk = btoa(" ".repeat(4800));
+    const chunkGain = () => FakeAudioContext.gains[FakeAudioContext.gains.length - 1];
+    act(() => {
+      socket.emitOpen();
+      socket.emitMessage({ type: "session_open", provider: "Google", model: "gemini-3.8-live", voice: "Puck" });
+    });
+    context.currentTime = 1;
+    act(() => { socket.emitMessage({ type: "assistant_audio", audio: chunk, sample_rate: 24000 }); });
+    const first = chunkGain();
+    // A fresh run of speech fades in and is prepared to fade out.
+    expect(first.gain.setValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+    expect(first.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+
+    act(() => { socket.emitMessage({ type: "assistant_audio", audio: chunk, sample_rate: 24000 }); });
+    const second = chunkGain();
+    // Seamless continuation: no fade-in, and the predecessor's fade-out is undone.
+    expect(second.gain.setValueAtTime).not.toHaveBeenCalledWith(0, expect.any(Number));
+    expect(first.gain.cancelScheduledValues).toHaveBeenCalledTimes(1);
+
+    context.currentTime = 5; // the queue ran dry
+    act(() => { socket.emitMessage({ type: "assistant_audio", audio: chunk, sample_rate: 24000 }); });
+    expect(chunkGain().gain.setValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+    expect(second.gain.cancelScheduledValues).not.toHaveBeenCalled();
   });
 
   it("stops all queued audio on native interruption and cannot resume from a stale timeout", async () => {

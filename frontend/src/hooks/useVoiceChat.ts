@@ -100,6 +100,11 @@ export type VoiceChatCanvasData = {
 /** An early coach review only belongs to a turn committed shortly after it. */
 const COACH_PENDING_TTL_MS = 30_000;
 
+// Assistant audio scheduling: headroom before a fresh run of speech, and the
+// fade applied at the edges of playback gaps to avoid clicks.
+const PLAYBACK_START_LEAD_SECONDS = 0.2;
+const PLAYBACK_FADE_SECONDS = 0.004;
+
 export default function useVoiceChat({
   formatErrorMessage,
   providerOptions = [],
@@ -330,6 +335,9 @@ export default function useVoiceChat({
   const playingSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const assistantPlaybackGenerationRef = useRef(0);
   const nextPlaybackTimeRef = useRef(0);
+  // Tail of the playback queue, so a chunk that arrives in time can cancel
+  // its predecessor's de-click fade-out (see playAssistantAudio).
+  const lastPlaybackChunkRef = useRef<{ gain: GainNode; endAt: number } | null>(null);
   const audioInputReadyRef = useRef(false);
   const voiceChatConnectedRef = useRef(false);
   const getScreenShareConnection = useCallback(() => voiceChatConnectedRef.current ? websocketRef.current : null, []);
@@ -555,6 +563,7 @@ export default function useVoiceChat({
       }
     });
     playingSourcesRef.current = [];
+    lastPlaybackChunkRef.current = null;
     setVoiceChatAssistantSpeaking(false);
     if (audioContextRef.current) {
       nextPlaybackTimeRef.current = audioContextRef.current.currentTime;
@@ -1009,8 +1018,13 @@ export default function useVoiceChat({
     ) {
       return;
     }
-    if (nextPlaybackTimeRef.current < context.currentTime) {
-      nextPlaybackTimeRef.current = context.currentTime + 0.08;
+    // Providers stream speech in ~90-160 ms chunks that end mid-waveform. A
+    // chunk arriving after the queue ran dry leaves a gap, and the jump from
+    // the cut-off sample to silence is an audible click. Start each fresh
+    // run of speech with more headroom, and fade the edges of any gap.
+    const freshStart = nextPlaybackTimeRef.current < context.currentTime;
+    if (freshStart) {
+      nextPlaybackTimeRef.current = context.currentTime + PLAYBACK_START_LEAD_SECONDS;
     }
 
     try {
@@ -1027,10 +1041,29 @@ export default function useVoiceChat({
 
       const source = context.createBufferSource();
       source.buffer = buffer;
-      source.connect(assistantGainRef.current || context.destination);
+      const chunkGain = context.createGain();
+      source.connect(chunkGain);
+      chunkGain.connect(assistantGainRef.current || context.destination);
       const startAt = Math.max(context.currentTime + 0.04, nextPlaybackTimeRef.current);
+      const endAt = startAt + buffer.duration;
+      const previous = lastPlaybackChunkRef.current;
+      const seamless = !freshStart && previous !== null && Math.abs(previous.endAt - startAt) < 0.001;
+      if (seamless && previous) {
+        // Continues the waveform exactly: undo the predecessor's fade-out.
+        previous.gain.gain.cancelScheduledValues(previous.endAt - PLAYBACK_FADE_SECONDS);
+        previous.gain.gain.setValueAtTime(1, previous.endAt - PLAYBACK_FADE_SECONDS);
+      } else {
+        chunkGain.gain.setValueAtTime(0, startAt);
+        chunkGain.gain.linearRampToValueAtTime(1, startAt + PLAYBACK_FADE_SECONDS);
+      }
+      if (buffer.duration > PLAYBACK_FADE_SECONDS * 2) {
+        // Fade out in case nothing follows; cancelled above if something does.
+        chunkGain.gain.setValueAtTime(1, endAt - PLAYBACK_FADE_SECONDS);
+        chunkGain.gain.linearRampToValueAtTime(0, endAt);
+      }
+      lastPlaybackChunkRef.current = { gain: chunkGain, endAt };
       source.start(startAt);
-      nextPlaybackTimeRef.current = startAt + buffer.duration;
+      nextPlaybackTimeRef.current = endAt;
       playingSourcesRef.current.push(source);
       setVoiceChatAssistantSpeaking(true);
       source.addEventListener("ended", () => {

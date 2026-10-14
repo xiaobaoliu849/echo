@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { IS_HOSTED_BUILD } from "../hosted";
+import HostedAccountCard from "./HostedAccountCard";
 import {
   getSidebarItems,
   type ActiveTab,
@@ -498,7 +499,7 @@ function AppSidebar({
               tabIndex={-1}
               onClick={() => onTabChange("transcription")}
             />
-            {IS_HOSTED_BUILD ? null : <>
+            {IS_HOSTED_BUILD ? <HostedAccountCard /> : <>
             <button
               type="button"
               className={`vsFooterAction vsLoginBtn ${authReady ? "active" : ""}`}

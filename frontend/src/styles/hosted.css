@@ -97,34 +97,58 @@
   font-size: var(--step--1);
 }
 
-.hostedBalanceBar {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 60;
+/* Sidebar footer account card (replaces the login/settings buttons). */
+.hostedAccountCard {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px 6px 14px;
+  width: 100%;
+  padding: 10px 10px 10px 14px;
   font-family: var(--body-font);
-  font-size: var(--step--1);
-  color: var(--text-secondary);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 999px;
-  box-shadow: var(--shadow-sm);
+  border-radius: 14px;
 }
 
-.hostedBalanceMinutes {
-  font-weight: 600;
+.hostedAccountText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.hostedAccountName {
+  font-size: var(--step--1);
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hostedAccountMinutes {
+  font-size: var(--step-0);
+  color: var(--text-secondary);
+}
+
+.hostedAccountMinutes strong,
+.hostedAccountMinutesCompact {
   color: var(--brand-dark);
+  font-weight: 700;
 }
 
-.hostedBalanceMinutes.is-low {
+.hostedAccountCard.is-low .hostedAccountMinutes strong,
+.hostedAccountCard.is-low .hostedAccountMinutesCompact {
   color: var(--danger);
 }
 
-.hostedBalanceBar button {
+.hostedAccountMinutesCompact {
+  display: none;
+  font-size: var(--step-0);
+}
+
+.hostedAccountLogout {
+  flex: none;
   padding: 4px 10px;
   font-size: var(--step--1);
   color: var(--text-secondary);
@@ -132,4 +156,24 @@
   border: 1px solid var(--border-color);
   border-radius: 999px;
   cursor: pointer;
+}
+
+.hostedAccountLogout:hover {
+  color: var(--text-primary);
+  border-color: var(--text-soft);
+}
+
+/* Collapsed sidebar: just the minutes number. */
+.vsSidebar.collapsed .hostedAccountCard {
+  justify-content: center;
+  padding: 8px 4px;
+}
+
+.vsSidebar.collapsed .hostedAccountText,
+.vsSidebar.collapsed .hostedAccountLogout {
+  display: none;
+}
+
+.vsSidebar.collapsed .hostedAccountMinutesCompact {
+  display: block;
 }
