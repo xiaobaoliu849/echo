@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HOSTED_MODEL_LABELS, IS_HOSTED_BUILD, hostedBillingNote, isHostedModelSold } from "../hosted";
+import { HOSTED_MODEL_LABELS, HOSTED_PROVIDER_LABELS, IS_HOSTED_BUILD, hostedBillingNote, isHostedModelSold } from "../hosted";
 import { createPortal } from "react-dom";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
@@ -455,9 +455,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     ? formatAvatarCallLabel(voiceChat.voiceChatAvatarName, voiceChat.voiceChatVoice, t)
     : isCurrentModelRealtime
     ? IS_HOSTED_BUILD
-      ? [HOSTED_MODEL_LABELS[currentModelName] || currentModelName, hostedBillingNote(currentModelName), secondaryLabel]
-          .filter(Boolean)
-          .join(" · ")
+      ? `${HOSTED_MODEL_LABELS[currentModelName] || currentModelName} · ${secondaryLabel}`
       : `${currentModelName} · ${secondaryLabel}`
     : currentModelName.trim()
     ? `${getProviderDisplayName(currentProviderName, "short", t)} / ${currentModelName}`
@@ -530,7 +528,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       {isSelectedProvider ? "✓" : ""}
                     </span>
                     <span className="vsVoiceSettingsRowLabel">
-                      {getProviderDisplayName(group.provider, "short", t)}
+                      {(IS_HOSTED_BUILD && HOSTED_PROVIDER_LABELS[group.provider]) ||
+                        getProviderDisplayName(group.provider, "short", t)}
                     </span>
                     {localBadge ? (
                       <span className={`vsProviderBadge ${localBadge.cls}`}>{localBadge.label}</span>
@@ -792,7 +791,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       ✨ {t("声音复刻已激活：将使用您本人的声音朗读外语", "Voice Clone active: Speaking in your own voice")}
                     </div>
                   ) : null}
-                  <div className="vsVoiceSettingsList" style={{ maxHeight: 300, overflowY: "auto" }}>
+                  {/* The flyout scrolls as a whole; a second scroller inside it nests scrollbars. */}
+                  <div className="vsVoiceSettingsList">
                     {previewVoiceOptions.map((item) => (
                       <button
                         key={item.value}

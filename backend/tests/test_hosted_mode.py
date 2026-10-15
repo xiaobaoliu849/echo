@@ -384,6 +384,15 @@ class HostedApiTests(unittest.TestCase):
         [lot] = history["lots"]
         self.assertAlmostEqual(lot["expires_at"] - lot["created_at"], 5 * 86400)
 
+    def test_grant_can_set_its_own_validity(self) -> None:
+        response = self._request(
+            "POST", "/api/billing/admin/grant", self.admin_token,
+            json={"account": "1203", "minutes": 300, "valid_days": 30, "note": "月卡"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        [lot] = self.billing.active_lots(USER[0])
+        self.assertAlmostEqual(lot["expires_at"] - lot["created_at"], 30 * 86400)
+
     def test_my_history(self) -> None:
         self.billing.grant(USER[0], 600, note="WeChat 49")
         self.billing.charge(USER[0], 60, wall_seconds=60, provider="Vercel", model="m")
@@ -605,6 +614,10 @@ class CommunityClientTests(unittest.TestCase):
                 return {"account": "1203", "remaining_seconds": 300, "calls": [], "daily": [], "grants": [], "token": token}
             if path == "/api/billing/renewal":
                 return {"text": "¥49", "qr": ""}
+            if path.startswith("/api/billing/admin/"):
+                if token != "remote-token":
+                    raise community_client.CommunityServerError(401, {"code": "AUTH_ADMIN_TOKEN_MISSING"})
+                return {"forwarded": path, "body": json}
             if path == "/api/auth/change-password":
                 if json["current_password"] != "pw":
                     raise community_client.CommunityServerError(400, {"code": "AUTH_CHANGE_PASSWORD_FAILED", "message": "bad"})
@@ -665,6 +678,16 @@ class CommunityClientTests(unittest.TestCase):
             json={"current_password": "pw", "new_password": "newpass1"},
         )
         self.assertEqual(ok.json()["email"], "1203@echo.local")
+
+    def test_admin_console_is_forwarded_to_the_server(self) -> None:
+        auth = {"Authorization": "Bearer remote-token"}
+        listing = self._request("GET", "/api/billing/admin/users?days=7&tz=480", headers=auth).json()
+        self.assertEqual(listing["forwarded"], "/api/billing/admin/users?days=7&tz=480")
+        grant = self._request(
+            "POST", "/api/billing/admin/grant", headers=auth, json={"account": "1203", "minutes": 300, "valid_days": 30}
+        ).json()
+        self.assertEqual(grant["body"]["valid_days"], 30)
+        self.assertEqual(self._request("GET", "/api/billing/admin/users").status_code, 401)
 
     def test_only_direct_capable_models_are_offered(self) -> None:
         body = self._request("GET", "/api/billing/hosted-info").json()

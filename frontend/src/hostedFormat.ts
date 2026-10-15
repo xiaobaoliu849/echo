@@ -69,3 +69,31 @@ export function useSubmit(action: () => Promise<void>) {
   };
   return { busy, error, setError, submit };
 }
+
+/** What the operator sells. Admin presets and the default renewal text both read this. */
+export type HostedPackage = { id: string; name: string; minutes: number; validDays: number; price: number; hint: string };
+
+export const HOSTED_PACKAGES: HostedPackage[] = [
+  { id: "trial", name: "新人体验", minutes: 30, validDays: 30, price: 0, hint: "免费" },
+  { id: "monthly", name: "月卡", minutes: 300, validDays: 30, price: 99, hint: "推荐，适合每天练" },
+  { id: "pack", name: "分钟包", minutes: 200, validDays: 90, price: 79, hint: "适合偶尔练" },
+];
+
+export function packageNote(pkg: HostedPackage): string {
+  return pkg.price > 0 ? `${pkg.name} ¥${pkg.price}` : pkg.name;
+}
+
+/** Suggested renewal text, built from the same price list. */
+export function defaultRenewalText(): string {
+  const lines = HOSTED_PACKAGES.map((pkg) =>
+    pkg.price > 0
+      ? `${pkg.name} ¥${pkg.price}：${pkg.minutes} 分钟，${pkg.validDays} 天内有效（${pkg.hint}）`
+      : `${pkg.name}：${pkg.hint} ${pkg.minutes} 分钟（${pkg.validDays} 天内有效）`,
+  );
+  return [
+    ...lines,
+    "",
+    "深度思考版 1 分钟按 1.5 分钟计；通义千问 1 分钟只扣 0.5 分钟",
+    "扫码转账后，微信留言门牌号和套餐，当天到账",
+  ].join("\n");
+}

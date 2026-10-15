@@ -329,6 +329,10 @@ def create_app() -> FastAPI:
     app.include_router(tts.router, prefix="/api/tts", tags=["tts"])
     app.include_router(documents.router, prefix="/api/tts", tags=["documents"])
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+    from services.community_client import is_community_client
+
+    if is_community_client():
+        app.include_router(billing.community_admin_router, prefix="/api/billing", tags=["billing"])
     app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
     app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
     app.include_router(coach.router, prefix="/api/coach", tags=["coach"])

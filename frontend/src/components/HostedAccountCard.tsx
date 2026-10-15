@@ -53,6 +53,7 @@ export default function HostedAccountCard() {
   const minutes = remaining === null ? "…" : formatRemainingMinutes(remaining);
   return (
     <div className={low ? "hostedAccountCard is-low" : "hostedAccountCard"} role="status">
+      {/* Top: who and how much (opens "My account"); bottom: actions on their own row. */}
       <button
         type="button"
         className="hostedAccountOpen"
@@ -60,7 +61,7 @@ export default function HostedAccountCard() {
         title={`剩余 ${minutes} 分钟 · 我的账户`}
       >
         <span className="hostedAccountText">
-          <span className="hostedAccountName">{account || "…"} · 我的账户</span>
+          <span className="hostedAccountName">{account || "…"}</span>
           <span className="hostedAccountMinutes">
             剩余 <strong>{minutes}</strong> 分钟
           </span>
@@ -69,17 +70,18 @@ export default function HostedAccountCard() {
               className="hostedAccountExpiring"
               title={`${formatMinutes(expiring.seconds)} 分钟将于 ${formatTime(expiring.expires_at)} 到期`}
             >
-              {formatTime(expiring.expires_at).slice(0, 5)} 到期 {formatMinutes(expiring.seconds)} 分
+              {formatMinutes(expiring.seconds)} 分钟 {formatTime(expiring.expires_at).slice(0, 5)} 到期
             </span>
           ) : null}
         </span>
         <strong className="hostedAccountMinutesCompact">{minutes}</strong>
       </button>
+      <div className="hostedAccountActions">
+        <button type="button" onClick={() => setPanelOpen(true)}>我的账户</button>
+        {getAuthRuntimeConfig().isAdmin ? <a href={HOSTED_ADMIN_HASH}>管理</a> : null}
+        <button type="button" onClick={logout}>退出</button>
+      </div>
       {panelOpen ? <HostedAccountPanel onClose={() => setPanelOpen(false)} /> : null}
-      {getAuthRuntimeConfig().isAdmin ? (
-        <a className="hostedAccountLogout" href={HOSTED_ADMIN_HASH}>管理</a>
-      ) : null}
-      <button type="button" className="hostedAccountLogout" onClick={logout}>退出</button>
     </div>
   );
 }

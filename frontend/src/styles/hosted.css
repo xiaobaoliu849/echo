@@ -97,13 +97,16 @@
   font-size: var(--step--1);
 }
 
-/* Sidebar footer account card (replaces the login/settings buttons). */
+/* Sidebar footer account card (replaces the login/settings buttons):
+   name and minutes on top, actions on their own row so nothing is squeezed. */
 .hostedAccountCard {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
-  padding: 10px 10px 10px 14px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 12px 14px 10px;
   font-family: var(--body-font);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -114,7 +117,6 @@
 .hostedAccountCard .hostedAccountOpen {
   display: flex;
   align-items: center;
-  flex: 1;
   min-width: 0;
   padding: 0;
   color: inherit;
@@ -129,12 +131,6 @@
 .hostedAccountCard .hostedAccountOpen:hover:not(:disabled) {
   transform: none;
   filter: none;
-}
-
-.hostedAccountCard .hostedAccountOpen:hover .hostedAccountName {
-  color: var(--brand-dark);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .vsSidebar.collapsed .hostedAccountOpen {
@@ -160,12 +156,17 @@
 .hostedAccountMinutes {
   font-size: var(--step-0);
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .hostedAccountMinutes strong,
 .hostedAccountMinutesCompact {
   color: var(--brand-dark);
   font-weight: 700;
+}
+
+.hostedAccountMinutes strong {
+  font-size: var(--step-1);
 }
 
 .hostedAccountCard.is-low .hostedAccountMinutes strong,
@@ -178,39 +179,62 @@
   font-size: var(--step-0);
 }
 
-.hostedAccountLogout {
-  flex: none;
-  padding: 4px 10px;
+/* Action row: quiet text buttons separated by a hairline. */
+.hostedAccountActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.hostedAccountActions > button,
+.hostedAccountActions > a {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  font: inherit;
   font-size: var(--step--1);
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
   color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
   cursor: pointer;
 }
 
-.hostedAccountLogout:hover {
-  color: var(--text-primary);
-  border-color: var(--text-soft);
+.hostedAccountActions > button:hover:not(:disabled),
+.hostedAccountActions > a:hover {
+  color: var(--brand-dark);
+  background: var(--brand-soft);
+  transform: none;
+  filter: none;
+}
+
+.hostedAccountActions > button:focus-visible,
+.hostedAccountActions > a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
 }
 
 /* Collapsed sidebar: just the minutes number. */
 .vsSidebar.collapsed .hostedAccountCard {
-  justify-content: center;
+  align-items: center;
   padding: 8px 4px;
 }
 
 .vsSidebar.collapsed .hostedAccountText,
-.vsSidebar.collapsed .hostedAccountLogout {
+.vsSidebar.collapsed .hostedAccountActions {
   display: none;
 }
 
 .vsSidebar.collapsed .hostedAccountMinutesCompact {
   display: block;
-}
-
-a.hostedAccountLogout {
-  text-decoration: none;
 }
 
 /* ── Operator console (#/admin) ────────────────────────────────────── */
@@ -1024,10 +1048,6 @@ a.hostedAccountLogout {
   white-space: nowrap;
 }
 
-/* The card is narrow (more so with the admin button): keep each line whole. */
-.hostedAccountMinutes {
-  white-space: nowrap;
-}
 
 @media (max-width: 760px) {
   .hostedLotList li {
@@ -1036,5 +1056,59 @@ a.hostedAccountLogout {
 
   .hostedLotList li > :nth-child(3) {
     grid-column: 1 / -1;
+  }
+}
+
+/* Admin: package presets in the create / top-up dialogs. */
+.hostedAdminPackages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hostedAdmin .hostedAdminPackages button,
+.hostedAdminOverlay .hostedAdminPackages button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  font-size: var(--step--1);
+  font-weight: 400;
+  text-align: left;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+.hostedAdminPackages button strong {
+  font-size: var(--step-0);
+  color: var(--text-primary);
+}
+
+.hostedAdmin .hostedAdminPackages button.is-active,
+.hostedAdminOverlay .hostedAdminPackages button.is-active {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+
+.hostedAdminInline > label {
+  flex: 1;
+}
+
+.hostedAdminForm select {
+  padding: 8px 10px;
+  font: inherit;
+  font-size: var(--step-0);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+@media (max-width: 760px) {
+  .hostedAdminPackages {
+    grid-template-columns: 1fr;
   }
 }

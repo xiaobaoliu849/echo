@@ -1743,12 +1743,18 @@ export function createHostedAccount(payload: {
   password: string;
   minutes: number;
   note: string;
+  valid_days?: number;
 }): Promise<{ account: string; remaining_seconds: number }> {
   return hostedAdminRequest("users", payload);
 }
 
-export function grantHostedMinutes(account: string, minutes: number, note: string): Promise<{ remaining_seconds: number }> {
-  return hostedAdminRequest("grant", { account, minutes, note });
+export function grantHostedMinutes(
+  account: string,
+  minutes: number,
+  note: string,
+  validDays?: number,
+): Promise<{ remaining_seconds: number }> {
+  return hostedAdminRequest("grant", { account, minutes, note, valid_days: validDays });
 }
 
 export function setHostedAccountActive(account: string, active: boolean): Promise<{ ok: boolean }> {

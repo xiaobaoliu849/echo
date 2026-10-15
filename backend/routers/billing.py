@@ -6,6 +6,7 @@ Only meaningful in hosted mode; outside it every route except
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -19,6 +20,8 @@ from services.direct_calls import HEARTBEAT_SECONDS, DirectCallRegistry
 from services.user_auth_service import user_auth_service
 
 router = APIRouter()
+# Mounted ahead of ``router`` only on a community client (see main.py).
+community_admin_router = APIRouter()
 
 MAX_GRANT_MINUTES = 100_000
 
@@ -39,12 +42,15 @@ class CreateAccountRequest(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     minutes: int = Field(default=0, ge=0, le=MAX_GRANT_MINUTES)
     note: str = Field(default="", max_length=200)
+    # Per-package validity (e.g. a 30-day monthly card); None = server default.
+    valid_days: int | None = Field(default=None, ge=1, le=366)
 
 
 class GrantRequest(BaseModel):
     account: str = Field(min_length=1, max_length=120)
     minutes: int = Field(ge=-MAX_GRANT_MINUTES, le=MAX_GRANT_MINUTES)
     note: str = Field(default="", max_length=200)
+    valid_days: int | None = Field(default=None, ge=1, le=366)
 
 
 class RenewalRequest(BaseModel):
@@ -345,7 +351,10 @@ async def admin_create_user(payload: CreateAccountRequest) -> dict[str, Any]:
     balance = billing_service.get_balance(email)
     if payload.minutes:
         balance = billing_service.grant(
-            email, payload.minutes * 60, note=payload.note or "initial", valid_days=hosted_mode.minutes_valid_days()
+            email,
+            payload.minutes * 60,
+            note=payload.note or "initial",
+            valid_days=payload.valid_days or hosted_mode.minutes_valid_days(),
         )
     return {"account": hosted_mode.display_account_id(email), "remaining_seconds": balance}
 
@@ -356,7 +365,10 @@ async def admin_grant(payload: GrantRequest) -> dict[str, Any]:
     email = _known_email(payload.account)
     try:
         balance = billing_service.grant(
-            email, payload.minutes * 60, note=payload.note, valid_days=hosted_mode.minutes_valid_days()
+            email,
+            payload.minutes * 60,
+            note=payload.note,
+            valid_days=payload.valid_days or hosted_mode.minutes_valid_days(),
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
@@ -394,3 +406,23 @@ async def admin_set_renewal(payload: RenewalRequest) -> dict[str, Any]:
         return hosted_renewal.save(text=payload.text, qr=payload.qr)
     except ValueError as exc:
         raise _bad_request(exc) from exc
+
+
+_ADMIN_PATH_RE = re.compile(r"^[a-z-]{1,40}$")
+
+
+@community_admin_router.api_route("/admin/{path}", methods=["GET", "POST"], include_in_schema=False)
+async def community_admin_proxy(
+    path: str, request: Request, authorization: str | None = Header(default=None, alias="Authorization")
+) -> Any:
+    """On a community client the operator console talks to the hosted server."""
+    if not _ADMIN_PATH_RE.match(path):
+        raise HTTPException(status_code=404, detail={"code": "NOT_AVAILABLE", "message": "Not available.", "meta": {}})
+    body = await request.json() if request.method == "POST" else None
+    query = f"?{request.url.query}" if request.url.query else ""
+    try:
+        return await community_client.forward(
+            request.method, f"/api/billing/admin/{path}{query}", token=_bearer(authorization), json=body
+        )
+    except community_client.CommunityServerError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})

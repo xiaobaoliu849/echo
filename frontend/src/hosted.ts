@@ -6,6 +6,13 @@
 
 export const IS_HOSTED_BUILD = import.meta.env.VITE_HOSTED === "true";
 
+/** Provider names a neighbour recognises (the internal ones mean nothing to them). */
+export const HOSTED_PROVIDER_LABELS: Record<string, string> = {
+  Vercel: "谷歌 Gemini",
+  DashScope: "通义千问",
+  Doubao: "豆包",
+};
+
 /** Location hash of the operator console (admin accounts only). */
 export const HOSTED_ADMIN_HASH = "#/admin";
 

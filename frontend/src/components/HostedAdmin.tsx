@@ -13,7 +13,17 @@ import {
   type HostedAdminUser,
   type HostedAdminUserDetail,
 } from "../api";
-import { fillDays, formatElapsed, formatTime, minutes, modelLabel, useSubmit } from "../hostedFormat";
+import {
+  HOSTED_PACKAGES,
+  defaultRenewalText,
+  fillDays,
+  formatElapsed,
+  formatTime,
+  minutes,
+  modelLabel,
+  packageNote,
+  useSubmit,
+} from "../hostedFormat";
 import { formatErrorMessage } from "../utils/errorFormatting";
 import { DailyChart, GrantList, LotList, Modal, StatTile } from "./HostedUi";
 
@@ -268,15 +278,10 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
       </main>
 
       {dialog?.kind === "create" ? (
-        <CreateDialog validDays={overview?.minutes_valid_days ?? 0} onClose={() => setDialog(null)} onDone={done} />
+        <CreateDialog onClose={() => setDialog(null)} onDone={done} />
       ) : null}
       {dialog?.kind === "grant" ? (
-        <GrantDialog
-          user={dialog.user}
-          validDays={overview?.minutes_valid_days ?? 0}
-          onClose={() => setDialog(null)}
-          onDone={done}
-        />
+        <GrantDialog user={dialog.user} onClose={() => setDialog(null)} onDone={done} />
       ) : null}
       {dialog?.kind === "password" ? (
         <PasswordDialog user={dialog.user} onClose={() => setDialog(null)} onDone={done} />
@@ -377,11 +382,16 @@ function RenewalSettings({ onSaved }: { onSaved: () => void }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={1000}
-            rows={4}
+            rows={8}
             disabled={!loaded}
-            placeholder={"例如：\n300 分钟 ¥49，600 分钟 ¥89\n扫码转账后微信留言门牌号，当天到账"}
+            placeholder={defaultRenewalText()}
           />
         </label>
+        <div>
+          <button type="button" className="hostedAdminGhost" onClick={() => setText(defaultRenewalText())} disabled={!loaded}>
+            填入标准价目
+          </button>
+        </div>
         <div className="hostedAdminQrRow">
           {qr ? <img src={qr} alt="收款码预览" className="hostedPanelQr" /> : <span className="hostedAdminQrEmpty">未设置收款码</span>}
           <div className="hostedAdminQrActions">
@@ -415,30 +425,89 @@ function PasswordField({ value, onChange }: { value: string; onChange: (value: s
   );
 }
 
-function validityNote(validDays: number): string {
-  return validDays > 0 ? `新加的分钟 ${validDays} 天内有效，先到期的先扣。` : "新加的分钟长期有效。";
+const VALIDITY_CHOICES = [30, 90];
+
+type PackageState = { mins: string; validDays: number; note: string };
+
+function packageState(id: string): PackageState {
+  const pkg = HOSTED_PACKAGES.find((item) => item.id === id) ?? HOSTED_PACKAGES[0];
+  return { mins: String(pkg.minutes), validDays: pkg.validDays, note: packageNote(pkg) };
 }
 
-function CreateDialog({
-  validDays,
-  onClose,
-  onDone,
+/** Package presets plus the minutes / validity / note they fill in. */
+function PackageFields({
+  value,
+  onChange,
+  allowNegative = false,
 }: {
-  validDays: number;
-  onClose: () => void;
-  onDone: (message: string) => void;
+  value: PackageState;
+  onChange: (next: PackageState) => void;
+  allowNegative?: boolean;
 }) {
+  const active = HOSTED_PACKAGES.find(
+    (pkg) => String(pkg.minutes) === value.mins && pkg.validDays === value.validDays,
+  );
+  return (
+    <>
+      <div className="hostedAdminPackages" role="group" aria-label="套餐">
+        {HOSTED_PACKAGES.map((pkg) => (
+          <button
+            key={pkg.id}
+            type="button"
+            className={active?.id === pkg.id ? "is-active" : ""}
+            onClick={() => onChange(packageState(pkg.id))}
+          >
+            <strong>{pkg.name}</strong>
+            <span>{pkg.minutes} 分钟 · {pkg.validDays} 天</span>
+            <span>{pkg.price > 0 ? `¥${pkg.price}` : "免费"}</span>
+          </button>
+        ))}
+      </div>
+      <div className="hostedAdminInline">
+        <label>
+          <span>分钟数{allowNegative ? "（负数=扣减）" : ""}</span>
+          <input
+            type="number"
+            min={allowNegative ? -100000 : 0}
+            max={100000}
+            value={value.mins}
+            onChange={(e) => onChange({ ...value, mins: e.target.value })}
+          />
+        </label>
+        <label>
+          <span>有效期</span>
+          <select value={value.validDays} onChange={(e) => onChange({ ...value, validDays: Number(e.target.value) })}>
+            {VALIDITY_CHOICES.map((days) => (
+              <option key={days} value={days}>{days} 天</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label>
+        <span>备注（用户能看到）</span>
+        <input
+          value={value.note}
+          onChange={(e) => onChange({ ...value, note: e.target.value })}
+          maxLength={200}
+          placeholder="例如 月卡 ¥99"
+        />
+      </label>
+    </>
+  );
+}
+
+function CreateDialog({ onClose, onDone }: { onClose: () => void; onDone: (message: string) => void }) {
   const [account, setAccount] = useState("");
   const [password, setPassword] = useState(generatePassword);
-  const [mins, setMins] = useState("60");
-  const [note, setNote] = useState("");
+  const [pkg, setPkg] = useState<PackageState>(() => packageState("trial"));
   const [created, setCreated] = useState<{ account: string; password: string } | null>(null);
   const { busy, error, submit } = useSubmit(async () => {
     const result = await createHostedAccount({
       account: account.trim(),
       password,
-      minutes: Math.max(0, Math.round(Number(mins) || 0)),
-      note: note.trim(),
+      minutes: Math.max(0, Math.round(Number(pkg.mins) || 0)),
+      note: pkg.note.trim(),
+      valid_days: pkg.validDays,
     });
     setCreated({ account: result.account, password });
   });
@@ -464,14 +533,7 @@ function CreateDialog({
           <input value={account} onChange={(e) => setAccount(e.target.value)} required maxLength={120} autoFocus />
         </label>
         <PasswordField value={password} onChange={setPassword} />
-        <label>
-          <span>赠送 / 首充分钟（{validityNote(validDays)}）</span>
-          <input type="number" min={0} max={100000} value={mins} onChange={(e) => setMins(e.target.value)} />
-        </label>
-        <label>
-          <span>备注（可选）</span>
-          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="例如 试用 / 微信转账 ¥49" />
-        </label>
+        <PackageFields value={pkg} onChange={setPkg} />
         {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
         <div className="hostedAdminModalActions">
           <button type="button" className="hostedAdminGhost" onClick={onClose}>取消</button>
@@ -482,22 +544,17 @@ function CreateDialog({
   );
 }
 
-const GRANT_PRESETS = [60, 300, 600, 1200];
-
 function GrantDialog({
   user,
-  validDays,
   onClose,
   onDone,
 }: {
   user: HostedAdminUser;
-  validDays: number;
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
-  const [mins, setMins] = useState("300");
-  const [note, setNote] = useState("");
-  const amount = Math.round(Number(mins) || 0);
+  const [pkg, setPkg] = useState<PackageState>(() => packageState("monthly"));
+  const amount = Math.round(Number(pkg.mins) || 0);
   const { busy, error, setError, submit } = useSubmit(async () => {
     if (amount === 0) {
       setError("请输入分钟数");
@@ -506,35 +563,14 @@ function GrantDialog({
     if (amount < 0 && !window.confirm(`从 ${user.account} 扣减 ${-amount} 分钟？`)) {
       return;
     }
-    const result = await grantHostedMinutes(user.account, amount, note.trim());
+    const result = await grantHostedMinutes(user.account, amount, pkg.note.trim(), pkg.validDays);
     onDone(`${user.account} ${amount > 0 ? "已加" : "已扣"} ${Math.abs(amount)} 分钟，现剩 ${minutes(result.remaining_seconds)} 分钟`);
   });
   return (
     <Modal title={`给 ${user.account} 加时长`} onClose={onClose}>
       <form className="hostedAdminForm" onSubmit={submit}>
-        <p className="hostedAdminMuted">
-          当前剩余 {minutes(user.remaining_seconds)} 分钟。{validityNote(validDays)}负数表示扣减（纠错用）。
-        </p>
-        <div className="hostedAdminChips">
-          {GRANT_PRESETS.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              className={amount === preset ? "is-active" : ""}
-              onClick={() => setMins(String(preset))}
-            >
-              +{preset}
-            </button>
-          ))}
-        </div>
-        <label>
-          <span>分钟数</span>
-          <input type="number" min={-100000} max={100000} value={mins} onChange={(e) => setMins(e.target.value)} autoFocus />
-        </label>
-        <label>
-          <span>备注</span>
-          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="例如 10月 微信转账 ¥49" />
-        </label>
+        <p className="hostedAdminMuted">当前剩余 {minutes(user.remaining_seconds)} 分钟。选套餐即可，通话时先扣最早到期的分钟。</p>
+        <PackageFields value={pkg} onChange={setPkg} allowNegative />
         {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
         <div className="hostedAdminModalActions">
           <button type="button" className="hostedAdminGhost" onClick={onClose}>取消</button>
