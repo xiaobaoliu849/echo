@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from services.api_auth_guard import validate_auth_header, validate_websocket_token
 from services.billing_service import billing_service
 from services import community_client, hosted_mode
-from services.session_meter import SessionMeter
+from services.session_meter import SessionMeter, live_sessions
 from services.realtime_session_recorder import run_db_call
 from services.speaking_coach import normalize_tutor_config, reset_tutor_session, set_tutor_session
 from services.realtime_voice_service import (
@@ -332,6 +332,10 @@ async def voice_chat_ws(
             hosted_error = "当前账号不支持该模型，请选择其他模型。"
         elif billing_service.get_balance(hosted_user_email) <= 0:
             hosted_error = "时长已用完，请联系管理员充值。"
+        elif len(live_sessions()) >= hosted_mode.max_relay_sessions():
+            # Every relayed call streams audio through this server's uplink;
+            # past this many, everyone's calls would start to stutter.
+            hosted_error = "线路繁忙，请稍后再试，或改用谷歌 Gemini。"
         if hosted_error:
             await websocket.send_json(
                 {"type": "error", "message": hosted_error, "provider": selected_provider}
@@ -352,13 +356,18 @@ async def voice_chat_ws(
 
     community_meter: community_client.CommunityCallMeter | None = None
     direct_grant: dict[str, str] | None = None
+    if community_token and selected_provider in community_client.RELAY_PROVIDERS:
+        # Mainland providers that cannot hand out client secrets: the hosted
+        # server runs and meters the call, this machine only pipes it.
+        await community_client.relay_call(websocket, websocket.url.query)
+        return
     if community_token:
         # Community client: the hosted server authorises and bills the call,
         # and this machine talks to the provider over its own network.
         try:
-            if selected_provider != "Vercel":
+            if selected_provider not in community_client.DIRECT_PROVIDERS:
                 raise community_client.CommunityServerError(
-                    400, {"message": "该模型暂不支持，请选择 Gemini。"}
+                    400, {"message": "该模型暂不支持，请选择其他模型。"}
                 )
             grant = await community_client.start_direct_call(community_token, selected_provider, model)
         except community_client.CommunityServerError as exc:

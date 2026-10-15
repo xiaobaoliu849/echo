@@ -468,6 +468,15 @@ class HostedApiTests(unittest.TestCase):
         ) as ws:
             self.assertIn("不支持", ws.receive_json()["message"])
 
+    def test_relayed_calls_are_capped(self) -> None:
+        self.billing.grant(USER[0], 600)
+        busy = [{"user_email": "x"}] * 5
+        with patch.object(voice_chat_router, "live_sessions", return_value=busy):
+            client = TestClient(self.app)
+            url = f"/api/voice-chat/ws?provider=DashScope&model=qwen3.8-omni-flash-realtime&token={self.user_token}"
+            with client.websocket_connect(url) as ws:
+                self.assertIn("线路繁忙", ws.receive_json()["message"])
+
     def test_voice_ws_rejects_empty_balance(self) -> None:
         client = TestClient(self.app)
         with client.websocket_connect(f"/api/voice-chat/ws?provider=Vercel&token={self.user_token}") as ws:
@@ -689,9 +698,72 @@ class CommunityClientTests(unittest.TestCase):
         self.assertEqual(grant["body"]["valid_days"], 30)
         self.assertEqual(self._request("GET", "/api/billing/admin/users").status_code, 401)
 
-    def test_only_direct_capable_models_are_offered(self) -> None:
+    def test_direct_and_relayed_models_are_offered(self) -> None:
         body = self._request("GET", "/api/billing/hosted-info").json()
-        self.assertEqual([p["provider"] for p in body["providers"]], ["Vercel"])
+        self.assertEqual([p["provider"] for p in body["providers"]], ["Vercel", "DashScope"])
+
+    def test_qwen_and_doubao_calls_are_relayed_through_the_server(self) -> None:
+        upstreams: list[Any] = []
+
+        class FakeUpstream:
+            """The hosted server's voice socket: answers pings, then hangs up for lack of minutes."""
+
+            def __init__(self, url: str, **kwargs: Any) -> None:
+                self.url = url
+                self.kwargs = kwargs
+                self.sent: list[Any] = []
+                self.close_code: int | None = None
+                self.queue: asyncio.Queue[Any] = asyncio.Queue()
+                self.closed = False
+
+            async def send(self, data: Any) -> None:
+                self.sent.append(data)
+                if data == '{"type": "ping"}':
+                    await self.queue.put('{"type": "pong"}')
+                    await self.queue.put(b"\x01\x02")
+                    self.close_code = 4402
+                    await self.queue.put(None)
+
+            def __aiter__(self) -> "FakeUpstream":
+                return self
+
+            async def __anext__(self) -> Any:
+                item = await self.queue.get()
+                if item is None:
+                    raise StopAsyncIteration
+                return item
+
+            async def close(self) -> None:
+                self.closed = True
+
+        async def fake_connect(url: str, **kwargs: Any) -> FakeUpstream:
+            upstream = FakeUpstream(url, **kwargs)
+            upstreams.append(upstream)
+            return upstream
+
+        import websockets
+
+        with patch.object(websockets, "connect", side_effect=fake_connect):
+            client = TestClient(self.app)
+            url = "/api/voice-chat/ws?provider=Doubao&model=doubao-realtime&voice=v1&token=remote-token"
+            with client.websocket_connect(url) as ws:
+                ws.send_text('{"type": "ping"}')
+                ws.send_bytes(b"pcm")
+                self.assertEqual(ws.receive_text(), '{"type": "pong"}')
+                self.assertEqual(ws.receive_bytes(), b"\x01\x02")
+                with self.assertRaises(WebSocketDisconnect) as closed:
+                    ws.receive_text()
+        self.assertEqual(closed.exception.code, 4402)  # the server's reason reaches the app
+        [upstream] = upstreams
+        self.assertEqual(
+            upstream.url,
+            "wss://hosted.test:8443/api/voice-chat/ws?provider=Doubao&model=doubao-realtime&voice=v1&token=remote-token",
+        )
+        self.assertIsNone(upstream.kwargs["proxy"])
+        self.assertEqual(upstream.sent[0], '{"type": "ping"}')
+        self.assertTrue(upstream.closed)
+        # A relayed call never asks the server for a direct-call grant.
+        self.assertFalse([c for c in self.calls if c[1] == "/api/billing/direct/start"])
 
     def test_balance_is_forwarded_with_the_token(self) -> None:
         body = self._request("GET", "/api/billing/me", headers={"Authorization": "Bearer remote-token"}).json()
@@ -741,7 +813,15 @@ class CommunityClientTests(unittest.TestCase):
         with client.websocket_connect("/api/voice-chat/ws?provider=Vercel&token=wrong") as ws:
             self.assertEqual(ws.receive_json()["type"], "error")
 
-    def test_qwen_is_not_offered_directly(self) -> None:
+    def test_relay_reports_an_unreachable_server(self) -> None:
+        import websockets
+
+        with patch.object(websockets, "connect", side_effect=OSError("no route")):
+            client = TestClient(self.app)
+            with client.websocket_connect("/api/voice-chat/ws?provider=DashScope&token=remote-token") as ws:
+                self.assertIn("连接服务器失败", ws.receive_json()["message"])
+
+    def test_other_providers_are_refused(self) -> None:
         client = TestClient(self.app)
-        with client.websocket_connect("/api/voice-chat/ws?provider=DashScope&token=remote-token") as ws:
-            self.assertIn("Gemini", ws.receive_json()["message"])
+        with client.websocket_connect("/api/voice-chat/ws?provider=OpenAI&token=remote-token") as ws:
+            self.assertIn("暂不支持", ws.receive_json()["message"])

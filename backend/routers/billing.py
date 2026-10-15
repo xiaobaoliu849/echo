@@ -93,12 +93,13 @@ def _bearer(authorization: str | None) -> str:
 @router.get("/hosted-info", response_model=None)
 async def hosted_info() -> dict[str, Any] | JSONResponse:
     if community_client.is_community_client():
-        # Only providers that can go direct are offered on a community client.
+        # Gemini goes direct; Qwen Omni and Doubao are relayed through the server.
         try:
             info = await community_client.forward("GET", "/api/billing/hosted-info")
         except community_client.CommunityServerError as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-        info["providers"] = [p for p in info.get("providers", []) if p.get("provider") in DIRECT_PROVIDERS]
+        supported = community_client.DIRECT_PROVIDERS | community_client.RELAY_PROVIDERS
+        info["providers"] = [p for p in info.get("providers", []) if p.get("provider") in supported]
         return info
     if not hosted_mode.is_hosted_mode():
         return {"hosted": False, "providers": []}
@@ -190,7 +191,7 @@ async def renewal_info(
 
 # Only providers that can mint short-lived client secrets can go direct; the
 # operator's real key must never leave this server.
-DIRECT_PROVIDERS = frozenset({"Vercel"})
+DIRECT_PROVIDERS = community_client.DIRECT_PROVIDERS
 _direct_registry: DirectCallRegistry | None = None
 
 

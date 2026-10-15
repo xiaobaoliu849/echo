@@ -58,6 +58,9 @@ DEFAULT_MAX_SESSION_SECONDS = 15 * 60
 # Minutes from each top-up expire this many days later (0 = never), which
 # caps how long sold-but-unused minutes stay a liability.
 DEFAULT_MINUTES_VALID_DAYS = 90
+# Relayed calls stream audio through this server; a 3 Mbps uplink carries
+# about five without stuttering.
+DEFAULT_MAX_RELAY_SESSIONS = 5
 EXPIRY_WARNING_DAYS = 7
 
 _config = BackendConfig()
@@ -101,6 +104,10 @@ def low_balance_warning_seconds() -> int:
 
 def max_session_seconds() -> int:
     return _int_setting("max_session_seconds", DEFAULT_MAX_SESSION_SECONDS)
+
+
+def max_relay_sessions() -> int:
+    return _int_setting("max_relay_sessions", DEFAULT_MAX_RELAY_SESSIONS)
 
 
 def minutes_valid_days() -> int:
