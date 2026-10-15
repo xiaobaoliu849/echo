@@ -16,9 +16,9 @@ import {
   type HostedPrefs,
 } from "../api";
 import { createInlineTranslator } from "../i18n";
-import { formatErrorMessage } from "../utils/errorFormatting";
 import { HOSTED_ADMIN_HASH, getHostedLanguage, setHostedLanguage } from "../hosted";
 import { applyHostedPrefs } from "../hostedPrefs";
+import { hostedErrorMessage } from "../hostedFormat";
 import "../styles/hosted.css";
 
 type Phase = "login" | "loading" | "onboarding" | "ready";
@@ -32,6 +32,7 @@ type Phase = "login" | "loading" | "onboarding" | "ready";
 export default function HostedRoot() {
   const [phase, setPhase] = useState<Phase>(() => (getAuthRuntimeConfig().apiToken ? "loading" : "login"));
   const [prefs, setPrefs] = useState<HostedPrefs | null>(null);
+  const [noTrial, setNoTrial] = useState(false);
   const [hash, setHash] = useState(() => window.location.hash);
 
   useEffect(() => {
@@ -92,7 +93,14 @@ export default function HostedRoot() {
   }, [phase]);
 
   if (phase === "login") {
-    return <HostedLogin onLoggedIn={() => setPhase("loading")} />;
+    return (
+      <HostedLogin
+        onLoggedIn={(trialGranted) => {
+          setNoTrial(!trialGranted);
+          setPhase("loading");
+        }}
+      />
+    );
   }
   if (phase === "loading") {
     return <main className="hostedLogin" aria-busy="true" />;
@@ -100,7 +108,7 @@ export default function HostedRoot() {
   // The operator console never waits behind the learner onboarding.
   const adminConsole = hash === HOSTED_ADMIN_HASH && getAuthRuntimeConfig().isAdmin;
   if (phase === "onboarding" && prefs && !adminConsole) {
-    return <HostedOnboarding prefs={prefs} onDone={() => setPhase("ready")} />;
+    return <HostedOnboarding prefs={prefs} noTrial={noTrial} onDone={() => setPhase("ready")} />;
   }
   if (adminConsole) {
     return (
@@ -118,7 +126,7 @@ export default function HostedRoot() {
   return <App />;
 }
 
-function HostedLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
+function HostedLogin({ onLoggedIn }: { onLoggedIn: (trialGranted: boolean) => void }) {
   const language = getHostedLanguage();
   const t = createInlineTranslator(language);
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -165,13 +173,19 @@ function HostedLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
     setBusy(true);
     try {
       if (mode === "register") {
-        await registerHostedAccount({ invite_code: inviteCode.trim(), account: account.trim(), password, learner });
+        const { trialGranted } = await registerHostedAccount({
+          invite_code: inviteCode.trim(),
+          account: account.trim(),
+          password,
+          learner,
+        });
+        onLoggedIn(trialGranted);
       } else {
         await loginAuthUser(account.trim(), password);
+        onLoggedIn(true);
       }
-      onLoggedIn();
     } catch (err) {
-      const message = formatErrorMessage(err, mode === "register" ? t("注册失败", "Sign-up failed") : t("登录失败", "Login failed"));
+      const message = hostedErrorMessage(err, mode === "register" ? t("注册失败", "Sign-up failed") : t("登录失败", "Login failed"));
       setError(
         mode === "login" && /incorrect|401/i.test(message)
           ? t("账号或密码不对，请再试一次", "Wrong account or password, please try again")

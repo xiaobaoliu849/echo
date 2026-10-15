@@ -1653,7 +1653,7 @@ export async function registerHostedAccount(payload: {
   account: string;
   password: string;
   learner: "child" | "adult";
-}): Promise<AuthRuntimeConfig> {
+}): Promise<{ trialGranted: boolean }> {
   const response = await fetch(`${API_BASE_URL}/api/billing/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Client-ID": getClientId() },
@@ -1662,7 +1662,10 @@ export async function registerHostedAccount(payload: {
   if (!response.ok) {
     await throwApiError(response);
   }
-  return applyAuthSession((await response.json()) as AuthSessionResponse);
+  const body = (await response.json()) as AuthSessionResponse & { trial_granted?: boolean };
+  applyAuthSession(body);
+  // The free trial is once per device and a few per network.
+  return { trialGranted: body.trial_granted !== false };
 }
 
 export async function fetchHostedInfo(): Promise<HostedInfo> {
@@ -1868,7 +1871,29 @@ export function grantHostedMinutes(
   return hostedAdminRequest("grant", { account, minutes, note, valid_days: validDays, memory_days: memoryDays });
 }
 
-export type HostedRegistration = { enabled: boolean; code: string };
+export type HostedRegistration = { enabled: boolean };
+
+/** A single-use invite code; `used_by` is the account it registered. */
+export type HostedInvite = {
+  code: string;
+  note: string;
+  created_at: number;
+  used_by: string | null;
+  used_at: number | null;
+  revoked: boolean;
+};
+
+export async function fetchHostedInvites(): Promise<HostedInvite[]> {
+  return (await hostedAdminRequest<{ invites: HostedInvite[] }>("invites")).invites;
+}
+
+export async function createHostedInvites(count: number, note: string): Promise<string[]> {
+  return (await hostedAdminRequest<{ codes: string[] }>("invites", { count, note })).codes;
+}
+
+export function revokeHostedInvite(code: string): Promise<{ ok: boolean }> {
+  return hostedAdminRequest("invites/revoke", { code });
+}
 
 export function fetchHostedRegistration(): Promise<HostedRegistration> {
   return hostedAdminRequest("registration");

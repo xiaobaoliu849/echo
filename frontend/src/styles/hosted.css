@@ -1595,3 +1595,69 @@
   border-radius: 999px;
 }
 
+/* Admin: single-use invite codes. */
+.hostedAdminInviteForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.hostedAdminInviteForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--step--1);
+  color: var(--text-secondary);
+}
+
+.hostedAdminInviteForm select,
+.hostedAdminInviteForm input {
+  padding: 8px 10px;
+  font: inherit;
+  font-size: var(--step-0);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.hostedAdminInviteNote {
+  flex: 1;
+  min-width: 180px;
+}
+
+.hostedAdminFreshCodes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--brand-soft);
+  border-radius: 10px;
+  font-size: var(--step-0);
+}
+
+.hostedAdminFreshCodes strong,
+.hostedAdminCode {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+
+.hostedAdminFreshCodes strong {
+  white-space: pre-wrap;
+  color: var(--brand-dark);
+}
+
+.hostedLoginNotice {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: var(--step--1);
+  line-height: 1.6;
+  color: var(--brand-dark);
+  background: var(--brand-soft);
+  border-radius: 8px;
+}
+

@@ -42,7 +42,15 @@ DEFAULT_PREFS: dict[str, Any] = {
 }
 
 
-# ── invite code ──────────────────────────────────────────────────────────
+# ── sign-up: single-use invite codes and trial limits ───────────────────
+#
+# Every invite code registers one account. The free trial is further limited
+# to one per device and a few per network, so one person cannot farm trial
+# minutes with fresh accounts.
+
+TRIAL_PER_NETWORK = 3
+TRIAL_NETWORK_WINDOW_DAYS = 30
+INVITE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"  # no 0/O or 1/I
 
 
 def _registration_path() -> Path:
@@ -50,20 +58,16 @@ def _registration_path() -> Path:
 
 
 def load_registration() -> dict[str, Any]:
+    """Whether self-service sign-up is open (the invite codes live in the DB)."""
     try:
         data = json.loads(_registration_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
-    if not isinstance(data, dict):
-        data = {}
-    return {"enabled": bool(data.get("enabled")), "code": str(data.get("code") or "")}
+    return {"enabled": bool(data.get("enabled")) if isinstance(data, dict) else False}
 
 
-def save_registration(*, enabled: bool, code: str) -> dict[str, Any]:
-    code = str(code or "").strip()
-    if enabled and not 4 <= len(code) <= 32:
-        raise ValueError("邀请码需要 4–32 个字符。")
-    value = {"enabled": bool(enabled), "code": code}
+def save_registration(*, enabled: bool) -> dict[str, Any]:
+    value = {"enabled": bool(enabled)}
     target = _registration_path()
     tmp = target.with_suffix(".tmp")
     tmp.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
@@ -72,16 +76,122 @@ def save_registration(*, enabled: bool, code: str) -> dict[str, Any]:
 
 
 def generate_invite_code() -> str:
-    # Easy to read aloud and type on a phone: no 0/O or 1/I.
-    alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-    return "".join(secrets.choice(alphabet) for _ in range(6))
+    return "".join(secrets.choice(INVITE_ALPHABET) for _ in range(6))
 
 
-def check_invite_code(code: str) -> bool:
-    settings = load_registration()
-    if not settings["enabled"] or not settings["code"]:
-        return False
-    return secrets.compare_digest(str(code or "").strip().upper(), settings["code"].upper())
+class InviteStore:
+    def __init__(self, db_path: Path | None = None) -> None:
+        self.db_path = db_path or get_data_file_path("voice_spirit.db")
+        with get_db_connection(self.db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS invite_codes (
+                    code TEXT PRIMARY KEY,
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    used_by TEXT,
+                    used_at INTEGER,
+                    revoked INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS trial_claims (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_email TEXT NOT NULL,
+                    device_id TEXT NOT NULL DEFAULT '',
+                    network TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.commit()
+
+    def create(self, count: int, note: str = "") -> list[str]:
+        codes: list[str] = []
+        now = int(time.time())
+        with get_db_connection(self.db_path) as conn:
+            while len(codes) < count:
+                code = generate_invite_code()
+                cursor = conn.execute(
+                    "INSERT OR IGNORE INTO invite_codes (code, note, created_at) VALUES (?, ?, ?)",
+                    (code, str(note or "").strip()[:60], now),
+                )
+                if cursor.rowcount:
+                    codes.append(code)
+            conn.commit()
+        return codes
+
+    def list(self) -> list[dict[str, Any]]:
+        with get_db_connection(self.db_path) as conn:
+            rows = conn.execute("SELECT * FROM invite_codes ORDER BY created_at DESC, code").fetchall()
+        return [
+            {
+                "code": str(r["code"]),
+                "note": str(r["note"]),
+                "created_at": int(r["created_at"]),
+                "used_by": r["used_by"],
+                "used_at": int(r["used_at"]) if r["used_at"] else None,
+                "revoked": bool(r["revoked"]),
+            }
+            for r in rows
+        ]
+
+    def revoke(self, code: str) -> bool:
+        with get_db_connection(self.db_path) as conn:
+            cursor = conn.execute(
+                "UPDATE invite_codes SET revoked = 1 WHERE code = ? AND used_by IS NULL",
+                (str(code or "").strip().upper(),),
+            )
+            conn.commit()
+        return bool(cursor.rowcount)
+
+    def claim(self, code: str, email: str) -> bool:
+        """Atomically mark an unused code as used by ``email``; False if not usable."""
+        with get_db_connection(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                UPDATE invite_codes SET used_by = ?, used_at = ?
+                WHERE code = ? AND used_by IS NULL AND revoked = 0
+                """,
+                (email, int(time.time()), str(code or "").strip().upper()),
+            )
+            conn.commit()
+        return bool(cursor.rowcount)
+
+    def release(self, code: str, email: str) -> None:
+        """Undo a claim when the account could not be created after all."""
+        with get_db_connection(self.db_path) as conn:
+            conn.execute(
+                "UPDATE invite_codes SET used_by = NULL, used_at = NULL WHERE code = ? AND used_by = ?",
+                (str(code or "").strip().upper(), email),
+            )
+            conn.commit()
+
+    def trial_allowed(self, *, device_id: str, network: str) -> bool:
+        since = int(time.time()) - TRIAL_NETWORK_WINDOW_DAYS * 86400
+        with get_db_connection(self.db_path) as conn:
+            if device_id:
+                row = conn.execute("SELECT 1 FROM trial_claims WHERE device_id = ? LIMIT 1", (device_id,)).fetchone()
+                if row:
+                    return False
+            if network:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM trial_claims WHERE network = ? AND created_at >= ?",
+                    (network, since),
+                ).fetchone()
+                if int(row["n"] or 0) >= TRIAL_PER_NETWORK:
+                    return False
+        return True
+
+    def record_trial(self, email: str, *, device_id: str, network: str) -> None:
+        with get_db_connection(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO trial_claims (user_email, device_id, network, created_at) VALUES (?, ?, ?, ?)",
+                (email, device_id, network, int(time.time())),
+            )
+            conn.commit()
 
 
 def validate_account_name(account: str) -> str:
@@ -177,3 +287,4 @@ def sanitize_prefs(raw: dict[str, Any], *, allow_signup: bool = False) -> dict[s
 
 
 account_prefs_store = AccountPrefsStore()
+invite_store = InviteStore()

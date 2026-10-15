@@ -268,6 +268,7 @@ class HostedApiTests(unittest.TestCase):
             patch.object(hosted_memory, "hosted_memory_store", HostedMemoryStore(db_path=tmp / "memory.db")),
             patch.object(hosted_accounts, "account_prefs_store", hosted_accounts.AccountPrefsStore(tmp / "prefs.db")),
             patch.object(hosted_accounts, "_registration_path", return_value=tmp / "registration.json"),
+            patch.object(hosted_accounts, "invite_store", hosted_accounts.InviteStore(tmp / "invites.db")),
             # The direct-call registry is built once and keeps its billing store.
             patch.object(billing_router, "_direct_registry", None),
             patch.object(hosted_memory, "server_settings", return_value=("https://everos.test", "server-key")),
@@ -498,44 +499,73 @@ class HostedApiTests(unittest.TestCase):
             ).json()
         self.assertTrue(body["memory"])
 
-    def _register(self, **overrides: Any) -> httpx.Response:
+    def _register(self, client_id: str = "device-1", **overrides: Any) -> httpx.Response:
         payload = {"invite_code": "ABC234", "account": "1702", "password": "secret1", "learner": "child"}
         payload.update(overrides)
-        return self._request("POST", "/api/billing/register", json=payload)
+        return self._request("POST", "/api/billing/register", json=payload, headers={"X-Client-ID": client_id})
 
-    def test_registration_needs_the_invite_code(self) -> None:
+    def _open_with_codes(self, count: int) -> list[str]:
+        self._request("POST", "/api/billing/admin/registration", self.admin_token, json={"enabled": True})
+        return self._request(
+            "POST", "/api/billing/admin/invites", self.admin_token, json={"count": count, "note": "楼下王阿姨"}
+        ).json()["codes"]
+
+    def test_registration_is_closed_until_opened(self) -> None:
         self.assertFalse(self._request("GET", "/api/billing/hosted-info").json()["registration_open"])
-        self.assertEqual(self._register().status_code, 403)  # closed until the operator opens it
-        setting = self._request(
-            "POST", "/api/billing/admin/registration", self.admin_token, json={"enabled": True, "code": "abc234"}
-        )
-        self.assertEqual(setting.status_code, 200, setting.text)
-        self.assertTrue(self._request("GET", "/api/billing/hosted-info").json()["registration_open"])
-        self.assertEqual(self._register(invite_code="WRONG1").json()["detail"]["code"], "INVITE_CODE_INVALID")
+        [code] = hosted_accounts.invite_store.create(1)
+        self.assertEqual(self._register(invite_code=code).json()["detail"]["code"], "REGISTRATION_CLOSED")
         self.assertEqual(
-            self._request(
-                "POST", "/api/billing/admin/registration", self.user_token, json={"enabled": False}
-            ).status_code,
+            self._request("POST", "/api/billing/admin/registration", self.user_token, json={"enabled": True}).status_code,
             403,
         )
+        self.assertEqual(self._request("GET", "/api/billing/admin/invites", self.user_token).status_code, 403)
 
-    def test_self_registration_gives_the_trial_and_logs_in(self) -> None:
-        hosted_accounts.save_registration(enabled=True, code="ABC234")
-        response = self._register()
-        self.assertEqual(response.status_code, 200, response.text)
-        token = response.json()["access_token"]
+    def test_each_invite_code_registers_one_account(self) -> None:
+        [code] = self._open_with_codes(1)
+        self.assertTrue(self._request("GET", "/api/billing/hosted-info").json()["registration_open"])
+        first = self._register(invite_code=code.lower())
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertTrue(first.json()["trial_granted"])
+        token = first.json()["access_token"]
         me = self._request("GET", "/api/billing/me", token).json()
         self.assertEqual((me["account"], me["remaining_seconds"]), ("1702", 30 * 60))
         [lot] = self.billing.active_lots("1702@echo.local")
         self.assertAlmostEqual(lot["expires_at"] - lot["created_at"], 30 * 86400)
         prefs = self._request("GET", "/api/billing/me/prefs", token).json()
         self.assertEqual((prefs["learner"], prefs["signup"], prefs["onboarded"]), ("child", "self", False))
-        self.assertFalse(response.json()["user"]["is_admin"])
+        self.assertFalse(first.json()["user"]["is_admin"])
+        # The same code cannot register a second account.
+        again = self._register(invite_code=code, account="1703", client_id="device-2")
+        self.assertEqual(again.json()["detail"]["code"], "INVITE_CODE_INVALID")
+        [invite] = self._request("GET", "/api/billing/admin/invites", self.admin_token).json()["invites"]
+        self.assertEqual((invite["used_by"], invite["note"]), ("1702", "楼下王阿姨"))
         listing = self._request("GET", "/api/billing/admin/users", self.admin_token).json()
         self.assertEqual(next(u for u in listing["users"] if u["account"] == "1702")["signup"], "self")
-        # The same name cannot be taken twice, and odd names are refused.
-        self.assertIn("已经有人用了", self._register().json()["detail"]["message"])
-        self.assertEqual(self._register(account="a@b").status_code, 400)
+
+    def test_a_failed_sign_up_does_not_burn_the_code(self) -> None:
+        [code] = self._open_with_codes(1)
+        taken = self._register(invite_code=code, account="1203")  # the existing user's name
+        self.assertIn("已经有人用了", taken.json()["detail"]["message"])
+        self.assertEqual(self._register(invite_code=code, account="a@b").status_code, 400)
+        self.assertEqual(self._register(invite_code=code).status_code, 200)
+
+    def test_revoked_codes_stop_working(self) -> None:
+        [code] = self._open_with_codes(1)
+        revoke = self._request("POST", "/api/billing/admin/invites/revoke", self.admin_token, json={"code": code})
+        self.assertEqual(revoke.status_code, 200, revoke.text)
+        self.assertEqual(self._register(invite_code=code).json()["detail"]["code"], "INVITE_CODE_INVALID")
+
+    def test_trial_is_once_per_device_and_capped_per_network(self) -> None:
+        codes = self._open_with_codes(5)
+        same_device = [self._register(invite_code=codes[i], account=f"17{i:02d}").json() for i in range(2)]
+        self.assertEqual([r["trial_granted"] for r in same_device], [True, False])
+        self.assertEqual(self.billing.get_balance("1701@echo.local"), 0)  # registered, but no free minutes
+        more = [
+            self._register(invite_code=codes[i], account=f"18{i:02d}", client_id=f"device-{i}").json()
+            for i in range(2, 5)
+        ]
+        # Same network (the test client's address): three trials in 30 days, then none.
+        self.assertEqual([r["trial_granted"] for r in more], [True, True, False])
 
     def test_preferences_are_sanitised_and_kept_on_the_account(self) -> None:
         saved = self._request(
@@ -812,6 +842,11 @@ class CommunityClientTests(unittest.TestCase):
             json={"current_password": "pw", "new_password": "newpass1"},
         )
         self.assertEqual(ok.json()["email"], "1203@echo.local")
+
+    def test_nested_admin_paths_are_forwarded(self) -> None:
+        auth = {"Authorization": "Bearer remote-token"}
+        body = self._request("POST", "/api/billing/admin/invites/revoke", headers=auth, json={"code": "ABC234"}).json()
+        self.assertEqual(body["forwarded"], "/api/billing/admin/invites/revoke")
 
     def test_registration_is_answered_by_the_server(self) -> None:
         payload = {"invite_code": "ABC234", "account": "1702", "password": "secret1", "learner": "adult"}

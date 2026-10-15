@@ -2,9 +2,9 @@ import { useState } from "react";
 import echoIcon from "../assets/echo-icon.png";
 import { saveHostedPrefs, type HostedPrefs } from "../api";
 import { getHostedLanguage } from "../hosted";
+import { hostedErrorMessage } from "../hostedFormat";
 import { applyHostedPrefs } from "../hostedPrefs";
 import { createInlineTranslator } from "../i18n";
-import { formatErrorMessage } from "../utils/errorFormatting";
 
 type Level = HostedPrefs["level"];
 
@@ -12,7 +12,16 @@ type Level = HostedPrefs["level"];
  * First-run walkthrough: who is learning and their level become the speaking
  * coach's defaults, so the very first call already fits the learner.
  */
-export default function HostedOnboarding({ prefs, onDone }: { prefs: HostedPrefs; onDone: () => void }) {
+export default function HostedOnboarding({
+  prefs,
+  noTrial = false,
+  onDone,
+}: {
+  prefs: HostedPrefs;
+  /** Signed up, but this device or network already used its free trial. */
+  noTrial?: boolean;
+  onDone: () => void;
+}) {
   const t = createInlineTranslator(getHostedLanguage());
   const [step, setStep] = useState(0);
   const [learner, setLearner] = useState<HostedPrefs["learner"]>(prefs.learner);
@@ -40,7 +49,7 @@ export default function HostedOnboarding({ prefs, onDone }: { prefs: HostedPrefs
       applyHostedPrefs(await saveHostedPrefs(patch));
       onDone();
     } catch (err) {
-      setError(formatErrorMessage(err, t("保存失败，请再试一次", "Could not save, please try again")));
+      setError(hostedErrorMessage(err, t("保存失败，请再试一次", "Could not save, please try again")));
     } finally {
       setBusy(false);
     }
@@ -50,6 +59,14 @@ export default function HostedOnboarding({ prefs, onDone }: { prefs: HostedPrefs
     <main className="hostedLogin">
       <section className="hostedLoginCard hostedOnboarding" aria-live="polite">
         <img src={echoIcon} alt="" className="hostedLoginIcon" />
+        {noTrial && step === 0 ? (
+          <p className="hostedLoginNotice" role="status">
+            {t(
+              "注册成功。这台设备已经领过新人体验，这次不再赠送免费分钟，充值后就能开始练习。",
+              "You are signed up. This device has already had its free trial, so top up to start practising.",
+            )}
+          </p>
+        ) : null}
         <p className="hostedOnboardingStep">{t(`第 ${step + 1} 步，共 3 步`, `Step ${step + 1} of 3`)}</p>
 
         {step === 0 ? (

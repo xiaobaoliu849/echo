@@ -12,6 +12,10 @@ import {
   setHostedAccountMemory,
   fetchHostedRegistration,
   saveHostedRegistration,
+  fetchHostedInvites,
+  createHostedInvites,
+  revokeHostedInvite,
+  type HostedInvite,
   setHostedAccountActive,
   type HostedAdminOverview,
   type HostedAdminUser,
@@ -364,67 +368,154 @@ function readQrImage(file: File): Promise<string> {
   });
 }
 
-/** Easy to read aloud and type on a phone: no 0/O or 1/I. */
-function generateInviteCode(): string {
-  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const values = new Uint32Array(6);
-  crypto.getRandomValues(values);
-  return Array.from(values, (n) => alphabet[n % alphabet.length]).join("");
-}
-
-/** Self-service sign-up: the invite code neighbours type to create an account. */
+/** Self-service sign-up: one single-use invite code per person. */
 function RegistrationSettings({ onSaved }: { onSaved: (message: string) => void }) {
   const [enabled, setEnabled] = useState(false);
-  const [code, setCode] = useState("");
+  const [invites, setInvites] = useState<HostedInvite[]>([]);
+  const [count, setCount] = useState(5);
+  const [note, setNote] = useState("");
+  const [fresh, setFresh] = useState<string[]>([]);
+  const [showUsed, setShowUsed] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const { busy, error, submit } = useSubmit(async () => {
-    const next = await saveHostedRegistration({ enabled, code: code.trim().toUpperCase() });
-    setCode(next.code);
-    onSaved(next.enabled ? `已开放注册，邀请码 ${next.code}` : "已关闭自助注册");
-  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const reload = useCallback(async () => {
+    const [registration, list] = await Promise.all([fetchHostedRegistration(), fetchHostedInvites()]);
+    setEnabled(registration.enabled);
+    setInvites(list);
+  }, []);
 
   useEffect(() => {
-    fetchHostedRegistration()
-      .then((value) => {
-        setEnabled(value.enabled);
-        setCode(value.code);
-      })
-      .catch(() => undefined)
+    reload()
+      .catch((err) => setError(formatErrorMessage(err, "加载失败")))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [reload]);
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+    } catch (err) {
+      setError(formatErrorMessage(err, "操作失败"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = (next: boolean) =>
+    run(async () => {
+      await saveHostedRegistration({ enabled: next });
+      setEnabled(next);
+      onSaved(next ? "已开放注册：新用户凭邀请码自己注册" : "已关闭自助注册");
+    });
+
+  const generate = () =>
+    run(async () => {
+      const codes = await createHostedInvites(count, note.trim());
+      setFresh(codes);
+      setNote("");
+      await reload();
+    });
+
+  const revoke = (code: string) =>
+    run(async () => {
+      if (!window.confirm(`作废邀请码 ${code}？作废后就不能再用它注册了。`)) {
+        return;
+      }
+      await revokeHostedInvite(code);
+      await reload();
+    });
+
+  const unused = invites.filter((item) => !item.used_by && !item.revoked);
+  const finished = invites.filter((item) => item.used_by || item.revoked);
+  const shown = showUsed ? [...unused, ...finished] : unused;
 
   return (
     <section className="hostedAdminCard">
       <h2>新用户注册</h2>
       <p className="hostedAdminMuted">
-        开放后，新用户在登录页填邀请码就能自己注册，并自动获得新人体验 30 分钟（30 天有效）。邀请码只发给你想邀请的人；
-        如果外传了，换一个新的即可，已注册的账号不受影响。
+        每个邀请码只能注册一个账号，发给谁可以写在备注里。新账号自动获得 30 分钟体验（30 天有效）；
+        同一台设备只送一次，同一个网络 30 天最多送 3 次，超过的照样能注册，但不送分钟。
       </p>
-      <form className="hostedAdminForm hostedAdminRenewal" onSubmit={submit}>
-        <label className="hostedAdminCheck">
-          <input type="checkbox" checked={enabled} disabled={!loaded} onChange={(e) => setEnabled(e.target.checked)} />
-          <span>开放自助注册</span>
+      <label className="hostedAdminCheck">
+        <input type="checkbox" checked={enabled} disabled={!loaded || busy} onChange={(e) => void toggle(e.target.checked)} />
+        <span>开放自助注册</span>
+      </label>
+
+      <div className="hostedAdminInviteForm">
+        <label>
+          <span>生成几个</span>
+          <select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={busy}>
+            {[1, 5, 10, 20].map((n) => (
+              <option key={n} value={n}>{n} 个</option>
+            ))}
+          </select>
         </label>
-        <div className="hostedAdminInline">
-          <label>
-            <span>邀请码（4–32 位）</span>
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              maxLength={32}
-              disabled={!loaded}
-              placeholder="例如 7KQ2MX"
-            />
-          </label>
-          <button type="button" className="hostedAdminGhost hostedAdminAlignEnd" onClick={() => setCode(generateInviteCode())} disabled={!loaded}>
-            随机生成
+        <label className="hostedAdminInviteNote">
+          <span>备注（可选，例如发给谁）</span>
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={60} disabled={busy} />
+        </label>
+        <button type="button" className="hostedAdminPrimary" disabled={!loaded || busy} onClick={() => void generate()}>
+          生成邀请码
+        </button>
+      </div>
+
+      {fresh.length > 0 ? (
+        <div className="hostedAdminFreshCodes">
+          <span>新生成：</span>
+          <strong>{fresh.join("  ")}</strong>
+          <button type="button" className="hostedAdminGhost" onClick={() => void navigator.clipboard?.writeText(fresh.join("\n"))}>
+            复制
           </button>
         </div>
-        {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
-        <div className="hostedAdminModalActions">
-          <button type="submit" className="hostedAdminPrimary" disabled={busy || !loaded}>{busy ? "保存中…" : "保存"}</button>
-        </div>
-      </form>
+      ) : null}
+      {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
+
+      <table className="hostedAdminTable hostedAdminTableCompact">
+        <thead>
+          <tr>
+            <th>邀请码</th>
+            <th>备注</th>
+            <th>状态</th>
+            <th aria-label="操作" />
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((item) => (
+            <tr key={item.code} className={item.used_by || item.revoked ? "is-disabled" : ""}>
+              <td data-label="邀请码"><code className="hostedAdminCode">{item.code}</code></td>
+              <td data-label="备注">{item.note || "—"}</td>
+              <td data-label="状态">
+                {item.revoked
+                  ? "已作废"
+                  : item.used_by
+                    ? `已被 ${item.used_by} 使用 · ${formatTime(item.used_at)}`
+                    : "未使用"}
+              </td>
+              <td className="hostedAdminRowActions">
+                {!item.used_by && !item.revoked ? (
+                  <>
+                    <button type="button" onClick={() => void navigator.clipboard?.writeText(item.code)}>复制</button>
+                    <button type="button" onClick={() => void revoke(item.code)} disabled={busy}>作废</button>
+                  </>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+          {shown.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="hostedAdminEmpty">{loaded ? "没有可用的邀请码，点「生成邀请码」" : "加载中…"}</td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+      {finished.length > 0 ? (
+        <button type="button" className="hostedAdminGhost hostedPanelMore" onClick={() => setShowUsed((v) => !v)}>
+          {showUsed ? "只看未使用的" : `显示已使用 / 已作废的 ${finished.length} 个`}
+        </button>
+      ) : null}
     </section>
   );
 }

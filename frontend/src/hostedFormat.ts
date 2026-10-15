@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { HostedDailyUsage } from "./api";
+import { ApiRequestError, type HostedDailyUsage } from "./api";
 import { HOSTED_MODEL_LABELS } from "./hosted";
 import { formatErrorMessage } from "./utils/errorFormatting";
 
@@ -136,3 +136,18 @@ export function defaultRenewalText(): string {
     "扫码转账后，微信留言你的账号和套餐，当天到账",
   ].join("\n");
 }
+
+/**
+ * Error text for neighbours: the server's own sentence when it sent one,
+ * without the error code and request id meant for the operator.
+ */
+export function hostedErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiRequestError) {
+    const message = String(error.detail?.message ?? "").trim();
+    if (message) {
+      return message;
+    }
+  }
+  return formatErrorMessage(error, fallback);
+}
+

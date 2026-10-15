@@ -26,10 +26,10 @@ import {
   minutes,
   modelLabel,
   useSubmit,
+  hostedErrorMessage,
 } from "../hostedFormat";
 import { applyHostedPrefs } from "../hostedPrefs";
 import { createInlineTranslator } from "../i18n";
-import { formatErrorMessage } from "../utils/errorFormatting";
 import { DailyChart, GrantList, LotList, Modal, StatTile } from "./HostedUi";
 
 /**
@@ -108,7 +108,7 @@ function AccountTab() {
           }
         }
       })
-      .catch((err) => !cancelled && setError(formatErrorMessage(err, t("加载失败", "Could not load"))));
+      .catch((err) => !cancelled && setError(hostedErrorMessage(err, t("加载失败", "Could not load"))));
     return () => {
       cancelled = true;
     };
@@ -245,7 +245,7 @@ function usePrefs() {
     let cancelled = false;
     fetchHostedPrefs()
       .then((value) => !cancelled && setPrefs(value))
-      .catch((err) => !cancelled && setError(formatErrorMessage(err, "")));
+      .catch((err) => !cancelled && setError(hostedErrorMessage(err, "")));
     return () => {
       cancelled = true;
     };
@@ -264,7 +264,7 @@ function usePrefs() {
       return next;
     } catch (err) {
       setPrefs(prefs);
-      setError(formatErrorMessage(err, ""));
+      setError(hostedErrorMessage(err, ""));
       return null;
     }
   };
@@ -435,7 +435,7 @@ function ChangePasswordForm() {
     try {
       await changeAuthPassword(current, next);
     } catch (err) {
-      const message = formatErrorMessage(err, t("修改失败", "Could not change it"));
+      const message = hostedErrorMessage(err, t("修改失败", "Could not change it"));
       throw new Error(/incorrect|current/i.test(message) ? t("当前密码不对", "The current password is wrong") : message, { cause: err });
     }
     setDone(true);
@@ -486,7 +486,7 @@ function MemorySection() {
     let cancelled = false;
     fetchHostedMemory()
       .then((value) => !cancelled && setMemory(value))
-      .catch((err) => !cancelled && setError(formatErrorMessage(err, t("读取记忆失败", "Could not load memories"))));
+      .catch((err) => !cancelled && setError(hostedErrorMessage(err, t("读取记忆失败", "Could not load memories"))));
     return () => {
       cancelled = true;
     };
@@ -533,7 +533,7 @@ function MemorySection() {
       const next = await setHostedMemoryEnabled(memory.opted_out);
       setMemory({ ...memory, ...next });
     } catch (err) {
-      setError(formatErrorMessage(err, t("操作失败", "Something went wrong")));
+      setError(hostedErrorMessage(err, t("操作失败", "Something went wrong")));
     } finally {
       setBusy(false);
     }
@@ -550,7 +550,7 @@ function MemorySection() {
       setMemory({ ...memory, profile: [], episodes: [] });
       setMessage(t("已清除。之后的通话会重新开始记。", "Erased. Future calls start a fresh memory."));
     } catch (err) {
-      setError(formatErrorMessage(err, t("清除失败", "Could not erase")));
+      setError(hostedErrorMessage(err, t("清除失败", "Could not erase")));
     } finally {
       setBusy(false);
     }

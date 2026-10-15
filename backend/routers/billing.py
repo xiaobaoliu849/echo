@@ -65,7 +65,15 @@ class RegisterRequest(BaseModel):
 
 class RegistrationSettingsRequest(BaseModel):
     enabled: bool
-    code: str = Field(default="", max_length=32)
+
+
+class InviteCreateRequest(BaseModel):
+    count: int = Field(default=5, ge=1, le=50)
+    note: str = Field(default="", max_length=60)
+
+
+class InviteRevokeRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
 
 
 class MemoryGrantRequest(BaseModel):
@@ -244,27 +252,41 @@ async def register(
     if not user_auth_service.has_users():
         # The first account becomes the operator; it is never self-served.
         raise refuse(403, "REGISTRATION_CLOSED", "服务器还没有准备好，请联系管理员。")
-    if not hosted_accounts.check_invite_code(payload.invite_code):
-        raise refuse(403, "INVITE_CODE_INVALID", "邀请码不对，请向管理员索取。")
+    if not hosted_accounts.load_registration()["enabled"]:
+        raise refuse(403, "REGISTRATION_CLOSED", "暂未开放注册，请联系管理员。")
     try:
         name = hosted_accounts.validate_account_name(payload.account)
-        email = hosted_mode.normalize_account_id(name)
+    except ValueError as exc:
+        raise refuse(400, "REGISTER_FAILED", str(exc)) from exc
+    email = hosted_mode.normalize_account_id(name)
+    invites = hosted_accounts.invite_store
+    # Claim the single-use code first, so two sign-ups cannot share one.
+    if not invites.claim(payload.invite_code, email):
+        raise refuse(403, "INVITE_CODE_INVALID", "邀请码不对或已经用过了，请向管理员索取新的。")
+    try:
         user = user_auth_service.register_user(email, payload.password)
     except ValueError as exc:
+        invites.release(payload.invite_code, email)
         message = str(exc)
         if "exist" in message.lower() or "already" in message.lower():
             message = "这个账号已经有人用了，换一个吧。"
         raise refuse(400, "REGISTER_FAILED", message) from exc
-    billing_service.grant(
-        email,
-        hosted_accounts.TRIAL_MINUTES * 60,
-        note="新人体验",
-        valid_days=hosted_accounts.TRIAL_VALID_DAYS,
-    )
+    client_id = _extract_client_id(x_client_id)
+    network = _request_ip(request)
+    trial_granted = invites.trial_allowed(device_id=client_id, network=network)
+    if trial_granted:
+        billing_service.grant(
+            email,
+            hosted_accounts.TRIAL_MINUTES * 60,
+            note="新人体验",
+            valid_days=hosted_accounts.TRIAL_VALID_DAYS,
+        )
+        invites.record_trial(email, device_id=client_id, network=network)
     hosted_accounts.account_prefs_store.update(
         email, {"signup": "self", "learner": payload.learner}, allow_signup=True
     )
-    return _build_session(user, _extract_client_id(x_client_id))
+    session = _build_session(user, client_id)
+    return {**session.model_dump(), "trial_granted": trial_granted}
 
 
 @router.get("/me/prefs", response_model=None)
@@ -592,7 +614,7 @@ async def admin_set_renewal(payload: RenewalRequest) -> dict[str, Any]:
         raise _bad_request(exc) from exc
 
 
-_ADMIN_PATH_RE = re.compile(r"^[a-z-]{1,40}$")
+_ADMIN_PATH_RE = re.compile(r"^[a-z-]{1,40}(/[a-z-]{1,40})?$")
 
 
 @router.get("/admin/registration")
@@ -604,10 +626,31 @@ async def admin_get_registration() -> dict[str, Any]:
 @router.post("/admin/registration")
 async def admin_set_registration(payload: RegistrationSettingsRequest) -> dict[str, Any]:
     _require_hosted()
-    try:
-        return hosted_accounts.save_registration(enabled=payload.enabled, code=payload.code)
-    except ValueError as exc:
-        raise _bad_request(exc) from exc
+    return hosted_accounts.save_registration(enabled=payload.enabled)
+
+
+@router.get("/admin/invites")
+async def admin_list_invites() -> dict[str, Any]:
+    _require_hosted()
+    invites = hosted_accounts.invite_store.list()
+    for item in invites:
+        if item["used_by"]:
+            item["used_by"] = hosted_mode.display_account_id(item["used_by"])
+    return {"invites": invites}
+
+
+@router.post("/admin/invites")
+async def admin_create_invites(payload: InviteCreateRequest) -> dict[str, Any]:
+    _require_hosted()
+    return {"codes": hosted_accounts.invite_store.create(payload.count, payload.note)}
+
+
+@router.post("/admin/invites/revoke")
+async def admin_revoke_invite(payload: InviteRevokeRequest) -> dict[str, Any]:
+    _require_hosted()
+    if not hosted_accounts.invite_store.revoke(payload.code):
+        raise _bad_request(ValueError("这个邀请码不存在或已经被使用。"))
+    return {"ok": True}
 
 
 @router.post("/admin/memory")
@@ -618,7 +661,7 @@ async def admin_set_memory(payload: MemoryGrantRequest) -> dict[str, Any]:
     return {"account": hosted_mode.display_account_id(email), "memory_until": until or None}
 
 
-@community_admin_router.api_route("/admin/{path}", methods=["GET", "POST"], include_in_schema=False)
+@community_admin_router.api_route("/admin/{path:path}", methods=["GET", "POST"], include_in_schema=False)
 async def community_admin_proxy(
     path: str, request: Request, authorization: str | None = Header(default=None, alias="Authorization")
 ) -> Any:
