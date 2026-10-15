@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import App from "../App";
 import HostedAdmin from "./HostedAdmin";
 import HostedOnboarding from "./HostedOnboarding";
@@ -110,7 +111,6 @@ function HostedLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [trialMinutes, setTrialMinutes] = useState(30);
   const [account, setAccount] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [learner, setLearner] = useState<"child" | "adult">("child");
   const [busy, setBusy] = useState(false);
@@ -144,10 +144,6 @@ function HostedLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
       }
       if (password.length < 6) {
         setError(t("密码至少 6 位", "Password needs at least 6 characters"));
-        return;
-      }
-      if (password !== confirm) {
-        setError(t("两次输入的密码不一样", "The two passwords do not match"));
         return;
       }
     }
@@ -208,20 +204,17 @@ function HostedLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
           />
         </label>
         <label>
-          <span>{registering ? t("密码（至少 6 位）", "Password (6+ characters)") : t("密码", "Password")}</span>
-          <input
-            type="password"
+          <span>{registering ? t("密码（至少 6 位，记住它）", "Password (6+ characters, remember it)") : t("密码", "Password")}</span>
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             autoComplete={registering ? "new-password" : "current-password"}
+            showLabel={t("显示密码", "Show password")}
+            hideLabel={t("隐藏密码", "Hide password")}
           />
         </label>
         {registering ? (
           <>
-            <label>
-              <span>{t("再输一次密码", "Repeat the password")}</span>
-              <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
-            </label>
             <div className="hostedLearnerPick" role="radiogroup" aria-label={t("谁在学", "Who is learning")}>
               <span>{t("谁在学？", "Who is learning?")}</span>
               <div>
@@ -246,5 +239,42 @@ function HostedLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
         )}
       </form>
     </main>
+  );
+}
+
+/** Password field with an eye button, so a typo is visible before submitting. */
+function PasswordInput({
+  value,
+  onChange,
+  autoComplete,
+  showLabel,
+  hideLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: string;
+  showLabel: string;
+  hideLabel: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span className="hostedPasswordField">
+      <input
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        spellCheck={false}
+      />
+      <button
+        type="button"
+        className="hostedPasswordToggle"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? hideLabel : showLabel}
+        title={visible ? hideLabel : showLabel}
+      >
+        {visible ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+      </button>
+    </span>
   );
 }

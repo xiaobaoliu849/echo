@@ -511,11 +511,11 @@ function PasswordField({ value, onChange }: { value: string; onChange: (value: s
 
 const VALIDITY_CHOICES = [30, 90];
 
-type PackageState = { mins: string; validDays: number; note: string; memoryDays: number };
+type PackageState = { id: string; mins: string; validDays: number; note: string; memoryDays: number };
 
 function packageState(id: string): PackageState {
   const pkg = HOSTED_PACKAGES.find((item) => item.id === id) ?? HOSTED_PACKAGES[0];
-  return { mins: String(pkg.minutes), validDays: pkg.validDays, note: packageNote(pkg), memoryDays: pkg.memoryDays };
+  return { id: pkg.id, mins: String(pkg.minutes), validDays: pkg.validDays, note: packageNote(pkg), memoryDays: pkg.memoryDays };
 }
 
 /** Package presets plus the minutes / validity / note they fill in. */
@@ -528,8 +528,9 @@ function PackageFields({
   onChange: (next: PackageState) => void;
   allowNegative?: boolean;
 }) {
+  // Two presets can share minutes and validity (monthly card, first month), so match by id too.
   const active = HOSTED_PACKAGES.find(
-    (pkg) => String(pkg.minutes) === value.mins && pkg.validDays === value.validDays,
+    (pkg) => pkg.id === value.id && String(pkg.minutes) === value.mins && pkg.validDays === value.validDays,
   );
   return (
     <>
@@ -544,6 +545,7 @@ function PackageFields({
             <strong>{pkg.name}</strong>
             <span>{pkg.minutes} 分钟 · {pkg.validDays} 天</span>
             <span>{pkg.price > 0 ? `¥${pkg.price}` : "免费"}{pkg.memoryDays ? " · 含 AI 记忆" : ""}</span>
+            {pkg.firstTimeOnly ? <span className="hostedAdminPackageNote">新用户限一次</span> : null}
           </button>
         ))}
       </div>

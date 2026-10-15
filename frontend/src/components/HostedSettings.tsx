@@ -16,7 +16,17 @@ import {
   type HostedRenewal,
 } from "../api";
 import { getHostedLanguage } from "../hosted";
-import { fillDays, formatDate, formatElapsed, formatTime, minutes, modelLabel, useSubmit } from "../hostedFormat";
+import EvermindBadge from "./EvermindBadge";
+import {
+  USER_PACKAGES,
+  fillDays,
+  formatDate,
+  formatElapsed,
+  formatTime,
+  minutes,
+  modelLabel,
+  useSubmit,
+} from "../hostedFormat";
 import { applyHostedPrefs } from "../hostedPrefs";
 import { createInlineTranslator } from "../i18n";
 import { formatErrorMessage } from "../utils/errorFormatting";
@@ -83,6 +93,7 @@ function AccountTab() {
   const [renewal, setRenewal] = useState<HostedRenewal | null>(null);
   const [error, setError] = useState("");
   const [showAllCalls, setShowAllCalls] = useState(false);
+  const [renewOpen, setRenewOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +102,10 @@ function AccountTab() {
         if (!cancelled) {
           setHistory(nextHistory);
           setRenewal(nextRenewal);
+          // Running low: show how to top up without an extra click.
+          if (nextHistory.remaining_seconds < LOW_BALANCE_SECONDS) {
+            setRenewOpen(true);
+          }
         }
       })
       .catch((err) => !cancelled && setError(formatErrorMessage(err, t("加载失败", "Could not load"))));
@@ -108,11 +123,17 @@ function AccountTab() {
     <>
       {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
       <div className="hostedPanelBalance">
-        <span className="hostedAdminMuted">{t("账号", "Account")} {history?.account ?? "…"}</span>
-        <span className={remaining !== null && remaining < LOW_BALANCE_SECONDS ? "hostedPanelMinutes is-low" : "hostedPanelMinutes"}>
-          {t("剩余", "")} <strong>{remaining === null ? "…" : Math.floor(remaining / 60)}</strong> {t("分钟", "minutes left")}
-        </span>
+        <div>
+          <span className="hostedAdminMuted">{t("账号", "Account")} {history?.account ?? "…"}</span>
+          <span className={remaining !== null && remaining < LOW_BALANCE_SECONDS ? "hostedPanelMinutes is-low" : "hostedPanelMinutes"}>
+            {t("剩余", "")} <strong>{remaining === null ? "…" : Math.floor(remaining / 60)}</strong> {t("分钟", "minutes left")}
+          </span>
+        </div>
+        <button type="button" className="hostedAdminPrimary" aria-expanded={renewOpen} onClick={() => setRenewOpen((v) => !v)}>
+          {renewOpen ? t("收起", "Hide") : t("续费", "Top up")}
+        </button>
       </div>
+      {renewOpen ? <RenewalBlock renewal={renewal} /> : null}
 
       <section className="hostedPanelSection">
         <h3>{t("有效期", "Validity")}</h3>
@@ -120,11 +141,6 @@ function AccountTab() {
           {t("每次充值的分钟各自计算有效期，通话时先扣最早到期的。", "Each top-up has its own expiry; calls use the soonest-expiring minutes first.")}
         </p>
         {history ? <LotList lots={history.lots} /> : <p className="hostedAdminMuted">{t("加载中…", "Loading…")}</p>}
-      </section>
-
-      <section className="hostedPanelSection">
-        <h3>{t("续费", "Top up")}</h3>
-        <RenewalBlock renewal={renewal} />
       </section>
 
       <section className="hostedPanelSection">
@@ -180,18 +196,41 @@ function AccountTab() {
   );
 }
 
+/** What can be bought (the shared price list) and how to pay (the operator's QR and note). */
 function RenewalBlock({ renewal }: { renewal: HostedRenewal | null }) {
   const t = useT();
-  if (!renewal) {
-    return <p className="hostedAdminMuted">{t("加载中…", "Loading…")}</p>;
-  }
-  if (!renewal.text && !renewal.qr) {
-    return <p className="hostedAdminMuted">{t("续费请联系管理员。", "Ask the organiser to top up.")}</p>;
-  }
   return (
-    <div className="hostedPanelRenewal">
-      {renewal.qr ? <img src={renewal.qr} alt={t("付款二维码", "Payment QR code")} className="hostedPanelQr" /> : null}
-      {renewal.text ? <p className="hostedPanelRenewalText">{renewal.text}</p> : null}
+    <div className="hostedRenew">
+      <div className="hostedRenewPackages">
+        {USER_PACKAGES.map((pkg) => (
+          <div key={pkg.id} className={pkg.memoryDays ? "hostedRenewPackage is-featured" : "hostedRenewPackage"}>
+            <div className="hostedRenewPackageHead">
+              <strong>{pkg.name}</strong>
+              {pkg.memoryDays ? <span className="hostedPremiumTag">{t("含 AI 记忆", "Incl. AI memory")}</span> : null}
+            </div>
+            <span className="hostedRenewPrice">
+              ¥{pkg.price}
+              {pkg.validDays === 30 ? <small>{t(" / 月", " / month")}</small> : null}
+            </span>
+            {pkg.firstPrice ? (
+              <span className="hostedRenewOffer">{t(`新用户首月 ¥${pkg.firstPrice}`, `First month ¥${pkg.firstPrice} for new users`)}</span>
+            ) : null}
+            <span className="hostedAdminMuted">
+              {t(`${pkg.minutes} 分钟 · ${pkg.validDays} 天内有效`, `${pkg.minutes} min · valid ${pkg.validDays} days`)}
+            </span>
+          </div>
+        ))}
+      </div>
+      {!renewal ? (
+        <p className="hostedAdminMuted">{t("加载中…", "Loading…")}</p>
+      ) : renewal.text || renewal.qr ? (
+        <div className="hostedPanelRenewal">
+          {renewal.qr ? <img src={renewal.qr} alt={t("付款二维码", "Payment QR code")} className="hostedPanelQr" /> : null}
+          {renewal.text ? <p className="hostedPanelRenewalText">{renewal.text}</p> : null}
+        </div>
+      ) : (
+        <p className="hostedAdminMuted">{t("付款方式请联系管理员。", "Ask the organiser how to pay.")}</p>
+      )}
     </div>
   );
 }
@@ -459,17 +498,31 @@ function MemorySection() {
   if (!memory) {
     return <p className="hostedAdminMuted">{t("加载中…", "Loading…")}</p>;
   }
+  const header = (
+    <div className="hostedMemoryBrand">
+      <EvermindBadge variant="light" compact />
+      <span className="hostedPremiumTag">{t("月卡专享", "Monthly card perk")}</span>
+    </div>
+  );
   if (!memory.configured) {
-    return <p className="hostedAdminMuted">{t("AI 记忆暂未开放。", "AI memory is not available yet.")}</p>;
+    return (
+      <div className="hostedMemory">
+        {header}
+        <p className="hostedAdminMuted">{t("AI 记忆暂未开放。", "AI memory is not available yet.")}</p>
+      </div>
+    );
   }
   if (!memory.member) {
     return (
-      <p className="hostedAdminMuted">
-        {t(
-          "开通月卡即可使用 AI 记忆：外教会记住你的名字、英语水平和聊过的话题，每次都接着上次聊。",
-          "AI memory comes with the monthly card: the tutor remembers your name, level and past topics, and picks up where you left off.",
-        )}
-      </p>
+      <div className="hostedMemory">
+        {header}
+        <p className="hostedMemoryPitch">
+          {t(
+            "开通月卡即可使用 AI 记忆：外教会记住你的名字、英语水平和聊过的话题，每次都接着上次聊，越聊越懂你。",
+            "AI memory comes with the monthly card: the tutor remembers your name, level and past topics, and picks up where you left off.",
+          )}
+        </p>
+      </div>
     );
   }
 
@@ -507,6 +560,7 @@ function MemorySection() {
   const episodes = memory.episodes ?? [];
   return (
     <div className="hostedMemory">
+      {header}
       <div className="hostedMemoryHead">
         <span className="hostedAdminMuted">{t("有效期至", "Valid until")} {formatDate(memory.memory_until ?? 0)}</span>
         <label className="hostedAdminCheck">

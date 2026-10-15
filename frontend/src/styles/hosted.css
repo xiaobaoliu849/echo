@@ -803,10 +803,12 @@
 }
 
 /* "My account" panel */
+/* Balance on the left, the top-up button on the right. */
 .hostedPanelBalance {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 14px 16px;
   margin-bottom: 4px;
   background: var(--brand-soft);
@@ -1062,8 +1064,13 @@
 /* Admin: package presets in the create / top-up dialogs. */
 .hostedAdminPackages {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.hostedAdminPackageNote {
+  font-size: var(--step--1);
+  color: #8a6a1f;
 }
 
 .hostedAdmin .hostedAdminPackages button,
@@ -1452,3 +1459,139 @@
     white-space: nowrap;
   }
 }
+
+/* Password with a show/hide eye. */
+.hostedPasswordField {
+  position: relative;
+  display: block;
+}
+
+.hostedPasswordField input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 44px !important;
+}
+
+.hostedLoginCard .hostedPasswordToggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+
+.hostedLoginCard .hostedPasswordToggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.hostedPanelBalance > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hostedRenew {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 4px;
+  padding: 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+}
+
+.hostedRenewPackages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.hostedRenewPackage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+.hostedRenewPackage.is-featured {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand) inset;
+}
+
+.hostedRenewPackageHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.hostedRenewPrice {
+  font-size: var(--step-2);
+  font-weight: 700;
+  color: var(--brand-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.hostedRenew .hostedPanelQr {
+  width: 132px;
+}
+
+.hostedPremiumTag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: var(--step--1);
+  font-weight: 600;
+  white-space: nowrap;
+  color: #8a6a1f;
+  background: #f6ecd2;
+  border-radius: 999px;
+}
+
+/* AI memory: EverMind brand line. */
+.hostedMemoryBrand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.hostedMemoryPitch {
+  margin: 0;
+  font-size: var(--step-0);
+  line-height: 1.7;
+}
+
+.hostedRenewPrice small {
+  font-size: var(--step--1);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.hostedRenewOffer {
+  align-self: flex-start;
+  padding: 2px 8px;
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: #b4471b;
+  background: #fbe6dc;
+  border-radius: 999px;
+}
+

@@ -80,13 +80,41 @@ export type HostedPackage = {
   hint: string;
   /** Days of AI memory included (the monthly card's perk). */
   memoryDays: number;
+  /** The new-user first-month offer: an admin preset, shown to users as a tag on the full-price card. */
+  firstTimeOnly?: boolean;
+  /** First-month price advertised on the full-price card. */
+  firstPrice?: number;
 };
 
+// Prices settled 2026-10-15: monthly card ¥129 (¥99 for a new user's first
+// month, once), minute pack ¥99, 30 free minutes on sign-up.
 export const HOSTED_PACKAGES: HostedPackage[] = [
   { id: "trial", name: "新人体验", minutes: 30, validDays: 30, price: 0, hint: "免费", memoryDays: 0 },
-  { id: "monthly", name: "月卡", minutes: 300, validDays: 30, price: 99, hint: "推荐，适合每天练，含 AI 记忆", memoryDays: 30 },
-  { id: "pack", name: "分钟包", minutes: 200, validDays: 90, price: 79, hint: "适合偶尔练", memoryDays: 0 },
+  {
+    id: "monthly_first",
+    name: "月卡·首月",
+    minutes: 300,
+    validDays: 30,
+    price: 99,
+    hint: "新用户首月，每人限一次",
+    memoryDays: 30,
+    firstTimeOnly: true,
+  },
+  {
+    id: "monthly",
+    name: "月卡",
+    minutes: 300,
+    validDays: 30,
+    price: 129,
+    hint: "推荐，适合每天练，含 AI 记忆",
+    memoryDays: 30,
+    firstPrice: 99,
+  },
+  { id: "pack", name: "分钟包", minutes: 200, validDays: 90, price: 99, hint: "适合偶尔练", memoryDays: 0 },
 ];
+
+/** Packages a user can choose from (the first-month offer shows as a tag instead). */
+export const USER_PACKAGES = HOSTED_PACKAGES.filter((pkg) => pkg.price > 0 && !pkg.firstTimeOnly);
 
 export function packageNote(pkg: HostedPackage): string {
   return pkg.price > 0 ? `${pkg.name} ¥${pkg.price}` : pkg.name;
@@ -94,10 +122,11 @@ export function packageNote(pkg: HostedPackage): string {
 
 /** Suggested renewal text, built from the same price list. */
 export function defaultRenewalText(): string {
-  const lines = HOSTED_PACKAGES.map((pkg) =>
+  const lines = HOSTED_PACKAGES.filter((pkg) => !pkg.firstTimeOnly).map((pkg) =>
     pkg.price > 0
-      ? `${pkg.name} ¥${pkg.price}：${pkg.minutes} 分钟，${pkg.validDays} 天内有效（${pkg.hint}）`
-      : `${pkg.name}：${pkg.hint} ${pkg.minutes} 分钟（${pkg.validDays} 天内有效）`,
+      ? `${pkg.name} ¥${pkg.price}：${pkg.minutes} 分钟，${pkg.validDays} 天内有效（${pkg.hint}）` +
+        (pkg.firstPrice ? `，新用户首月只要 ¥${pkg.firstPrice}` : "")
+      : `${pkg.name}：注册即送 ${pkg.minutes} 分钟（${pkg.validDays} 天内有效）`,
   );
   return [
     ...lines,
