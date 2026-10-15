@@ -99,7 +99,15 @@ async def hosted_info() -> dict[str, Any] | JSONResponse:
     return {
         "hosted": True,
         "providers": [
-            {"provider": name, "models": list(entry.get("models") or [])}
+            {
+                "provider": name,
+                "models": list(entry.get("models") or []),
+                # Minutes deducted per minute of talk, shown next to each model.
+                "multipliers": {
+                    model: hosted_mode.resolve_billing_multiplier(name, model)
+                    for model in entry.get("models") or []
+                },
+            }
             for name, entry in hosted_mode.hosted_providers().items()
         ],
     }

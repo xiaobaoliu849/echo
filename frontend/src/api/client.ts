@@ -58,6 +58,7 @@ import type {
   VoiceType,
   VoicesResponse
 } from "./types";
+import { setHostedMultipliers } from "../hosted";
 
 export class ApiRequestError extends Error {
   status: number;
@@ -1599,7 +1600,7 @@ export async function deleteCustomVoice(
 
 export type HostedInfo = {
   hosted: boolean;
-  providers: { provider: string; models: string[] }[];
+  providers: { provider: string; models: string[]; multipliers?: Record<string, number> }[];
 };
 
 export async function fetchHostedInfo(): Promise<HostedInfo> {
@@ -1746,6 +1747,7 @@ export async function fetchSettings(): Promise<SettingsResponse> {
     // The settings API is closed on a hosted server; the only "settings" a
     // user has are the realtime models the operator sells.
     const info = await fetchHostedInfo();
+    setHostedMultipliers(Object.assign({}, ...info.providers.map((item) => item.multipliers ?? {})));
     const defaultModels = Object.fromEntries(
       info.providers.map(({ provider, models }) => [
         provider,

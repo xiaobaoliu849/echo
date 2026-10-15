@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatModelHint, type UseChatResult } from "../../hooks/useChat";
-import { HOSTED_MODEL_LABELS, IS_HOSTED_BUILD } from "../../hosted";
+import { HOSTED_MODEL_LABELS, IS_HOSTED_BUILD, hostedBillingNote } from "../../hosted";
 
 function hostedModelLabel(model: string): string {
   return HOSTED_MODEL_LABELS[model] || model;
@@ -204,7 +204,10 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
               {activeGroup.choices.map((choice) => {
                 const isCurrentModel =
                   activeGroup.provider === chat.chatProvider && choice.model === chat.chatModel;
-                const hint = formatModelHint(activeGroup.provider, choice.model, t);
+                // Hosted build: tell buyers up front how fast a model uses minutes.
+                const hint = IS_HOSTED_BUILD
+                  ? hostedBillingNote(choice.model) || formatModelHint(activeGroup.provider, choice.model, t)
+                  : formatModelHint(activeGroup.provider, choice.model, t);
                 return (
                   <button
                     key={choice.value}

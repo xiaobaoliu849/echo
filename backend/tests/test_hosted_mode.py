@@ -258,6 +258,20 @@ class HostedApiTests(unittest.TestCase):
         self.assertTrue(body["hosted"])
         self.assertIn("Vercel", [p["provider"] for p in body["providers"]])
 
+    def test_per_model_multipliers(self) -> None:
+        from services import hosted_mode
+
+        self.assertEqual(hosted_mode.resolve_billing_multiplier("Vercel", "google/gemini-3.8-live"), 1.0)
+        self.assertEqual(
+            hosted_mode.resolve_billing_multiplier("Vercel", "google/gemini-3.8-live-extended-thinking"), 1.5
+        )
+        self.assertEqual(hosted_mode.resolve_billing_multiplier("DashScope", "qwen3.8-omni-flash-realtime"), 0.5)
+        self.assertIsNone(hosted_mode.resolve_billing_multiplier("Vercel", "unsold-model"))
+        vercel = next(
+            p for p in self._request("GET", "/api/billing/hosted-info").json()["providers"] if p["provider"] == "Vercel"
+        )
+        self.assertEqual(vercel["multipliers"]["google/gemini-3.8-live-extended-thinking"], 1.5)
+
     def test_admin_routes_need_admin(self) -> None:
         self.assertEqual(self._request("GET", "/api/billing/admin/users", self.user_token).status_code, 403)
         response = self._request(

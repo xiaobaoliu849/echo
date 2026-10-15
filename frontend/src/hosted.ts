@@ -34,3 +34,27 @@ export const HOSTED_MODEL_LABELS: Record<string, string> = {
   "qwen3.8-omni-flash-realtime": "通义千问 Omni",
   "doubao-realtime": "豆包实时语音",
 };
+
+// Minutes deducted per minute of talk, per model, from /api/billing/hosted-info.
+let hostedMultipliers: Record<string, number> = {};
+
+export function setHostedMultipliers(next: Record<string, number>): void {
+  hostedMultipliers = next;
+}
+
+/** Whether the server sells this model (unknown until hosted-info loads). */
+export function isHostedModelSold(model: string): boolean {
+  const sold = Object.keys(hostedMultipliers);
+  return sold.length === 0 || sold.includes(model);
+}
+
+/** How a model is billed, e.g. "1 分钟按 1.5 分钟计"; empty for the 1:1 default. */
+export function hostedBillingNote(model: string): string {
+  const multiplier = hostedMultipliers[model];
+  if (!multiplier || multiplier === 1) {
+    return "";
+  }
+  return multiplier < 1
+    ? `更省：1 分钟只扣 ${multiplier} 分钟`
+    : `1 分钟按 ${multiplier} 分钟计`;
+}

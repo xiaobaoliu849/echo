@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HOSTED_MODEL_LABELS, IS_HOSTED_BUILD } from "../hosted";
+import { HOSTED_MODEL_LABELS, IS_HOSTED_BUILD, hostedBillingNote, isHostedModelSold } from "../hosted";
 import { createPortal } from "react-dom";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
@@ -158,6 +158,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           if (hidden.size > 0) {
             models = models.filter((m) => !hidden.has(m.model));
           }
+        }
+        if (IS_HOSTED_BUILD) {
+          // The built-in catalog lists every model; the server refuses unsold ones.
+          models = models.filter((item) => isHostedModelSold(item.model));
         }
         models = models.flatMap((item) => supportsLiveAvatar(provider, item.model)
           ? [item, { ...item, value: `${item.value}\u001favatar`, avatar: true }]
@@ -450,7 +454,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     : voiceChat.voiceChatLiveAvatar && currentProviderName === committedProvider && currentModelName === committedModel
     ? formatAvatarCallLabel(voiceChat.voiceChatAvatarName, voiceChat.voiceChatVoice, t)
     : isCurrentModelRealtime
-    ? `${IS_HOSTED_BUILD ? HOSTED_MODEL_LABELS[currentModelName] || currentModelName : currentModelName} · ${secondaryLabel}`
+    ? IS_HOSTED_BUILD
+      ? [HOSTED_MODEL_LABELS[currentModelName] || currentModelName, hostedBillingNote(currentModelName), secondaryLabel]
+          .filter(Boolean)
+          .join(" · ")
+      : `${currentModelName} · ${secondaryLabel}`
     : currentModelName.trim()
     ? `${getProviderDisplayName(currentProviderName, "short", t)} / ${currentModelName}`
     : t("选择模型", "Select model");
@@ -586,7 +594,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     ? (avatarFace === "Ben"
                         ? t("实时视频分身 · 默认形象 Ben", "Live video avatar · Default face Ben")
                         : t(`实时视频分身 · 形象 ${avatarFace}`, `Live video avatar · Face ${avatarFace}`))
-                    : formatModelHint(currentProviderGroup.provider, item.model, t);
+                    : IS_HOSTED_BUILD
+                      // Hosted build: tell buyers up front how fast a model uses minutes.
+                      ? hostedBillingNote(item.model) || formatModelHint(currentProviderGroup.provider, item.model, t)
+                      : formatModelHint(currentProviderGroup.provider, item.model, t);
                   return (
                     <button
                       key={item.value}
@@ -611,7 +622,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                         <span className="vsVoiceSettingsRowLabel" title={item.avatar ? "Gemini 3.8 Live · Avatar" : item.model}>
                           {currentProviderGroup.provider === TAVUS_PROVIDER
                             ? t("打开视频分身", "Open Video PAL")
-                            : item.avatar ? "Gemini 3.8 Live · Avatar" : item.model}
+                            : item.avatar ? "Gemini 3.8 Live · Avatar"
+                            : IS_HOSTED_BUILD ? HOSTED_MODEL_LABELS[item.model] || item.model
+                            : item.model}
                         </span>
                         {item.isRealtime && !item.avatar ? (
                           <span className="vsVoiceSettingsProviderChevron" aria-hidden="true" style={{ fontSize: 12, opacity: 0.6 }}>

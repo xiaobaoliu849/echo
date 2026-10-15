@@ -37,18 +37,24 @@ HOSTED_PUBLIC_PATHS: frozenset[str] = frozenset(
 HOSTED_ADMIN_PREFIXES: tuple[str, ...] = ("/api/billing/admin/",)
 
 # Default paid offering. ``models`` empty = any model of that provider;
-# ``multiplier`` scales billed seconds (e.g. 2.0 for a pricier model).
+# ``multiplier`` scales billed seconds (e.g. 2.0 for a pricier model) and
+# ``model_multipliers`` overrides it per model. A minute is priced for the
+# Gemini Live default; thinking tokens make extended thinking pricier and
+# Qwen Omni is several times cheaper, sold as the economy option.
 DEFAULT_HOSTED_PROVIDERS: dict[str, dict[str, Any]] = {
     "Vercel": {
         "multiplier": 1.0,
         "models": ["google/gemini-3.8-live", "google/gemini-3.8-live-extended-thinking"],
+        "model_multipliers": {"google/gemini-3.8-live-extended-thinking": 1.5},
     },
-    "DashScope": {"multiplier": 1.0, "models": ["qwen3.8-omni-flash-realtime"]},
+    "DashScope": {"multiplier": 0.5, "models": ["qwen3.8-omni-flash-realtime"]},
     "Doubao": {"multiplier": 1.0, "models": ["doubao-realtime"]},
 }
 DEFAULT_IDLE_TIMEOUT_SECONDS = 60
 DEFAULT_LOW_BALANCE_WARNING_SECONDS = 300
-DEFAULT_MAX_SESSION_SECONDS = 30 * 60
+# Live models re-bill the whole context every turn, so per-minute cost grows
+# with call length; a 15 min cap keeps the worst case bounded.
+DEFAULT_MAX_SESSION_SECONDS = 15 * 60
 
 _config = BackendConfig()
 
@@ -126,8 +132,12 @@ def resolve_billing_multiplier(provider: str, model: str | None) -> float | None
     models = _allowed_models(entry)
     if models and str(model or "").strip() not in models:
         return None
+    per_model = entry.get("model_multipliers")
+    raw = entry.get("multiplier", 1.0)
+    if isinstance(per_model, dict) and str(model or "").strip() in per_model:
+        raw = per_model[str(model or "").strip()]
     try:
-        multiplier = float(entry.get("multiplier", 1.0))
+        multiplier = float(raw)
     except (TypeError, ValueError):
         multiplier = 1.0
     return multiplier if multiplier > 0 else 1.0
