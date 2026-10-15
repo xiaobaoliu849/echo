@@ -220,8 +220,10 @@ async def overview(store: HostedMemoryStore, email: str) -> dict[str, Any]:
         logger.warning("hosted memory overview failed: %s", exc)
         result["error"] = "暂时读取不到记忆，请稍后再试。"
         return result
-    result["profile"] = _profile_lines(profile)
-    result["episodes"] = _episode_items(episodes)
+    # EverOS writes summaries in terms of the sender id ("echo_1a2b… said");
+    # show the user "你" instead of their opaque id.
+    result["profile"] = [line.replace(scope, "你") for line in _profile_lines(profile)]
+    result["episodes"] = [{**item, "text": item["text"].replace(scope, "你")} for item in _episode_items(episodes)]
     return result
 
 

@@ -933,6 +933,22 @@ class HostedMemoryTests(unittest.TestCase):
         with patch.object(hosted_memory, "server_settings", return_value=("https://everos.test", "")):
             self.assertFalse(self.store.status("a@x")["active"])
 
+    def test_overview_names_the_user_you(self) -> None:
+        scope = self.store.scope("a@x")
+        episodes = httpx.Response(
+            200, json={"data": {"episodes": [{"id": "e1", "summary": f"{scope} said their name is Xiaoming"}]}}
+        )
+        profile = httpx.Response(200, json={"data": {"profiles": [{"name": f"{scope} / Xiaoming"}]}})
+
+        async def fake_call(operation: str, body: dict[str, Any]) -> httpx.Response:
+            self.assertEqual(body["user_id"], scope)
+            return profile if body["memory_type"] == "profile" else episodes
+
+        with patch.object(hosted_memory, "call_everos", side_effect=fake_call):
+            result = asyncio.run(hosted_memory.overview(self.store, "a@x"))
+        self.assertEqual(result["episodes"][0]["text"], "你 said their name is Xiaoming")
+        self.assertEqual(result["profile"], ["name: 你 / Xiaoming"])
+
     def test_gateway_pins_every_request_to_the_caller(self) -> None:
         add = rewrite_gateway_request(
             "add",
