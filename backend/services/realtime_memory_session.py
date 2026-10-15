@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
+
 import asyncio
 import datetime
 import json
@@ -73,6 +75,21 @@ def _merge_memory_text(previous: str, incoming: str, *, cumulative: bool = False
     if base.endswith(snapshot):
         return previous
     return snapshot
+
+
+_UNSET = object()
+# Set by the voice socket on a hosted server or community client: the memory
+# config this call must use (None = memory off). The browser's own config is
+# ignored there, since it cannot be trusted to pick whose memories to read.
+_forced_memory: ContextVar[Any] = ContextVar("forced_realtime_memory", default=_UNSET)
+
+
+def set_forced_memory(payload: dict[str, Any] | None) -> Any:
+    return _forced_memory.set(payload)
+
+
+def reset_forced_memory(token: Any) -> None:
+    _forced_memory.reset(token)
 
 
 class RealtimeMemorySession:
@@ -360,6 +377,10 @@ class RealtimeMemorySession:
         """
         if self._explicitly_configured or self._config.get_service() is not None:
             return False
+        forced = _forced_memory.get()
+        if forced is not _UNSET:
+            self.configure(None)  # applies the forced config
+            return bool(self._config.get_service())
         from .hosted_mode import is_locked_down
 
         if is_locked_down():
@@ -414,8 +435,11 @@ class RealtimeMemorySession:
         self._explicitly_configured = True
         from .hosted_mode import is_locked_down
 
-        if is_locked_down():
-            payload = None  # memory is not per-account yet; see configure_from_server
+        forced = _forced_memory.get()
+        if forced is not _UNSET:
+            payload = forced  # this account's own memory, chosen by the server
+        elif is_locked_down():
+            payload = None  # shared server without a per-account config: no memory
         if not isinstance(payload, dict) or not payload.get("enabled"):
             self._config = EverMemConfig()
             self._current_user_text = ""

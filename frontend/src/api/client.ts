@@ -1691,12 +1691,56 @@ export type HostedAdminUser = {
   remaining_seconds: number;
   used_seconds: number;
   last_used_at: number | null;
+  /** AI memory membership end (epoch seconds), null = none. */
+  memory_until: number | null;
 };
+
+/** A user's AI memory: membership, their own switch, and what is remembered. */
+export type HostedMemory = {
+  configured: boolean;
+  member: boolean;
+  memory_until: number | null;
+  opted_out: boolean;
+  active: boolean;
+  profile?: string[];
+  episodes?: { id: string; text: string; at: number | string | null }[];
+  error?: string;
+};
+
+export async function fetchHostedMemory(): Promise<HostedMemory> {
+  const response = await apiFetch(`${API_BASE_URL}/api/billing/me/memory`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+async function postHostedMemory<T>(path: string, body: unknown): Promise<T> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/billing/me/memory/${path}`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS },
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json() as Promise<T>;
+}
+
+export function setHostedMemoryEnabled(enabled: boolean): Promise<HostedMemory> {
+  return postHostedMemory("switch", { enabled });
+}
+
+export function clearHostedMemory(): Promise<{ deleted: number }> {
+  return postHostedMemory("clear", {});
+}
 
 export type HostedAdminOverview = {
   days: number;
   /** Days a new top-up stays valid; 0 = never expires. */
   minutes_valid_days: number;
+  /** Whether the server holds an EverOS key, i.e. memory can work at all. */
+  memory_configured: boolean;
   users: HostedAdminUser[];
   by_model: { provider: string; model: string; wall_seconds: number }[];
   daily: HostedDailyUsage[];
@@ -1709,6 +1753,7 @@ export type HostedAdminUserDetail = {
   grants: HostedGrantRecord[];
   lots: HostedLot[];
   daily: HostedDailyUsage[];
+  memory: HostedMemory;
 };
 
 function viewerUtcOffsetMinutes(): number {
@@ -1744,6 +1789,7 @@ export function createHostedAccount(payload: {
   minutes: number;
   note: string;
   valid_days?: number;
+  memory_days?: number;
 }): Promise<{ account: string; remaining_seconds: number }> {
   return hostedAdminRequest("users", payload);
 }
@@ -1753,8 +1799,14 @@ export function grantHostedMinutes(
   minutes: number,
   note: string,
   validDays?: number,
+  memoryDays = 0,
 ): Promise<{ remaining_seconds: number }> {
-  return hostedAdminRequest("grant", { account, minutes, note, valid_days: validDays });
+  return hostedAdminRequest("grant", { account, minutes, note, valid_days: validDays, memory_days: memoryDays });
+}
+
+/** Give (days > 0) or take away (0) an account's AI memory membership. */
+export function setHostedAccountMemory(account: string, days: number): Promise<{ memory_until: number | null }> {
+  return hostedAdminRequest("memory", { account, days });
 }
 
 export function setHostedAccountActive(account: string, active: boolean): Promise<{ ok: boolean }> {

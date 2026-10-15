@@ -13,6 +13,8 @@ from services.api_auth_guard import validate_auth_header, validate_websocket_tok
 from services.billing_service import billing_service
 from services import community_client, hosted_mode
 from services.session_meter import SessionMeter, live_sessions
+from services import hosted_memory
+from services.realtime_memory_session import reset_forced_memory, set_forced_memory
 from services.realtime_session_recorder import run_db_call
 from services.speaking_coach import normalize_tutor_config, reset_tutor_session, set_tutor_session
 from services.realtime_voice_service import (
@@ -230,6 +232,9 @@ async def get_voice_agent_session(session_id: str) -> VoiceAgentSessionDetailRes
     return VoiceAgentSessionDetailResponse(**detail)
 
 
+_NO_FORCED_MEMORY = object()  # desktop app: the browser's own memory settings apply
+
+
 @router.websocket("/ws")
 async def voice_chat_ws(
     websocket: WebSocket,
@@ -354,6 +359,12 @@ async def voice_chat_ws(
             max_session=hosted_mode.max_session_seconds(),
         )
 
+    # On a shared server the account, not the browser, decides whose
+    # memories a call may read; see services/hosted_memory.py.
+    forced_memory: Any = _NO_FORCED_MEMORY
+    if hosted_user_email:
+        forced_memory = hosted_memory.session_payload(hosted_memory.hosted_memory_store, hosted_user_email)
+
     community_meter: community_client.CommunityCallMeter | None = None
     direct_grant: dict[str, str] | None = None
     if community_token and selected_provider in community_client.RELAY_PROVIDERS:
@@ -382,6 +393,18 @@ async def voice_chat_ws(
             await websocket.close(code=4402 if exc.status_code == 402 else 1011)
             return
         direct_grant = {key: str(grant[key]) for key in ("client_secret", "model", "ws_url")}
+        # This call runs here, so memory goes through the server's gateway,
+        # which pins every read and write to this account.
+        forced_memory = (
+            {
+                "enabled": True,
+                "api_url": community_client.memory_gateway_url(),
+                "api_key": community_token,
+                "scope_id": "account",
+            }
+            if grant.get("memory")
+            else None
+        )
         model = direct_grant["model"]
         community_meter = community_client.CommunityCallMeter(
             websocket,
@@ -475,6 +498,7 @@ async def voice_chat_ws(
             scenario=tutor_scenario,
         )
     )
+    memory_token = set_forced_memory(forced_memory) if forced_memory is not _NO_FORCED_MEMORY else None
     try:
         if selected_provider == "Cartesia":
             await voice_chat_service.stream_cartesia_session(
@@ -576,6 +600,8 @@ async def voice_chat_ws(
             pass
     finally:
         reset_tutor_session(tutor_token)
+        if memory_token is not None:
+            reset_forced_memory(memory_token)
         if meter_task is not None:
             meter_task.cancel()
         if session_meter is not None:

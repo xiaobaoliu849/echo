@@ -37,7 +37,15 @@ async def _pooled_client() -> AsyncIterator[httpx.AsyncClient]:
         # httpx drops idle connections after 5 s by default, but voice recalls
         # are often minutes apart; keep the connection (and its TLS session)
         # warm much longer. The server may still close it, which httpx handles.
-        client = httpx.AsyncClient(timeout=30.0, limits=httpx.Limits(keepalive_expiry=300.0))
+        from .community_client import is_community_client, tls_verify
+
+        # A community client's memory goes only to its hosted server's
+        # gateway, which presents the pinned self-signed certificate.
+        client = httpx.AsyncClient(
+            timeout=30.0,
+            limits=httpx.Limits(keepalive_expiry=300.0),
+            verify=tls_verify() if is_community_client() else True,
+        )
         _SHARED_CLIENTS[loop] = client
     yield client
 

@@ -8,6 +8,7 @@ import {
   grantHostedMinutes,
   resetHostedPassword,
   saveHostedRenewal,
+  setHostedAccountMemory,
   setHostedAccountActive,
   type HostedAdminOverview,
   type HostedAdminUser,
@@ -17,6 +18,7 @@ import {
   HOSTED_PACKAGES,
   defaultRenewalText,
   fillDays,
+  formatDate,
   formatElapsed,
   formatTime,
   minutes,
@@ -41,6 +43,10 @@ type Dialog =
   | { kind: "grant"; user: HostedAdminUser }
   | { kind: "password"; user: HostedAdminUser }
   | { kind: "detail"; user: HostedAdminUser };
+
+function memoryLabel(until: number | null): string {
+  return until && until * 1000 > Date.now() ? `${formatDate(until).slice(5)} 到期` : "—";
+}
 
 function generatePassword(): string {
   const digits = new Uint32Array(6);
@@ -152,6 +158,11 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
       <main className="hostedAdminMain">
         {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
         {notice ? <p className="hostedAdminNotice" role="status">{notice}</p> : null}
+        {overview && !overview.memory_configured ? (
+          <p className="hostedAdminNotice" role="status">
+            服务器还没有配置 EverOS 密钥，AI 记忆暂时不能用（开通了也不会生效）。
+          </p>
+        ) : null}
 
         <section className="hostedAdminStats" aria-label="概览">
           <StatTile label="正常用户" value={String(totals.active)} hint={`共 ${totals.customers} 个账号`} />
@@ -206,6 +217,7 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
                   <th className="hostedAdminNum">剩余(分)</th>
                   <th className="hostedAdminNum">近{days}天用(分)</th>
                   <th>最近使用</th>
+                  <th>AI 记忆</th>
                   <th aria-label="操作" />
                 </tr>
               </thead>
@@ -227,6 +239,7 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
                     </td>
                     <td data-label={`近${days}天用(分)`} className="hostedAdminNum">{minutes(user.used_seconds)}</td>
                     <td data-label="最近使用">{formatTime(user.last_used_at)}</td>
+                    <td data-label="AI 记忆">{memoryLabel(user.memory_until)}</td>
                     <td className="hostedAdminRowActions">
                       <button type="button" onClick={() => setDialog({ kind: "grant", user })}>加时长</button>
                       <button type="button" onClick={() => setDialog({ kind: "password", user })}>重置密码</button>
@@ -427,11 +440,11 @@ function PasswordField({ value, onChange }: { value: string; onChange: (value: s
 
 const VALIDITY_CHOICES = [30, 90];
 
-type PackageState = { mins: string; validDays: number; note: string };
+type PackageState = { mins: string; validDays: number; note: string; memoryDays: number };
 
 function packageState(id: string): PackageState {
   const pkg = HOSTED_PACKAGES.find((item) => item.id === id) ?? HOSTED_PACKAGES[0];
-  return { mins: String(pkg.minutes), validDays: pkg.validDays, note: packageNote(pkg) };
+  return { mins: String(pkg.minutes), validDays: pkg.validDays, note: packageNote(pkg), memoryDays: pkg.memoryDays };
 }
 
 /** Package presets plus the minutes / validity / note they fill in. */
@@ -459,7 +472,7 @@ function PackageFields({
           >
             <strong>{pkg.name}</strong>
             <span>{pkg.minutes} 分钟 · {pkg.validDays} 天</span>
-            <span>{pkg.price > 0 ? `¥${pkg.price}` : "免费"}</span>
+            <span>{pkg.price > 0 ? `¥${pkg.price}` : "免费"}{pkg.memoryDays ? " · 含 AI 记忆" : ""}</span>
           </button>
         ))}
       </div>
@@ -483,6 +496,14 @@ function PackageFields({
           </select>
         </label>
       </div>
+      <label className="hostedAdminCheck">
+        <input
+          type="checkbox"
+          checked={value.memoryDays > 0}
+          onChange={(e) => onChange({ ...value, memoryDays: e.target.checked ? 30 : 0 })}
+        />
+        <span>同时开通 AI 记忆 30 天（月卡自带）</span>
+      </label>
       <label>
         <span>备注（用户能看到）</span>
         <input
@@ -508,6 +529,7 @@ function CreateDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
       minutes: Math.max(0, Math.round(Number(pkg.mins) || 0)),
       note: pkg.note.trim(),
       valid_days: pkg.validDays,
+      memory_days: pkg.memoryDays,
     });
     setCreated({ account: result.account, password });
   });
@@ -563,7 +585,7 @@ function GrantDialog({
     if (amount < 0 && !window.confirm(`从 ${user.account} 扣减 ${-amount} 分钟？`)) {
       return;
     }
-    const result = await grantHostedMinutes(user.account, amount, pkg.note.trim(), pkg.validDays);
+    const result = await grantHostedMinutes(user.account, amount, pkg.note.trim(), pkg.validDays, pkg.memoryDays);
     onDone(`${user.account} ${amount > 0 ? "已加" : "已扣"} ${Math.abs(amount)} 分钟，现剩 ${minutes(result.remaining_seconds)} 分钟`);
   });
   return (
@@ -640,6 +662,8 @@ function DetailDialog({
 }) {
   const [detail, setDetail] = useState<HostedAdminUserDetail | null>(null);
   const [error, setError] = useState("");
+  const [memoryBusy, setMemoryBusy] = useState(false);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let cancelled = false;
     fetchHostedAdminUserDetail(user.account, days)
@@ -648,7 +672,21 @@ function DetailDialog({
     return () => {
       cancelled = true;
     };
-  }, [user.account, days]);
+  }, [user.account, days, reload]);
+  const changeMemory = async (memoryDays: number) => {
+    if (memoryDays === 0 && !window.confirm(`取消 ${user.account} 的 AI 记忆？已记住的内容会保留，续上后还能用。`)) {
+      return;
+    }
+    setMemoryBusy(true);
+    try {
+      await setHostedAccountMemory(user.account, memoryDays);
+      setReload((n) => n + 1);
+    } catch (err) {
+      setError(formatErrorMessage(err, "操作失败"));
+    } finally {
+      setMemoryBusy(false);
+    }
+  };
   const used = (detail?.daily ?? []).reduce((sum, d) => sum + d.wall_seconds, 0);
   return (
     <Modal title={`账号 ${user.account}`} onClose={onClose}>
@@ -661,6 +699,23 @@ function DetailDialog({
       {detail ? <DailyChart daily={fillDays(detail.daily, days)} /> : <p className="hostedAdminMuted">加载中…</p>}
       <h3>可用分钟（有效期）</h3>
       {detail ? <LotList lots={detail.lots} /> : null}
+      <h3>AI 记忆</h3>
+      {detail ? (
+        <div className="hostedAdminMemoryRow">
+          <span>
+            {detail.memory.member ? `${formatDate(detail.memory.memory_until ?? 0)} 到期` : "未开通"}
+            {detail.memory.opted_out ? "（用户自己关闭了）" : ""}
+          </span>
+          <button type="button" className="hostedAdminGhost" disabled={memoryBusy} onClick={() => void changeMemory(30)}>
+            {detail.memory.member ? "续 30 天" : "开通 30 天"}
+          </button>
+          {detail.memory.member ? (
+            <button type="button" className="hostedAdminGhost" disabled={memoryBusy} onClick={() => void changeMemory(0)}>
+              取消
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <h3>充值记录</h3>
       {detail && detail.grants.length > 0 ? (
         <GrantList grants={detail.grants} />

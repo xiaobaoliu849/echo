@@ -17,7 +17,10 @@ from routers import auth as auth_router
 from routers import billing as billing_router
 from routers import voice_chat as voice_chat_router
 from services import api_auth_guard
+from services import hosted_memory
 from services.billing_service import BillingService
+from services.hosted_memory import HostedMemoryStore, rewrite_gateway_request
+from services.realtime_memory_session import RealtimeMemorySession, reset_forced_memory, set_forced_memory
 from services.config_loader import BackendConfig
 from services.session_meter import SessionMeter
 from services.user_auth_service import AuthRateLimiter, UserAuthService
@@ -262,6 +265,10 @@ class HostedApiTests(unittest.TestCase):
             patch.object(billing_router, "user_auth_service", self.users),
             patch.object(billing_router, "billing_service", self.billing),
             patch.object(voice_chat_router, "billing_service", self.billing),
+            patch.object(hosted_memory, "hosted_memory_store", HostedMemoryStore(db_path=tmp / "memory.db")),
+            # The direct-call registry is built once and keeps its billing store.
+            patch.object(billing_router, "_direct_registry", None),
+            patch.object(hosted_memory, "server_settings", return_value=("https://everos.test", "server-key")),
         ]
         for p in self._patches:
             p.start()
@@ -434,6 +441,60 @@ class HostedApiTests(unittest.TestCase):
         self.assertEqual(self._request("GET", "/api/billing/me", self.user_token).status_code, 200)
         login = self._request("POST", "/api/auth/login", json={"email": "1203", "password": "newpass1"})
         self.assertEqual(login.status_code, 200)
+
+    def test_monthly_card_turns_memory_on(self) -> None:
+        response = self._request(
+            "POST", "/api/billing/admin/grant", self.admin_token,
+            json={"account": "1203", "minutes": 300, "valid_days": 30, "memory_days": 30, "note": "月卡 ¥99"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        listing = self._request("GET", "/api/billing/admin/users", self.admin_token).json()
+        user = next(u for u in listing["users"] if u["account"] == "1203")
+        self.assertGreater(user["memory_until"], 0)
+        self.assertTrue(listing["memory_configured"])
+        revoke = self._request("POST", "/api/billing/admin/memory", self.admin_token, json={"account": "1203", "days": 0})
+        self.assertIsNone(revoke.json()["memory_until"])
+
+    def test_my_memory_page(self) -> None:
+        hosted_memory.hosted_memory_store.extend(USER[0], 30)
+        remembered = {"profile": ["name: 小明"], "episodes": [{"id": "e1", "text": "Talked about cats", "at": 1}]}
+        with patch.object(hosted_memory, "overview", AsyncMock(return_value=remembered)):
+            body = self._request("GET", "/api/billing/me/memory", self.user_token).json()
+        self.assertTrue(body["active"])
+        self.assertEqual(body["profile"], ["name: 小明"])
+        off = self._request("POST", "/api/billing/me/memory/switch", self.user_token, json={"enabled": False}).json()
+        self.assertFalse(off["active"])
+        self.assertTrue(off["opted_out"])
+        with patch.object(hosted_memory, "clear", AsyncMock(return_value=3)) as clear:
+            cleared = self._request("POST", "/api/billing/me/memory/clear", self.user_token).json()
+        self.assertEqual(cleared, {"deleted": 3})
+        self.assertEqual(clear.await_args.args[1], USER[0])  # only the caller's own memory
+
+    def test_memory_gateway_requires_membership_and_pins_scope(self) -> None:
+        payload = {"query": "my name", "user_id": "victim", "top_k": 5}
+        denied = self._request(
+            "POST", "/api/billing/memory-gateway/api/v2/memory/search", self.user_token, json=payload
+        )
+        self.assertEqual(denied.status_code, 403)
+        hosted_memory.hosted_memory_store.extend(USER[0], 30)
+        upstream = httpx.Response(200, json={"data": {"episodes": []}})
+        with patch.object(hosted_memory, "call_everos", AsyncMock(return_value=upstream)) as call:
+            ok = self._request("POST", "/api/billing/memory-gateway/api/v2/memory/search", self.user_token, json=payload)
+        self.assertEqual(ok.status_code, 200)
+        operation, body = call.await_args.args
+        self.assertEqual(operation, "search")
+        self.assertEqual(body["user_id"], hosted_memory.hosted_memory_store.scope(USER[0]))
+        self.assertEqual(self._request("POST", "/api/billing/memory-gateway/api/v2/memory/search", json=payload).status_code, 401)
+
+    def test_direct_grant_reports_memory(self) -> None:
+        self.billing.grant(USER[0], 600)
+        hosted_memory.hosted_memory_store.extend(USER[0], 30)
+        minted = {"client_secret": "s", "model": "google/gemini-3.8-live", "ws_url": "wss://gw"}
+        with patch.object(billing_router, "_mint_direct_secret", AsyncMock(return_value=minted)):
+            body = self._request(
+                "POST", "/api/billing/direct/start", self.user_token, json={"provider": "Vercel"}
+            ).json()
+        self.assertTrue(body["memory"])
 
     def test_admin_cannot_be_disabled(self) -> None:
         response = self._request(
@@ -635,7 +696,8 @@ class CommunityClientTests(unittest.TestCase):
                 if token != "remote-token":
                     raise community_client.CommunityServerError(401, {"message": "login"})
                 return {"call_id": "c1", "client_secret": "vcst_x", "model": "google/gemini-3.8-live",
-                        "ws_url": "wss://gw/realtime", "heartbeat_seconds": 0.05, "remaining_seconds": 300}
+                        "ws_url": "wss://gw/realtime", "heartbeat_seconds": 0.05, "remaining_seconds": 300,
+                        "memory": True}
             if path == "/api/billing/direct/heartbeat":
                 return self.heartbeat_verdicts.pop(0) if self.heartbeat_verdicts else {"remaining_seconds": 290, "stop": False}
             raise AssertionError(path)
@@ -779,7 +841,10 @@ class CommunityClientTests(unittest.TestCase):
         async def fake_session(websocket: Any, **kwargs: Any) -> None:
             from starlette.websockets import WebSocketState
 
+            from services.realtime_memory_session import _forced_memory
+
             captured.update(kwargs)
+            captured["memory"] = _forced_memory.get()
             await websocket.send_json({"type": "assistant_text", "text": "hi"})
             # Talk until the meter hangs up (heartbeats are >= 1 s apart).
             for _ in range(200):
@@ -801,6 +866,9 @@ class CommunityClientTests(unittest.TestCase):
         # No local Gateway key was needed: the grant came from the server.
         self.assertEqual(captured["direct_grant"]["client_secret"], "vcst_x")
         self.assertEqual(captured["model"], "google/gemini-3.8-live")
+        # Memory goes through the hosted server's gateway with the user's own token.
+        self.assertEqual(captured["memory"]["api_url"], "https://hosted.test:8443/api/billing/memory-gateway")
+        self.assertEqual(captured["memory"]["api_key"], "remote-token")
         self.assertEqual(events[0], {"type": "billing", "remaining_seconds": 300})
         self.assertEqual(events[-1]["type"], "billing_end")
         self.assertEqual(events[-1]["reason"], "balance_exhausted")
@@ -825,3 +893,105 @@ class CommunityClientTests(unittest.TestCase):
         client = TestClient(self.app)
         with client.websocket_connect("/api/voice-chat/ws?provider=OpenAI&token=remote-token") as ws:
             self.assertIn("暂不支持", ws.receive_json()["message"])
+
+
+class HostedMemoryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.store = HostedMemoryStore(db_path=Path(self._tmp.name) / "m.db")
+        self._key = patch.object(hosted_memory, "server_settings", return_value=("https://everos.test", "k"))
+        self._key.start()
+
+    def tearDown(self) -> None:
+        self._key.stop()
+        self._tmp.cleanup()
+
+    def test_each_account_gets_its_own_random_scope(self) -> None:
+        a, b = self.store.scope("A@x"), self.store.scope("b@x")
+        self.assertNotEqual(a, b)
+        self.assertEqual(a, self.store.scope("a@x"))  # stable, case-insensitive
+        self.assertTrue(a.startswith("echo_"))
+        self.assertNotIn("a@x", a)
+
+    def test_membership_extends_and_can_be_switched_off(self) -> None:
+        self.assertFalse(self.store.status("a@x")["active"])
+        first = self.store.extend("a@x", 30)
+        self.assertAlmostEqual(self.store.extend("a@x", 30) - first, 30 * 86400, delta=5)  # stacks
+        self.assertTrue(self.store.status("a@x")["active"])
+        self.store.set_opted_out("a@x", True)
+        status = self.store.status("a@x")
+        self.assertTrue(status["member"])
+        self.assertFalse(status["active"])
+        self.assertIsNone(hosted_memory.session_payload(self.store, "a@x"))
+        self.store.set_opted_out("a@x", False)
+        self.assertEqual(hosted_memory.session_payload(self.store, "a@x")["scope_id"], self.store.scope("a@x"))
+        self.store.extend("a@x", 0)
+        self.assertFalse(self.store.status("a@x")["member"])
+
+    def test_no_server_key_means_no_memory(self) -> None:
+        self.store.extend("a@x", 30)
+        with patch.object(hosted_memory, "server_settings", return_value=("https://everos.test", "")):
+            self.assertFalse(self.store.status("a@x")["active"])
+
+    def test_gateway_pins_every_request_to_the_caller(self) -> None:
+        add = rewrite_gateway_request(
+            "add",
+            {
+                "session_id": "someone_else_default",
+                "user_id": "victim",
+                "messages": [{"sender_id": "victim", "role": "user", "content": "hi"}],
+            },
+            "echo_me",
+        )
+        self.assertEqual(add["session_id"], "echo_me_someone_else_default")
+        self.assertEqual(add["messages"][0]["sender_id"], "echo_me")
+        self.assertNotIn("user_id", add)
+        search = rewrite_gateway_request(
+            "search",
+            {"query": "q", "user_id": "victim", "agent_id": "x", "top_k": 999, "filters": {"session_id": "s"}},
+            "echo_me",
+        )
+        self.assertEqual(search["user_id"], "echo_me")
+        self.assertNotIn("agent_id", search)
+        self.assertEqual(search["top_k"], 20)
+        self.assertEqual(search["filters"], {"session_id": "echo_me_s"})
+        get = rewrite_gateway_request("get", {"memory_type": "agent_skill", "user_id": "victim"}, "echo_me")
+        self.assertEqual((get["user_id"], get["memory_type"]), ("echo_me", "episode"))
+        self.assertEqual(rewrite_gateway_request("flush", {"session_id": "echo_me_x"}, "echo_me"), {"session_id": "echo_me_x"})
+        with self.assertRaises(ValueError):
+            rewrite_gateway_request("delete", {}, "echo_me")
+        with self.assertRaises(ValueError):
+            rewrite_gateway_request("add", {"messages": []}, "echo_me")
+
+
+class ForcedMemoryConfigTests(unittest.TestCase):
+    """On a shared server the call's memory comes from the account, never the browser."""
+
+    def _session(self) -> RealtimeMemorySession:
+        return RealtimeMemorySession()
+
+    def test_browser_config_is_ignored_when_forced(self) -> None:
+        forced = {"enabled": True, "api_url": "https://everos.test", "api_key": "k", "scope_id": "echo_me"}
+        token = set_forced_memory(forced)
+        try:
+            session = self._session()
+            session.configure({"enabled": True, "api_key": "browser", "scope_id": "victim"})
+        finally:
+            reset_forced_memory(token)
+        self.assertEqual(session._config.memory_scope, "echo_me")
+        self.assertEqual(session._config.key, "k")
+
+    def test_forced_off_disables_memory_even_if_the_browser_enables_it(self) -> None:
+        token = set_forced_memory(None)
+        try:
+            session = self._session()
+            session.configure({"enabled": True, "api_key": "browser", "scope_id": "victim"})
+            self.assertIsNone(session._config.get_service())
+        finally:
+            reset_forced_memory(token)
+
+    def test_locked_down_without_forced_config_stays_off(self) -> None:
+        with patch.dict(os.environ, {"ECHO_HOSTED_MODE": "1"}):
+            session = self._session()
+            session.configure({"enabled": True, "api_key": "browser", "scope_id": "victim"})
+            self.assertIsNone(session._config.get_service())

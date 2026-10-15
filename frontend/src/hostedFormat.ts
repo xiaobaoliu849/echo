@@ -71,12 +71,21 @@ export function useSubmit(action: () => Promise<void>) {
 }
 
 /** What the operator sells. Admin presets and the default renewal text both read this. */
-export type HostedPackage = { id: string; name: string; minutes: number; validDays: number; price: number; hint: string };
+export type HostedPackage = {
+  id: string;
+  name: string;
+  minutes: number;
+  validDays: number;
+  price: number;
+  hint: string;
+  /** Days of AI memory included (the monthly card's perk). */
+  memoryDays: number;
+};
 
 export const HOSTED_PACKAGES: HostedPackage[] = [
-  { id: "trial", name: "新人体验", minutes: 30, validDays: 30, price: 0, hint: "免费" },
-  { id: "monthly", name: "月卡", minutes: 300, validDays: 30, price: 99, hint: "推荐，适合每天练" },
-  { id: "pack", name: "分钟包", minutes: 200, validDays: 90, price: 79, hint: "适合偶尔练" },
+  { id: "trial", name: "新人体验", minutes: 30, validDays: 30, price: 0, hint: "免费", memoryDays: 0 },
+  { id: "monthly", name: "月卡", minutes: 300, validDays: 30, price: 99, hint: "推荐，适合每天练，含 AI 记忆", memoryDays: 30 },
+  { id: "pack", name: "分钟包", minutes: 200, validDays: 90, price: 79, hint: "适合偶尔练", memoryDays: 0 },
 ];
 
 export function packageNote(pkg: HostedPackage): string {
@@ -93,6 +102,7 @@ export function defaultRenewalText(): string {
   return [
     ...lines,
     "",
+    "AI 记忆：外教会记住你的名字、水平和聊过的话题，月卡自带",
     "深度思考版 1 分钟按 1.5 分钟计；通义千问 1 分钟只扣 0.5 分钟",
     "扫码转账后，微信留言门牌号和套餐，当天到账",
   ].join("\n");

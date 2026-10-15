@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import {
   changeAuthPassword,
+  clearHostedMemory,
+  fetchHostedMemory,
+  setHostedMemoryEnabled,
+  type HostedMemory,
   fetchHostedHistory,
   fetchHostedRenewal,
   type HostedHistory,
   type HostedRenewal,
 } from "../api";
-import { fillDays, formatElapsed, formatTime, minutes, modelLabel, useSubmit } from "../hostedFormat";
+import { fillDays, formatDate, formatElapsed, formatTime, minutes, modelLabel, useSubmit } from "../hostedFormat";
 import { formatErrorMessage } from "../utils/errorFormatting";
 import { DailyChart, GrantList, LotList, Modal, StatTile } from "./HostedUi";
 
@@ -108,6 +112,11 @@ export default function HostedAccountPanel({ onClose }: { onClose: () => void })
       </section>
 
       <section className="hostedPanelSection">
+        <h3>AI 记忆</h3>
+        <MemorySection />
+      </section>
+
+      <section className="hostedPanelSection">
         <h3>修改密码</h3>
         <ChangePasswordForm />
       </section>
@@ -175,5 +184,111 @@ function ChangePasswordForm() {
         <button type="submit" className="hostedAdminPrimary" disabled={busy}>{busy ? "提交中…" : "修改密码"}</button>
       </div>
     </form>
+  );
+}
+
+/** Membership, the user's own on/off switch, what is remembered, and a full wipe. */
+function MemorySection() {
+  const [memory, setMemory] = useState<HostedMemory | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchHostedMemory()
+      .then((value) => !cancelled && setMemory(value))
+      .catch((err) => !cancelled && setError(formatErrorMessage(err, "读取记忆失败")));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (error && !memory) {
+    return <p className="hostedAdminError" role="alert">{error}</p>;
+  }
+  if (!memory) {
+    return <p className="hostedAdminMuted">加载中…</p>;
+  }
+  if (!memory.configured) {
+    return <p className="hostedAdminMuted">AI 记忆暂未开放。</p>;
+  }
+  if (!memory.member) {
+    return (
+      <p className="hostedAdminMuted">
+        开通月卡即可使用 AI 记忆：外教会记住你的名字、英语水平和聊过的话题，每次都接着上次聊。
+      </p>
+    );
+  }
+
+  const toggle = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const next = await setHostedMemoryEnabled(memory.opted_out);
+      setMemory({ ...memory, ...next });
+    } catch (err) {
+      setError(formatErrorMessage(err, "操作失败"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearAll = async () => {
+    if (!window.confirm("清除 AI 记住的关于你的全部内容？清除后无法恢复。")) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await clearHostedMemory();
+      setMemory({ ...memory, profile: [], episodes: [] });
+      setMessage("已清除。之后的通话会重新开始记。");
+    } catch (err) {
+      setError(formatErrorMessage(err, "清除失败"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const profile = memory.profile ?? [];
+  const episodes = memory.episodes ?? [];
+  return (
+    <div className="hostedMemory">
+      <div className="hostedMemoryHead">
+        <span className="hostedAdminMuted">有效期至 {formatDate(memory.memory_until ?? 0)}</span>
+        <label className="hostedAdminCheck">
+          <input type="checkbox" checked={!memory.opted_out} disabled={busy} onChange={() => void toggle()} />
+          <span>通话时让 AI 记住我</span>
+        </label>
+      </div>
+      {memory.opted_out ? (
+        <p className="hostedAdminMuted">已关闭：通话时 AI 不会读取也不会记录你的内容。</p>
+      ) : null}
+      {memory.error ? <p className="hostedAdminMuted">{memory.error}</p> : null}
+      {memory.error ? null : profile.length === 0 && episodes.length === 0 ? (
+        <p className="hostedAdminMuted">AI 还没有记住关于你的内容，多聊几次就会有了。</p>
+      ) : (
+        <>
+          {profile.length > 0 ? (
+            <ul className="hostedMemoryList">
+              {profile.map((line, index) => <li key={`p-${index}`}>{line}</li>)}
+            </ul>
+          ) : null}
+          {episodes.length > 0 ? (
+            <ul className="hostedMemoryList is-episodes">
+              {episodes.map((item, index) => <li key={item.id || `e-${index}`}>{item.text}</li>)}
+            </ul>
+          ) : null}
+        </>
+      )}
+      {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
+      {message ? <p className="hostedAdminNotice" role="status">{message}</p> : null}
+      <div>
+        <button type="button" className="hostedAdminGhost" disabled={busy} onClick={() => void clearAll()}>
+          清除我的全部记忆
+        </button>
+      </div>
+    </div>
   );
 }

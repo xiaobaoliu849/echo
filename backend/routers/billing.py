@@ -14,7 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from services import community_client, hosted_mode, hosted_renewal
+from services import community_client, hosted_memory, hosted_mode, hosted_renewal
 from services.billing_service import billing_service
 from services.direct_calls import HEARTBEAT_SECONDS, DirectCallRegistry
 from services.user_auth_service import user_auth_service
@@ -44,6 +44,8 @@ class CreateAccountRequest(BaseModel):
     note: str = Field(default="", max_length=200)
     # Per-package validity (e.g. a 30-day monthly card); None = server default.
     valid_days: int | None = Field(default=None, ge=1, le=366)
+    # Days of AI memory that come with the package (the monthly card has 30).
+    memory_days: int = Field(default=0, ge=0, le=366)
 
 
 class GrantRequest(BaseModel):
@@ -51,6 +53,16 @@ class GrantRequest(BaseModel):
     minutes: int = Field(ge=-MAX_GRANT_MINUTES, le=MAX_GRANT_MINUTES)
     note: str = Field(default="", max_length=200)
     valid_days: int | None = Field(default=None, ge=1, le=366)
+    memory_days: int = Field(default=0, ge=0, le=366)
+
+
+class MemoryGrantRequest(BaseModel):
+    account: str = Field(min_length=1, max_length=120)
+    days: int = Field(ge=0, le=366)  # 0 revokes
+
+
+class MemorySwitchRequest(BaseModel):
+    enabled: bool
 
 
 class RenewalRequest(BaseModel):
@@ -147,9 +159,9 @@ def _expiring_soon(lots: list[dict[str, Any]]) -> dict[str, int] | None:
     return {"seconds": sum(lot["remaining_seconds"] for lot in due), "expires_at": min(lot["expires_at"] for lot in due)}
 
 
-async def _forward_to_server(method: str, path: str, authorization: str | None) -> Any:
+async def _forward_to_server(method: str, path: str, authorization: str | None, json: Any = None) -> Any:
     try:
-        return await community_client.forward(method, path, token=_bearer(authorization))
+        return await community_client.forward(method, path, token=_bearer(authorization), json=json)
     except community_client.CommunityServerError as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
@@ -185,6 +197,77 @@ async def renewal_info(
     _require_hosted()
     _current_email(request)
     return hosted_renewal.load()
+
+
+# ── AI memory (EverOS), one private memory per account ───────────────────
+
+
+@router.get("/me/memory", response_model=None)
+async def my_memory(
+    request: Request, authorization: str | None = Header(default=None, alias="Authorization")
+) -> dict[str, Any] | JSONResponse:
+    if community_client.is_community_client():
+        return await _forward_to_server("GET", "/api/billing/me/memory", authorization)
+    _require_hosted()
+    email = _current_email(request)
+    store = hosted_memory.hosted_memory_store
+    status = store.status(email)
+    remembered = await hosted_memory.overview(store, email) if status["configured"] else {"profile": [], "episodes": []}
+    return {**status, **remembered}
+
+
+@router.post("/me/memory/switch", response_model=None)
+async def my_memory_switch(
+    payload: MemorySwitchRequest,
+    request: Request,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> dict[str, Any] | JSONResponse:
+    if community_client.is_community_client():
+        return await _forward_to_server("POST", "/api/billing/me/memory/switch", authorization, payload.model_dump())
+    _require_hosted()
+    email = _current_email(request)
+    hosted_memory.hosted_memory_store.set_opted_out(email, not payload.enabled)
+    return hosted_memory.hosted_memory_store.status(email)
+
+
+@router.post("/me/memory/clear", response_model=None)
+async def my_memory_clear(
+    request: Request, authorization: str | None = Header(default=None, alias="Authorization")
+) -> dict[str, Any] | JSONResponse:
+    if community_client.is_community_client():
+        return await _forward_to_server("POST", "/api/billing/me/memory/clear", authorization, {})
+    _require_hosted()
+    email = _current_email(request)
+    try:
+        deleted = await hosted_memory.clear(hosted_memory.hosted_memory_store, email)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail={"code": "MEMORY_CLEAR_FAILED", "message": "清除失败，请稍后再试。", "meta": {}}
+        ) from exc
+    return {"deleted": deleted}
+
+
+@router.post("/memory-gateway/api/v2/memory/{operation}")
+async def memory_gateway(operation: str, request: Request) -> JSONResponse:
+    """EverOS v2 for calls that run on a community client, pinned to the caller."""
+    _require_hosted()
+    email = _current_email(request)
+    store = hosted_memory.hosted_memory_store
+    if not store.status(email)["active"]:
+        raise HTTPException(status_code=403, detail={"code": "MEMORY_OFF", "message": "AI 记忆未开通。", "meta": {}})
+    try:
+        body = hosted_memory.rewrite_gateway_request(operation, await request.json(), store.scope(email))
+    except (ValueError, TypeError) as exc:
+        raise _bad_request(exc) from exc
+    try:
+        upstream = await hosted_memory.call_everos(operation, body)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail={"code": "MEMORY_UNAVAILABLE", "message": str(exc)[:200], "meta": {}}) from exc
+    try:
+        content: Any = upstream.json()
+    except ValueError:
+        content = {"detail": upstream.text[:200]}
+    return JSONResponse(status_code=upstream.status_code, content=content)
 
 
 # ── direct calls: the user's machine talks to the provider itself ────────
@@ -245,6 +328,7 @@ async def direct_start(payload: DirectStartRequest, request: Request) -> dict[st
     return {
         "call_id": call.call_id,
         "provider": provider,
+        "memory": hosted_memory.hosted_memory_store.status(email)["active"],
         "heartbeat_seconds": HEARTBEAT_SECONDS,
         "remaining_seconds": billing_service.get_balance(email),
         **minted,
@@ -298,6 +382,7 @@ async def admin_list_users(
     _require_hosted()
     since = int(time.time()) - days * 86400
     usage = {row["user_email"]: row for row in billing_service.usage_summary(since=since)}
+    memberships = hosted_memory.hosted_memory_store.memberships()
     users = []
     for user in user_auth_service.list_users():
         email = str(user["email"])
@@ -311,10 +396,12 @@ async def admin_list_users(
                 "remaining_seconds": int(row.get("balance_seconds", 0)),
                 "used_seconds": int(row.get("used_seconds", 0)),
                 "last_used_at": row.get("last_used_at"),
+                "memory_until": memberships.get(email) or None,
             }
         )
     return {
         "days": days,
+        "memory_configured": bool(hosted_memory.server_settings()[1]),
         "minutes_valid_days": hosted_mode.minutes_valid_days(),
         "users": users,
         "by_model": billing_service.usage_by_model(since=since),
@@ -338,6 +425,7 @@ async def admin_user_detail(
         "grants": billing_service.grants(email),
         "lots": billing_service.active_lots(email),
         "daily": billing_service.usage_by_day(since=since, utc_offset_minutes=tz, email=email),
+        "memory": hosted_memory.hosted_memory_store.status(email),
     }
 
 
@@ -357,6 +445,8 @@ async def admin_create_user(payload: CreateAccountRequest) -> dict[str, Any]:
             note=payload.note or "initial",
             valid_days=payload.valid_days or hosted_mode.minutes_valid_days(),
         )
+    if payload.memory_days:
+        hosted_memory.hosted_memory_store.extend(email, payload.memory_days)
     return {"account": hosted_mode.display_account_id(email), "remaining_seconds": balance}
 
 
@@ -373,6 +463,8 @@ async def admin_grant(payload: GrantRequest) -> dict[str, Any]:
         )
     except ValueError as exc:
         raise _bad_request(exc) from exc
+    if payload.memory_days and payload.minutes > 0:
+        hosted_memory.hosted_memory_store.extend(email, payload.memory_days)
     return {"account": hosted_mode.display_account_id(email), "remaining_seconds": balance}
 
 
@@ -410,6 +502,14 @@ async def admin_set_renewal(payload: RenewalRequest) -> dict[str, Any]:
 
 
 _ADMIN_PATH_RE = re.compile(r"^[a-z-]{1,40}$")
+
+
+@router.post("/admin/memory")
+async def admin_set_memory(payload: MemoryGrantRequest) -> dict[str, Any]:
+    _require_hosted()
+    email = _known_email(payload.account)
+    until = hosted_memory.hosted_memory_store.extend(email, payload.days)
+    return {"account": hosted_mode.display_account_id(email), "memory_until": until or None}
 
 
 @community_admin_router.api_route("/admin/{path}", methods=["GET", "POST"], include_in_schema=False)

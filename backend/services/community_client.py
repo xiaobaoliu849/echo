@@ -57,6 +57,16 @@ def _verify() -> ssl.SSLContext | bool:
     return True
 
 
+def tls_verify() -> ssl.SSLContext | bool:
+    """TLS verification for any connection to the hosted server."""
+    return _verify()
+
+
+def memory_gateway_url() -> str:
+    """EverOS-shaped endpoint on the hosted server that pins calls to the caller."""
+    return f"{community_server_url()}/api/billing/memory-gateway"
+
+
 class CommunityServerError(Exception):
     def __init__(self, status_code: int, detail: Any) -> None:
         super().__init__(str(detail))
