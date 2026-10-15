@@ -1,6 +1,9 @@
 import type { CoachConfig, CoachLevel, TutorScenario } from "../api";
 
 const STORAGE_KEY = "vs_speaking_coach";
+
+/** Window event carrying a Partial<CoachConfig> for the running voice chat (hosted settings use it). */
+export const COACH_CONFIG_EVENT = "echo:coach-config";
 // v2: "tutor" is the coach switch (the voice AI coaches live) and "enabled"
 // only adds written feedback cards on top. Older saves had them as two
 // independent toggles, where "enabled" alone was what users knew as the coach.
@@ -51,6 +54,7 @@ export function readStoredCoachConfig(): CoachConfig {
       scenario: TUTOR_SCENARIOS.some((item) => item.value === parsed.scenario)
         ? (parsed.scenario as TutorScenario)
         : DEFAULT_COACH_CONFIG.scenario,
+      ...(parsed.learner === "child" || parsed.learner === "adult" ? { learner: parsed.learner } : {}),
     };
   } catch {
     return DEFAULT_COACH_CONFIG;
@@ -78,7 +82,7 @@ export function coachSupportedModel(model: string): boolean {
 /** Fields baked into the realtime system prompt at call start. */
 export function tutorPromptKey(config: CoachConfig): string {
   return config.tutor
-    ? [config.target_language, config.native_language, config.level, config.scenario].join("|")
+    ? [config.target_language, config.native_language, config.level, config.scenario, config.learner ?? ""].join("|")
     : "";
 }
 

@@ -256,6 +256,7 @@ async def voice_chat_ws(
     tutor_native_language: str | None = Query(default=None, max_length=40),
     tutor_level: str | None = Query(default=None, max_length=20),
     tutor_scenario: str | None = Query(default=None, max_length=40),
+    tutor_learner: str | None = Query(default=None, max_length=10),
     token: str | None = None,
 ) -> None:
     # The HTTP auth middleware does not cover WebSocket scopes; enforce auth
@@ -496,6 +497,7 @@ async def voice_chat_ws(
             native_language=tutor_native_language,
             level=tutor_level,
             scenario=tutor_scenario,
+            learner=tutor_learner,
         )
     )
     memory_token = set_forced_memory(forced_memory) if forced_memory is not _NO_FORCED_MEMORY else None

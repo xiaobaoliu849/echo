@@ -17,7 +17,7 @@ from routers import auth as auth_router
 from routers import billing as billing_router
 from routers import voice_chat as voice_chat_router
 from services import api_auth_guard
-from services import hosted_memory
+from services import hosted_accounts, hosted_memory
 from services.billing_service import BillingService
 from services.hosted_memory import HostedMemoryStore, rewrite_gateway_request
 from services.realtime_memory_session import RealtimeMemorySession, reset_forced_memory, set_forced_memory
@@ -266,6 +266,8 @@ class HostedApiTests(unittest.TestCase):
             patch.object(billing_router, "billing_service", self.billing),
             patch.object(voice_chat_router, "billing_service", self.billing),
             patch.object(hosted_memory, "hosted_memory_store", HostedMemoryStore(db_path=tmp / "memory.db")),
+            patch.object(hosted_accounts, "account_prefs_store", hosted_accounts.AccountPrefsStore(tmp / "prefs.db")),
+            patch.object(hosted_accounts, "_registration_path", return_value=tmp / "registration.json"),
             # The direct-call registry is built once and keeps its billing store.
             patch.object(billing_router, "_direct_registry", None),
             patch.object(hosted_memory, "server_settings", return_value=("https://everos.test", "server-key")),
@@ -496,6 +498,56 @@ class HostedApiTests(unittest.TestCase):
             ).json()
         self.assertTrue(body["memory"])
 
+    def _register(self, **overrides: Any) -> httpx.Response:
+        payload = {"invite_code": "ABC234", "account": "1702", "password": "secret1", "learner": "child"}
+        payload.update(overrides)
+        return self._request("POST", "/api/billing/register", json=payload)
+
+    def test_registration_needs_the_invite_code(self) -> None:
+        self.assertFalse(self._request("GET", "/api/billing/hosted-info").json()["registration_open"])
+        self.assertEqual(self._register().status_code, 403)  # closed until the operator opens it
+        setting = self._request(
+            "POST", "/api/billing/admin/registration", self.admin_token, json={"enabled": True, "code": "abc234"}
+        )
+        self.assertEqual(setting.status_code, 200, setting.text)
+        self.assertTrue(self._request("GET", "/api/billing/hosted-info").json()["registration_open"])
+        self.assertEqual(self._register(invite_code="WRONG1").json()["detail"]["code"], "INVITE_CODE_INVALID")
+        self.assertEqual(
+            self._request(
+                "POST", "/api/billing/admin/registration", self.user_token, json={"enabled": False}
+            ).status_code,
+            403,
+        )
+
+    def test_self_registration_gives_the_trial_and_logs_in(self) -> None:
+        hosted_accounts.save_registration(enabled=True, code="ABC234")
+        response = self._register()
+        self.assertEqual(response.status_code, 200, response.text)
+        token = response.json()["access_token"]
+        me = self._request("GET", "/api/billing/me", token).json()
+        self.assertEqual((me["account"], me["remaining_seconds"]), ("1702", 30 * 60))
+        [lot] = self.billing.active_lots("1702@echo.local")
+        self.assertAlmostEqual(lot["expires_at"] - lot["created_at"], 30 * 86400)
+        prefs = self._request("GET", "/api/billing/me/prefs", token).json()
+        self.assertEqual((prefs["learner"], prefs["signup"], prefs["onboarded"]), ("child", "self", False))
+        self.assertFalse(response.json()["user"]["is_admin"])
+        listing = self._request("GET", "/api/billing/admin/users", self.admin_token).json()
+        self.assertEqual(next(u for u in listing["users"] if u["account"] == "1702")["signup"], "self")
+        # The same name cannot be taken twice, and odd names are refused.
+        self.assertIn("已经有人用了", self._register().json()["detail"]["message"])
+        self.assertEqual(self._register(account="a@b").status_code, 400)
+
+    def test_preferences_are_sanitised_and_kept_on_the_account(self) -> None:
+        saved = self._request(
+            "POST", "/api/billing/me/prefs", self.user_token,
+            json={"level": "advanced", "ui_language": "en-US", "onboarded": True, "signup": "self", "evil": 1},
+        ).json()
+        self.assertEqual((saved["level"], saved["ui_language"], saved["onboarded"]), ("advanced", "en-US", True))
+        self.assertEqual(saved["signup"], "admin")  # users cannot relabel themselves
+        self.assertNotIn("evil", saved)
+        bad = self._request("POST", "/api/billing/me/prefs", self.user_token, json={"level": "expert"}).json()
+        self.assertEqual(bad["level"], "advanced")
+
     def test_admin_cannot_be_disabled(self) -> None:
         response = self._request(
             "POST", "/api/billing/admin/active", self.admin_token, json={"account": "boss", "active": False}
@@ -684,6 +736,8 @@ class CommunityClientTests(unittest.TestCase):
                 return {"account": "1203", "remaining_seconds": 300, "calls": [], "daily": [], "grants": [], "token": token}
             if path == "/api/billing/renewal":
                 return {"text": "¥49", "qr": ""}
+            if path == "/api/billing/register":
+                return {"access_token": "remote-token", "token_type": "bearer", "user": {"email": "1702@echo.local"}}
             if path.startswith("/api/billing/admin/"):
                 if token != "remote-token":
                     raise community_client.CommunityServerError(401, {"code": "AUTH_ADMIN_TOKEN_MISSING"})
@@ -749,6 +803,12 @@ class CommunityClientTests(unittest.TestCase):
             json={"current_password": "pw", "new_password": "newpass1"},
         )
         self.assertEqual(ok.json()["email"], "1203@echo.local")
+
+    def test_registration_is_answered_by_the_server(self) -> None:
+        payload = {"invite_code": "ABC234", "account": "1702", "password": "secret1", "learner": "adult"}
+        body = self._request("POST", "/api/billing/register", json=payload).json()
+        self.assertEqual(body["access_token"], "remote-token")
+        self.assertIn(("POST", "/api/billing/register", payload), self.calls)
 
     def test_admin_console_is_forwarded_to_the_server(self) -> None:
         auth = {"Authorization": "Bearer remote-token"}
@@ -1011,3 +1071,14 @@ class ForcedMemoryConfigTests(unittest.TestCase):
             session = self._session()
             session.configure({"enabled": True, "api_key": "browser", "scope_id": "victim"})
             self.assertIsNone(session._config.get_service())
+
+
+class ChildLearnerTests(unittest.TestCase):
+    def test_child_learner_gets_a_gentler_coach(self) -> None:
+        from services.speaking_coach import build_tutor_instructions, normalize_tutor_config
+
+        child = normalize_tutor_config(enabled=True, level="beginner", learner="child")
+        adult = normalize_tutor_config(enabled=True, level="beginner", learner="nonsense")
+        self.assertEqual((child["learner"], adult["learner"]), ("child", "adult"))
+        self.assertIn("The learner is a child", build_tutor_instructions(child))
+        self.assertNotIn("The learner is a child", build_tutor_instructions(adult))

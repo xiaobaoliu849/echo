@@ -1,9 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { HostedDailyUsage, HostedGrantRecord, HostedLot } from "../api";
+import { getHostedLanguage } from "../hosted";
 import { formatDate, formatTime, minutes } from "../hostedFormat";
+import { createInlineTranslator } from "../i18n";
 
-// Building blocks shared by the hosted "My account" panel and admin console.
+// Follows the account's interface language (fixed per page load).
+const t = createInlineTranslator(getHostedLanguage());
+
+// Building blocks shared by the hosted settings panel and admin console.
 
 export function StatTile({ label, value, unit, hint }: { label: string; value: string; unit?: string; hint: string }) {
   return (
@@ -24,17 +29,23 @@ export function DailyChart({ daily }: { daily: HostedDailyUsage[] }) {
   const total = daily.reduce((sum, d) => sum + d.wall_seconds, 0);
   const active = hover === null ? null : daily[hover];
   if (total === 0) {
-    return <p className="hostedAdminMuted">这段时间还没有通话。</p>;
+    return <p className="hostedAdminMuted">{t("这段时间还没有通话。", "No calls in this period.")}</p>;
   }
   return (
     <figure className="hostedAdminChart">
       <div className="hostedAdminChartReadout" aria-live="polite">
         {active ? (
           <>
-            <strong>{active.day.slice(5)}</strong> {minutes(active.wall_seconds)} 分钟 · {active.users} 人 · 扣费 {minutes(active.billed_seconds)} 分钟
+            <strong>{active.day.slice(5)}</strong>{" "}
+            {t(
+              `${minutes(active.wall_seconds)} 分钟 · ${active.users} 人 · 扣费 ${minutes(active.billed_seconds)} 分钟`,
+              `${minutes(active.wall_seconds)} min · ${active.users} people · billed ${minutes(active.billed_seconds)} min`,
+            )}
           </>
         ) : (
-          <span className="hostedAdminMuted">峰值 {minutes(peak)} 分钟/天 · 指向柱子看当天明细</span>
+          <span className="hostedAdminMuted">
+            {t(`峰值 ${minutes(peak)} 分钟/天 · 指向柱子看当天明细`, `Peak ${minutes(peak)} min/day · point at a bar for details`)}
+          </span>
         )}
       </div>
       <div className="hostedAdminBars" role="list" onMouseLeave={() => setHover(null)}>
@@ -44,7 +55,7 @@ export function DailyChart({ daily }: { daily: HostedDailyUsage[] }) {
             role="listitem"
             tabIndex={0}
             className={hover === index ? "hostedAdminBarSlot is-hover" : "hostedAdminBarSlot"}
-            aria-label={`${d.day} ${minutes(d.wall_seconds)} 分钟，${d.users} 人`}
+            aria-label={t(`${d.day} ${minutes(d.wall_seconds)} 分钟，${d.users} 人`, `${d.day} ${minutes(d.wall_seconds)} min, ${d.users} people`)}
             onMouseEnter={() => setHover(index)}
             onFocus={() => setHover(index)}
             onBlur={() => setHover(null)}
@@ -90,7 +101,7 @@ export function Modal({
       <div className={wide ? "hostedAdminModal is-wide" : "hostedAdminModal"} role="dialog" aria-modal="true" aria-label={title}>
         <div className="hostedAdminModalHead">
           <h2>{title}</h2>
-          <button type="button" className="hostedAdminClose" onClick={onClose} aria-label="关闭">×</button>
+          <button type="button" className="hostedAdminClose" onClick={onClose} aria-label={t("关闭", "Close")}>×</button>
         </div>
         {children}
       </div>
@@ -104,7 +115,7 @@ const EXPIRY_WARNING_SECONDS = 7 * 86400;
 /** Unused minutes per top-up with their expiry, soonest first. */
 export function LotList({ lots }: { lots: HostedLot[] }) {
   if (lots.length === 0) {
-    return <p className="hostedAdminMuted">没有可用分钟。</p>;
+    return <p className="hostedAdminMuted">{t("没有可用分钟。", "No minutes available.")}</p>;
   }
   const soon = Date.now() / 1000 + EXPIRY_WARNING_SECONDS;
   return (
@@ -112,8 +123,10 @@ export function LotList({ lots }: { lots: HostedLot[] }) {
       {lots.map((lot, index) => (
         <li key={`${lot.created_at}-${index}`} className={lot.expires_at !== null && lot.expires_at <= soon ? "is-soon" : ""}>
           <strong className="hostedAdminNum">{minutes(lot.remaining_seconds)} 分钟</strong>
-          <span>{lot.expires_at === null ? "长期有效" : `${formatDate(lot.expires_at)} 到期`}</span>
-          <span className="hostedAdminMuted">{formatTime(lot.created_at)} 充值 {minutes(lot.granted_seconds)} 分钟</span>
+          <span>{lot.expires_at === null ? t("长期有效", "No expiry") : t(`${formatDate(lot.expires_at)} 到期`, `Expires ${formatDate(lot.expires_at)}`)}</span>
+          <span className="hostedAdminMuted">
+            {t(`${formatTime(lot.created_at)} 充值 ${minutes(lot.granted_seconds)} 分钟`, `${formatTime(lot.created_at)} topped up ${minutes(lot.granted_seconds)} min`)}
+          </span>
         </li>
       ))}
     </ul>
@@ -128,9 +141,9 @@ export function GrantList({ grants }: { grants: HostedGrantRecord[] }) {
         <li key={`${grant.created_at}-${index}`}>
           <span className="hostedAdminMuted">{formatTime(grant.created_at)}</span>
           <span className={grant.delta_seconds < 0 ? "hostedAdminLow" : ""}>
-            {grant.delta_seconds > 0 ? "+" : ""}{minutes(grant.delta_seconds)} 分钟
+            {grant.delta_seconds > 0 ? "+" : ""}{minutes(grant.delta_seconds)} {t("分钟", "min")}
           </span>
-          <span>{grant.kind === "expire" ? "到期作废" : grant.note || "—"}</span>
+          <span>{grant.kind === "expire" ? t("到期作废", "Expired unused") : grant.note || "—"}</span>
         </li>
       ))}
     </ul>

@@ -29,6 +29,7 @@ import {
   coachCardsActive,
   coachSupportedModel,
   coachTextKey,
+  COACH_CONFIG_EVENT,
   readStoredCoachConfig,
   tutorPromptKey,
   writeStoredCoachConfig,
@@ -268,6 +269,18 @@ export default function useVoiceChat({
       );
     }, 800);
   }, [sendCoachConfig, t]);
+
+  // Settings outside the call UI (hosted "learning preferences") push changes here.
+  useEffect(() => {
+    const onCoachConfig = (event: Event) => {
+      const patch = (event as CustomEvent<Partial<CoachConfig>>).detail;
+      if (patch && typeof patch === "object") {
+        updateVoiceChatCoachConfig(patch);
+      }
+    };
+    window.addEventListener(COACH_CONFIG_EVENT, onCoachConfig);
+    return () => window.removeEventListener(COACH_CONFIG_EVENT, onCoachConfig);
+  }, [updateVoiceChatCoachConfig]);
 
   const dismissCoachFeedback = useCallback((id: number) => {
     for (const [key, item] of coachFeedbackByTextRef.current) {
@@ -2033,6 +2046,7 @@ export default function useVoiceChat({
                 nativeLanguage: coachConfigRef.current.native_language,
                 level: coachConfigRef.current.level,
                 scenario: coachConfigRef.current.scenario,
+                learner: coachConfigRef.current.learner,
               }
             : undefined,
       });

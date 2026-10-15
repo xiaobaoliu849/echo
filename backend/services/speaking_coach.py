@@ -92,6 +92,7 @@ def normalize_tutor_config(
     native_language: str | None = None,
     level: str | None = None,
     scenario: str | None = None,
+    learner: str | None = None,
 ) -> dict[str, Any] | None:
     """Sanitized tutor config, or None when tutor mode is off."""
     if not enabled:
@@ -107,6 +108,7 @@ def normalize_tutor_config(
     assert base is not None
     clean_scenario = str(scenario or "").strip().lower()
     base["scenario"] = clean_scenario if clean_scenario in TUTOR_SCENARIOS else DEFAULT_TUTOR_SCENARIO
+    base["learner"] = "child" if str(learner or "").strip().lower() == "child" else "adult"
     return base
 
 
@@ -141,6 +143,14 @@ def build_tutor_instructions(config: dict[str, Any]) -> str:
         ),
     }[config["level"]]
     examiner = config["scenario"] == "ielts"
+    child_hint = (
+        "- The learner is a child (about 6-12 years old). Be warm, playful and very encouraging; use "
+        "simple concrete words and topics children enjoy (animals, school, games, family, food, "
+        "cartoons). Keep corrections gentle: praise the attempt first, then model the right sentence "
+        "for them to repeat. Never bring up topics unsuitable for children.\n"
+        if config.get("learner") == "child"
+        else ""
+    )
     correction_timing = (
         "- While the mock test is running, stay in examiner role and do not correct; at the end give the "
         "estimate plus the three most useful corrections, each as 'you said ..., better: ...'.\n"
@@ -161,6 +171,7 @@ def build_tutor_instructions(config: dict[str, Any]) -> str:
         "These rules override the general assistant persona and language rules above.\n"
         f"- Scenario: {TUTOR_SCENARIOS[config['scenario']]}\n"
         f"- Speak {target} by default. {level_hint}\n"
+        f"{child_hint}"
         "- Keep the conversation going: each reply is short (1-3 sentences) so the learner does most of the "
         "talking, and ends with exactly one question or prompt.\n"
         f"{correction_timing}"

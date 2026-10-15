@@ -9,6 +9,8 @@ import {
   resetHostedPassword,
   saveHostedRenewal,
   setHostedAccountMemory,
+  fetchHostedRegistration,
+  saveHostedRegistration,
   setHostedAccountActive,
   type HostedAdminOverview,
   type HostedAdminUser,
@@ -214,6 +216,7 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
                 <tr>
                   <th>账号</th>
                   <th>状态</th>
+                  <th>来源</th>
                   <th className="hostedAdminNum">剩余(分)</th>
                   <th className="hostedAdminNum">近{days}天用(分)</th>
                   <th>最近使用</th>
@@ -232,6 +235,7 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
                     <td data-label="状态">
                       <StatusBadge user={user} />
                     </td>
+                    <td data-label="来源" className="hostedAdminMuted">{user.signup === "self" ? "自助注册" : "开户"}</td>
                     <td data-label="剩余(分)" className="hostedAdminNum">
                       <span className={!user.is_admin && user.remaining_seconds < LOW_BALANCE_SECONDS ? "hostedAdminLow" : ""}>
                         {minutes(user.remaining_seconds)}
@@ -253,7 +257,7 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
                 ))}
                 {overview && users.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="hostedAdminEmpty">{query ? "没有匹配的账号" : "还没有账号"}</td>
+                    <td colSpan={8} className="hostedAdminEmpty">{query ? "没有匹配的账号" : "还没有账号"}</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -261,7 +265,9 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
           </div>
         </section>
 
-        <RenewalSettings onSaved={() => setNotice("续费信息已保存，用户在「我的账户」里能看到")} />
+        <RegistrationSettings onSaved={(message) => setNotice(message)} />
+
+        <RenewalSettings onSaved={() => setNotice("续费信息已保存，用户在「设置 → 账户与时长」里能看到")} />
 
         <section className="hostedAdminCard">
           <h2>按模型（近 {days} 天）</h2>
@@ -351,6 +357,71 @@ function readQrImage(file: File): Promise<string> {
   });
 }
 
+/** Easy to read aloud and type on a phone: no 0/O or 1/I. */
+function generateInviteCode(): string {
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const values = new Uint32Array(6);
+  crypto.getRandomValues(values);
+  return Array.from(values, (n) => alphabet[n % alphabet.length]).join("");
+}
+
+/** Self-service sign-up: the invite code neighbours type to create an account. */
+function RegistrationSettings({ onSaved }: { onSaved: (message: string) => void }) {
+  const [enabled, setEnabled] = useState(false);
+  const [code, setCode] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const { busy, error, submit } = useSubmit(async () => {
+    const next = await saveHostedRegistration({ enabled, code: code.trim().toUpperCase() });
+    setCode(next.code);
+    onSaved(next.enabled ? `已开放注册，邀请码 ${next.code}（发到小区群即可）` : "已关闭自助注册");
+  });
+
+  useEffect(() => {
+    fetchHostedRegistration()
+      .then((value) => {
+        setEnabled(value.enabled);
+        setCode(value.code);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoaded(true));
+  }, []);
+
+  return (
+    <section className="hostedAdminCard">
+      <h2>新用户注册</h2>
+      <p className="hostedAdminMuted">
+        开放后，邻居在登录页填邀请码就能自己注册，并自动获得新人体验 30 分钟（30 天有效）。邀请码只发在小区群里；
+        如果外传了，换一个新的即可，已注册的账号不受影响。
+      </p>
+      <form className="hostedAdminForm hostedAdminRenewal" onSubmit={submit}>
+        <label className="hostedAdminCheck">
+          <input type="checkbox" checked={enabled} disabled={!loaded} onChange={(e) => setEnabled(e.target.checked)} />
+          <span>开放自助注册</span>
+        </label>
+        <div className="hostedAdminInline">
+          <label>
+            <span>邀请码（4–32 位）</span>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              maxLength={32}
+              disabled={!loaded}
+              placeholder="例如 7KQ2MX"
+            />
+          </label>
+          <button type="button" className="hostedAdminGhost hostedAdminAlignEnd" onClick={() => setCode(generateInviteCode())} disabled={!loaded}>
+            随机生成
+          </button>
+        </div>
+        {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
+        <div className="hostedAdminModalActions">
+          <button type="submit" className="hostedAdminPrimary" disabled={busy || !loaded}>{busy ? "保存中…" : "保存"}</button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function RenewalSettings({ onSaved }: { onSaved: () => void }) {
   const [text, setText] = useState("");
   const [qr, setQr] = useState("");
@@ -387,7 +458,7 @@ function RenewalSettings({ onSaved }: { onSaved: () => void }) {
   return (
     <section className="hostedAdminCard">
       <h2>续费信息</h2>
-      <p className="hostedAdminMuted">显示在每个用户的「我的账户」里。充值备注也会显示给用户本人。</p>
+      <p className="hostedAdminMuted">显示在每个用户的「设置 → 账户与时长」里。充值备注也会显示给用户本人。</p>
       <form className="hostedAdminForm hostedAdminRenewal" onSubmit={submit}>
         <label>
           <span>说明（价格、微信号、转账后怎么通知你…）</span>

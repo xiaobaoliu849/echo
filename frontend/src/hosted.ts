@@ -65,3 +65,23 @@ export function hostedBillingNote(model: string): string {
     ? `更省：1 分钟只扣 ${multiplier} 分钟`
     : `1 分钟按 ${multiplier} 分钟计`;
 }
+
+const HOSTED_LANGUAGE_KEY = "echo_hosted_ui_language";
+
+/** Interface language of the hosted build (account preference, cached on this device). */
+export function getHostedLanguage(): "zh-CN" | "en-US" {
+  try {
+    return localStorage.getItem(HOSTED_LANGUAGE_KEY) === "en-US" ? "en-US" : "zh-CN";
+  } catch {
+    return "zh-CN";
+  }
+}
+
+export function setHostedLanguage(language: string): void {
+  try {
+    localStorage.setItem(HOSTED_LANGUAGE_KEY, language === "en-US" ? "en-US" : "zh-CN");
+  } catch {
+    // Private mode: the language simply falls back to Chinese.
+  }
+}
+

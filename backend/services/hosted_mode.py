@@ -32,6 +32,7 @@ HOSTED_PUBLIC_PATHS: frozenset[str] = frozenset(
     {
         "/api/auth/login",
         "/api/billing/hosted-info",
+        "/api/billing/register",
     }
 )
 HOSTED_ADMIN_PREFIXES: tuple[str, ...] = ("/api/billing/admin/",)

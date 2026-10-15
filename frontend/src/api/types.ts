@@ -271,6 +271,8 @@ export type CoachConfig = {
   /** Speaking coach: the realtime voice model itself coaches the learner live (system prompt). */
   tutor: boolean;
   scenario: TutorScenario;
+  /** Who is learning: a child gets a gentler, playful coach. Absent = adult. */
+  learner?: "child" | "adult";
 };
 
 export type CoachIssue = {

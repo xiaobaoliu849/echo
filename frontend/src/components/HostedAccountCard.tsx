@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import HostedAccountPanel from "./HostedAccountPanel";
+import HostedSettings, { type SettingsTab } from "./HostedSettings";
 import {
   AUTH_REJECTED_EVENT,
   clearAuthRuntime,
@@ -8,13 +8,15 @@ import {
   type HostedExpiringSoon,
 } from "../api";
 import { formatTime, minutes as formatMinutes } from "../hostedFormat";
-import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, formatRemainingMinutes, type HostedBalanceDetail } from "../hosted";
+import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, formatRemainingMinutes, getHostedLanguage, type HostedBalanceDetail } from "../hosted";
+import { createInlineTranslator } from "../i18n";
 
 /** Account card in the sidebar footer: who is logged in and minutes left. */
 export default function HostedAccountCard() {
+  const t = createInlineTranslator(getHostedLanguage());
   const [account, setAccount] = useState("");
   const [remaining, setRemaining] = useState<number | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [expiring, setExpiring] = useState<HostedExpiringSoon>(null);
 
   useEffect(() => {
@@ -53,35 +55,35 @@ export default function HostedAccountCard() {
   const minutes = remaining === null ? "…" : formatRemainingMinutes(remaining);
   return (
     <div className={low ? "hostedAccountCard is-low" : "hostedAccountCard"} role="status">
-      {/* Top: who and how much (opens "My account"); bottom: actions on their own row. */}
+      {/* Top: who and how much (opens Settings); bottom: actions on their own row. */}
       <button
         type="button"
         className="hostedAccountOpen"
-        onClick={() => setPanelOpen(true)}
-        title={`剩余 ${minutes} 分钟 · 我的账户`}
+        onClick={() => setSettingsTab("account")}
+        title={t(`剩余 ${minutes} 分钟 · 设置`, `${minutes} minutes left · Settings`)}
       >
         <span className="hostedAccountText">
           <span className="hostedAccountName">{account || "…"}</span>
           <span className="hostedAccountMinutes">
-            剩余 <strong>{minutes}</strong> 分钟
+            {t("剩余", "")} <strong>{minutes}</strong> {t("分钟", "min left")}
           </span>
           {expiring ? (
             <span
               className="hostedAccountExpiring"
-              title={`${formatMinutes(expiring.seconds)} 分钟将于 ${formatTime(expiring.expires_at)} 到期`}
+              title={t(`${formatMinutes(expiring.seconds)} 分钟将于 ${formatTime(expiring.expires_at)} 到期`, `${formatMinutes(expiring.seconds)} min expire ${formatTime(expiring.expires_at)}`)}
             >
-              {formatMinutes(expiring.seconds)} 分钟 {formatTime(expiring.expires_at).slice(0, 5)} 到期
+              {t(`${formatMinutes(expiring.seconds)} 分钟 ${formatTime(expiring.expires_at).slice(0, 5)} 到期`, `${formatMinutes(expiring.seconds)} min expire ${formatTime(expiring.expires_at).slice(0, 5)}`)}
             </span>
           ) : null}
         </span>
         <strong className="hostedAccountMinutesCompact">{minutes}</strong>
       </button>
       <div className="hostedAccountActions">
-        <button type="button" onClick={() => setPanelOpen(true)}>我的账户</button>
-        {getAuthRuntimeConfig().isAdmin ? <a href={HOSTED_ADMIN_HASH}>管理</a> : null}
-        <button type="button" onClick={logout}>退出</button>
+        <button type="button" onClick={() => setSettingsTab("account")}>{t("设置", "Settings")}</button>
+        {getAuthRuntimeConfig().isAdmin ? <a href={HOSTED_ADMIN_HASH}>{t("管理", "Admin")}</a> : null}
+        <button type="button" onClick={logout}>{t("退出", "Log out")}</button>
       </div>
-      {panelOpen ? <HostedAccountPanel onClose={() => setPanelOpen(false)} /> : null}
+      {settingsTab ? <HostedSettings initialTab={settingsTab} onClose={() => setSettingsTab(null)} /> : null}
     </div>
   );
 }

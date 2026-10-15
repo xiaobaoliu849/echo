@@ -14,7 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from services import community_client, hosted_memory, hosted_mode, hosted_renewal
+from services import community_client, hosted_accounts, hosted_memory, hosted_mode, hosted_renewal
 from services.billing_service import billing_service
 from services.direct_calls import HEARTBEAT_SECONDS, DirectCallRegistry
 from services.user_auth_service import user_auth_service
@@ -54,6 +54,18 @@ class GrantRequest(BaseModel):
     note: str = Field(default="", max_length=200)
     valid_days: int | None = Field(default=None, ge=1, le=366)
     memory_days: int = Field(default=0, ge=0, le=366)
+
+
+class RegisterRequest(BaseModel):
+    invite_code: str = Field(min_length=1, max_length=64)
+    account: str = Field(min_length=1, max_length=60)
+    password: str = Field(min_length=6, max_length=128)
+    learner: str = Field(default="adult", max_length=10)
+
+
+class RegistrationSettingsRequest(BaseModel):
+    enabled: bool
+    code: str = Field(default="", max_length=32)
 
 
 class MemoryGrantRequest(BaseModel):
@@ -117,6 +129,8 @@ async def hosted_info() -> dict[str, Any] | JSONResponse:
         return {"hosted": False, "providers": []}
     return {
         "hosted": True,
+        "registration_open": hosted_accounts.load_registration()["enabled"],
+        "trial_minutes": hosted_accounts.TRIAL_MINUTES,
         "providers": [
             {
                 "provider": name,
@@ -197,6 +211,81 @@ async def renewal_info(
     _require_hosted()
     _current_email(request)
     return hosted_renewal.load()
+
+
+# ── self-service sign-up (community invite code) and preferences ────────
+
+
+@router.post("/register", response_model=None)
+async def register(
+    payload: RegisterRequest,
+    request: Request,
+    x_client_id: str | None = Header(default=None, alias="X-Client-ID"),
+) -> Any:
+    if community_client.is_community_client():
+        try:
+            return await community_client.forward(
+                "POST", "/api/billing/register", json=payload.model_dump(), client_id=str(x_client_id or "")
+            )
+        except community_client.CommunityServerError as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    _require_hosted()
+    # Imported lazily: routers.auth imports this router's services too.
+    from routers.auth import _build_session, _extract_client_id, _request_ip
+    from services.user_auth_service import AuthRateLimitError, auth_rate_limiter
+
+    def refuse(status: int, code: str, message: str) -> HTTPException:
+        return HTTPException(status_code=status, detail={"code": code, "message": message, "meta": {}})
+
+    try:
+        auth_rate_limiter.hit_ip(_request_ip(request))
+    except AuthRateLimitError as exc:
+        raise refuse(429, "AUTH_RATE_LIMITED", "尝试次数太多，请稍后再试。") from exc
+    if not user_auth_service.has_users():
+        # The first account becomes the operator; it is never self-served.
+        raise refuse(403, "REGISTRATION_CLOSED", "服务器还没有准备好，请联系管理员。")
+    if not hosted_accounts.check_invite_code(payload.invite_code):
+        raise refuse(403, "INVITE_CODE_INVALID", "邀请码不对，请向管理员索取（小区群里有）。")
+    try:
+        name = hosted_accounts.validate_account_name(payload.account)
+        email = hosted_mode.normalize_account_id(name)
+        user = user_auth_service.register_user(email, payload.password)
+    except ValueError as exc:
+        message = str(exc)
+        if "exist" in message.lower() or "already" in message.lower():
+            message = "这个账号已经有人用了，换一个吧（比如在门牌号后面加名字）。"
+        raise refuse(400, "REGISTER_FAILED", message) from exc
+    billing_service.grant(
+        email,
+        hosted_accounts.TRIAL_MINUTES * 60,
+        note="新人体验",
+        valid_days=hosted_accounts.TRIAL_VALID_DAYS,
+    )
+    hosted_accounts.account_prefs_store.update(
+        email, {"signup": "self", "learner": payload.learner}, allow_signup=True
+    )
+    return _build_session(user, _extract_client_id(x_client_id))
+
+
+@router.get("/me/prefs", response_model=None)
+async def my_prefs(
+    request: Request, authorization: str | None = Header(default=None, alias="Authorization")
+) -> dict[str, Any] | JSONResponse:
+    if community_client.is_community_client():
+        return await _forward_to_server("GET", "/api/billing/me/prefs", authorization)
+    _require_hosted()
+    return hosted_accounts.account_prefs_store.get(_current_email(request))
+
+
+@router.post("/me/prefs", response_model=None)
+async def update_my_prefs(
+    request: Request, authorization: str | None = Header(default=None, alias="Authorization")
+) -> dict[str, Any] | JSONResponse:
+    patch = await request.json()
+    if community_client.is_community_client():
+        return await _forward_to_server("POST", "/api/billing/me/prefs", authorization, patch)
+    _require_hosted()
+    return hosted_accounts.account_prefs_store.update(_current_email(request), patch if isinstance(patch, dict) else {})
 
 
 # ── AI memory (EverOS), one private memory per account ───────────────────
@@ -383,6 +472,7 @@ async def admin_list_users(
     since = int(time.time()) - days * 86400
     usage = {row["user_email"]: row for row in billing_service.usage_summary(since=since)}
     memberships = hosted_memory.hosted_memory_store.memberships()
+    signups = hosted_accounts.account_prefs_store.signups()
     users = []
     for user in user_auth_service.list_users():
         email = str(user["email"])
@@ -397,6 +487,7 @@ async def admin_list_users(
                 "used_seconds": int(row.get("used_seconds", 0)),
                 "last_used_at": row.get("last_used_at"),
                 "memory_until": memberships.get(email) or None,
+                "signup": signups.get(email, "admin"),
             }
         )
     return {
@@ -502,6 +593,21 @@ async def admin_set_renewal(payload: RenewalRequest) -> dict[str, Any]:
 
 
 _ADMIN_PATH_RE = re.compile(r"^[a-z-]{1,40}$")
+
+
+@router.get("/admin/registration")
+async def admin_get_registration() -> dict[str, Any]:
+    _require_hosted()
+    return hosted_accounts.load_registration()
+
+
+@router.post("/admin/registration")
+async def admin_set_registration(payload: RegistrationSettingsRequest) -> dict[str, Any]:
+    _require_hosted()
+    try:
+        return hosted_accounts.save_registration(enabled=payload.enabled, code=payload.code)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
 
 
 @router.post("/admin/memory")

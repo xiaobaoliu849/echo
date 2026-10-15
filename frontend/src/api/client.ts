@@ -58,7 +58,7 @@ import type {
   VoiceType,
   VoicesResponse
 } from "./types";
-import { setHostedMultipliers } from "../hosted";
+import { getHostedLanguage, setHostedMultipliers } from "../hosted";
 
 export class ApiRequestError extends Error {
   status: number;
@@ -775,6 +775,7 @@ export function buildVoiceChatWebSocketUrl(params: {
     nativeLanguage: string;
     level: string;
     scenario: string;
+    learner?: string;
   };
 }): string {
   const httpUrl = new URL(API_BASE_URL);
@@ -829,6 +830,9 @@ export function buildVoiceChatWebSocketUrl(params: {
     wsUrl.searchParams.set("tutor_native_language", params.tutor.nativeLanguage);
     wsUrl.searchParams.set("tutor_level", params.tutor.level);
     wsUrl.searchParams.set("tutor_scenario", params.tutor.scenario);
+    if (params.tutor.learner) {
+      wsUrl.searchParams.set("tutor_learner", params.tutor.learner);
+    }
   }
   const wsToken = getRealtimeWebSocketToken();
   if (wsToken) {
@@ -1601,7 +1605,59 @@ export async function deleteCustomVoice(
 export type HostedInfo = {
   hosted: boolean;
   providers: { provider: string; models: string[]; multipliers?: Record<string, number> }[];
+  /** Whether new users may sign up with the community invite code. */
+  registration_open?: boolean;
+  trial_minutes?: number;
 };
+
+/** Per-account preferences on the hosted server (follow the user across devices). */
+export type HostedPrefs = {
+  learner: "child" | "adult";
+  level: "beginner" | "intermediate" | "advanced" | "ielts";
+  native_language: string;
+  coach: boolean;
+  ui_language: "zh-CN" | "en-US";
+  onboarded: boolean;
+  signup: "self" | "admin";
+};
+
+export async function fetchHostedPrefs(): Promise<HostedPrefs> {
+  const response = await apiFetch(`${API_BASE_URL}/api/billing/me/prefs`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function saveHostedPrefs(patch: Partial<HostedPrefs>): Promise<HostedPrefs> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/billing/me/prefs`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) },
+    { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS },
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+/** Self-service sign-up with the community invite code; logs the new user in. */
+export async function registerHostedAccount(payload: {
+  invite_code: string;
+  account: string;
+  password: string;
+  learner: "child" | "adult";
+}): Promise<AuthRuntimeConfig> {
+  const response = await fetch(`${API_BASE_URL}/api/billing/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Client-ID": getClientId() },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return applyAuthSession((await response.json()) as AuthSessionResponse);
+}
 
 export async function fetchHostedInfo(): Promise<HostedInfo> {
   const response = await apiFetch(`${API_BASE_URL}/api/billing/hosted-info`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
@@ -1693,6 +1749,8 @@ export type HostedAdminUser = {
   last_used_at: number | null;
   /** AI memory membership end (epoch seconds), null = none. */
   memory_until: number | null;
+  /** "self" = signed up with the invite code, "admin" = account created by the operator. */
+  signup: "self" | "admin";
 };
 
 /** A user's AI memory: membership, their own switch, and what is remembered. */
@@ -1804,6 +1862,16 @@ export function grantHostedMinutes(
   return hostedAdminRequest("grant", { account, minutes, note, valid_days: validDays, memory_days: memoryDays });
 }
 
+export type HostedRegistration = { enabled: boolean; code: string };
+
+export function fetchHostedRegistration(): Promise<HostedRegistration> {
+  return hostedAdminRequest("registration");
+}
+
+export function saveHostedRegistration(value: HostedRegistration): Promise<HostedRegistration> {
+  return hostedAdminRequest("registration", value);
+}
+
 /** Give (days > 0) or take away (0) an account's AI memory membership. */
 export function setHostedAccountMemory(account: string, days: number): Promise<{ memory_until: number | null }> {
   return hostedAdminRequest("memory", { account, days });
@@ -1836,7 +1904,11 @@ export async function fetchSettings(): Promise<SettingsResponse> {
     return {
       config_path: "",
       providers: info.providers.map((item) => item.provider),
-      settings: { default_models: defaultModels } as unknown as SettingsResponse["settings"],
+      settings: {
+        default_models: defaultModels,
+        // The account's interface language, cached on this device by HostedRoot.
+        ui_settings: { display_language: getHostedLanguage() },
+      } as unknown as SettingsResponse["settings"],
     };
   }
   const response = await apiFetch(`${API_BASE_URL}/api/settings/`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
