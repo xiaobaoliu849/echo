@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { saveHostedPrefs } from "../api";
 import { HOSTED_MODEL_LABELS, HOSTED_PROVIDER_LABELS, IS_HOSTED_BUILD, hostedBillingNote, isHostedModelSold } from "../hosted";
 import { createPortal } from "react-dom";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
@@ -684,7 +685,13 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                         type="checkbox"
                         checked={coachConfig.tutor && voiceChat.voiceChatCoachSupported}
                         disabled={!voiceChat.voiceChatCoachSupported}
-                        onChange={(e) => voiceChat.onCoachConfigChange({ tutor: e.target.checked })}
+                        onChange={(e) => {
+                          voiceChat.onCoachConfigChange({ tutor: e.target.checked });
+                          if (IS_HOSTED_BUILD) {
+                            // Keep the account's preference in step with the call toggle.
+                            void saveHostedPrefs({ coach: e.target.checked }).catch(() => undefined);
+                          }
+                        }}
                       />
                       <span style={{ fontWeight: 600 }}>{t("🎓 口语教练", "🎓 Speaking coach")}</span>
                     </label>
@@ -716,6 +723,17 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                             ))}
                           </select>
                         </label>
+                        {IS_HOSTED_BUILD ? (
+                          // Level and learner are account settings on the hosted build; the
+                          // practice language is always English there.
+                          <span className="vsCoachHint">
+                            {t(
+                              `水平：${hostedLevelLabel(coachConfig.level, t)}${coachConfig.learner === "child" ? " · 孩子" : ""}（在「设置 → 学习偏好」修改）`,
+                              `Level: ${hostedLevelLabel(coachConfig.level, t)}${coachConfig.learner === "child" ? " · child" : ""} (change it in Settings → Learning)`,
+                            )}
+                          </span>
+                        ) : (
+                        <>
                         <label className="vsGeminiAccentField">
                           <span>{t("练习语言", "Practice language")}</span>
                           <select
@@ -759,6 +777,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                           />
                           <span>{t("📝 同时显示文字纠错卡片", "📝 Also show written feedback cards")}</span>
                         </label>
+                        </>
+                        )}
                       </>
                     ) : null}
                   </div>
@@ -1060,4 +1080,14 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
       ), document.body) : null}
     </div>
   );
+}
+
+function hostedLevelLabel(level: CoachLevel, t: (zh: string, en: string) => string): string {
+  return level === "beginner"
+    ? t("入门", "Beginner")
+    : level === "intermediate"
+    ? t("中级", "Intermediate")
+    : level === "advanced"
+    ? t("高级", "Advanced")
+    : t("雅思", "IELTS");
 }
