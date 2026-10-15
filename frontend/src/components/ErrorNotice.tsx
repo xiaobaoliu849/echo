@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { buildErrorHints, detectSuggestedProvider, parseErrorCode, parseRequestId } from "../error_hints";
+import { IS_HOSTED_BUILD } from "../hosted";
 import { useI18n } from "../i18n";
 
 type ErrorNoticeProps = {
@@ -214,7 +215,8 @@ export default function ErrorNotice({ message, scope = "", context, onOpenSettin
   return (
     <>
       <p className="error">{text}</p>
-      {code || requestId || text ? (
+      {/* Diagnostics and provider settings are for the operator, not neighbours on the hosted build. */}
+      {!IS_HOSTED_BUILD && (code || requestId || text) ? (
         <div className="errorMeta">
           {code ? <span className="errorMetaTag">code: {code}</span> : null}
           {requestId ? (

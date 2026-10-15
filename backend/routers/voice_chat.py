@@ -473,14 +473,23 @@ async def voice_chat_ws(
             _missing.append("StepFun API Key")
 
     if _missing:
-        await websocket.send_json(
-            {
+        if hosted_user_email:
+            # Neighbours cannot configure providers; tell them what they can do
+            # and leave the real cause in the operator's log.
+            logger.warning("hosted provider not configured: %s missing %s", selected_provider, _missing)
+            error_event: dict[str, Any] = {
+                "type": "error",
+                "message": "这条线路暂时不可用，请换一个模型（比如谷歌 Gemini）再试；一直不行请联系管理员。",
+                "provider": selected_provider,
+            }
+        else:
+            error_event = {
                 "type": "error",
                 "message": f"缺少 {selected_provider} 必需的配置: {', '.join(_missing)}。请在「设置 → 服务商设置」中配置后重试。",
                 "provider": selected_provider,
                 "missing": _missing,
             }
-        )
+        await websocket.send_json(error_event)
         await websocket.close(code=1003)
         return
 

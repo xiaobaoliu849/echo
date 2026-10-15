@@ -590,6 +590,15 @@ class HostedApiTests(unittest.TestCase):
             with client.websocket_connect(url) as ws:
                 self.assertIn("线路繁忙", ws.receive_json()["message"])
 
+    def test_unconfigured_line_gives_neighbours_a_plain_message(self) -> None:
+        self.billing.grant(USER[0], 600)
+        with patch.object(BackendConfig, "get_setting", return_value=""):
+            client = TestClient(self.app)
+            with client.websocket_connect(f"/api/voice-chat/ws?provider=Doubao&token={self.user_token}") as ws:
+                event = ws.receive_json()
+        self.assertIn("这条线路暂时不可用", event["message"])
+        self.assertNotIn("missing", event)  # no key names for neighbours
+
     def test_voice_ws_rejects_empty_balance(self) -> None:
         client = TestClient(self.app)
         with client.websocket_connect(f"/api/voice-chat/ws?provider=Vercel&token={self.user_token}") as ws:
