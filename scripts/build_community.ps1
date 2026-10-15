@@ -13,12 +13,16 @@
   with the packaging venv, and packages electron-builder.community.yml.
   Run scripts/build_desktop.ps1 once first so .packaging-venv exists.
 
+  -Version stamps the community installer on its own (e.g. 1.0.5) without
+  bumping electron/package.json, which the regular desktop release shares.
+
 .EXAMPLE
-  ./scripts/build_community.ps1 -Server https://203.0.113.5:8443 -CertFile C:\path\server-cert.pem
+  ./scripts/build_community.ps1 -Server https://203.0.113.5:8443 -CertFile C:\path\server-cert.pem -Version 1.0.5
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Server,
-  [Parameter(Mandatory = $true)][string]$CertFile
+  [Parameter(Mandatory = $true)][string]$CertFile,
+  [string]$Version = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,7 +47,9 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 [IO.File]::WriteAllText((Join-Path $repoRoot "electron/community-config.json"), (@{ server = $Server } | ConvertTo-Json), $utf8)
 [IO.File]::WriteAllText((Join-Path $repoRoot "electron/community-server.pem"), $certText, $utf8)
 
-$env:VITE_APP_VERSION = (Get-Content electron/package.json -Raw | ConvertFrom-Json).version
+if ($Version -and $Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must look like 1.0.5" }
+if (-not $Version) { $Version = (Get-Content electron/package.json -Raw | ConvertFrom-Json).version }
+$env:VITE_APP_VERSION = $Version
 Invoke-Checked "npm.cmd" @("--prefix", "frontend", "run", "build", "--", "--mode", "hosted")
 Push-Location backend
 try {
@@ -53,7 +59,7 @@ try {
 
 Push-Location electron
 try {
-  Invoke-Checked "npx.cmd" @("electron-builder", "--config", "electron-builder.community.yml", "--win", "nsis", "--publish", "never")
+  Invoke-Checked "npx.cmd" @("electron-builder", "--config", "electron-builder.community.yml", "--win", "nsis", "--publish", "never", "-c.extraMetadata.version=$Version")
   Get-ChildItem dist-community -Filter "*.exe" | Select-Object Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB, 1) } }
 } finally { Pop-Location }
 Write-Host "Community installer built in electron/dist-community. Note: frontend/dist now holds the hosted build; run build_desktop.ps1 before a regular release."
