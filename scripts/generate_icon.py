@@ -99,7 +99,7 @@ def render_sidebar() -> Image.Image:
         tag_font = ImageFont.truetype("msyh.ttc", int(h * 0.048))
     except OSError:  # fonts missing on a non-Windows builder: skip text
         return img.resize(SIDEBAR_SIZE, Image.LANCZOS)
-    for text, font, y in (("Echo", name_font, h * 0.44), ("AI 语音助手", tag_font, h * 0.58)):
+    for text, font, y in (("Echo", name_font, h * 0.44), ("英语口语陪练", tag_font, h * 0.58)):
         box = draw.textbbox((0, 0), text, font=font)
         draw.text(((w - (box[2] - box[0])) / 2 - box[0], y), text, font=font, fill=BUBBLE)
     return img.resize(SIDEBAR_SIZE, Image.LANCZOS)
