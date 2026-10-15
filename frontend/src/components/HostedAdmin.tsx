@@ -380,7 +380,7 @@ function RegistrationSettings({ onSaved }: { onSaved: (message: string) => void 
   const { busy, error, submit } = useSubmit(async () => {
     const next = await saveHostedRegistration({ enabled, code: code.trim().toUpperCase() });
     setCode(next.code);
-    onSaved(next.enabled ? `已开放注册，邀请码 ${next.code}（发到小区群即可）` : "已关闭自助注册");
+    onSaved(next.enabled ? `已开放注册，邀请码 ${next.code}` : "已关闭自助注册");
   });
 
   useEffect(() => {
@@ -397,7 +397,7 @@ function RegistrationSettings({ onSaved }: { onSaved: (message: string) => void 
     <section className="hostedAdminCard">
       <h2>新用户注册</h2>
       <p className="hostedAdminMuted">
-        开放后，邻居在登录页填邀请码就能自己注册，并自动获得新人体验 30 分钟（30 天有效）。邀请码只发在小区群里；
+        开放后，新用户在登录页填邀请码就能自己注册，并自动获得新人体验 30 分钟（30 天有效）。邀请码只发给你想邀请的人；
         如果外传了，换一个新的即可，已注册的账号不受影响。
       </p>
       <form className="hostedAdminForm hostedAdminRenewal" onSubmit={submit}>
@@ -631,7 +631,7 @@ function CreateDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
     <Modal title="新建账号" onClose={onClose}>
       <form className="hostedAdminForm" onSubmit={submit}>
         <label>
-          <span>账号（如门牌号 1203，用户用它登录）</span>
+          <span>账号（用户用它登录，例如 1203）</span>
           <input value={account} onChange={(e) => setAccount(e.target.value)} required maxLength={120} autoFocus />
         </label>
         <PasswordField value={password} onChange={setPassword} />

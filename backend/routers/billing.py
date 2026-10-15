@@ -245,7 +245,7 @@ async def register(
         # The first account becomes the operator; it is never self-served.
         raise refuse(403, "REGISTRATION_CLOSED", "服务器还没有准备好，请联系管理员。")
     if not hosted_accounts.check_invite_code(payload.invite_code):
-        raise refuse(403, "INVITE_CODE_INVALID", "邀请码不对，请向管理员索取（小区群里有）。")
+        raise refuse(403, "INVITE_CODE_INVALID", "邀请码不对，请向管理员索取。")
     try:
         name = hosted_accounts.validate_account_name(payload.account)
         email = hosted_mode.normalize_account_id(name)
@@ -253,7 +253,7 @@ async def register(
     except ValueError as exc:
         message = str(exc)
         if "exist" in message.lower() or "already" in message.lower():
-            message = "这个账号已经有人用了，换一个吧（比如在门牌号后面加名字）。"
+            message = "这个账号已经有人用了，换一个吧。"
         raise refuse(400, "REGISTER_FAILED", message) from exc
     billing_service.grant(
         email,

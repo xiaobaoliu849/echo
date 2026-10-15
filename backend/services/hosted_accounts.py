@@ -88,7 +88,7 @@ def validate_account_name(account: str) -> str:
     """Return the cleaned short account name or raise ValueError."""
     cleaned = str(account or "").strip()
     if "@" in cleaned or not ACCOUNT_RE.match(cleaned):
-        raise ValueError("账号用 2–30 个字（中文、字母、数字、- 或 _），例如门牌号 1203。")
+        raise ValueError("账号用 2–30 个字（中文、字母、数字、- 或 _），例如 1203。")
     return cleaned
 
 

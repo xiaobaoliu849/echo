@@ -285,7 +285,8 @@ export default function ErrorNotice({ message, scope = "", context, onOpenSettin
           <pre>{diagnostics}</pre>
         </div>
       ) : null}
-      {hints.length > 0 ? (
+      {/* Fix-it hints point at keys and settings neighbours do not have. */}
+      {!IS_HOSTED_BUILD && hints.length > 0 ? (
         <div className="errorHints">
           <p>{t("建议处理方式", "Suggested handling")}</p>
           <ul>

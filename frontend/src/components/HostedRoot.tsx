@@ -77,7 +77,8 @@ export default function HostedRoot() {
           return;
         }
         setPrefs(loaded);
-        setPhase(loaded.onboarded ? "ready" : "onboarding");
+        // Onboarding sets up a learner; the operator account skips it.
+        setPhase(loaded.onboarded || getAuthRuntimeConfig().isAdmin ? "ready" : "onboarding");
       })
       .catch(() => {
         // Preferences are a convenience: never lock the user out over them.
@@ -153,7 +154,7 @@ function HostedLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
     }
     if (mode === "register") {
       if (!inviteCode.trim()) {
-        setError(t("请输入小区邀请码", "Enter the community invite code"));
+        setError(t("请输入邀请码", "Enter the invite code"));
         return;
       }
       if (password.length < 6) {
@@ -203,12 +204,12 @@ function HostedLogin({ onLoggedIn }: { onLoggedIn: () => void }) {
         ) : null}
         {registering ? (
           <label>
-            <span>{t("小区邀请码（小区群里有）", "Community invite code (posted in the group chat)")}</span>
+            <span>{t("邀请码", "Invite code")}</span>
             <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} autoComplete="off" autoCapitalize="characters" />
           </label>
         ) : null}
         <label>
-          <span>{registering ? t("账号（门牌号或昵称，登录用）", "Account (door number or nickname)") : t("账号", "Account")}</span>
+          <span>{registering ? t("账号（昵称或数字，登录用）", "Account (a nickname or number, used to log in)") : t("账号", "Account")}</span>
           <input
             value={account}
             onChange={(e) => setAccount(e.target.value)}

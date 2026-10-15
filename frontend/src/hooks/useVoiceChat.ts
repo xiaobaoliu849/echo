@@ -2107,8 +2107,8 @@ export default function useVoiceChat({
           // Neighbours need to know what to do, not the socket close code.
           const hostedDropMsg = IS_HOSTED_BUILD
             ? t(
-                "通话连接中断了，多半是网络不稳。请重新开始通话；如果开着 VPN 或代理，先关掉再试。",
-                "The call dropped, most likely a network hiccup. Start it again; if a VPN or proxy is on, turn it off first."
+                "通话连接中断了，多半是网络不稳。请检查网络后重新开始通话。",
+                "The call dropped, most likely a network hiccup. Check your connection and start it again."
               )
             : "";
           setVoiceChatError((prev) => prev || authMsg || hostedDropMsg || t(
