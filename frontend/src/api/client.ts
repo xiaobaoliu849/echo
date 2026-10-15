@@ -1618,6 +1618,83 @@ export async function fetchHostedBalance(): Promise<{ account: string; remaining
   return response.json();
 }
 
+// ── hosted operator console (admin token) ──────────────────────────────
+
+export type HostedDailyUsage = { day: string; wall_seconds: number; billed_seconds: number; users: number };
+
+export type HostedAdminUser = {
+  account: string;
+  is_admin: boolean;
+  is_active: boolean;
+  created_at: string | null;
+  remaining_seconds: number;
+  used_seconds: number;
+  last_used_at: number | null;
+};
+
+export type HostedAdminOverview = {
+  days: number;
+  users: HostedAdminUser[];
+  by_model: { provider: string; model: string; wall_seconds: number }[];
+  daily: HostedDailyUsage[];
+  live: { account: string; provider: string; model: string; mode: "relay" | "direct"; elapsed_seconds: number }[];
+};
+
+export type HostedAdminUserDetail = {
+  account: string;
+  remaining_seconds: number;
+  grants: { delta_seconds: number; note: string; created_at: number }[];
+  daily: HostedDailyUsage[];
+};
+
+function viewerUtcOffsetMinutes(): number {
+  return -new Date().getTimezoneOffset();
+}
+
+async function hostedAdminRequest<T>(path: string, body?: unknown): Promise<T> {
+  const init: RequestInit = body === undefined
+    ? {}
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const response = await apiFetch(`${API_BASE_URL}/api/billing/admin/${path}`, init, {
+    useAdminToken: true,
+    timeoutMs: CONTROL_REQUEST_TIMEOUT_MS,
+  });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json() as Promise<T>;
+}
+
+export function fetchHostedAdminOverview(days: number): Promise<HostedAdminOverview> {
+  return hostedAdminRequest(`users?days=${days}&tz=${viewerUtcOffsetMinutes()}`);
+}
+
+export function fetchHostedAdminUserDetail(account: string, days: number): Promise<HostedAdminUserDetail> {
+  const query = new URLSearchParams({ account, days: String(days), tz: String(viewerUtcOffsetMinutes()) });
+  return hostedAdminRequest(`user-detail?${query}`);
+}
+
+export function createHostedAccount(payload: {
+  account: string;
+  password: string;
+  minutes: number;
+  note: string;
+}): Promise<{ account: string; remaining_seconds: number }> {
+  return hostedAdminRequest("users", payload);
+}
+
+export function grantHostedMinutes(account: string, minutes: number, note: string): Promise<{ remaining_seconds: number }> {
+  return hostedAdminRequest("grant", { account, minutes, note });
+}
+
+export function setHostedAccountActive(account: string, active: boolean): Promise<{ ok: boolean }> {
+  return hostedAdminRequest("active", { account, active });
+}
+
+export function resetHostedPassword(account: string, password: string): Promise<{ ok: boolean }> {
+  return hostedAdminRequest("password", { account, password });
+}
+
 export async function fetchSettings(): Promise<SettingsResponse> {
   if (import.meta.env.VITE_HOSTED === "true") {
     // The settings API is closed on a hosted server; the only "settings" a

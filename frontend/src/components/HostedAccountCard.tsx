@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { AUTH_REJECTED_EVENT, clearAuthRuntime, fetchHostedBalance } from "../api";
-import { HOSTED_BALANCE_EVENT, formatRemainingMinutes, type HostedBalanceDetail } from "../hosted";
+import { AUTH_REJECTED_EVENT, clearAuthRuntime, fetchHostedBalance, getAuthRuntimeConfig } from "../api";
+import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, formatRemainingMinutes, type HostedBalanceDetail } from "../hosted";
 
 /** Account card in the sidebar footer: who is logged in and minutes left. */
 export default function HostedAccountCard() {
@@ -49,6 +49,9 @@ export default function HostedAccountCard() {
         </span>
       </div>
       <strong className="hostedAccountMinutesCompact">{minutes}</strong>
+      {getAuthRuntimeConfig().isAdmin ? (
+        <a className="hostedAccountLogout" href={HOSTED_ADMIN_HASH}>管理</a>
+      ) : null}
       <button type="button" className="hostedAccountLogout" onClick={logout}>退出</button>
     </div>
   );

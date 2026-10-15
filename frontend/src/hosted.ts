@@ -6,6 +6,9 @@
 
 export const IS_HOSTED_BUILD = import.meta.env.VITE_HOSTED === "true";
 
+/** Location hash of the operator console (admin accounts only). */
+export const HOSTED_ADMIN_HASH = "#/admin";
+
 /** Server → client billing frames on the voice WebSocket, re-broadcast here. */
 export const HOSTED_BALANCE_EVENT = "echo:hosted-balance";
 

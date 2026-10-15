@@ -52,6 +52,19 @@ class BillingServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.billing.grant("a@x", 0)
 
+    def test_daily_usage_uses_viewer_timezone(self) -> None:
+        self.billing.grant("a@x", 6000, note="WeChat 49")
+        # 2026-10-14 20:00 UTC is already 10-15 in UTC+8.
+        with patch("services.billing_service.time.time", return_value=1792008000):
+            self.billing.charge("a@x", 120, wall_seconds=60, provider="p", model="m")
+            self.billing.charge("b@x", 0, wall_seconds=0, provider="p", model="m")
+        self.assertEqual(self.billing.usage_by_day()[0]["day"], "2026-10-14")
+        [day] = self.billing.usage_by_day(utc_offset_minutes=480)
+        self.assertEqual(day, {"day": "2026-10-15", "wall_seconds": 60, "billed_seconds": 120, "users": 1})
+        self.assertEqual(self.billing.usage_by_day(email="b@x"), [])
+        [grant] = self.billing.grants("A@x")
+        self.assertEqual((grant["delta_seconds"], grant["note"]), (6000, "WeChat 49"))
+
 
 class _FakeWebSocket:
     def __init__(self) -> None:
@@ -247,6 +260,32 @@ class HostedApiTests(unittest.TestCase):
         self.assertEqual(response.json()["remaining_seconds"], 21600)
         listing = self._request("GET", "/api/billing/admin/users", self.admin_token).json()
         self.assertIn("1501", [u["account"] for u in listing["users"]])
+
+    def test_admin_dashboard_and_user_detail(self) -> None:
+        self.billing.grant(USER[0], 600, note="first top-up")
+        self.billing.charge(USER[0], 90, wall_seconds=90, provider="Vercel", model="m")
+        body = self._request("GET", "/api/billing/admin/users?days=7&tz=480", self.admin_token).json()
+        self.assertEqual(body["daily"][0]["wall_seconds"], 90)
+        self.assertEqual(body["live"], [])
+        user = next(u for u in body["users"] if u["account"] == "1203")
+        self.assertEqual((user["remaining_seconds"], user["used_seconds"]), (510, 90))
+        self.assertTrue(user["created_at"])
+        detail = self._request("GET", "/api/billing/admin/user-detail?account=1203", self.admin_token).json()
+        self.assertEqual(detail["remaining_seconds"], 510)
+        self.assertEqual(detail["grants"][0]["note"], "first top-up")
+        self.assertEqual(detail["daily"][0]["billed_seconds"], 90)
+        missing = self._request("GET", "/api/billing/admin/user-detail?account=nobody", self.admin_token)
+        self.assertEqual(missing.status_code, 400)
+        self.assertEqual(
+            self._request("GET", "/api/billing/admin/user-detail?account=1203", self.user_token).status_code, 403
+        )
+
+    def test_admin_cannot_be_disabled(self) -> None:
+        response = self._request(
+            "POST", "/api/billing/admin/active", self.admin_token, json={"account": "boss", "active": False}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._request("GET", "/api/billing/admin/users", self.admin_token).status_code, 200)
 
     def test_disabled_account_loses_access(self) -> None:
         self._request("POST", "/api/billing/admin/active", self.admin_token, json={"account": "1203", "active": False})

@@ -186,4 +186,50 @@ class BillingService:
         ]
 
 
+    def usage_by_day(self, *, since: int = 0, utc_offset_minutes: int = 0, email: str = "") -> list[dict[str, Any]]:
+        """Daily wall-clock and billed usage, bucketed in the viewer's timezone."""
+        shift = f"{int(utc_offset_minutes):+d} minutes"
+        query = """
+            SELECT date(created_at, 'unixepoch', ?) AS day,
+                   SUM(wall_seconds) AS wall_seconds,
+                   -SUM(delta_seconds) AS billed_seconds,
+                   COUNT(DISTINCT user_email) AS users
+            FROM billing_ledger
+            WHERE kind = 'usage' AND created_at >= ?
+        """
+        params: list[Any] = [shift, int(since)]
+        if email:
+            query += " AND user_email = ?"
+            params.append(self._normalize(email))
+        query += " GROUP BY day ORDER BY day"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [
+            {
+                "day": str(r["day"]),
+                "wall_seconds": int(r["wall_seconds"] or 0),
+                "billed_seconds": int(r["billed_seconds"] or 0),
+                "users": int(r["users"] or 0),
+            }
+            for r in rows
+        ]
+
+    def grants(self, email: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Most recent top-ups and corrections for one user, newest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT delta_seconds, note, created_at
+                FROM billing_ledger
+                WHERE user_email = ? AND kind = 'grant'
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (self._normalize(email), int(limit)),
+            ).fetchall()
+        return [
+            {"delta_seconds": int(r["delta_seconds"]), "note": str(r["note"]), "created_at": int(r["created_at"])}
+            for r in rows
+        ]
+
 billing_service = BillingService()

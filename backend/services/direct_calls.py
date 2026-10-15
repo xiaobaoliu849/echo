@@ -152,3 +152,18 @@ class DirectCallRegistry:
     def open_calls(self) -> int:
         with self._lock:
             return len(self._calls)
+
+    def live_calls(self) -> list[dict[str, object]]:
+        self.reap_stale()
+        now = self._now()
+        with self._lock:
+            return [
+                {
+                    "user_email": c.user_email,
+                    "provider": c.provider,
+                    "model": c.model,
+                    "elapsed_seconds": int(now - c.started),
+                    "mode": "direct",
+                }
+                for c in self._calls.values()
+            ]

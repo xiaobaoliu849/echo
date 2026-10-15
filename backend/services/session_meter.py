@@ -19,6 +19,7 @@ import logging
 import math
 import re
 import time
+import weakref
 from typing import Any
 
 from fastapi import WebSocket
@@ -26,6 +27,9 @@ from fastapi import WebSocket
 from .billing_service import BillingService
 
 logger = logging.getLogger(__name__)
+
+# Relayed calls in progress, for the operator dashboard.
+_live_meters: "weakref.WeakSet[SessionMeter]" = weakref.WeakSet()
 
 ACTIVITY_EVENT_TYPES = frozenset(
     {
@@ -99,6 +103,7 @@ class SessionMeter:
         self._warned = False
         self.end_reason = ""
         self._install_send_hook()
+        _live_meters.add(self)
 
     # ── activity tracking ────────────────────────────────────────────────
 
@@ -184,8 +189,22 @@ class SessionMeter:
 
     def finalize(self) -> int:
         """Charge the tail since the last tick. Call once after the session ends."""
+        _live_meters.discard(self)
         try:
             return self._charge_elapsed(final=True)
         except Exception:
             logger.exception("hosted_session_final_charge_failed user=%s", self._user)
             return -1
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "user_email": self._user,
+            "provider": self._provider,
+            "model": self._model,
+            "elapsed_seconds": int(time.monotonic() - self._started),
+            "mode": "relay",
+        }
+
+
+def live_sessions() -> list[dict[str, Any]]:
+    return [meter.snapshot() for meter in list(_live_meters)]

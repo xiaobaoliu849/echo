@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import App from "../App";
+import HostedAdmin from "./HostedAdmin";
 import echoIcon from "../assets/echo-icon.png";
 import { AUTH_REJECTED_EVENT, clearAuthRuntime, getAuthRuntimeConfig, loginAuthUser } from "../api";
 import { formatErrorMessage } from "../utils/errorFormatting";
+import { HOSTED_ADMIN_HASH } from "../hosted";
 import "../styles/hosted.css";
 
 /**
@@ -12,6 +14,13 @@ import "../styles/hosted.css";
  */
 export default function HostedRoot() {
   const [loggedIn, setLoggedIn] = useState(() => Boolean(getAuthRuntimeConfig().apiToken));
+  const [hash, setHash] = useState(() => window.location.hash);
+
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   useEffect(() => {
     const onRejected = () => {
@@ -24,6 +33,19 @@ export default function HostedRoot() {
 
   if (!loggedIn) {
     return <HostedLogin onLoggedIn={() => setLoggedIn(true)} />;
+  }
+  if (hash === HOSTED_ADMIN_HASH && getAuthRuntimeConfig().isAdmin) {
+    return (
+      <HostedAdmin
+        onExit={() => {
+          window.location.hash = "";
+        }}
+        onLogout={() => {
+          clearAuthRuntime();
+          setLoggedIn(false);
+        }}
+      />
+    );
   }
   return <App />;
 }

@@ -197,8 +197,34 @@ async def direct_heartbeat(payload: DirectHeartbeatRequest, request: Request) ->
 # ── operator endpoints (admin token enforced by the auth middleware) ─────
 
 
+def _live_calls() -> list[dict[str, Any]]:
+    from services.session_meter import live_sessions
+
+    calls = live_sessions() + _registry().live_calls()
+    return [
+        {
+            "account": hosted_mode.display_account_id(str(call["user_email"])),
+            "provider": call["provider"],
+            "model": call["model"],
+            "mode": call["mode"],
+            "elapsed_seconds": call["elapsed_seconds"],
+        }
+        for call in sorted(calls, key=lambda c: -int(c["elapsed_seconds"]))
+    ]
+
+
+def _known_email(account: str) -> str:
+    email = hosted_mode.normalize_account_id(account)
+    if email not in {str(u["email"]) for u in user_auth_service.list_users()}:
+        raise _bad_request(ValueError("User not found."))
+    return email
+
+
 @router.get("/admin/users")
-async def admin_list_users(days: int = Query(default=30, ge=1, le=366)) -> dict[str, Any]:
+async def admin_list_users(
+    days: int = Query(default=30, ge=1, le=366),
+    tz: int = Query(default=0, ge=-840, le=840, description="Viewer's UTC offset in minutes, for daily buckets."),
+) -> dict[str, Any]:
     _require_hosted()
     since = int(time.time()) - days * 86400
     usage = {row["user_email"]: row for row in billing_service.usage_summary(since=since)}
@@ -211,6 +237,7 @@ async def admin_list_users(days: int = Query(default=30, ge=1, le=366)) -> dict[
                 "account": hosted_mode.display_account_id(email),
                 "is_admin": bool(user.get("is_admin")),
                 "is_active": bool(user.get("is_active")),
+                "created_at": user.get("created_at"),
                 "remaining_seconds": int(row.get("balance_seconds", 0)),
                 "used_seconds": int(row.get("used_seconds", 0)),
                 "last_used_at": row.get("last_used_at"),
@@ -220,6 +247,25 @@ async def admin_list_users(days: int = Query(default=30, ge=1, le=366)) -> dict[
         "days": days,
         "users": users,
         "by_model": billing_service.usage_by_model(since=since),
+        "daily": billing_service.usage_by_day(since=since, utc_offset_minutes=tz),
+        "live": _live_calls(),
+    }
+
+
+@router.get("/admin/user-detail")
+async def admin_user_detail(
+    account: str = Query(min_length=1, max_length=120),
+    days: int = Query(default=30, ge=1, le=366),
+    tz: int = Query(default=0, ge=-840, le=840),
+) -> dict[str, Any]:
+    _require_hosted()
+    email = _known_email(account)
+    since = int(time.time()) - days * 86400
+    return {
+        "account": hosted_mode.display_account_id(email),
+        "remaining_seconds": billing_service.get_balance(email),
+        "grants": billing_service.grants(email),
+        "daily": billing_service.usage_by_day(since=since, utc_offset_minutes=tz, email=email),
     }
 
 
@@ -240,9 +286,7 @@ async def admin_create_user(payload: CreateAccountRequest) -> dict[str, Any]:
 @router.post("/admin/grant")
 async def admin_grant(payload: GrantRequest) -> dict[str, Any]:
     _require_hosted()
-    email = hosted_mode.normalize_account_id(payload.account)
-    if email not in {str(u["email"]) for u in user_auth_service.list_users()}:
-        raise _bad_request(ValueError("User not found."))
+    email = _known_email(payload.account)
     try:
         balance = billing_service.grant(email, payload.minutes * 60, note=payload.note)
     except ValueError as exc:
@@ -253,8 +297,12 @@ async def admin_grant(payload: GrantRequest) -> dict[str, Any]:
 @router.post("/admin/active")
 async def admin_set_active(payload: SetActiveRequest) -> dict[str, Any]:
     _require_hosted()
+    email = hosted_mode.normalize_account_id(payload.account)
+    if not payload.active and any(u["email"] == email and u.get("is_admin") for u in user_auth_service.list_users()):
+        # Disabling the operator would lock everyone out of this page.
+        raise _bad_request(ValueError("不能停用管理员账号。"))
     try:
-        user_auth_service.set_active(hosted_mode.normalize_account_id(payload.account), payload.active)
+        user_auth_service.set_active(email, payload.active)
     except ValueError as exc:
         raise _bad_request(exc) from exc
     return {"ok": True}
