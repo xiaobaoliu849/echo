@@ -48,9 +48,27 @@ import {
 
 const CONVERSATION_HISTORY_STORAGE_KEY = "vs_conversation_history";
 
+/**
+ * Hosted build: several neighbours (a parent and a child, say) can share one
+ * computer, so each account keeps its own conversation list. The account is
+ * fixed for the App's lifetime (a login or account switch remounts/reloads).
+ */
+function conversationHistoryKey(): string {
+  if (!IS_HOSTED_BUILD) {
+    return CONVERSATION_HISTORY_STORAGE_KEY;
+  }
+  const account = getAuthRuntimeConfig().userEmail.trim().toLowerCase();
+  return `${CONVERSATION_HISTORY_STORAGE_KEY}:${account || "anonymous"}`;
+}
+
 function loadConversationHistory(): ConversationArchiveEntry[] {
   try {
-    const raw = localStorage.getItem(CONVERSATION_HISTORY_STORAGE_KEY);
+    if (IS_HOSTED_BUILD) {
+      // Older hosted builds kept one list for everyone on the device; whose
+      // conversations it holds is unknown, so it is not shown to anyone.
+      localStorage.removeItem(CONVERSATION_HISTORY_STORAGE_KEY);
+    }
+    const raw = localStorage.getItem(conversationHistoryKey());
     if (!raw) {
       return [];
     }
@@ -63,7 +81,7 @@ function loadConversationHistory(): ConversationArchiveEntry[] {
 
 function saveConversationHistory(entries: ConversationArchiveEntry[]): void {
   try {
-    localStorage.setItem(CONVERSATION_HISTORY_STORAGE_KEY, JSON.stringify(entries));
+    localStorage.setItem(conversationHistoryKey(), JSON.stringify(entries));
   } catch {
     // Ignore storage failures in browser-restricted contexts.
   }
