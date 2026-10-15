@@ -8,7 +8,7 @@ import {
 } from "../api";
 import { fillDays, formatElapsed, formatTime, minutes, modelLabel, useSubmit } from "../hostedFormat";
 import { formatErrorMessage } from "../utils/errorFormatting";
-import { DailyChart, Modal, StatTile } from "./HostedUi";
+import { DailyChart, GrantList, LotList, Modal, StatTile } from "./HostedUi";
 
 /** "My account" for a hosted user: balance, how to renew, usage, password. */
 
@@ -54,6 +54,12 @@ export default function HostedAccountPanel({ onClose }: { onClose: () => void })
       </div>
 
       <section className="hostedPanelSection">
+        <h3>有效期</h3>
+        <p className="hostedAdminMuted hostedPanelHint">每次充值的分钟各自计算有效期，通话时先扣最早到期的。</p>
+        {history ? <LotList lots={history.lots} /> : <p className="hostedAdminMuted">加载中…</p>}
+      </section>
+
+      <section className="hostedPanelSection">
         <h3>续费</h3>
         <RenewalBlock renewal={renewal} />
       </section>
@@ -95,17 +101,7 @@ export default function HostedAccountPanel({ onClose }: { onClose: () => void })
       <section className="hostedPanelSection">
         <h3>充值记录</h3>
         {history && history.grants.length > 0 ? (
-          <ul className="hostedAdminGrants">
-            {history.grants.map((grant, index) => (
-              <li key={`${grant.created_at}-${index}`}>
-                <span className="hostedAdminMuted">{formatTime(grant.created_at)}</span>
-                <span className={grant.delta_seconds < 0 ? "hostedAdminLow" : ""}>
-                  {grant.delta_seconds > 0 ? "+" : ""}{minutes(grant.delta_seconds)} 分钟
-                </span>
-                <span>{grant.note || "—"}</span>
-              </li>
-            ))}
-          </ul>
+          <GrantList grants={history.grants} />
         ) : (
           <p className="hostedAdminMuted">{history ? "还没有充值记录。" : ""}</p>
         )}

@@ -987,3 +987,54 @@ a.hostedAccountLogout {
     flex-wrap: wrap;
   }
 }
+
+/* Minutes by top-up with their expiry ("My account" and admin detail). */
+.hostedLotList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--step--1);
+}
+
+.hostedLotList li {
+  display: grid;
+  grid-template-columns: 80px 120px 1fr;
+  align-items: baseline;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hostedLotList li.is-soon span:nth-child(2) {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.hostedPanelHint {
+  margin: -4px 0 8px;
+}
+
+.hostedAccountExpiring {
+  font-size: var(--step--1);
+  color: var(--danger);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The card is narrow (more so with the admin button): keep each line whole. */
+.hostedAccountMinutes {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .hostedLotList li {
+    grid-template-columns: 70px 1fr;
+  }
+
+  .hostedLotList li > :nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}

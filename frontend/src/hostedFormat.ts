@@ -6,8 +6,12 @@ import { formatErrorMessage } from "./utils/errorFormatting";
 // Formatting and form helpers shared by the hosted account and admin pages.
 
 export function minutes(seconds: number): string {
+  // Round down: a balance must never look bigger than it is.
   const value = seconds / 60;
-  return value >= 100 || Number.isInteger(value) ? String(Math.round(value)) : value.toFixed(1);
+  if (Math.abs(value) >= 100 || Number.isInteger(value)) {
+    return String(Math.trunc(value));
+  }
+  return (Math.trunc(value * 10) / 10).toFixed(1);
 }
 
 export function formatTime(epochSeconds: number | null | undefined): string {
@@ -17,6 +21,13 @@ export function formatTime(epochSeconds: number | null | undefined): string {
   const date = new Date(epochSeconds * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Calendar date, e.g. 2027-01-13; for expiry dates a year away. */
+export function formatDate(epochSeconds: number): string {
+  const date = new Date(epochSeconds * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 export function formatElapsed(seconds: number): string {

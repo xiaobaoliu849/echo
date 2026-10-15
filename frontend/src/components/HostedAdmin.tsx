@@ -15,7 +15,7 @@ import {
 } from "../api";
 import { fillDays, formatElapsed, formatTime, minutes, modelLabel, useSubmit } from "../hostedFormat";
 import { formatErrorMessage } from "../utils/errorFormatting";
-import { DailyChart, Modal, StatTile } from "./HostedUi";
+import { DailyChart, GrantList, LotList, Modal, StatTile } from "./HostedUi";
 
 /**
  * Operator console for a hosted server: accounts, top-ups and usage.
@@ -268,10 +268,15 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
       </main>
 
       {dialog?.kind === "create" ? (
-        <CreateDialog onClose={() => setDialog(null)} onDone={done} />
+        <CreateDialog validDays={overview?.minutes_valid_days ?? 0} onClose={() => setDialog(null)} onDone={done} />
       ) : null}
       {dialog?.kind === "grant" ? (
-        <GrantDialog user={dialog.user} onClose={() => setDialog(null)} onDone={done} />
+        <GrantDialog
+          user={dialog.user}
+          validDays={overview?.minutes_valid_days ?? 0}
+          onClose={() => setDialog(null)}
+          onDone={done}
+        />
       ) : null}
       {dialog?.kind === "password" ? (
         <PasswordDialog user={dialog.user} onClose={() => setDialog(null)} onDone={done} />
@@ -410,7 +415,19 @@ function PasswordField({ value, onChange }: { value: string; onChange: (value: s
   );
 }
 
-function CreateDialog({ onClose, onDone }: { onClose: () => void; onDone: (message: string) => void }) {
+function validityNote(validDays: number): string {
+  return validDays > 0 ? `新加的分钟 ${validDays} 天内有效，先到期的先扣。` : "新加的分钟长期有效。";
+}
+
+function CreateDialog({
+  validDays,
+  onClose,
+  onDone,
+}: {
+  validDays: number;
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
   const [account, setAccount] = useState("");
   const [password, setPassword] = useState(generatePassword);
   const [mins, setMins] = useState("60");
@@ -448,7 +465,7 @@ function CreateDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
         </label>
         <PasswordField value={password} onChange={setPassword} />
         <label>
-          <span>赠送 / 首充分钟</span>
+          <span>赠送 / 首充分钟（{validityNote(validDays)}）</span>
           <input type="number" min={0} max={100000} value={mins} onChange={(e) => setMins(e.target.value)} />
         </label>
         <label>
@@ -469,10 +486,12 @@ const GRANT_PRESETS = [60, 300, 600, 1200];
 
 function GrantDialog({
   user,
+  validDays,
   onClose,
   onDone,
 }: {
   user: HostedAdminUser;
+  validDays: number;
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
@@ -493,7 +512,9 @@ function GrantDialog({
   return (
     <Modal title={`给 ${user.account} 加时长`} onClose={onClose}>
       <form className="hostedAdminForm" onSubmit={submit}>
-        <p className="hostedAdminMuted">当前剩余 {minutes(user.remaining_seconds)} 分钟。负数表示扣减（纠错用）。</p>
+        <p className="hostedAdminMuted">
+          当前剩余 {minutes(user.remaining_seconds)} 分钟。{validityNote(validDays)}负数表示扣减（纠错用）。
+        </p>
         <div className="hostedAdminChips">
           {GRANT_PRESETS.map((preset) => (
             <button
@@ -602,19 +623,11 @@ function DetailDialog({
       </div>
       <h3>每日通话</h3>
       {detail ? <DailyChart daily={fillDays(detail.daily, days)} /> : <p className="hostedAdminMuted">加载中…</p>}
+      <h3>可用分钟（有效期）</h3>
+      {detail ? <LotList lots={detail.lots} /> : null}
       <h3>充值记录</h3>
       {detail && detail.grants.length > 0 ? (
-        <ul className="hostedAdminGrants">
-          {detail.grants.map((grant, index) => (
-            <li key={`${grant.created_at}-${index}`}>
-              <span className="hostedAdminMuted">{formatTime(grant.created_at)}</span>
-              <span className={grant.delta_seconds < 0 ? "hostedAdminLow" : ""}>
-                {grant.delta_seconds > 0 ? "+" : ""}{minutes(grant.delta_seconds)} 分钟
-              </span>
-              <span>{grant.note || "—"}</span>
-            </li>
-          ))}
-        </ul>
+        <GrantList grants={detail.grants} />
       ) : (
         <p className="hostedAdminMuted">{detail ? "还没有充值记录。" : ""}</p>
       )}

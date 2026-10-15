@@ -1,8 +1,11 @@
 """Per-user realtime minutes balance for hosted mode.
 
-Balances are kept in whole seconds. Every change is written to
-``billing_ledger`` in the same transaction as the balance update, so the
-balance can always be reconciled against its history.
+Balances are kept in whole seconds. Every top-up is a *lot* in
+``billing_lots`` with its own expiry; usage drains the lot that expires
+first, and a lot that expires unused is written off. The balance is the
+sum of unexpired lots (``billing_balances`` caches it for listings), and
+every change is written to ``billing_ledger`` in the same transaction, so
+it can always be reconciled against its history.
 """
 
 from __future__ import annotations
@@ -57,19 +60,121 @@ class BillingService:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_billing_ledger_user ON billing_ledger(user_email, created_at)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS billing_lots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_email TEXT NOT NULL,
+                    granted_seconds INTEGER NOT NULL,
+                    remaining_seconds INTEGER NOT NULL,
+                    expires_at INTEGER,
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_billing_lots_user ON billing_lots(user_email, remaining_seconds)"
+            )
+            # Balances from before lots existed become one lot that never
+            # expires, so nobody loses minutes they already had.
+            conn.execute(
+                """
+                INSERT INTO billing_lots (user_email, granted_seconds, remaining_seconds, expires_at, note, created_at)
+                SELECT b.user_email, b.balance_seconds, b.balance_seconds, NULL, 'legacy', b.updated_at
+                FROM billing_balances b
+                WHERE b.balance_seconds > 0
+                  AND NOT EXISTS (SELECT 1 FROM billing_lots l WHERE l.user_email = b.user_email)
+                """
+            )
             conn.commit()
 
     @staticmethod
     def _normalize(email: str) -> str:
         return str(email or "").strip().lower()
 
+    @staticmethod
+    def _unexpired_total(conn, user: str, now: int) -> int:
+        row = conn.execute(
+            """
+            SELECT COALESCE(SUM(remaining_seconds), 0) AS total
+            FROM billing_lots
+            WHERE user_email = ? AND remaining_seconds > 0 AND (expires_at IS NULL OR expires_at > ?)
+            """,
+            (user, now),
+        ).fetchone()
+        return int(row["total"] or 0)
+
+    @staticmethod
+    def _ledger(
+        conn,
+        user: str,
+        kind: str,
+        delta: int,
+        now: int,
+        *,
+        wall: int = 0,
+        provider: str = "",
+        model: str = "",
+        note: str = "",
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO billing_ledger
+                (user_email, kind, delta_seconds, wall_seconds, provider, model, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (user, kind, int(delta), int(wall), provider, model, note, now),
+        )
+
+    @staticmethod
+    def _store_balance(conn, user: str, balance: int, now: int) -> None:
+        conn.execute(
+            """
+            INSERT INTO billing_balances (user_email, balance_seconds, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_email) DO UPDATE SET
+                balance_seconds = excluded.balance_seconds,
+                updated_at = excluded.updated_at
+            """,
+            (user, balance, now),
+        )
+
+    def _expire_locked(self, conn, user: str, now: int) -> None:
+        """Write off lots that expired unused. Caller holds the write lock."""
+        rows = conn.execute(
+            """
+            SELECT id, remaining_seconds FROM billing_lots
+            WHERE user_email = ? AND remaining_seconds > 0 AND expires_at IS NOT NULL AND expires_at <= ?
+            """,
+            (user, now),
+        ).fetchall()
+        if not rows:
+            return
+        expired = sum(int(r["remaining_seconds"]) for r in rows)
+        conn.executemany("UPDATE billing_lots SET remaining_seconds = 0 WHERE id = ?", [(r["id"],) for r in rows])
+        self._ledger(conn, user, "expire", -expired, now, note=f"{len(rows)} 笔到期")
+        self._store_balance(conn, user, self._unexpired_total(conn, user, now), now)
+
     def get_balance(self, email: str) -> int:
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT balance_seconds FROM billing_balances WHERE user_email = ?",
-                (self._normalize(email),),
-            ).fetchone()
-        return int(row["balance_seconds"]) if row else 0
+            return self._unexpired_total(conn, self._normalize(email), int(time.time()))
+
+    def expire_due(self) -> None:
+        """Write off every expired lot, so cached balances and the ledger agree."""
+        now = int(time.time())
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            users = conn.execute(
+                """
+                SELECT DISTINCT user_email FROM billing_lots
+                WHERE remaining_seconds > 0 AND expires_at IS NOT NULL AND expires_at <= ?
+                """,
+                (now,),
+            ).fetchall()
+            for row in users:
+                self._expire_locked(conn, str(row["user_email"]), now)
+            conn.commit()
 
     def _apply(
         self,
@@ -81,45 +186,92 @@ class BillingService:
         provider: str = "",
         model: str = "",
         note: str = "",
+        valid_days: int = 0,
     ) -> int:
         user = self._normalize(email)
         now = int(time.time())
+        delta = int(delta_seconds)
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            row = conn.execute(
-                "SELECT balance_seconds FROM billing_balances WHERE user_email = ?",
-                (user,),
-            ).fetchone()
-            current = int(row["balance_seconds"]) if row else 0
-            # Usage never drives the balance negative; the meter hangs up at 0,
-            # so any overshoot is at most one metering tick.
-            new_balance = max(0, current + int(delta_seconds))
-            applied = new_balance - current
-            conn.execute(
-                """
-                INSERT INTO billing_balances (user_email, balance_seconds, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(user_email) DO UPDATE SET
-                    balance_seconds = excluded.balance_seconds,
-                    updated_at = excluded.updated_at
-                """,
-                (user, new_balance, now),
-            )
-            conn.execute(
-                """
-                INSERT INTO billing_ledger
-                    (user_email, kind, delta_seconds, wall_seconds, provider, model, note, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (user, kind, applied, int(wall_seconds), provider, model, note, now),
+            self._expire_locked(conn, user, now)
+            current = self._unexpired_total(conn, user, now)
+            if delta > 0:
+                expires_at = now + int(valid_days) * 86400 if valid_days > 0 else None
+                conn.execute(
+                    """
+                    INSERT INTO billing_lots
+                        (user_email, granted_seconds, remaining_seconds, expires_at, note, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (user, delta, delta, expires_at, note, now),
+                )
+            elif delta < 0:
+                # Drain the lot that expires first; never-expiring lots last.
+                # Usage never drives the balance negative; the meter hangs up
+                # at 0, so any overshoot is at most one metering tick.
+                need = -delta
+                lots = conn.execute(
+                    """
+                    SELECT id, remaining_seconds FROM billing_lots
+                    WHERE user_email = ? AND remaining_seconds > 0 AND (expires_at IS NULL OR expires_at > ?)
+                    ORDER BY expires_at IS NULL, expires_at, id
+                    """,
+                    (user, now),
+                ).fetchall()
+                for lot in lots:
+                    if need <= 0:
+                        break
+                    take = min(need, int(lot["remaining_seconds"]))
+                    conn.execute(
+                        "UPDATE billing_lots SET remaining_seconds = remaining_seconds - ? WHERE id = ?",
+                        (take, lot["id"]),
+                    )
+                    need -= take
+            new_balance = self._unexpired_total(conn, user, now)
+            self._store_balance(conn, user, new_balance, now)
+            self._ledger(
+                conn,
+                user,
+                kind,
+                new_balance - current,
+                now,
+                wall=wall_seconds,
+                provider=provider,
+                model=model,
+                note=note,
             )
             conn.commit()
         return new_balance
 
-    def grant(self, email: str, seconds: int, *, note: str = "") -> int:
+    def grant(self, email: str, seconds: int, *, note: str = "", valid_days: int = 0) -> int:
+        """Add (or, negative, deduct) minutes; new minutes expire after ``valid_days`` (0 = never)."""
         if int(seconds) == 0:
             raise ValueError("Grant amount must be non-zero.")
-        return self._apply(email, int(seconds), kind="grant", note=note)
+        return self._apply(email, int(seconds), kind="grant", note=note, valid_days=valid_days)
+
+    def active_lots(self, email: str) -> list[dict[str, Any]]:
+        """Unexpired minutes by lot, soonest expiry first (``expires_at`` None = never)."""
+        now = int(time.time())
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT remaining_seconds, granted_seconds, expires_at, note, created_at
+                FROM billing_lots
+                WHERE user_email = ? AND remaining_seconds > 0 AND (expires_at IS NULL OR expires_at > ?)
+                ORDER BY expires_at IS NULL, expires_at, id
+                """,
+                (self._normalize(email), now),
+            ).fetchall()
+        return [
+            {
+                "remaining_seconds": int(r["remaining_seconds"]),
+                "granted_seconds": int(r["granted_seconds"]),
+                "expires_at": int(r["expires_at"]) if r["expires_at"] is not None else None,
+                "note": str(r["note"]),
+                "created_at": int(r["created_at"]),
+            }
+            for r in rows
+        ]
 
     def charge(
         self,
@@ -143,6 +295,7 @@ class BillingService:
 
     def usage_summary(self, *, since: int = 0) -> list[dict[str, Any]]:
         """Per-user balance plus wall-clock usage since ``since`` (epoch secs)."""
+        self.expire_due()
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -215,20 +368,25 @@ class BillingService:
         ]
 
     def grants(self, email: str, *, limit: int = 50) -> list[dict[str, Any]]:
-        """Most recent top-ups and corrections for one user, newest first."""
+        """Most recent top-ups, corrections and expiries for one user, newest first."""
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT delta_seconds, note, created_at
+                SELECT kind, delta_seconds, note, created_at
                 FROM billing_ledger
-                WHERE user_email = ? AND kind = 'grant'
+                WHERE user_email = ? AND kind IN ('grant', 'expire') AND delta_seconds != 0
                 ORDER BY created_at DESC, id DESC
                 LIMIT ?
                 """,
                 (self._normalize(email), int(limit)),
             ).fetchall()
         return [
-            {"delta_seconds": int(r["delta_seconds"]), "note": str(r["note"]), "created_at": int(r["created_at"])}
+            {
+                "kind": str(r["kind"]),
+                "delta_seconds": int(r["delta_seconds"]),
+                "note": str(r["note"]),
+                "created_at": int(r["created_at"]),
+            }
             for r in rows
         ]
 

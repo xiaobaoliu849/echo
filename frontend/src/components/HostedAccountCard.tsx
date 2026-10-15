@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import HostedAccountPanel from "./HostedAccountPanel";
-import { AUTH_REJECTED_EVENT, clearAuthRuntime, fetchHostedBalance, getAuthRuntimeConfig } from "../api";
+import {
+  AUTH_REJECTED_EVENT,
+  clearAuthRuntime,
+  fetchHostedBalance,
+  getAuthRuntimeConfig,
+  type HostedExpiringSoon,
+} from "../api";
+import { formatTime, minutes as formatMinutes } from "../hostedFormat";
 import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, formatRemainingMinutes, type HostedBalanceDetail } from "../hosted";
 
 /** Account card in the sidebar footer: who is logged in and minutes left. */
@@ -8,6 +15,7 @@ export default function HostedAccountCard() {
   const [account, setAccount] = useState("");
   const [remaining, setRemaining] = useState<number | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [expiring, setExpiring] = useState<HostedExpiringSoon>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -17,6 +25,7 @@ export default function HostedAccountCard() {
           if (!cancelled) {
             setAccount(me.account);
             setRemaining(me.remaining_seconds);
+            setExpiring(me.expiring_soon ?? null);
           }
         })
         .catch(() => undefined);
@@ -55,6 +64,14 @@ export default function HostedAccountCard() {
           <span className="hostedAccountMinutes">
             剩余 <strong>{minutes}</strong> 分钟
           </span>
+          {expiring ? (
+            <span
+              className="hostedAccountExpiring"
+              title={`${formatMinutes(expiring.seconds)} 分钟将于 ${formatTime(expiring.expires_at)} 到期`}
+            >
+              {formatTime(expiring.expires_at).slice(0, 5)} 到期 {formatMinutes(expiring.seconds)} 分
+            </span>
+          ) : null}
         </span>
         <strong className="hostedAccountMinutesCompact">{minutes}</strong>
       </button>

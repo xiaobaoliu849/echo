@@ -62,7 +62,7 @@ def _create(account: str, password: str, minutes: int, *, admin: bool) -> None:
         sys.exit("请先用 add-admin 创建管理员账号（第一个账号自动成为管理员）。")
     user_auth_service.register_user(email, password)
     if minutes:
-        billing_service.grant(email, minutes * 60, note="initial")
+        billing_service.grant(email, minutes * 60, note="initial", valid_days=hosted_mode.minutes_valid_days())
     print(f"已创建 {account}，剩余 {billing_service.get_balance(email) // 60} 分钟")
 
 
@@ -78,7 +78,9 @@ def cmd_grant(args: argparse.Namespace) -> None:
     email = hosted_mode.normalize_account_id(args.account)
     if email not in {str(u["email"]) for u in user_auth_service.list_users()}:
         sys.exit(f"找不到账号 {args.account}")
-    balance = billing_service.grant(email, args.minutes * 60, note=args.note)
+    balance = billing_service.grant(
+        email, args.minutes * 60, note=args.note, valid_days=hosted_mode.minutes_valid_days()
+    )
     print(f"{args.account} 现在剩余 {_minutes(balance)} 分钟")
 
 

@@ -1611,7 +1611,14 @@ export async function fetchHostedInfo(): Promise<HostedInfo> {
   return response.json();
 }
 
-export async function fetchHostedBalance(): Promise<{ account: string; remaining_seconds: number }> {
+/** Minutes that lapse within the server's warning window, if any. */
+export type HostedExpiringSoon = { seconds: number; expires_at: number } | null;
+
+export async function fetchHostedBalance(): Promise<{
+  account: string;
+  remaining_seconds: number;
+  expiring_soon?: HostedExpiringSoon;
+}> {
   const response = await apiFetch(`${API_BASE_URL}/api/billing/me`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
@@ -1628,7 +1635,17 @@ export type HostedCallRecord = {
   billed_seconds: number;
 };
 
-export type HostedGrantRecord = { delta_seconds: number; note: string; created_at: number };
+/** A top-up or deduction (kind "grant") or minutes written off unused (kind "expire"). */
+export type HostedGrantRecord = { kind?: "grant" | "expire"; delta_seconds: number; note: string; created_at: number };
+
+/** Unused minutes from one top-up; `expires_at` null = never expires. */
+export type HostedLot = {
+  remaining_seconds: number;
+  granted_seconds: number;
+  expires_at: number | null;
+  note: string;
+  created_at: number;
+};
 
 export type HostedHistory = {
   account: string;
@@ -1636,6 +1653,7 @@ export type HostedHistory = {
   daily: HostedDailyUsage[];
   calls: HostedCallRecord[];
   grants: HostedGrantRecord[];
+  lots: HostedLot[];
 };
 
 /** Renewal instructions set by the operator; `qr` is a data: URL or "". */
@@ -1677,6 +1695,8 @@ export type HostedAdminUser = {
 
 export type HostedAdminOverview = {
   days: number;
+  /** Days a new top-up stays valid; 0 = never expires. */
+  minutes_valid_days: number;
   users: HostedAdminUser[];
   by_model: { provider: string; model: string; wall_seconds: number }[];
   daily: HostedDailyUsage[];
@@ -1687,6 +1707,7 @@ export type HostedAdminUserDetail = {
   account: string;
   remaining_seconds: number;
   grants: HostedGrantRecord[];
+  lots: HostedLot[];
   daily: HostedDailyUsage[];
 };
 

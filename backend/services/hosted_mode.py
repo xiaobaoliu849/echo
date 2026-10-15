@@ -55,6 +55,10 @@ DEFAULT_LOW_BALANCE_WARNING_SECONDS = 300
 # Live models re-bill the whole context every turn, so per-minute cost grows
 # with call length; a 15 min cap keeps the worst case bounded.
 DEFAULT_MAX_SESSION_SECONDS = 15 * 60
+# Minutes from each top-up expire this many days later (0 = never), which
+# caps how long sold-but-unused minutes stay a liability.
+DEFAULT_MINUTES_VALID_DAYS = 90
+EXPIRY_WARNING_DAYS = 7
 
 _config = BackendConfig()
 
@@ -97,6 +101,14 @@ def low_balance_warning_seconds() -> int:
 
 def max_session_seconds() -> int:
     return _int_setting("max_session_seconds", DEFAULT_MAX_SESSION_SECONDS)
+
+
+def minutes_valid_days() -> int:
+    try:
+        value = int(_hosted_settings().get("minutes_valid_days", DEFAULT_MINUTES_VALID_DAYS))
+    except (TypeError, ValueError):
+        return DEFAULT_MINUTES_VALID_DAYS
+    return max(0, value)
 
 
 def hosted_providers() -> dict[str, dict[str, Any]]:

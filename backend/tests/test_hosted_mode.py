@@ -52,6 +52,67 @@ class BillingServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.billing.grant("a@x", 0)
 
+    def _at(self, when: int):
+        return patch("services.billing_service.time.time", return_value=when)
+
+    def test_soonest_expiring_lot_is_used_first(self) -> None:
+        day = 86400
+        with self._at(1000):
+            self.billing.grant("a@x", 600, valid_days=90, note="big")
+        with self._at(2000):
+            self.billing.grant("a@x", 300, valid_days=10, note="short")
+            self.billing.grant("a@x", 100, note="forever")
+            self.assertEqual(self.billing.charge("a@x", 350, wall_seconds=350, provider="p", model="m"), 650)
+            lots = self.billing.active_lots("a@x")
+        # The 10-day lot drains first, then the 90-day one; the never-expiring
+        # lot is kept for last.
+        self.assertEqual([(lot["note"], lot["remaining_seconds"]) for lot in lots], [("big", 550), ("forever", 100)])
+        self.assertEqual(lots[0]["expires_at"], 1000 + 90 * day)
+        self.assertIsNone(lots[1]["expires_at"])
+
+    def test_unused_minutes_expire(self) -> None:
+        day = 86400
+        with self._at(1000):
+            self.billing.grant("a@x", 600, valid_days=30)
+            self.billing.charge("a@x", 100, wall_seconds=100, provider="p", model="m")
+        with self._at(1000 + 30 * day - 1):
+            self.assertEqual(self.billing.get_balance("a@x"), 500)
+        with self._at(1000 + 30 * day):
+            self.assertEqual(self.billing.get_balance("a@x"), 0)
+            self.billing.expire_due()
+            [row] = self.billing.usage_summary()
+            # A new top-up after expiry starts from zero, not from the lapsed lot.
+            self.assertEqual(self.billing.grant("a@x", 60, valid_days=30), 60)
+        self.assertEqual(row["balance_seconds"], 0)
+        expired = [g for g in self.billing.grants("a@x") if g["kind"] == "expire"]
+        self.assertEqual([g["delta_seconds"] for g in expired], [-500])
+
+    def test_deduction_takes_from_lots(self) -> None:
+        with self._at(1000):
+            self.billing.grant("a@x", 600, valid_days=90)
+            self.assertEqual(self.billing.grant("a@x", -200), 400)
+            self.assertEqual(self.billing.grant("a@x", -1000), 0)
+            self.assertEqual(self.billing.active_lots("a@x"), [])
+
+    def test_existing_balances_become_a_lot_that_never_expires(self) -> None:
+        import sqlite3
+
+        db = Path(self._tmp.name) / "legacy.db"
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE billing_balances (user_email TEXT PRIMARY KEY, balance_seconds INTEGER NOT NULL DEFAULT 0,"
+            " updated_at INTEGER NOT NULL)"
+        )
+        conn.execute("INSERT INTO billing_balances VALUES ('old@x', 900, 5), ('empty@x', 0, 5)")
+        conn.commit()
+        conn.close()  # Windows cannot delete the temp dir while it is open
+        legacy = BillingService(db_path=db)
+        self.assertEqual(legacy.get_balance("old@x"), 900)
+        self.assertIsNone(legacy.active_lots("old@x")[0]["expires_at"])
+        self.assertEqual(legacy.active_lots("empty@x"), [])
+        BillingService(db_path=db)  # re-running the migration adds nothing
+        self.assertEqual(legacy.get_balance("old@x"), 900)
+
     def test_ticks_are_grouped_into_calls(self) -> None:
         self.billing.grant("a@x", 6000)
         clock = iter([1000, 1005, 1010, 1300, 1305, 1310])
@@ -251,7 +312,9 @@ class HostedApiTests(unittest.TestCase):
         self.assertEqual(self._request("GET", "/api/billing/me").status_code, 401)
         self.billing.grant(USER[0], 300)
         response = self._request("GET", "/api/billing/me", self.user_token)
-        self.assertEqual(response.json(), {"account": "1203", "remaining_seconds": 300})
+        self.assertEqual(
+            response.json(), {"account": "1203", "remaining_seconds": 300, "expiring_soon": None}
+        )
 
     def test_hosted_info_is_public(self) -> None:
         body = self._request("GET", "/api/billing/hosted-info").json()
@@ -307,6 +370,19 @@ class HostedApiTests(unittest.TestCase):
         self.assertEqual(
             self._request("GET", "/api/billing/admin/user-detail?account=1203", self.user_token).status_code, 403
         )
+
+    def test_top_ups_expire_after_configured_days(self) -> None:
+        from services import hosted_mode
+
+        with patch.object(hosted_mode, "_hosted_settings", return_value={"minutes_valid_days": 5}):
+            self._request("POST", "/api/billing/admin/grant", self.admin_token, json={"account": "1203", "minutes": 10})
+            me = self._request("GET", "/api/billing/me", self.user_token).json()
+            listing = self._request("GET", "/api/billing/admin/users", self.admin_token).json()
+        self.assertEqual(me["expiring_soon"]["seconds"], 600)
+        self.assertEqual(listing["minutes_valid_days"], 5)
+        history = self._request("GET", "/api/billing/me/history", self.user_token).json()
+        [lot] = history["lots"]
+        self.assertAlmostEqual(lot["expires_at"] - lot["created_at"], 5 * 86400)
 
     def test_my_history(self) -> None:
         self.billing.grant(USER[0], 600, note="WeChat 49")

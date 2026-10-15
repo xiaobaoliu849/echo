@@ -127,7 +127,17 @@ async def my_balance(
     return {
         "account": hosted_mode.display_account_id(email),
         "remaining_seconds": billing_service.get_balance(email),
+        "expiring_soon": _expiring_soon(billing_service.active_lots(email)),
     }
+
+
+def _expiring_soon(lots: list[dict[str, Any]]) -> dict[str, int] | None:
+    """Minutes that lapse within the warning window, for a reminder."""
+    horizon = int(time.time()) + hosted_mode.EXPIRY_WARNING_DAYS * 86400
+    due = [lot for lot in lots if lot["expires_at"] is not None and lot["expires_at"] <= horizon]
+    if not due:
+        return None
+    return {"seconds": sum(lot["remaining_seconds"] for lot in due), "expires_at": min(lot["expires_at"] for lot in due)}
 
 
 async def _forward_to_server(method: str, path: str, authorization: str | None) -> Any:
@@ -155,6 +165,7 @@ async def my_history(
         "daily": billing_service.usage_by_day(since=since, utc_offset_minutes=tz, email=email),
         "calls": billing_service.recent_calls(email, since=since),
         "grants": billing_service.grants(email, limit=20),
+        "lots": billing_service.active_lots(email),
     }
 
 
@@ -297,6 +308,7 @@ async def admin_list_users(
         )
     return {
         "days": days,
+        "minutes_valid_days": hosted_mode.minutes_valid_days(),
         "users": users,
         "by_model": billing_service.usage_by_model(since=since),
         "daily": billing_service.usage_by_day(since=since, utc_offset_minutes=tz),
@@ -317,6 +329,7 @@ async def admin_user_detail(
         "account": hosted_mode.display_account_id(email),
         "remaining_seconds": billing_service.get_balance(email),
         "grants": billing_service.grants(email),
+        "lots": billing_service.active_lots(email),
         "daily": billing_service.usage_by_day(since=since, utc_offset_minutes=tz, email=email),
     }
 
@@ -331,7 +344,9 @@ async def admin_create_user(payload: CreateAccountRequest) -> dict[str, Any]:
         raise _bad_request(exc) from exc
     balance = billing_service.get_balance(email)
     if payload.minutes:
-        balance = billing_service.grant(email, payload.minutes * 60, note=payload.note or "initial")
+        balance = billing_service.grant(
+            email, payload.minutes * 60, note=payload.note or "initial", valid_days=hosted_mode.minutes_valid_days()
+        )
     return {"account": hosted_mode.display_account_id(email), "remaining_seconds": balance}
 
 
@@ -340,7 +355,9 @@ async def admin_grant(payload: GrantRequest) -> dict[str, Any]:
     _require_hosted()
     email = _known_email(payload.account)
     try:
-        balance = billing_service.grant(email, payload.minutes * 60, note=payload.note)
+        balance = billing_service.grant(
+            email, payload.minutes * 60, note=payload.note, valid_days=hosted_mode.minutes_valid_days()
+        )
     except ValueError as exc:
         raise _bad_request(exc) from exc
     return {"account": hosted_mode.display_account_id(email), "remaining_seconds": balance}

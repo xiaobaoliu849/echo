@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { HostedDailyUsage } from "../api";
-import { minutes } from "../hostedFormat";
+import type { HostedDailyUsage, HostedGrantRecord, HostedLot } from "../api";
+import { formatDate, formatTime, minutes } from "../hostedFormat";
 
 // Building blocks shared by the hosted "My account" panel and admin console.
 
@@ -96,5 +96,43 @@ export function Modal({
       </div>
     </div>,
     document.body,
+  );
+}
+
+const EXPIRY_WARNING_SECONDS = 7 * 86400;
+
+/** Unused minutes per top-up with their expiry, soonest first. */
+export function LotList({ lots }: { lots: HostedLot[] }) {
+  if (lots.length === 0) {
+    return <p className="hostedAdminMuted">没有可用分钟。</p>;
+  }
+  const soon = Date.now() / 1000 + EXPIRY_WARNING_SECONDS;
+  return (
+    <ul className="hostedLotList">
+      {lots.map((lot, index) => (
+        <li key={`${lot.created_at}-${index}`} className={lot.expires_at !== null && lot.expires_at <= soon ? "is-soon" : ""}>
+          <strong className="hostedAdminNum">{minutes(lot.remaining_seconds)} 分钟</strong>
+          <span>{lot.expires_at === null ? "长期有效" : `${formatDate(lot.expires_at)} 到期`}</span>
+          <span className="hostedAdminMuted">{formatTime(lot.created_at)} 充值 {minutes(lot.granted_seconds)} 分钟</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Top-ups, deductions and expiries, newest first. */
+export function GrantList({ grants }: { grants: HostedGrantRecord[] }) {
+  return (
+    <ul className="hostedAdminGrants">
+      {grants.map((grant, index) => (
+        <li key={`${grant.created_at}-${index}`}>
+          <span className="hostedAdminMuted">{formatTime(grant.created_at)}</span>
+          <span className={grant.delta_seconds < 0 ? "hostedAdminLow" : ""}>
+            {grant.delta_seconds > 0 ? "+" : ""}{minutes(grant.delta_seconds)} 分钟
+          </span>
+          <span>{grant.kind === "expire" ? "到期作废" : grant.note || "—"}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
