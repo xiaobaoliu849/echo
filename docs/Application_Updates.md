@@ -80,6 +80,27 @@ Old 1.0.1 installations require a manual check in Settings → System to receive
 this first release. They cannot acquire the new background checks and notices until
 they install the version containing it.
 
+## Community installer (hosted accounts)
+
+The community build (`scripts/build_community.ps1`) does not use the GitHub
+feed. `electron/community-config.json` carries `updates`, an electron-updater
+**generic** feed URL (`-UpdatesUrl`, default `<Server>/updates/`); `main.js`
+sets it with `setFeedURL` and starts the same checks (30 s after launch, then
+every six hours). On the operator server's host the updater's session accepts
+only the pinned `community-server.pem`; any other host (e.g. object storage)
+keeps normal certificate checks.
+
+Users see the controls in **Settings → General** and the same dismissible
+notice, which opens that tab.
+
+To release: build with `-Version` (and optionally `-ReleaseNotes`), then upload
+`latest.yml`, `Echo-Community-Setup-<version>.exe` and its `.blockmap` from
+`electron/dist-community` to the feed. Upload the installer and blockmap before
+`latest.yml`, so clients never see a manifest whose installer is missing.
+
+Community copies before the first build with this feature (1.0.11 and older)
+never check for updates; they need one manual reinstall.
+
 ## Evidence and remaining gates
 
 On 2026-09-20 the public repository had stable v1.0.1 with an installer,

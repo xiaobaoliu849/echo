@@ -16,13 +16,20 @@
   -Version stamps the community installer on its own (e.g. 1.0.5) without
   bumping electron/package.json, which the regular desktop release shares.
 
+  Installed copies check an electron-updater generic feed: -UpdatesUrl, or
+  <Server>/updates/ by default. The build writes latest.yml next to the
+  installer and its .blockmap; upload all three to that feed to release.
+  -ReleaseNotes is shown to users in Settings -> General.
+
 .EXAMPLE
-  ./scripts/build_community.ps1 -Server https://203.0.113.5:8443 -CertFile C:\path\server-cert.pem -Version 1.0.5
+  ./scripts/build_community.ps1 -Server https://203.0.113.5:8443 -CertFile C:\path\server-cert.pem -Version 1.0.5 -ReleaseNotes "New settings page"
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Server,
   [Parameter(Mandatory = $true)][string]$CertFile,
-  [string]$Version = ""
+  [string]$Version = "",
+  [string]$UpdatesUrl = "",
+  [string]$ReleaseNotes = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,8 +50,12 @@ if ($certText -notmatch "BEGIN CERTIFICATE" -or $certText -match "PRIVATE KEY") 
 $buildPython = Join-Path $repoRoot ".packaging-venv/Scripts/python.exe"
 if (-not (Test-Path -LiteralPath $buildPython)) { throw "Run scripts/build_desktop.ps1 first to create .packaging-venv." }
 
+if (-not $UpdatesUrl) { $UpdatesUrl = $Server.TrimEnd("/") + "/updates/" }
+if (-not $UpdatesUrl.StartsWith("https://")) { throw "UpdatesUrl must start with https://" }
+if (-not $UpdatesUrl.EndsWith("/")) { $UpdatesUrl += "/" }
+
 $utf8 = New-Object System.Text.UTF8Encoding $false
-[IO.File]::WriteAllText((Join-Path $repoRoot "electron/community-config.json"), (@{ server = $Server } | ConvertTo-Json), $utf8)
+[IO.File]::WriteAllText((Join-Path $repoRoot "electron/community-config.json"), (@{ server = $Server; updates = $UpdatesUrl } | ConvertTo-Json), $utf8)
 [IO.File]::WriteAllText((Join-Path $repoRoot "electron/community-server.pem"), $certText, $utf8)
 
 if ($Version -and $Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must look like 1.0.5" }
@@ -59,7 +70,14 @@ try {
 
 Push-Location electron
 try {
-  Invoke-Checked "npx.cmd" @("electron-builder", "--config", "electron-builder.community.yml", "--win", "nsis", "--publish", "never", "-c.extraMetadata.version=$Version")
-  Get-ChildItem dist-community -Filter "*.exe" | Select-Object Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB, 1) } }
+  # A generic publish target makes electron-builder write latest.yml (the
+  # feed manifest); --publish never keeps it from uploading anything.
+  $builderArgs = @("electron-builder", "--config", "electron-builder.community.yml", "--win", "nsis", "--publish", "never",
+    "-c.extraMetadata.version=$Version", "-c.publish.provider=generic", "-c.publish.url=$UpdatesUrl")
+  if ($ReleaseNotes) { $builderArgs += "-c.releaseInfo.releaseNotes=$ReleaseNotes" }
+  Invoke-Checked "npx.cmd" $builderArgs
+  Get-ChildItem dist-community -File | Where-Object { $_.Name -like "*$Version*" -or $_.Name -eq "latest.yml" } |
+    Select-Object Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB, 1) } }
+  Write-Host "Release: upload latest.yml, Echo-Community-Setup-$Version.exe and its .blockmap to $UpdatesUrl"
 } finally { Pop-Location }
 Write-Host "Community installer built in electron/dist-community. Note: frontend/dist now holds the hosted build; run build_desktop.ps1 before a regular release."

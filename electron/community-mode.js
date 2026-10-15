@@ -4,8 +4,13 @@
 //
 // scripts/build_community.ps1 writes these files next to main.js (both are
 // gitignored because they name the operator's server):
-//   community-config.json  { "server": "https://203.0.113.5:8443" }
+//   community-config.json  { "server": "https://203.0.113.5:8443",
+//                            "updates": "https://.../echo-updates/" (optional) }
 //   community-server.pem   the server's self-signed certificate (public part)
+//
+// Updates come from a generic electron-updater feed (latest.yml + installer +
+// blockmap): `updates` when set, else <server>/updates/. On the server's own
+// host only the pinned certificate is accepted.
 
 const fs = require('fs');
 const path = require('path');
@@ -19,7 +24,12 @@ function parseCommunityConfig(raw) {
   if (url.protocol !== 'https:') {
     throw new Error('community-config.json: server must be https');
   }
-  return { server: url.origin };
+  const updates = new URL(String(data.updates || `${url.origin}/updates/`));
+  if (updates.protocol !== 'https:') {
+    throw new Error('community-config.json: updates must be https');
+  }
+  if (!updates.pathname.endsWith('/')) updates.pathname += '/';
+  return { server: url.origin, updatesUrl: updates.href };
 }
 
 /** Returns { server, caPath } for a community build, or null otherwise. */
@@ -42,4 +52,22 @@ function communityBackendEnv(config) {
   return { ECHO_COMMUNITY_SERVER: config.server, ECHO_COMMUNITY_CA: config.caPath };
 }
 
-module.exports = { loadCommunityConfig, parseCommunityConfig, communityBackendEnv };
+function normalisePem(pem) {
+  return String(pem || '').replace(/\r/g, '').trim();
+}
+
+/**
+ * certificate-verify proc for the updater's session: the operator's host is
+ * trusted only with the pinned certificate; every other host (e.g. an object
+ * storage bucket) keeps Chromium's normal verification (-3).
+ */
+function pinnedCertificateVerifier(config, pem) {
+  const host = new URL(config.server).hostname;
+  const expected = normalisePem(pem);
+  return (request, callback) => {
+    if (request.hostname !== host) return callback(-3);
+    callback(normalisePem(request.certificate && request.certificate.data) === expected ? 0 : -2);
+  };
+}
+
+module.exports = { loadCommunityConfig, parseCommunityConfig, communityBackendEnv, pinnedCertificateVerifier };

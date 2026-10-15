@@ -18,7 +18,7 @@ import AuthDialog from "./components/AuthDialog";
 import AppSidebar from "./components/AppSidebar";
 import AppUpdateNotice from "./components/AppUpdateNotice";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
-import { IS_HOSTED_BUILD } from "./hosted";
+import { HOSTED_OPEN_SETTINGS_EVENT, IS_HOSTED_BUILD } from "./hosted";
 const SettingsModal = lazyWithRetry(() => import("./components/SettingsModal"));
 import useChat from "./hooks/useChat";
 import useAudioOverview from "./hooks/useAudioOverview";
@@ -432,7 +432,11 @@ export default function App() {
 
   return (
     <I18nProvider language={uiLanguage}>
-      <AppUpdateNotice hidden={isSettingsOpen || IS_HOSTED_BUILD} onOpenUpdates={() => {
+      <AppUpdateNotice hidden={isSettingsOpen} onOpenUpdates={() => {
+        if (IS_HOSTED_BUILD) {
+          window.dispatchEvent(new CustomEvent(HOSTED_OPEN_SETTINGS_EVENT, { detail: "general" }));
+          return;
+        }
         setSettingsInitialCategory("desktop");
         setIsSettingsOpen(true);
       }} />

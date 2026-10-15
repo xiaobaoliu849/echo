@@ -33,6 +33,7 @@ import {
 import { applyHostedPrefs } from "../hostedPrefs";
 import { createInlineTranslator } from "../i18n";
 import HostedProgress from "./HostedProgress";
+import UpdateCard from "./UpdateCard";
 import { GrantList, LotList } from "./HostedUi";
 
 /**
@@ -94,9 +95,9 @@ export default function HostedSettings({ initialTab = "account", onClose }: { in
       id: "general",
       icon: Languages,
       label: t("通用", "General"),
-      hint: t("界面语言", "Display language"),
+      hint: t("界面语言、版本更新", "Language, updates"),
       title: t("通用", "General"),
-      lead: t("界面显示的语言。", "The language the app is shown in."),
+      lead: t("界面语言，以及应用的版本与更新。", "Display language, and app version and updates."),
     },
     {
       id: "security",
@@ -424,19 +425,23 @@ function GeneralTab() {
     }
   };
   return (
-    <div className="hostedSettingsGroup">
-      <SettingRow label={t("界面语言", "Display language")} hint={t("切换后页面会自动刷新", "The page reloads to apply it")}>
-        <Segmented
-          value={prefs.ui_language}
-          options={[
-            { value: "zh-CN", label: "中文" },
-            { value: "en-US", label: "English" },
-          ]}
-          onChange={(value) => void changeLanguage(value)}
-        />
-      </SettingRow>
-      {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
-    </div>
+    <>
+      <div className="hostedSettingsGroup">
+        <SettingRow label={t("界面语言", "Display language")} hint={t("切换后页面会自动刷新", "The page reloads to apply it")}>
+          <Segmented
+            value={prefs.ui_language}
+            options={[
+              { value: "zh-CN", label: "中文" },
+              { value: "en-US", label: "English" },
+            ]}
+            onChange={(value) => void changeLanguage(value)}
+          />
+        </SettingRow>
+        {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
+      </div>
+      {/* Installed app only; renders nothing in a browser. */}
+      <UpdateCard />
+    </>
   );
 }
 

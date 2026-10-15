@@ -1,11 +1,11 @@
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage, desktopCapturer, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { BackendRuntime } = require('./backend-runtime');
 const { autoUpdater } = require('electron-updater');
 const { UpdateController, isTrustedUpdateSender } = require('./update-controller');
 const { installScreenSharing } = require('./screen-sharing');
-const { loadCommunityConfig, communityBackendEnv } = require('./community-mode');
+const { loadCommunityConfig, communityBackendEnv, pinnedCertificateVerifier } = require('./community-mode');
 
 // Allows smoke tests and portable profiles to avoid the installed user's data.
 if (process.env.ECHO_DESKTOP_USER_DATA_DIR) {
@@ -378,6 +378,14 @@ function setupIpcHandlers() {
 }
 
 function setupAutoUpdaterEvents() {
+  if (COMMUNITY) {
+    // Community copies update from the operator's generic feed, not GitHub;
+    // the updater's own session trusts the server's pinned certificate.
+    const { NET_SESSION_NAME } = require('electron-updater/out/electronHttpExecutor');
+    session.fromPartition(NET_SESSION_NAME, { cache: false })
+      .setCertificateVerifyProc(pinnedCertificateVerifier(COMMUNITY, fs.readFileSync(COMMUNITY.caPath, 'utf-8')));
+    autoUpdater.setFeedURL({ provider: 'generic', url: COMMUNITY.updatesUrl });
+  }
   updateController = new UpdateController({
     updater: autoUpdater,
     version: app.getVersion(),
@@ -436,8 +444,7 @@ if (!gotTheLock) {
       await createWindow();
       createTray();
       setupMenus();
-      // Community copies are updated by reinstalling, not from GitHub releases.
-      if (!COMMUNITY && !process.argv.includes('--smoke-test')) updateController.start();
+      if (!process.argv.includes('--smoke-test')) updateController.start();
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       console.error('Backend startup failed:', message);

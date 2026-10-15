@@ -8,7 +8,7 @@ import {
   type HostedExpiringSoon,
 } from "../api";
 import { formatTime, minutes as formatMinutes } from "../hostedFormat";
-import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, formatRemainingMinutes, getHostedLanguage, type HostedBalanceDetail } from "../hosted";
+import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, HOSTED_OPEN_SETTINGS_EVENT, formatRemainingMinutes, getHostedLanguage, type HostedBalanceDetail } from "../hosted";
 import { createInlineTranslator } from "../i18n";
 
 /** Account card in the sidebar footer: who is logged in and minutes left. */
@@ -39,10 +39,15 @@ export default function HostedAccountCard() {
       setRemaining((event as CustomEvent<HostedBalanceDetail>).detail.remainingSeconds);
     };
     window.addEventListener(HOSTED_BALANCE_EVENT, onBalance);
+    const onOpenSettings = (event: Event) => {
+      setSettingsTab((event as CustomEvent<SettingsTab>).detail);
+    };
+    window.addEventListener(HOSTED_OPEN_SETTINGS_EVENT, onOpenSettings);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
       window.removeEventListener(HOSTED_BALANCE_EVENT, onBalance);
+      window.removeEventListener(HOSTED_OPEN_SETTINGS_EVENT, onOpenSettings);
     };
   }, []);
 

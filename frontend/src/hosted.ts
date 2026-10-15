@@ -16,6 +16,9 @@ export const HOSTED_PROVIDER_LABELS: Record<string, string> = {
 /** Location hash of the operator console (admin accounts only). */
 export const HOSTED_ADMIN_HASH = "#/admin";
 
+/** Opens hosted Settings at a tab (detail: the tab id); the sidebar account card owns it. */
+export const HOSTED_OPEN_SETTINGS_EVENT = "echo:hosted-open-settings";
+
 /** Server → client billing frames on the voice WebSocket, re-broadcast here. */
 export const HOSTED_BALANCE_EVENT = "echo:hosted-balance";
 

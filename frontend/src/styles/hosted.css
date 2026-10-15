@@ -1503,6 +1503,7 @@
 .hostedSettingsBody > .hostedSettingsGroup,
 .hostedSettingsBody > .hostedMemory,
 .hostedSettingsBody > .hostedRenew,
+.hostedSettingsBody > .vsUpdateCard,
 .hostedProgressCard {
   padding: 24px 28px;
   margin: 0;

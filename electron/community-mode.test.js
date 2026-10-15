@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { loadCommunityConfig, parseCommunityConfig, communityBackendEnv } = require('./community-mode');
+const { loadCommunityConfig, parseCommunityConfig, communityBackendEnv, pinnedCertificateVerifier } = require('./community-mode');
 
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'echo-community-'));
@@ -34,4 +34,26 @@ test('a config without the pinned certificate is refused', () => {
 
 test('plain http servers are refused', () => {
   assert.throws(() => parseCommunityConfig(JSON.stringify({ server: 'http://203.0.113.5:8443' })), /https/);
+});
+
+test('updates default to the server and may point elsewhere over https', () => {
+  assert.strictEqual(parseCommunityConfig(JSON.stringify({ server: 'https://203.0.113.5:8443' })).updatesUrl, 'https://203.0.113.5:8443/updates/');
+  assert.strictEqual(
+    parseCommunityConfig(JSON.stringify({ server: 'https://203.0.113.5:8443', updates: 'https://cdn.example.com/echo' })).updatesUrl,
+    'https://cdn.example.com/echo/',
+  );
+  assert.throws(() => parseCommunityConfig(JSON.stringify({ server: 'https://203.0.113.5:8443', updates: 'http://cdn.example.com/' })), /updates must be https/);
+});
+
+test('the pinned certificate is required on the server host only', () => {
+  const config = parseCommunityConfig(JSON.stringify({ server: 'https://203.0.113.5:8443' }));
+  const verify = pinnedCertificateVerifier(config, '-----BEGIN CERTIFICATE-----\r\nAAA\r\n-----END CERTIFICATE-----\r\n');
+  const result = (hostname, data) => {
+    let code;
+    verify({ hostname, certificate: { data } }, (value) => { code = value; });
+    return code;
+  };
+  assert.strictEqual(result('203.0.113.5', '-----BEGIN CERTIFICATE-----\nAAA\n-----END CERTIFICATE-----'), 0);
+  assert.strictEqual(result('203.0.113.5', '-----BEGIN CERTIFICATE-----\nBBB\n-----END CERTIFICATE-----'), -2);
+  assert.strictEqual(result('cdn.example.com', 'anything'), -3);
 });
