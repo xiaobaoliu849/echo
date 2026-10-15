@@ -22,17 +22,31 @@ OUT_DIR = ROOT / "resources" / "icons"
 FRONTEND_ICON_PATH = ROOT / "frontend" / "src" / "assets" / "echo-icon.png"
 ELECTRON_ICON_PATH = ROOT / "electron" / "icon.png"
 
-# Sage gradient formerly used by .vsBrandIcon in CSS.
-GRADIENT_TOP = (0x75, 0x89, 0x7E)
-GRADIENT_BOTTOM = (0x5C, 0x6E, 0x64)
-# .vsBrandIcon color: white (soundwave glyph)
-GLYPH = (255, 255, 255)
-# The in-app tile was 40px with a 22px SVG. Preserve those proportions.
+# Deep sage-green tile: saturated enough to hold up on a dark taskbar, a
+# light wallpaper, and the cream app shell alike (the old #75897E→#5C6E64
+# looked washed out next to the desktop).
+GRADIENT_TOP = (0x3B, 0x80, 0x6A)
+GRADIENT_BOTTOM = (0x1F, 0x4E, 0x40)
+# White speech bubble holding a soundwave; the centre bar is warm amber.
+BUBBLE = (255, 255, 255)
+WAVE = GRADIENT_BOTTOM
+ACCENT = (0xF2, 0xA0, 0x5A)
 CORNER_RADIUS_RATIO = 14 / 40
-BARS = ((4, 4), (8, 12), (12, 18), (16, 12), (20, 4))
-STROKE_WIDTH = 2.4
-VIEWBOX = 24
-GLYPH_SIZE_RATIO = 22 / 40
+# Geometry in units of the tile size.
+BUBBLE_BOX = (0.17, 0.20, 0.83, 0.70)
+BUBBLE_RADIUS = 0.32  # of the bubble height
+# (x as a fraction of bubble width, y below the bubble edge as a fraction of
+# the tile); the root starts inside the body so it meets the rounded corner
+# without a notch.
+TAIL = ((0.17, -0.09), (0.10, 0.117), (0.42, -0.02))
+WAVE_CENTER_Y = 0.45
+# (x offset, height) per bar; the full set and a bolder three-bar set for
+# frames of 32px and below, where five thin bars blur together.
+BARS = ((-0.166, 0.068), (-0.083, 0.156), (0.0, 0.234), (0.083, 0.156), (0.166, 0.068))
+BAR_WIDTH = 0.049
+SMALL_BARS = ((-0.12, 0.12), (0.0, 0.25), (0.12, 0.12))
+SMALL_BAR_WIDTH = 0.085
+SMALL_MAX = 32
 # CSS linear-gradient(160deg): 0deg points up, clockwise; the axis unit
 # vector in screen coordinates (x right, y down).
 AXIS = (math.sin(math.radians(160)), -math.cos(math.radians(160)))
@@ -46,8 +60,26 @@ SIDEBAR_PATH = ROOT / "resources" / "installer" / "sidebar.bmp"
 SIDEBAR_BOTTOM = GRADIENT_BOTTOM
 
 
+def draw_mark(draw: ImageDraw.ImageDraw, x0: float, y0: float, size: float, small: bool = False) -> None:
+    """Draw the bubble + soundwave into the square at (x0, y0) of side `size`."""
+    bx0, by0, bx1, by1 = (v * size for v in BUBBLE_BOX)
+    bx0, bx1, by0, by1 = bx0 + x0, bx1 + x0, by0 + y0, by1 + y0
+    draw.rounded_rectangle([bx0, by0, bx1, by1], radius=(by1 - by0) * BUBBLE_RADIUS, fill=BUBBLE)
+    width = bx1 - bx0
+    draw.polygon([(bx0 + tx * width, by1 - 1 + ty * size) for tx, ty in TAIL], fill=BUBBLE)
+    bars, bar_w = (SMALL_BARS, SMALL_BAR_WIDTH) if small else (BARS, BAR_WIDTH)
+    cx, cy, w = x0 + size / 2, y0 + size * WAVE_CENTER_Y, bar_w * size
+    for dx, h in bars:
+        x, hh = cx + dx * size, h * size
+        draw.rounded_rectangle(
+            [x - w / 2, cy - hh / 2, x + w / 2, cy + hh / 2],
+            radius=w / 2,
+            fill=ACCENT if dx == 0 else WAVE,
+        )
+
+
 def render_sidebar() -> Image.Image:
-    """Branded NSIS sidebar: vertical sage gradient, white glyph, app name."""
+    """Branded NSIS sidebar: vertical sage gradient, the mark, app name."""
     width, height = SIDEBAR_SIZE
     scale = 4
     w, h = width * scale, height * scale
@@ -57,18 +89,9 @@ def render_sidebar() -> Image.Image:
     rgb = np.round(top + (bottom - top) * t).astype(np.uint8)
     img = Image.fromarray(np.broadcast_to(rgb, (h, w, 3)).copy(), "RGB")
     draw = ImageDraw.Draw(img)
-    # Glyph box: 60% of the panel width, centered at a quarter of the height.
-    glyph = w * 0.6
-    stroke = STROKE_WIDTH / VIEWBOX * glyph
-    cx0, cy0 = w / 2, h * 0.25
-    for cx, bar_h in BARS:
-        x = cx0 + (cx - 12) / VIEWBOX * glyph
-        hh = bar_h / VIEWBOX * glyph
-        draw.rounded_rectangle(
-            [x - stroke / 2, cy0 - hh / 2, x + stroke / 2, cy0 + hh / 2],
-            radius=stroke / 2,
-            fill=GLYPH,
-        )
+    # Mark box: 70% of the panel width, centered at a quarter of the height.
+    mark = w * 0.7
+    draw_mark(draw, (w - mark) / 2, h * 0.25 - mark / 2, mark)
     try:
         from PIL import ImageFont
 
@@ -78,12 +101,11 @@ def render_sidebar() -> Image.Image:
         return img.resize(SIDEBAR_SIZE, Image.LANCZOS)
     for text, font, y in (("Echo", name_font, h * 0.44), ("AI 语音助手", tag_font, h * 0.58)):
         box = draw.textbbox((0, 0), text, font=font)
-        draw.text(((w - (box[2] - box[0])) / 2 - box[0], y), text, font=font, fill=GLYPH)
+        draw.text(((w - (box[2] - box[0])) / 2 - box[0], y), text, font=font, fill=BUBBLE)
     return img.resize(SIDEBAR_SIZE, Image.LANCZOS)
 
 
-
-def render(size: int) -> Image.Image:
+def render(size: int, small: bool = False) -> Image.Image:
     ux, uy = AXIS
     corners = [x * ux + y * uy for x in (0.0, size) for y in (0.0, size)]
     lo, hi = min(corners), max(corners)
@@ -97,18 +119,7 @@ def render(size: int) -> Image.Image:
     draw = ImageDraw.Draw(mask)
     draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=size * CORNER_RADIUS_RATIO, fill=255)
     img.putalpha(mask)
-    draw = ImageDraw.Draw(img)
-    glyph_size = size * GLYPH_SIZE_RATIO
-    inset = (size - glyph_size) / 2
-    stroke = STROKE_WIDTH / VIEWBOX * glyph_size
-    for cx, height in BARS:
-        x = inset + cx / VIEWBOX * glyph_size
-        h = height / VIEWBOX * glyph_size
-        draw.rounded_rectangle(
-            [x - stroke / 2, size / 2 - h / 2, x + stroke / 2, size / 2 + h / 2],
-            radius=stroke / 2,
-            fill=GLYPH + (255,),
-        )
+    draw_mark(ImageDraw.Draw(img), 0, 0, size, small)
     return img
 
 
@@ -118,10 +129,16 @@ def main() -> None:
     for path in (OUT_DIR / "logo.png", FRONTEND_ICON_PATH, ELECTRON_ICON_PATH):
         path.parent.mkdir(parents=True, exist_ok=True)
         png.save(path)
-    # ICO frames are produced via `sizes`; append_images is silently
-    # ignored by Pillow's ICO writer.
-    master.resize((256, 256), Image.LANCZOS).save(
-        OUT_DIR / "logo.ico", format="ICO", sizes=[(s, s) for s in ICO_SIZES]
+    # Pillow's ICO writer uses an appended image whose size matches a
+    # requested frame instead of downscaling the first one; small frames get
+    # the bolder three-bar glyph.
+    small = render(SUPERSAMPLE, small=True)
+    frames = [(small if s <= SMALL_MAX else master).resize((s, s), Image.LANCZOS) for s in ICO_SIZES]
+    frames[-1].save(
+        OUT_DIR / "logo.ico",
+        format="ICO",
+        sizes=[(s, s) for s in ICO_SIZES],
+        append_images=frames[:-1],
     )
     SIDEBAR_PATH.parent.mkdir(parents=True, exist_ok=True)
     render_sidebar().save(SIDEBAR_PATH)

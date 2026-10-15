@@ -168,7 +168,7 @@
   transform: scale(0.85);
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(160deg, rgb(117, 137, 126), rgb(92, 110, 100));
+  background: linear-gradient(160deg, rgb(59, 128, 106), rgb(31, 78, 64));
 }
 
 .vsSidebarToggleBtn:hover .vsBrandIconMark {
