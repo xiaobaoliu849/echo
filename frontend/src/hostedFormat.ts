@@ -151,3 +151,30 @@ export function hostedErrorMessage(error: unknown, fallback: string): string {
   return formatErrorMessage(error, fallback);
 }
 
+/** 0 = none, then under 5, under 15, under 30, and 30+ minutes. */
+export function practiceLevel(seconds: number): number {
+  if (seconds <= 0) return 0;
+  if (seconds < 5 * 60) return 1;
+  if (seconds < 15 * 60) return 2;
+  if (seconds < 30 * 60) return 3;
+  return 4;
+}
+
+/** Streaks over consecutive days, oldest first. Today without practice yet does not break the current one. */
+export function practiceStreaks(daily: HostedDailyUsage[]): { current: number; longest: number } {
+  let longest = 0;
+  let run = 0;
+  for (const day of daily) {
+    run = day.wall_seconds > 0 ? run + 1 : 0;
+    longest = Math.max(longest, run);
+  }
+  let current = 0;
+  let index = daily.length - 1;
+  if (index >= 0 && daily[index].wall_seconds <= 0) {
+    index -= 1;
+  }
+  for (; index >= 0 && daily[index].wall_seconds > 0; index -= 1) {
+    current += 1;
+  }
+  return { current, longest };
+}

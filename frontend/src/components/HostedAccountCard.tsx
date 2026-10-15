@@ -79,7 +79,7 @@ export default function HostedAccountCard() {
         <strong className="hostedAccountMinutesCompact">{minutes}</strong>
       </button>
       <div className="hostedAccountActions">
-        <button type="button" onClick={() => setSettingsTab("account")}>{t("设置", "Settings")}</button>
+        <button type="button" onClick={() => setSettingsTab("progress")}>{t("设置", "Settings")}</button>
         {getAuthRuntimeConfig().isAdmin ? <a href={HOSTED_ADMIN_HASH}>{t("管理", "Admin")}</a> : null}
         <button type="button" onClick={logout}>{t("退出", "Log out")}</button>
       </div>

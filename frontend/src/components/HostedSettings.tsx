@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ArrowLeft, Brain, Flame, GraduationCap, Languages, ShieldCheck, Wallet, type LucideIcon } from "lucide-react";
+import echoIcon from "../assets/echo-icon.png";
 import {
   AUTH_REJECTED_EVENT,
   changeAuthPassword,
@@ -19,7 +22,6 @@ import { getHostedLanguage } from "../hosted";
 import EvermindBadge from "./EvermindBadge";
 import {
   USER_PACKAGES,
-  fillDays,
   formatDate,
   formatElapsed,
   formatTime,
@@ -30,14 +32,15 @@ import {
 } from "../hostedFormat";
 import { applyHostedPrefs } from "../hostedPrefs";
 import { createInlineTranslator } from "../i18n";
-import { DailyChart, GrantList, LotList, Modal, StatTile } from "./HostedUi";
+import HostedProgress from "./HostedProgress";
+import { GrantList, LotList } from "./HostedUi";
 
 /**
  * Settings for a hosted user: everything they can change about their own
  * account, and nothing about the operator's server (keys, providers).
  */
 
-export type SettingsTab = "account" | "learning" | "memory" | "general" | "security";
+export type SettingsTab = "progress" | "account" | "learning" | "memory" | "general" | "security";
 
 const HISTORY_DAYS = 30;
 const CALLS_SHOWN = 10;
@@ -47,41 +50,130 @@ function useT() {
   return createInlineTranslator(getHostedLanguage());
 }
 
+type TabInfo = { id: SettingsTab; icon: LucideIcon; label: string; hint: string; title: string; lead: string };
+
+/** Full-window settings page: icon nav on the left, one titled section on the right. */
 export default function HostedSettings({ initialTab = "account", onClose }: { initialTab?: SettingsTab; onClose: () => void }) {
   const t = useT();
   const [tab, setTab] = useState<SettingsTab>(initialTab);
-  const tabs: { id: SettingsTab; label: string }[] = [
-    { id: "account", label: t("账户与时长", "Account & minutes") },
-    { id: "learning", label: t("学习偏好", "Learning") },
-    { id: "memory", label: t("AI 记忆", "AI memory") },
-    { id: "general", label: t("通用", "General") },
-    { id: "security", label: t("账号安全", "Security") },
+  const mainRef = useRef<HTMLElement>(null);
+  const tabs: TabInfo[] = [
+    {
+      id: "progress",
+      icon: Flame,
+      label: t("练习足迹", "Practice"),
+      hint: t("打卡与练习时长", "Streaks and minutes"),
+      title: t("你的练习足迹", "Your practice"),
+      lead: t("每天开口说一点，进步看得见。", "A little every day adds up. Here is how far you have come."),
+    },
+    {
+      id: "account",
+      icon: Wallet,
+      label: t("账户与时长", "Account & minutes"),
+      hint: t("余额、续费与记录", "Balance, top-ups, history"),
+      title: t("账户与时长", "Account & minutes"),
+      lead: t("剩余分钟、有效期，以及每一次通话和充值。", "Minutes left, when they expire, and every call and top-up."),
+    },
+    {
+      id: "learning",
+      icon: GraduationCap,
+      label: t("学习偏好", "Learning"),
+      hint: t("水平、教练、母语", "Level, coach, language"),
+      title: t("让外教更懂你", "Tune your tutor"),
+      lead: t("这些设置决定 AI 外教怎么和你聊，保存在账号上，换电脑也不会丢。", "These shape how the AI tutor talks with you. They are saved on your account."),
+    },
+    {
+      id: "memory",
+      icon: Brain,
+      label: t("AI 记忆", "AI memory"),
+      hint: t("外教记得的你", "What the tutor remembers"),
+      title: t("AI 记忆", "AI memory"),
+      lead: t("外教会记住你的名字、水平和聊过的话题，下次接着聊。", "The tutor remembers your name, level and past topics, and picks up where you left off."),
+    },
+    {
+      id: "general",
+      icon: Languages,
+      label: t("通用", "General"),
+      hint: t("界面语言", "Display language"),
+      title: t("通用", "General"),
+      lead: t("界面显示的语言。", "The language the app is shown in."),
+    },
+    {
+      id: "security",
+      icon: ShieldCheck,
+      label: t("账号安全", "Security"),
+      hint: t("密码与退出登录", "Password, log out"),
+      title: t("账号安全", "Security"),
+      lead: t("修改密码，或在这台电脑上退出登录。", "Change your password, or log out on this computer."),
+    },
   ];
-  return (
-    <Modal title={t("设置", "Settings")} onClose={onClose} wide>
+  const current = tabs.find((item) => item.id === tab) ?? tabs[0];
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const select = (id: SettingsTab) => {
+    setTab(id);
+    mainRef.current?.scrollTo({ top: 0 });
+  };
+
+  // Portalled so a transformed or clipped ancestor (the sidebar) cannot trap it.
+  return createPortal(
+    <div className="hostedAdminOverlay hostedSettingsPage" role="dialog" aria-modal="true" aria-label={t("设置", "Settings")}>
+      <header className="hostedSettingsTopbar">
+        <img src={echoIcon} alt="" className="hostedSettingsTopbarIcon" />
+        <strong>Echo</strong>
+        <span className="hostedSettingsTopbarTitle">{t("设置", "Settings")}</span>
+        <button type="button" className="hostedSettingsBack" onClick={onClose} title={t("返回 (Esc)", "Back (Esc)")}>
+          <ArrowLeft size={16} aria-hidden="true" />
+          {t("返回对话", "Back to chat")}
+        </button>
+      </header>
       <div className="hostedSettings">
         <nav className="hostedSettingsNav" aria-label={t("设置分类", "Settings sections")}>
-          {tabs.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={tab === item.id ? "page" : undefined}
-              className={tab === item.id ? "is-active" : ""}
-              onClick={() => setTab(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
+          {tabs.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-current={tab === item.id ? "page" : undefined}
+                className={tab === item.id ? "is-active" : ""}
+                onClick={() => select(item.id)}
+              >
+                <span className="hostedSettingsNavIcon"><Icon size={18} aria-hidden="true" /></span>
+                <span className="hostedSettingsNavText">
+                  <strong>{item.label}</strong>
+                  <small>{item.hint}</small>
+                </span>
+              </button>
+            );
+          })}
         </nav>
-        <div className="hostedSettingsBody">
-          {tab === "account" ? <AccountTab /> : null}
-          {tab === "learning" ? <LearningTab /> : null}
-          {tab === "memory" ? <MemorySection /> : null}
-          {tab === "general" ? <GeneralTab /> : null}
-          {tab === "security" ? <SecurityTab /> : null}
-        </div>
+        <main className="hostedSettingsMain" ref={mainRef}>
+          <div className="hostedSettingsBody">
+            <div className="hostedSettingsHero">
+              <h1>{current.title}</h1>
+              <p>{current.lead}</p>
+            </div>
+            {tab === "progress" ? <HostedProgress /> : null}
+            {tab === "account" ? <AccountTab /> : null}
+            {tab === "learning" ? <LearningTab /> : null}
+            {tab === "memory" ? <MemorySection /> : null}
+            {tab === "general" ? <GeneralTab /> : null}
+            {tab === "security" ? <SecurityTab /> : null}
+          </div>
+        </main>
       </div>
-    </Modal>
+    </div>,
+    document.body,
   );
 }
 
@@ -144,21 +236,13 @@ function AccountTab() {
       </section>
 
       <section className="hostedPanelSection">
-        <h3>{t(`近 ${HISTORY_DAYS} 天`, `Last ${HISTORY_DAYS} days`)}</h3>
-        <div className="hostedAdminDetailStats">
-          <StatTile
-            label={t("通话次数", "Calls")}
-            value={String(calls.length)}
-            unit={t("次", "")}
-            hint={t("同一模型间隔 90 秒内算一次", "Pauses under 90 s count as one call")}
-          />
-          <StatTile label={t("通话时长", "Talk time")} value={minutes(used)} unit={t("分钟", "min")} hint={t("实际通话时长", "Actual minutes talked")} />
-        </div>
-        {history ? <DailyChart daily={fillDays(history.daily, HISTORY_DAYS)} /> : null}
-      </section>
-
-      <section className="hostedPanelSection">
-        <h3>{t("通话记录", "Call history")}</h3>
+        <h3>{t(`通话记录 · 近 ${HISTORY_DAYS} 天`, `Calls · last ${HISTORY_DAYS} days`)}</h3>
+        <p className="hostedAdminMuted hostedPanelHint">
+          {t(
+            `共 ${calls.length} 次，${minutes(used)} 分钟。同一模型间隔 90 秒内算一次。`,
+            `${calls.length} calls, ${minutes(used)} min. Pauses under 90 s count as one call.`,
+          )}
+        </p>
         {calls.length === 0 ? (
           <p className="hostedAdminMuted">{history ? t("还没有通话。", "No calls yet.") : t("加载中…", "Loading…")}</p>
         ) : (
@@ -291,7 +375,6 @@ function LearningTab() {
   ];
   return (
     <div className="hostedSettingsGroup">
-      <p className="hostedAdminMuted">{t("这些设置决定 AI 外教怎么和你聊，保存在账号上，换电脑也不会丢。", "These shape how the AI tutor talks with you. They are saved on your account.")}</p>
       <SettingRow label={t("谁在学", "Who is learning")}>
         <Segmented
           value={prefs.learner}

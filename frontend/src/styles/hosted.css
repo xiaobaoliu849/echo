@@ -1338,46 +1338,191 @@
   border-color: var(--border-color);
 }
 
-/* ── Settings panel ────────────────────────────────────────────────── */
+/* ── Settings page (full window) ───────────────────────────────────── */
+.hostedAdminOverlay.hostedSettingsPage {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  background:
+    radial-gradient(1200px 400px at 85% -10%, color-mix(in oklab, var(--accent-soft) 70%, transparent), transparent 70%),
+    var(--bg-primary);
+}
+
+.hostedSettingsTopbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  height: 60px;
+  padding: 0 24px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 70%, transparent);
+}
+
+.hostedSettingsTopbarIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+}
+
+.hostedSettingsTopbar > strong {
+  font-size: var(--step-0);
+}
+
+.hostedSettingsTopbarTitle {
+  padding-left: 12px;
+  margin-left: 4px;
+  border-left: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.hostedAdminOverlay .hostedSettingsBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 7px 14px;
+  font-size: var(--step--1);
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+}
+
+.hostedAdminOverlay .hostedSettingsBack:hover {
+  color: var(--brand-dark);
+  border-color: color-mix(in oklab, var(--brand) 45%, var(--border-color));
+}
+
 .hostedSettings {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: 20px;
-  min-height: 420px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
 }
 
 .hostedSettingsNav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-right: 12px;
-  border-right: 1px solid var(--border-color);
+  gap: 6px;
+  padding: 20px 16px;
+  overflow-y: auto;
+  border-right: 1px solid color-mix(in oklab, var(--border-color) 70%, transparent);
 }
 
 .hostedAdminOverlay .hostedSettingsNav button {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
-  padding: 9px 12px;
-  font-size: var(--step--1);
-  font-weight: 500;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px;
   text-align: left;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   background: none;
-  border: 0;
-  border-radius: 9px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+}
+
+.hostedAdminOverlay .hostedSettingsNav button:hover:not(.is-active) {
+  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
 }
 
 .hostedAdminOverlay .hostedSettingsNav button.is-active {
-  color: var(--brand-dark);
-  background: var(--brand-soft);
-  font-weight: 600;
+  background: var(--bg-card);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-sm), inset 3px 0 0 var(--brand);
 }
 
-.hostedSettingsBody {
+.hostedSettingsNavIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  color: var(--text-secondary);
+  background: color-mix(in oklab, var(--bg-card) 70%, var(--border-color));
+  border-radius: 12px;
+}
+
+.hostedSettingsNav button.is-active .hostedSettingsNavIcon {
+  color: var(--brand-dark);
+  background: var(--brand-soft);
+}
+
+.hostedSettingsNavText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.hostedSettingsBody > .hostedPanelSection:first-of-type > h3 {
+.hostedSettingsNavText strong {
+  font-size: var(--step-0);
+  font-weight: 600;
+}
+
+.hostedSettingsNav button.is-active .hostedSettingsNavText strong {
+  color: var(--brand-dark);
+}
+
+.hostedSettingsNavText small {
+  font-size: var(--step--1);
+  color: var(--text-soft);
+}
+
+.hostedSettingsMain {
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.hostedSettingsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 44px 48px 64px;
+}
+
+.hostedSettingsHero h1 {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.hostedSettingsHero p {
+  margin: 0;
+  font-size: var(--step-0);
+  color: var(--text-secondary);
+}
+
+/* Each block of a tab is a card. */
+.hostedSettingsBody > .hostedPanelSection,
+.hostedSettingsBody > .hostedSettingsGroup,
+.hostedSettingsBody > .hostedMemory,
+.hostedSettingsBody > .hostedRenew,
+.hostedProgressCard {
+  padding: 24px 28px;
+  margin: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.hostedSettingsBody > .hostedPanelSection > h3 {
+  margin: 0 0 10px;
+  padding-top: 0;
   border-top: 0;
+  font-size: var(--step-1);
+}
+
+.hostedSettingsBody > .hostedPanelBalance {
+  margin: 0;
+  padding: 22px 28px;
+  border-radius: 20px;
 }
 
 .hostedSettingsGroup {
@@ -1388,7 +1533,7 @@
 
 .hostedSettingsGroup h3 {
   margin: 4px 0 0;
-  font-size: var(--step-0);
+  font-size: var(--step-1);
 }
 
 .hostedSettingRow {
@@ -1397,8 +1542,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
-  padding-bottom: 14px;
+  padding-bottom: 16px;
   border-bottom: 1px solid color-mix(in oklab, var(--border-color) 60%, transparent);
+}
+
+.hostedSettingRow:last-of-type {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .hostedSettingLabel {
@@ -1413,7 +1563,7 @@
 }
 
 .hostedSettingControl select {
-  padding: 7px 10px;
+  padding: 8px 12px;
   font: inherit;
   font-size: var(--step--1);
   color: var(--text-primary);
@@ -1423,7 +1573,7 @@
 }
 
 .hostedAdminOverlay .hostedAdminSegmented button {
-  padding: 6px 12px;
+  padding: 6px 14px;
   font-size: var(--step--1);
   border: 0;
   background: transparent;
@@ -1441,22 +1591,196 @@
   align-self: flex-end;
 }
 
+/* Practice tab */
+.hostedProgress {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.hostedProgressStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.hostedProgressStat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.hostedProgressStat.is-streak {
+  background: linear-gradient(160deg, var(--accent-soft), var(--bg-card));
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border-color));
+}
+
+.hostedProgressStatLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--step--1);
+  color: var(--text-secondary);
+}
+
+.hostedProgressStat.is-streak .hostedProgressStatLabel svg {
+  color: #e08a3c;
+}
+
+.hostedProgressStatValue {
+  font-size: var(--step-3);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.hostedProgressStatValue small {
+  margin-left: 3px;
+  font-size: var(--step--1);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.hostedProgressReadout {
+  min-height: 1.5em;
+  margin-bottom: 14px;
+  font-size: var(--step--1);
+  font-variant-numeric: tabular-nums;
+}
+
+.hostedHeatmapScroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.hostedHeatmap {
+  --cell: 18px;
+  --gap: 4px;
+  display: flex;
+  gap: var(--gap);
+  width: max-content;
+  margin: 0 auto;
+}
+
+.hostedHeatmapDays,
+.hostedHeatmapWeek {
+  display: grid;
+  grid-template-rows: 16px repeat(7, var(--cell));
+  gap: var(--gap);
+}
+
+.hostedHeatmapDays {
+  margin-right: 4px;
+  font-size: 11px;
+  line-height: var(--cell);
+  color: var(--text-soft);
+}
+
+.hostedHeatmapMonth {
+  width: var(--cell);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--text-soft);
+}
+
+.hostedHeatmapCell {
+  display: block;
+  width: var(--cell);
+  height: var(--cell);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--border-color) 70%, var(--bg-card));
+  outline-offset: 1px;
+}
+
+/* Logo greens (scripts/generate_icon.py); the hover ring is the logo's amber. */
+.hostedHeatmapCell.level-1 { background: color-mix(in oklab, #3b806a 28%, var(--bg-card)); }
+.hostedHeatmapCell.level-2 { background: color-mix(in oklab, #3b806a 55%, var(--bg-card)); }
+.hostedHeatmapCell.level-3 { background: #3b806a; }
+.hostedHeatmapCell.level-4 { background: #1f4e40; }
+.hostedHeatmapCell.is-future {
+  background: transparent;
+  border: 1px dashed color-mix(in oklab, var(--border-color) 60%, transparent);
+}
+
+.hostedHeatmapWeek .hostedHeatmapCell[tabindex]:hover,
+.hostedHeatmapWeek .hostedHeatmapCell[tabindex]:focus-visible {
+  outline: 2px solid #f2a05a;
+}
+
+.hostedHeatmapLegend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.hostedHeatmapLegend .hostedHeatmapCell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
 @media (max-width: 760px) {
+  .hostedSettingsTopbar {
+    padding: 0 16px;
+  }
+
   .hostedSettings {
     grid-template-columns: 1fr;
-    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .hostedSettingsNav {
     flex-direction: row;
     overflow-x: auto;
-    padding: 0 0 8px;
+    padding: 10px 16px;
     border-right: 0;
     border-bottom: 1px solid var(--border-color);
   }
 
   .hostedAdminOverlay .hostedSettingsNav button {
+    width: auto;
+    flex: none;
+    padding: 8px 12px;
     white-space: nowrap;
+  }
+
+  .hostedSettingsNavIcon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .hostedSettingsNavText small {
+    display: none;
+  }
+
+  .hostedProgressStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hostedHeatmap {
+    --cell: 14px;
+  }
+
+  .hostedSettingsBody {
+    padding: 24px 16px 48px;
+  }
+
+  .hostedSettingsBody > .hostedPanelSection,
+  .hostedSettingsBody > .hostedSettingsGroup,
+  .hostedSettingsBody > .hostedMemory,
+  .hostedSettingsBody > .hostedRenew,
+  .hostedProgressCard {
+    padding: 18px;
   }
 }
 
