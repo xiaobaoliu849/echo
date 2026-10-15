@@ -87,7 +87,7 @@ import {
   type VoiceChatMetrics
 } from "./useVoiceChatHelpers";
 import { serializeSelectionTrace, traceSelection } from "./voiceSelectionTrace";
-import { publishHostedBalance } from "../hosted";
+import { IS_HOSTED_BUILD, publishHostedBalance } from "../hosted";
 import { GEMINI_LIVE_ACCENTS, supportsGeminiAccent } from "../utils/geminiLivePreferences";
 import useLiveScreenShare from "./useLiveScreenShare";
 import { supportsLiveScreenShare } from "../utils/liveScreenShare";
@@ -1849,10 +1849,15 @@ export default function useVoiceChat({
       case "error":
         setVoiceChatError(
           event.message ||
-          t(
-            `实时语音后端返回错误。建议先选择 DashScope / ${DEFAULT_DASHSCOPE_MODEL} 重试。`,
-            `The realtime voice backend returned an error. Try DashScope / ${DEFAULT_DASHSCOPE_MODEL} first.`
-          )
+          (IS_HOSTED_BUILD
+            ? t(
+                "通话出了点问题，请重新开始通话；一直这样的话，换一个模型试试。",
+                "Something went wrong with the call. Start it again, or try another model."
+              )
+            : t(
+                `实时语音后端返回错误。建议先选择 DashScope / ${DEFAULT_DASHSCOPE_MODEL} 重试。`,
+                `The realtime voice backend returned an error. Try DashScope / ${DEFAULT_DASHSCOPE_MODEL} first.`
+              ))
         );
         setVoiceChatStatus(t("实时语音会话出错", "Realtime voice session failed"));
         stopSessionResources();
@@ -2095,9 +2100,18 @@ export default function useVoiceChat({
         stopSessionResources();
         if (event.code !== 1000) {
           const authMsg = event.code === 1008
-            ? t("实时语音认证失败：请在右上角登录账号或配置访问 Token 后重试。", "Realtime voice authentication failed: please login or provide an access token.")
+            ? IS_HOSTED_BUILD
+              ? t("登录已失效，请退出后重新登录。", "Your login expired. Log out and log in again.")
+              : t("实时语音认证失败：请在右上角登录账号或配置访问 Token 后重试。", "Realtime voice authentication failed: please login or provide an access token.")
             : "";
-          setVoiceChatError((prev) => prev || authMsg || t(
+          // Neighbours need to know what to do, not the socket close code.
+          const hostedDropMsg = IS_HOSTED_BUILD
+            ? t(
+                "通话连接中断了，多半是网络不稳。请重新开始通话；如果开着 VPN 或代理，先关掉再试。",
+                "The call dropped, most likely a network hiccup. Start it again; if a VPN or proxy is on, turn it off first."
+              )
+            : "";
+          setVoiceChatError((prev) => prev || authMsg || hostedDropMsg || t(
             `实时语音连接已关闭（code=${event.code}${event.reason ? `, reason=${event.reason}` : ""}）。建议先选择 DashScope / ${DEFAULT_DASHSCOPE_MODEL} 重试。`,
             `Realtime voice connection closed (code=${event.code}${event.reason ? `, reason=${event.reason}` : ""}). Try DashScope / ${DEFAULT_DASHSCOPE_MODEL} first.`
           ));
