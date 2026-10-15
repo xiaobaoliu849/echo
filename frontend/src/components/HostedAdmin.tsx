@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import echoIcon from "../assets/echo-icon.png";
 import {
+  ApiRequestError,
   createHostedAccount,
   fetchHostedAdminOverview,
   fetchHostedAdminUserDetail,
@@ -71,11 +72,17 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
       setOverview(await fetchHostedAdminOverview(days));
       setError("");
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 403) {
+        // Logged in, but not as the operator: back to the practice page.
+        window.alert("当前登录的不是管理员账号，已返回练习页面。");
+        onExit();
+        return;
+      }
       setError(formatErrorMessage(err, "加载失败"));
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, onExit]);
 
   useEffect(() => {
     void refresh();

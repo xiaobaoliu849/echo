@@ -5,6 +5,7 @@ import HostedAdmin from "./HostedAdmin";
 import HostedOnboarding from "./HostedOnboarding";
 import echoIcon from "../assets/echo-icon.png";
 import {
+  API_TOKEN_STORAGE_KEY,
   AUTH_REJECTED_EVENT,
   clearAuthRuntime,
   fetchHostedInfo,
@@ -37,6 +38,19 @@ export default function HostedRoot() {
     const onHash = () => setHash(window.location.hash);
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // Tabs share one login. When another tab logs in as someone else (or logs
+  // out), follow it instead of acting with an identity the server no longer
+  // matches — an admin page refreshing with a learner's token, for example.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === API_TOKEN_STORAGE_KEY && event.newValue !== event.oldValue) {
+        window.location.reload();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   useEffect(() => {

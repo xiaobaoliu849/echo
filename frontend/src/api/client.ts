@@ -80,7 +80,7 @@ export const API_BASE_URL =
     : import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 export const API_TOKEN = import.meta.env.VITE_API_TOKEN || "";
 export const API_ADMIN_TOKEN = import.meta.env.VITE_API_ADMIN_TOKEN || "";
-const API_TOKEN_STORAGE_KEY = "voicespirit_api_token";
+export const API_TOKEN_STORAGE_KEY = "voicespirit_api_token";
 const API_ADMIN_TOKEN_STORAGE_KEY = "voicespirit_api_admin_token";
 const AUTH_USER_EMAIL_STORAGE_KEY = "voicespirit_auth_user_email";
 const AUTH_USER_ADMIN_STORAGE_KEY = "voicespirit_auth_user_admin";
@@ -1305,6 +1305,12 @@ function notifyAuthRejected(response: Response, detail: ApiErrorDetail | undefin
   // Auth endpoints report their own failures inline (bad password, lockout);
   // only rejections on data endpoints mean the stored credentials went stale.
   if (response.url.includes("/api/auth/")) {
+    return;
+  }
+  // Hosted build: "this account is not an admin" is a valid session asking for
+  // the wrong page (e.g. another tab switched accounts), not a stale login;
+  // logging everyone out over it would also end the other tabs' sessions.
+  if (import.meta.env.VITE_HOSTED === "true" && code.startsWith("AUTH_ADMIN_")) {
     return;
   }
   if (typeof window === "undefined") {
