@@ -52,6 +52,20 @@ class BillingServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.billing.grant("a@x", 0)
 
+    def test_ticks_are_grouped_into_calls(self) -> None:
+        self.billing.grant("a@x", 6000)
+        clock = iter([1000, 1005, 1010, 1300, 1305, 1310])
+        models = ["m", "m", "m", "m", "m", "other"]
+        with patch("services.billing_service.time.time", side_effect=lambda: next(clock)):
+            for model in models:
+                self.billing.charge("a@x", 10, wall_seconds=5, provider="p", model=model)
+        calls = self.billing.recent_calls("a@x")
+        self.assertEqual([c["model"] for c in calls], ["other", "m", "m"])
+        oldest = calls[-1]
+        self.assertEqual((oldest["started_at"], oldest["ended_at"]), (995, 1010))
+        self.assertEqual((oldest["wall_seconds"], oldest["billed_seconds"]), (15, 30))
+        self.assertEqual(len(self.billing.recent_calls("a@x", limit=1)), 1)
+
     def test_daily_usage_uses_viewer_timezone(self) -> None:
         self.billing.grant("a@x", 6000, note="WeChat 49")
         # 2026-10-14 20:00 UTC is already 10-15 in UTC+8.
@@ -280,6 +294,48 @@ class HostedApiTests(unittest.TestCase):
             self._request("GET", "/api/billing/admin/user-detail?account=1203", self.user_token).status_code, 403
         )
 
+    def test_my_history(self) -> None:
+        self.billing.grant(USER[0], 600, note="WeChat 49")
+        self.billing.charge(USER[0], 60, wall_seconds=60, provider="Vercel", model="m")
+        self.assertEqual(self._request("GET", "/api/billing/me/history").status_code, 401)
+        body = self._request("GET", "/api/billing/me/history?days=7&tz=480", self.user_token).json()
+        self.assertEqual(body["remaining_seconds"], 540)
+        self.assertEqual(body["calls"][0]["wall_seconds"], 60)
+        self.assertEqual(body["grants"][0]["note"], "WeChat 49")
+        self.assertEqual(body["daily"][0]["billed_seconds"], 60)
+
+    def test_renewal_info_is_set_by_admin(self) -> None:
+        with tempfile.TemporaryDirectory() as data_dir, patch.dict(os.environ, {"ECHO_DATA_DIR": data_dir}):
+            self.assertEqual(self._request("GET", "/api/billing/renewal").status_code, 401)
+            self.assertEqual(self._request("GET", "/api/billing/renewal", self.user_token).json(), {"text": "", "qr": ""})
+            qr = "data:image/png;base64,iVBORw0KGgo="
+            payload = {"text": "300 分钟 ¥49", "qr": qr}
+            self.assertEqual(
+                self._request("POST", "/api/billing/admin/renewal", self.user_token, json=payload).status_code, 403
+            )
+            saved = self._request("POST", "/api/billing/admin/renewal", self.admin_token, json=payload)
+            self.assertEqual(saved.status_code, 200, saved.text)
+            self.assertEqual(self._request("GET", "/api/billing/renewal", self.user_token).json(), payload)
+            bad = self._request(
+                "POST", "/api/billing/admin/renewal", self.admin_token, json={"text": "", "qr": "javascript:alert(1)"}
+            )
+            self.assertEqual(bad.status_code, 400)
+
+    def test_user_can_change_own_password(self) -> None:
+        wrong = self._request(
+            "POST", "/api/auth/change-password", self.user_token,
+            json={"current_password": "nope", "new_password": "newpass1"},
+        )
+        self.assertEqual(wrong.status_code, 400)
+        ok = self._request(
+            "POST", "/api/auth/change-password", self.user_token,
+            json={"current_password": USER[1], "new_password": "newpass1"},
+        )
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertEqual(self._request("GET", "/api/billing/me", self.user_token).status_code, 200)
+        login = self._request("POST", "/api/auth/login", json={"email": "1203", "password": "newpass1"})
+        self.assertEqual(login.status_code, 200)
+
     def test_admin_cannot_be_disabled(self) -> None:
         response = self._request(
             "POST", "/api/billing/admin/active", self.admin_token, json={"account": "boss", "active": False}
@@ -455,6 +511,14 @@ class CommunityClientTests(unittest.TestCase):
                                                       {"provider": "DashScope", "models": ["q"]}]}
             if path == "/api/billing/me":
                 return {"account": "1203", "remaining_seconds": 300}
+            if path.startswith("/api/billing/me/history"):
+                return {"account": "1203", "remaining_seconds": 300, "calls": [], "daily": [], "grants": [], "token": token}
+            if path == "/api/billing/renewal":
+                return {"text": "¥49", "qr": ""}
+            if path == "/api/auth/change-password":
+                if json["current_password"] != "pw":
+                    raise community_client.CommunityServerError(400, {"code": "AUTH_CHANGE_PASSWORD_FAILED", "message": "bad"})
+                return {"id": "1", "email": "1203@echo.local", "is_admin": False, "is_active": True, "created_at": "x"}
             if path == "/api/billing/direct/start":
                 if token != "remote-token":
                     raise community_client.CommunityServerError(401, {"message": "login"})
@@ -494,6 +558,23 @@ class CommunityClientTests(unittest.TestCase):
         bad = self._request("POST", "/api/auth/login", json={"email": "1203", "password": "nope"})
         self.assertEqual(bad.status_code, 401)
         self.assertEqual(bad.json()["detail"]["code"], "AUTH_LOGIN_FAILED")
+
+    def test_account_page_requests_go_to_the_server(self) -> None:
+        auth = {"Authorization": "Bearer remote-token"}
+        history = self._request("GET", "/api/billing/me/history?days=7&tz=480", headers=auth).json()
+        self.assertEqual(history["token"], "remote-token")
+        self.assertIn(("GET", "/api/billing/me/history?days=7&tz=480", None), self.calls)
+        self.assertEqual(self._request("GET", "/api/billing/renewal", headers=auth).json()["text"], "¥49")
+        bad = self._request(
+            "POST", "/api/auth/change-password", headers=auth,
+            json={"current_password": "x", "new_password": "newpass1"},
+        )
+        self.assertEqual(bad.status_code, 400)
+        ok = self._request(
+            "POST", "/api/auth/change-password", headers=auth,
+            json={"current_password": "pw", "new_password": "newpass1"},
+        )
+        self.assertEqual(ok.json()["email"], "1203@echo.local")
 
     def test_only_direct_capable_models_are_offered(self) -> None:
         body = self._request("GET", "/api/billing/hosted-info").json()

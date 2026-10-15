@@ -240,7 +240,19 @@ async def login(
 async def change_password(
     payload: ChangePasswordRequest,
     authorization: str | None = Header(default=None, alias="Authorization"),
-) -> AuthUserResponse:
+) -> AuthUserResponse | JSONResponse:
+    if community_client.is_community_client():
+        token = str(authorization or "").strip()
+        try:
+            body = await community_client.forward(
+                "POST",
+                "/api/auth/change-password",
+                token=token[7:].strip() if token.lower().startswith("bearer ") else "",
+                json={"current_password": payload.current_password, "new_password": payload.new_password},
+            )
+        except community_client.CommunityServerError as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        return JSONResponse(content=body)
     user = _require_user(authorization)
     try:
         updated = user_auth_service.change_password(

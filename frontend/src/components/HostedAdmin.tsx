@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import echoIcon from "../assets/echo-icon.png";
 import {
   createHostedAccount,
   fetchHostedAdminOverview,
   fetchHostedAdminUserDetail,
+  fetchHostedRenewal,
   grantHostedMinutes,
   resetHostedPassword,
+  saveHostedRenewal,
   setHostedAccountActive,
   type HostedAdminOverview,
   type HostedAdminUser,
   type HostedAdminUserDetail,
-  type HostedDailyUsage,
 } from "../api";
-import { HOSTED_MODEL_LABELS } from "../hosted";
+import { fillDays, formatElapsed, formatTime, minutes, modelLabel, useSubmit } from "../hostedFormat";
 import { formatErrorMessage } from "../utils/errorFormatting";
+import { DailyChart, Modal, StatTile } from "./HostedUi";
 
 /**
  * Operator console for a hosted server: accounts, top-ups and usage.
@@ -30,46 +32,10 @@ type Dialog =
   | { kind: "password"; user: HostedAdminUser }
   | { kind: "detail"; user: HostedAdminUser };
 
-function minutes(seconds: number): string {
-  const value = seconds / 60;
-  return value >= 100 || Number.isInteger(value) ? String(Math.round(value)) : value.toFixed(1);
-}
-
-function formatTime(epochSeconds: number | null | undefined): string {
-  if (!epochSeconds) {
-    return "—";
-  }
-  const date = new Date(epochSeconds * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function formatElapsed(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  return `${m}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function modelLabel(model: string): string {
-  return HOSTED_MODEL_LABELS[model] || model || "—";
-}
-
 function generatePassword(): string {
   const digits = new Uint32Array(6);
   crypto.getRandomValues(digits);
   return Array.from(digits, (n) => String(n % 10)).join("");
-}
-
-/** One entry per calendar day in the period, so quiet days show as gaps. */
-function fillDays(daily: HostedDailyUsage[], days: number): HostedDailyUsage[] {
-  const byDay = new Map(daily.map((row) => [row.day, row]));
-  const out: HostedDailyUsage[] = [];
-  const today = new Date();
-  for (let i = days - 1; i >= 0; i -= 1) {
-    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    out.push(byDay.get(key) || { day: key, wall_seconds: 0, billed_seconds: 0, users: 0 });
-  }
-  return out;
 }
 
 export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; onLogout: () => void }) {
@@ -272,6 +238,8 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
           </div>
         </section>
 
+        <RenewalSettings onSaved={() => setNotice("续费信息已保存，用户在「我的账户」里能看到")} />
+
         <section className="hostedAdminCard">
           <h2>按模型（近 {days} 天）</h2>
           {overview && overview.by_model.length > 0 ? (
@@ -320,19 +288,6 @@ export default function HostedAdmin({ onExit, onLogout }: { onExit: () => void; 
   );
 }
 
-function StatTile({ label, value, unit, hint }: { label: string; value: string; unit?: string; hint: string }) {
-  return (
-    <div className="hostedAdminStat">
-      <span className="hostedAdminStatLabel">{label}</span>
-      <span className="hostedAdminStatValue">
-        {value}
-        {unit ? <small>{unit}</small> : null}
-      </span>
-      <span className="hostedAdminStatHint">{hint}</span>
-    </div>
-  );
-}
-
 function StatusBadge({ user }: { user: HostedAdminUser }) {
   if (user.is_admin) {
     return <span className="hostedAdminBadge is-admin">管理员</span>;
@@ -344,91 +299,103 @@ function StatusBadge({ user }: { user: HostedAdminUser }) {
   );
 }
 
-function DailyChart({ daily }: { daily: HostedDailyUsage[] }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const peak = Math.max(60, ...daily.map((d) => d.wall_seconds));
-  const total = daily.reduce((sum, d) => sum + d.wall_seconds, 0);
-  const active = hover === null ? null : daily[hover];
-  if (total === 0) {
-    return <p className="hostedAdminMuted">这段时间还没有通话。</p>;
-  }
-  return (
-    <figure className="hostedAdminChart">
-      <div className="hostedAdminChartReadout" aria-live="polite">
-        {active ? (
-          <>
-            <strong>{active.day.slice(5)}</strong> {minutes(active.wall_seconds)} 分钟 · {active.users} 人 · 扣费 {minutes(active.billed_seconds)} 分钟
-          </>
-        ) : (
-          <span className="hostedAdminMuted">峰值 {minutes(peak)} 分钟/天 · 指向柱子看当天明细</span>
-        )}
-      </div>
-      <div className="hostedAdminBars" role="list" onMouseLeave={() => setHover(null)}>
-        {daily.map((d, index) => (
-          <div
-            key={d.day}
-            role="listitem"
-            tabIndex={0}
-            className={hover === index ? "hostedAdminBarSlot is-hover" : "hostedAdminBarSlot"}
-            aria-label={`${d.day} ${minutes(d.wall_seconds)} 分钟，${d.users} 人`}
-            onMouseEnter={() => setHover(index)}
-            onFocus={() => setHover(index)}
-            onBlur={() => setHover(null)}
-          >
-            <span
-              className="hostedAdminBar"
-              style={{ height: d.wall_seconds ? `max(2px, ${(d.wall_seconds / peak) * 100}%)` : 0 }}
-            />
-          </div>
-        ))}
-      </div>
-      <figcaption className="hostedAdminChartAxis">
-        <span>{daily[0]?.day.slice(5)}</span>
-        <span>{daily[daily.length - 1]?.day.slice(5)}</span>
-      </figcaption>
-    </figure>
-  );
-}
+const QR_MAX_EDGE = 640;
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
+/** Downscale an uploaded payment QR so it travels comfortably as JSON. */
+function readQrImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, QR_MAX_EDGE / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      const context = canvas.getContext("2d");
+      if (!context) {
+        reject(new Error("无法读取图片"));
+        return;
       }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/png"));
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return (
-    <div className="hostedAdminOverlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="hostedAdminModal" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="hostedAdminModalHead">
-          <h2>{title}</h2>
-          <button type="button" className="hostedAdminClose" onClick={onClose} aria-label="关闭">×</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("无法读取图片，请换一张 PNG 或 JPG"));
+    };
+    image.src = url;
+  });
 }
 
-function useSubmit(action: () => Promise<void>) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
+function RenewalSettings({ onSaved }: { onSaved: () => void }) {
+  const [text, setText] = useState("");
+  const [qr, setQr] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const { busy, error, setError, submit } = useSubmit(async () => {
+    await saveHostedRenewal({ text: text.trim(), qr });
+    onSaved();
+  });
+
+  useEffect(() => {
+    fetchHostedRenewal()
+      .then((value) => {
+        setText(value.text);
+        setQr(value.qr);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const pickQr = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
     try {
-      await action();
+      setQr(await readQrImage(file));
+      setError("");
     } catch (err) {
-      setError(formatErrorMessage(err, "操作失败"));
-    } finally {
-      setBusy(false);
+      setError(formatErrorMessage(err, "无法读取图片"));
     }
   };
-  return { busy, error, setError, submit };
+
+  return (
+    <section className="hostedAdminCard">
+      <h2>续费信息</h2>
+      <p className="hostedAdminMuted">显示在每个用户的「我的账户」里。充值备注也会显示给用户本人。</p>
+      <form className="hostedAdminForm hostedAdminRenewal" onSubmit={submit}>
+        <label>
+          <span>说明（价格、微信号、转账后怎么通知你…）</span>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            maxLength={1000}
+            rows={4}
+            disabled={!loaded}
+            placeholder={"例如：\n300 分钟 ¥49，600 分钟 ¥89\n扫码转账后微信留言门牌号，当天到账"}
+          />
+        </label>
+        <div className="hostedAdminQrRow">
+          {qr ? <img src={qr} alt="收款码预览" className="hostedPanelQr" /> : <span className="hostedAdminQrEmpty">未设置收款码</span>}
+          <div className="hostedAdminQrActions">
+            <label className="hostedAdminGhost hostedAdminFileButton">
+              {qr ? "更换收款码" : "上传收款码"}
+              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => void pickQr(e)} />
+            </label>
+            {qr ? (
+              <button type="button" className="hostedAdminGhost" onClick={() => setQr("")}>移除</button>
+            ) : null}
+          </div>
+        </div>
+        {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
+        <div className="hostedAdminModalActions">
+          <button type="submit" className="hostedAdminPrimary" disabled={busy || !loaded}>{busy ? "保存中…" : "保存"}</button>
+        </div>
+      </form>
+    </section>
+  );
 }
 
 function PasswordField({ value, onChange }: { value: string; onChange: (value: string) => void }) {

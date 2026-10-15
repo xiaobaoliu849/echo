@@ -13,7 +13,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from services import community_client, hosted_mode
+from services import community_client, hosted_mode, hosted_renewal
 from services.billing_service import billing_service
 from services.direct_calls import HEARTBEAT_SECONDS, DirectCallRegistry
 from services.user_auth_service import user_auth_service
@@ -45,6 +45,11 @@ class GrantRequest(BaseModel):
     account: str = Field(min_length=1, max_length=120)
     minutes: int = Field(ge=-MAX_GRANT_MINUTES, le=MAX_GRANT_MINUTES)
     note: str = Field(default="", max_length=200)
+
+
+class RenewalRequest(BaseModel):
+    text: str = Field(default="", max_length=hosted_renewal.MAX_TEXT_LENGTH)
+    qr: str = Field(default="", max_length=hosted_renewal.MAX_QR_BYTES)
 
 
 class SetActiveRequest(BaseModel):
@@ -115,6 +120,45 @@ async def my_balance(
         "account": hosted_mode.display_account_id(email),
         "remaining_seconds": billing_service.get_balance(email),
     }
+
+
+async def _forward_to_server(method: str, path: str, authorization: str | None) -> Any:
+    try:
+        return await community_client.forward(method, path, token=_bearer(authorization))
+    except community_client.CommunityServerError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@router.get("/me/history", response_model=None)
+async def my_history(
+    request: Request,
+    days: int = Query(default=30, ge=1, le=366),
+    tz: int = Query(default=0, ge=-840, le=840),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> dict[str, Any] | JSONResponse:
+    if community_client.is_community_client():
+        return await _forward_to_server("GET", f"/api/billing/me/history?days={days}&tz={tz}", authorization)
+    _require_hosted()
+    email = _current_email(request)
+    since = int(time.time()) - days * 86400
+    return {
+        "account": hosted_mode.display_account_id(email),
+        "remaining_seconds": billing_service.get_balance(email),
+        "daily": billing_service.usage_by_day(since=since, utc_offset_minutes=tz, email=email),
+        "calls": billing_service.recent_calls(email, since=since),
+        "grants": billing_service.grants(email, limit=20),
+    }
+
+
+@router.get("/renewal", response_model=None)
+async def renewal_info(
+    request: Request, authorization: str | None = Header(default=None, alias="Authorization")
+) -> dict[str, Any] | JSONResponse:
+    if community_client.is_community_client():
+        return await _forward_to_server("GET", "/api/billing/renewal", authorization)
+    _require_hosted()
+    _current_email(request)
+    return hosted_renewal.load()
 
 
 # ── direct calls: the user's machine talks to the provider itself ────────
@@ -316,3 +360,12 @@ async def admin_reset_password(payload: ResetPasswordRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise _bad_request(exc) from exc
     return {"ok": True}
+
+
+@router.post("/admin/renewal")
+async def admin_set_renewal(payload: RenewalRequest) -> dict[str, Any]:
+    _require_hosted()
+    try:
+        return hosted_renewal.save(text=payload.text, qr=payload.qr)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc

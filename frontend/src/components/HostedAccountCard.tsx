@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import HostedAccountPanel from "./HostedAccountPanel";
 import { AUTH_REJECTED_EVENT, clearAuthRuntime, fetchHostedBalance, getAuthRuntimeConfig } from "../api";
 import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, formatRemainingMinutes, type HostedBalanceDetail } from "../hosted";
 
@@ -6,6 +7,7 @@ import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, formatRemainingMinutes, type H
 export default function HostedAccountCard() {
   const [account, setAccount] = useState("");
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,14 +43,22 @@ export default function HostedAccountCard() {
   const low = remaining !== null && remaining <= 300;
   const minutes = remaining === null ? "…" : formatRemainingMinutes(remaining);
   return (
-    <div className={low ? "hostedAccountCard is-low" : "hostedAccountCard"} role="status" title={`剩余 ${minutes} 分钟`}>
-      <div className="hostedAccountText">
-        <span className="hostedAccountName">{account || "…"}</span>
-        <span className="hostedAccountMinutes">
-          剩余 <strong>{minutes}</strong> 分钟
+    <div className={low ? "hostedAccountCard is-low" : "hostedAccountCard"} role="status">
+      <button
+        type="button"
+        className="hostedAccountOpen"
+        onClick={() => setPanelOpen(true)}
+        title={`剩余 ${minutes} 分钟 · 我的账户`}
+      >
+        <span className="hostedAccountText">
+          <span className="hostedAccountName">{account || "…"} · 我的账户</span>
+          <span className="hostedAccountMinutes">
+            剩余 <strong>{minutes}</strong> 分钟
+          </span>
         </span>
-      </div>
-      <strong className="hostedAccountMinutesCompact">{minutes}</strong>
+        <strong className="hostedAccountMinutesCompact">{minutes}</strong>
+      </button>
+      {panelOpen ? <HostedAccountPanel onClose={() => setPanelOpen(false)} /> : null}
       {getAuthRuntimeConfig().isAdmin ? (
         <a className="hostedAccountLogout" href={HOSTED_ADMIN_HASH}>管理</a>
       ) : null}

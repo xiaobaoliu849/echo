@@ -1618,6 +1618,48 @@ export async function fetchHostedBalance(): Promise<{ account: string; remaining
   return response.json();
 }
 
+export type HostedCallRecord = {
+  provider: string;
+  model: string;
+  started_at: number;
+  ended_at: number;
+  wall_seconds: number;
+  billed_seconds: number;
+};
+
+export type HostedGrantRecord = { delta_seconds: number; note: string; created_at: number };
+
+export type HostedHistory = {
+  account: string;
+  remaining_seconds: number;
+  daily: HostedDailyUsage[];
+  calls: HostedCallRecord[];
+  grants: HostedGrantRecord[];
+};
+
+/** Renewal instructions set by the operator; `qr` is a data: URL or "". */
+export type HostedRenewal = { text: string; qr: string };
+
+export async function fetchHostedHistory(days: number): Promise<HostedHistory> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/billing/me/history?days=${days}&tz=${viewerUtcOffsetMinutes()}`,
+    {},
+    { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS },
+  );
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
+export async function fetchHostedRenewal(): Promise<HostedRenewal> {
+  const response = await apiFetch(`${API_BASE_URL}/api/billing/renewal`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  return response.json();
+}
+
 // ── hosted operator console (admin token) ──────────────────────────────
 
 export type HostedDailyUsage = { day: string; wall_seconds: number; billed_seconds: number; users: number };
@@ -1643,7 +1685,7 @@ export type HostedAdminOverview = {
 export type HostedAdminUserDetail = {
   account: string;
   remaining_seconds: number;
-  grants: { delta_seconds: number; note: string; created_at: number }[];
+  grants: HostedGrantRecord[];
   daily: HostedDailyUsage[];
 };
 
@@ -1689,6 +1731,10 @@ export function grantHostedMinutes(account: string, minutes: number, note: strin
 
 export function setHostedAccountActive(account: string, active: boolean): Promise<{ ok: boolean }> {
   return hostedAdminRequest("active", { account, active });
+}
+
+export function saveHostedRenewal(renewal: HostedRenewal): Promise<HostedRenewal> {
+  return hostedAdminRequest("renewal", renewal);
 }
 
 export function resetHostedPassword(account: string, password: string): Promise<{ ok: boolean }> {

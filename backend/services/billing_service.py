@@ -232,4 +232,49 @@ class BillingService:
             for r in rows
         ]
 
+    def recent_calls(self, email: str, *, since: int = 0, limit: int = 50, gap_seconds: int = 90) -> list[dict[str, Any]]:
+        """Usage rows regrouped into calls, newest first.
+
+        The ledger stores one row per metering tick (every 5-15 s), so a
+        call is a run of same-model rows with no gap longer than
+        ``gap_seconds`` between them.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT provider, model, delta_seconds, wall_seconds, created_at
+                FROM billing_ledger
+                WHERE user_email = ? AND kind = 'usage' AND created_at >= ?
+                ORDER BY created_at, id
+                """,
+                (self._normalize(email), int(since)),
+            ).fetchall()
+        calls: list[dict[str, Any]] = []
+        for r in rows:
+            at = int(r["created_at"])
+            wall = int(r["wall_seconds"] or 0)
+            last = calls[-1] if calls else None
+            if (
+                last is not None
+                and last["model"] == str(r["model"])
+                and last["provider"] == str(r["provider"])
+                and at - last["ended_at"] <= gap_seconds
+            ):
+                last["ended_at"] = at
+                last["wall_seconds"] += wall
+                last["billed_seconds"] -= int(r["delta_seconds"])
+                continue
+            calls.append(
+                {
+                    "provider": str(r["provider"]),
+                    "model": str(r["model"]),
+                    "started_at": at - wall,
+                    "ended_at": at,
+                    "wall_seconds": wall,
+                    "billed_seconds": -int(r["delta_seconds"]),
+                }
+            )
+        calls.reverse()
+        return calls[: int(limit)]
+
 billing_service = BillingService()

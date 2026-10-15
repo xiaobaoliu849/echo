@@ -110,6 +110,37 @@
   border-radius: 14px;
 }
 
+/* The name + minutes area opens "My account"; undo the global button look. */
+.hostedAccountCard .hostedAccountOpen {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  font-weight: 400;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.hostedAccountCard .hostedAccountOpen:hover:not(:disabled) {
+  transform: none;
+  filter: none;
+}
+
+.hostedAccountCard .hostedAccountOpen:hover .hostedAccountName {
+  color: var(--brand-dark);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.vsSidebar.collapsed .hostedAccountOpen {
+  justify-content: center;
+}
+
 .hostedAccountText {
   display: flex;
   flex-direction: column;
@@ -202,7 +233,8 @@ a.hostedAccountLogout {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 24px;
+  /* Line the header up with the centred 1080px content column. */
+  padding: 12px max(24px, calc((100% - 1080px) / 2 + 24px));
   background: color-mix(in oklab, var(--canvas) 88%, transparent);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border-color);
@@ -233,25 +265,31 @@ a.hostedAccountLogout {
 }
 
 /* Undo the app-wide gradient button (desktop-interactions.css). */
-.hostedAdmin button {
-  font: inherit;
+.hostedAdmin button,
+.hostedAdminOverlay button {
+  font-family: inherit;
+  line-height: 1.4;
   cursor: pointer;
   box-shadow: none;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .hostedAdmin button:hover:not(:disabled),
-.hostedAdmin button:active:not(:disabled) {
+.hostedAdmin button:active:not(:disabled),
+.hostedAdminOverlay button:hover:not(:disabled),
+.hostedAdminOverlay button:active:not(:disabled) {
   filter: none;
   transform: none;
 }
 
-.hostedAdmin button:focus-visible {
+.hostedAdmin button:focus-visible,
+.hostedAdminOverlay button:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-.hostedAdmin button:disabled {
+.hostedAdmin button:disabled,
+.hostedAdminOverlay button:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -405,7 +443,8 @@ a.hostedAccountLogout {
 }
 
 .hostedAdminSearch,
-.hostedAdminForm input {
+.hostedAdminForm input,
+.hostedAdminForm textarea {
   padding: 8px 10px;
   font: inherit;
   font-size: var(--step-0);
@@ -414,6 +453,7 @@ a.hostedAccountLogout {
   border: 1px solid var(--border-color);
   border-radius: 10px;
   min-width: 0;
+  font-weight: 400;
 }
 
 .hostedAdminSearch {
@@ -421,7 +461,8 @@ a.hostedAccountLogout {
 }
 
 .hostedAdminSearch:focus,
-.hostedAdminForm input:focus {
+.hostedAdminForm input:focus,
+.hostedAdminForm textarea:focus {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
@@ -615,11 +656,18 @@ a.hostedAccountLogout {
 .hostedAdminOverlay {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  /* Above the app shell's floating controls (canvas toggle, call bar). */
+  z-index: 1000;
   display: grid;
   place-items: center;
   padding: 16px;
   background: color-mix(in oklab, black 35%, transparent);
+  font-family: var(--body-font);
+  color: var(--text-primary);
+}
+
+.hostedAdminModal.is-wide {
+  width: min(600px, 100%);
 }
 
 .hostedAdminModal {
@@ -644,7 +692,7 @@ a.hostedAccountLogout {
   justify-content: space-between;
 }
 
-.hostedAdmin .hostedAdminClose {
+.hostedAdminOverlay .hostedAdminClose {
   padding: 0 4px;
   border: 0;
   background: none;
@@ -730,7 +778,156 @@ a.hostedAccountLogout {
   font-variant-numeric: tabular-nums;
 }
 
+/* "My account" panel */
+.hostedPanelBalance {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  margin-bottom: 4px;
+  background: var(--brand-soft);
+  border-radius: 14px;
+}
+
+.hostedPanelMinutes {
+  font-size: var(--step-1);
+  color: var(--text-secondary);
+}
+
+.hostedPanelMinutes strong {
+  font-size: var(--step-4);
+  color: var(--brand-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.hostedPanelMinutes.is-low strong {
+  color: var(--danger);
+}
+
+.hostedPanelSection {
+  margin-top: 4px;
+}
+
+.hostedPanelSection > h3 {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.hostedPanelSection .hostedAdminChart {
+  margin-top: 14px;
+}
+
+.hostedPanelRenewal {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.hostedPanelQr {
+  flex: none;
+  width: 160px;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: #fff;
+}
+
+.hostedPanelRenewalText {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--step-0);
+  line-height: 1.7;
+}
+
+.hostedPanelList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--step--1);
+}
+
+.hostedPanelList li {
+  display: grid;
+  grid-template-columns: 90px 1fr 48px 64px;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hostedPanelMore {
+  margin-top: 10px;
+}
+
+/* Admin: renewal settings */
+.hostedAdminRenewal {
+  margin-top: 12px;
+}
+
+.hostedAdminForm textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.hostedAdminQrRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.hostedAdminQrEmpty {
+  display: grid;
+  place-items: center;
+  width: 160px;
+  height: 120px;
+  font-size: var(--step--1);
+  color: var(--text-soft);
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+}
+
+.hostedAdminQrActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hostedAdminForm label.hostedAdminFileButton {
+  position: relative;
+  display: inline-flex;
+  flex-direction: row;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.hostedAdminFileButton input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.hostedAdminFileButton:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 @media (max-width: 760px) {
+  .hostedPanelRenewal,
+  .hostedAdminQrRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hostedPanelList li {
+    grid-template-columns: 80px 1fr 44px;
+  }
+
+  .hostedPanelList li > :nth-child(4) {
+    display: none;
+  }
+
   .hostedAdminHeader {
     padding: 10px 16px;
   }
