@@ -473,6 +473,14 @@ class HostedApiTests(unittest.TestCase):
         self.assertEqual(cleared, {"deleted": 3})
         self.assertEqual(clear.await_args.args[1], USER[0])  # only the caller's own memory
 
+    def test_my_memory_skips_everos_for_non_members(self) -> None:
+        hosted_memory.hosted_memory_store.extend(USER[0], 0)
+        with patch.object(hosted_memory, "overview", AsyncMock()) as overview:
+            body = self._request("GET", "/api/billing/me/memory", self.user_token).json()
+        overview.assert_not_awaited()
+        self.assertFalse(body["member"])
+        self.assertEqual(body["episodes"], [])
+
     def test_memory_gateway_requires_membership_and_pins_scope(self) -> None:
         payload = {"query": "my name", "user_id": "victim", "top_k": 5}
         denied = self._request(
@@ -1052,6 +1060,57 @@ class HostedMemoryTests(unittest.TestCase):
             result = asyncio.run(hosted_memory.overview(self.store, "a@x"))
         self.assertEqual(result["episodes"][0]["text"], "你 said their name is Xiaoming")
         self.assertEqual(result["profile"], ["name: 你 / Xiaoming"])
+
+    def test_overview_flattens_structured_profiles_into_facts(self) -> None:
+        scope = self.store.scope("a@x")
+        profile = httpx.Response(
+            200,
+            json={
+                "data": {
+                    "profiles": [
+                        {
+                            "user_id": scope,
+                            "profile_data": {
+                                "explicit_info": [
+                                    {"category": "name", "description": "Xiaoming", "evidence": "said so"},
+                                    {"category": "hobby", "description": "football"},
+                                ],
+                                "implicit_traits": [{"trait": "curious"}],
+                                "interests": ["dinosaurs", "space"],
+                                "basic_info": {"name": "Xiaoming", "age": 10, "city": "Shenzhen"},
+                                "likes": [{"category": "food", "items": ["pizza", "noodles"]}],
+                                "note": {"category": "family", "description": f"{scope} has a sister"},
+                            },
+                        }
+                    ]
+                }
+            },
+        )
+        episodes = httpx.Response(
+            200, json={"data": {"episodes": [{"id": "e1", "subject": "Football", "summary": "Talked football", "timestamp": 1}]}}
+        )
+
+        async def fake_call(operation: str, body: dict[str, Any]) -> httpx.Response:
+            return profile if body["memory_type"] == "profile" else episodes
+
+        with patch.object(hosted_memory, "call_everos", side_effect=fake_call):
+            result = asyncio.run(hosted_memory.overview(self.store, "a@x"))
+        self.assertEqual(
+            result["facts"],
+            [
+                {"label": "name", "text": "Xiaoming"},
+                {"label": "hobby", "text": "football"},
+                {"label": "implicit_traits", "text": "curious"},
+                {"label": "interests", "text": "dinosaurs、space"},
+                # basic_info's name repeats explicit_info's and is shown once.
+                {"label": "age", "text": "10"},
+                {"label": "city", "text": "Shenzhen"},
+                {"label": "food", "text": "pizza、noodles"},
+                {"label": "family", "text": "你 has a sister"},
+            ],
+        )
+        self.assertEqual(result["profile"][0], "name: Xiaoming")
+        self.assertEqual(result["episodes"][0]["title"], "Football")
 
     def test_gateway_pins_every_request_to_the_caller(self) -> None:
         add = rewrite_gateway_request(

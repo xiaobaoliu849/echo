@@ -1,6 +1,7 @@
 import { useState } from "react";
 import echoIcon from "../assets/echo-icon.png";
 import { saveHostedPrefs, type HostedPrefs } from "../api";
+import { PREFS_KEY, putCached } from "../hostedCache";
 import { getHostedLanguage } from "../hosted";
 import { hostedErrorMessage } from "../hostedFormat";
 import { applyHostedPrefs } from "../hostedPrefs";
@@ -46,7 +47,9 @@ export default function HostedOnboarding({
       const patch: Partial<HostedPrefs> = skip
         ? { onboarded: true }
         : { learner, level: learner === "child" && level === "ielts" ? "beginner" : level, coach, onboarded: true };
-      applyHostedPrefs(await saveHostedPrefs(patch));
+      const next = await saveHostedPrefs(patch);
+      putCached(PREFS_KEY, next);
+      applyHostedPrefs(next);
       onDone();
     } catch (err) {
       setError(hostedErrorMessage(err, t("保存失败，请再试一次", "Could not save, please try again")));

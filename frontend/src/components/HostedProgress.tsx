@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Clock, Flame, Trophy } from "lucide-react";
-import { fetchHostedHistory, type HostedDailyUsage, type HostedHistory } from "../api";
+import { type HostedDailyUsage, type HostedHistory } from "../api";
 import { getHostedLanguage } from "../hosted";
 import { fillDays, hostedErrorMessage, minutes, practiceLevel, practiceStreaks } from "../hostedFormat";
+import { PROGRESS_DAYS, PROGRESS_KEY, loadProgressHistory, useCachedResource } from "../hostedCache";
 import { createInlineTranslator } from "../i18n";
 
 /**
@@ -11,9 +12,8 @@ import { createInlineTranslator } from "../i18n";
  * self-hosted VoiceTrajectoryHeatmap, which reads this machine's sessions).
  */
 
-const WEEKS = 26;
-// Whole weeks ending with the current one, starting on a Monday.
-const DAYS = WEEKS * 7;
+// 26 whole weeks ending with the current one, starting on a Monday.
+const DAYS = PROGRESS_DAYS;
 
 const t = createInlineTranslator(getHostedLanguage());
 
@@ -32,20 +32,11 @@ function dayLabel(day: string): string {
 }
 
 export default function HostedProgress() {
-  const [history, setHistory] = useState<HostedHistory | null>(null);
-  const [error, setError] = useState("");
+  const { data, error: loadError } = useCachedResource(PROGRESS_KEY, loadProgressHistory);
+  const history: HostedHistory | null = data ?? null;
+  const error = loadError && !history ? hostedErrorMessage(loadError, t("加载失败", "Could not load")) : "";
   const [active, setActive] = useState<Cell | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchHostedHistory(DAYS)
-      .then((value) => !cancelled && setHistory(value))
-      .catch((err) => !cancelled && setError(hostedErrorMessage(err, t("加载失败", "Could not load"))));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const { weeks, daily } = useMemo(() => {
     // Pad to Monday-aligned weeks: the last column ends on this week's Sunday.

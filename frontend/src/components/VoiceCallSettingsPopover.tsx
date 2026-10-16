@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { saveHostedPrefs } from "../api";
+import { PREFS_KEY, putCached } from "../hostedCache";
 import { HOSTED_MODEL_LABELS, HOSTED_PROVIDER_LABELS, IS_HOSTED_BUILD, hostedBillingNote, isHostedModelSold } from "../hosted";
 import { createPortal } from "react-dom";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
@@ -689,7 +690,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                           voiceChat.onCoachConfigChange({ tutor: e.target.checked });
                           if (IS_HOSTED_BUILD) {
                             // Keep the account's preference in step with the call toggle.
-                            void saveHostedPrefs({ coach: e.target.checked }).catch(() => undefined);
+                            void saveHostedPrefs({ coach: e.target.checked })
+                              .then((next) => putCached(PREFS_KEY, next))
+                              .catch(() => undefined);
                           }
                         }}
                       />

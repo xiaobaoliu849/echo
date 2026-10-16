@@ -323,7 +323,9 @@ async def my_memory(
     email = _current_email(request)
     store = hosted_memory.hosted_memory_store
     status = store.status(email)
-    remembered = await hosted_memory.overview(store, email) if status["configured"] else {"profile": [], "episodes": []}
+    # Only members can see memories; skip the two EverOS round trips otherwise.
+    shows = status["configured"] and status["member"]
+    remembered = await hosted_memory.overview(store, email) if shows else {"profile": [], "facts": [], "episodes": []}
     return {**status, **remembered}
 
 

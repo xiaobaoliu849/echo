@@ -178,3 +178,74 @@ export function practiceStreaks(daily: HostedDailyUsage[]): { current: number; l
   }
   return { current, longest };
 }
+
+// ── AI memory view ───────────────────────────────────────────────────────
+
+const MEMORY_LABELS: Record<string, [string, string]> = {
+  name: ["名字", "Name"],
+  nickname: ["昵称", "Nickname"],
+  age: ["年龄", "Age"],
+  gender: ["性别", "Gender"],
+  birthday: ["生日", "Birthday"],
+  occupation: ["职业", "Job"],
+  job: ["职业", "Job"],
+  school: ["学校", "School"],
+  grade: ["年级", "Grade"],
+  location: ["所在地", "Location"],
+  city: ["城市", "City"],
+  family: ["家人", "Family"],
+  pet: ["宠物", "Pets"],
+  pets: ["宠物", "Pets"],
+  hobby: ["兴趣爱好", "Hobbies"],
+  hobbies: ["兴趣爱好", "Hobbies"],
+  interest: ["兴趣爱好", "Interests"],
+  interests: ["兴趣爱好", "Interests"],
+  likes: ["喜欢", "Likes"],
+  dislikes: ["不喜欢", "Dislikes"],
+  preference: ["偏好", "Preferences"],
+  preferences: ["偏好", "Preferences"],
+  level: ["英语水平", "English level"],
+  english_level: ["英语水平", "English level"],
+  goal: ["学习目标", "Goals"],
+  goals: ["学习目标", "Goals"],
+  skills: ["技能", "Skills"],
+  language: ["语言", "Language"],
+  personality: ["性格", "Personality"],
+  traits: ["性格特点", "Traits"],
+  implicit_traits: ["性格特点", "Traits"],
+  explicit_info: ["基本信息", "About you"],
+};
+
+/** A readable name for an EverOS profile field ("english_level" → 英语水平). */
+export function memoryLabel(key: string, zh: boolean): string {
+  const known = MEMORY_LABELS[key.trim().toLowerCase().replace(/[\s-]+/g, "_")];
+  if (known) {
+    return zh ? known[0] : known[1];
+  }
+  const words = key.replace(/[_-]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
+}
+
+/** Profile facts, from the structured field or (older servers) "label: text" lines. */
+export function memoryFacts(memory: { facts?: { label: string; text: string }[]; profile?: string[] }): { label: string; text: string }[] {
+  if (memory.facts) {
+    return memory.facts;
+  }
+  return (memory.profile ?? []).map((line) => {
+    const at = line.indexOf(": ");
+    return at > 0 ? { label: line.slice(0, at), text: line.slice(at + 2) } : { label: "", text: line };
+  });
+}
+
+/** EverOS timestamps arrive as epoch seconds, epoch milliseconds or ISO strings. */
+export function memoryEpochSeconds(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const numeric = typeof value === "number" ? value : /^\d+(\.\d+)?$/.test(value) ? Number(value) : NaN;
+  if (Number.isFinite(numeric)) {
+    return numeric > 1e12 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
+}

@@ -1769,8 +1769,11 @@ export type HostedMemory = {
   memory_until: number | null;
   opted_out: boolean;
   active: boolean;
+  /** "label: text" lines; servers before 2026-10-16 send only these. */
   profile?: string[];
-  episodes?: { id: string; text: string; at: number | string | null }[];
+  /** The same profile lines, split for the card view. */
+  facts?: { label: string; text: string }[];
+  episodes?: { id: string; title?: string; text: string; at: number | string | null }[];
   error?: string;
 };
 

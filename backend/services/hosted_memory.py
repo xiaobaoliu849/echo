@@ -16,6 +16,7 @@ user / session field to the caller's own scope before forwarding.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import time
@@ -196,25 +197,33 @@ def rewrite_gateway_request(operation: str, payload: dict[str, Any], scope: str)
 
 
 async def call_everos(operation: str, body: dict[str, Any]) -> httpx.Response:
+    from .evermem_service import _pooled_client
+
     url, key = server_settings()
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+    # Pooled: EverOS is abroad, so a fresh TLS handshake per request is slow.
+    async with _pooled_client() as client:
         return await client.post(
             f"{url}/api/v2/memory/{operation}",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             json=body,
+            timeout=REQUEST_TIMEOUT,
         )
 
 
 async def overview(store: HostedMemoryStore, email: str) -> dict[str, Any]:
-    """What the AI remembers about this user: profile plus recent episodes."""
+    """What the AI remembers about this user: profile plus recent episodes.
+
+    ``profile`` stays a list of "label: text" strings for older clients;
+    ``facts`` carries the same lines as ``{label, text}`` for the card view.
+    """
     scope = store.scope(email)
-    result: dict[str, Any] = {"profile": [], "episodes": []}
+    result: dict[str, Any] = {"profile": [], "facts": [], "episodes": []}
     if not server_settings()[1]:
         return result
     try:
-        profile = await call_everos("get", rewrite_gateway_request("get", {"memory_type": "profile"}, scope))
-        episodes = await call_everos(
-            "get", rewrite_gateway_request("get", {"memory_type": "episode", "page_size": 20}, scope)
+        profile, episodes = await asyncio.gather(
+            call_everos("get", rewrite_gateway_request("get", {"memory_type": "profile"}, scope)),
+            call_everos("get", rewrite_gateway_request("get", {"memory_type": "episode", "page_size": 30}, scope)),
         )
     except httpx.HTTPError as exc:
         logger.warning("hosted memory overview failed: %s", exc)
@@ -222,8 +231,13 @@ async def overview(store: HostedMemoryStore, email: str) -> dict[str, Any]:
         return result
     # EverOS writes summaries in terms of the sender id ("echo_1a2b… said");
     # show the user "你" instead of their opaque id.
-    result["profile"] = [line.replace(scope, "你") for line in _profile_lines(profile)]
-    result["episodes"] = [{**item, "text": item["text"].replace(scope, "你")} for item in _episode_items(episodes)]
+    facts = [{"label": f["label"].replace(scope, "你"), "text": f["text"].replace(scope, "你")} for f in _profile_facts(profile)]
+    result["facts"] = facts
+    result["profile"] = [f"{f['label']}: {f['text']}" for f in facts]
+    result["episodes"] = [
+        {**item, "text": item["text"].replace(scope, "你"), "title": item["title"].replace(scope, "你")}
+        for item in _episode_items(episodes)
+    ]
     return result
 
 
@@ -238,20 +252,86 @@ def _data(response: httpx.Response) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _profile_lines(response: httpx.Response) -> list[str]:
+_SKIPPED_PROFILE_KEYS = frozenset(
+    {"user_id", "id", "scope", "group_id", "created_at", "updated_at", "timestamp", "version", "score", "evidence", "evidences"}
+)
+_TEXT_KEYS = ("description", "value", "content", "trait", "summary", "text", "name")
+_LABEL_KEYS = ("category", "attribute", "type", "aspect", "key", "title")
+
+
+def _content_fields(value: dict[str, Any]) -> dict[str, Any]:
+    """The fields of a profile object that carry content (not ids, labels or evidence)."""
+    return {
+        str(k): v
+        for k, v in value.items()
+        if k not in _SKIPPED_PROFILE_KEYS and k not in _LABEL_KEYS and v not in (None, "", [], {})
+    }
+
+
+def _as_text(value: Any) -> str:
+    if isinstance(value, list):
+        return "、".join(t for t in (_as_text(v) for v in value) if t)
+    if isinstance(value, dict):
+        fields = _content_fields(value)
+        for key in _TEXT_KEYS:
+            if key in fields:
+                return _as_text(fields[key])
+        # No obvious text field ({"items": [...]}, ...): keep everything.
+        return "、".join(t for t in (_as_text(v) for v in fields.values()) if t)
+    return "" if value is None else str(value).strip()
+
+
+def _label_of(value: dict[str, Any], fallback: str) -> str:
+    return next((str(value[k]) for k in _LABEL_KEYS if value.get(k)), fallback)
+
+
+def _flatten_profile(key: str, value: Any, out: list[dict[str, str]]) -> None:
+    """One fact per scalar, per list of strings, or per entry of a list of objects."""
+    if value in (None, "", [], {}):
+        return
+    if isinstance(value, list) and any(isinstance(v, dict) for v in value):
+        for entry in value:
+            if isinstance(entry, dict):
+                text = _as_text(entry)
+                if text:
+                    out.append({"label": _label_of(entry, key), "text": text})
+            elif entry:
+                out.append({"label": key, "text": str(entry)})
+        return
+    if isinstance(value, dict):
+        fields = _content_fields(value)
+        if len(fields) == 1 and next(iter(fields)) in _TEXT_KEYS:
+            # {"description": ..., "category": ...}: one fact.
+            out.append({"label": _label_of(value, key), "text": _as_text(fields)})
+        else:
+            # {"name": ..., "age": ..., "city": ...}: a fact per field.
+            for sub_key, sub_value in fields.items():
+                _flatten_profile(sub_key, sub_value, out)
+        return
+    text = _as_text(value)
+    if text:
+        out.append({"label": key, "text": text})
+
+
+def _profile_facts(response: httpx.Response) -> list[dict[str, str]]:
     data = _data(response)
-    lines: list[str] = []
+    facts: list[dict[str, str]] = []
     for profile in data.get("profiles") or ([data["profile_data"]] if data.get("profile_data") else []):
         if isinstance(profile, dict):
             source = profile.get("profile_data") if isinstance(profile.get("profile_data"), dict) else profile
             for key, value in source.items():
-                if key in {"user_id", "id", "created_at", "updated_at"} or value in (None, "", [], {}):
-                    continue
-                text = "、".join(str(v) for v in value) if isinstance(value, list) else str(value)
-                lines.append(f"{key}: {text}"[:300])
+                if key not in _SKIPPED_PROFILE_KEYS:
+                    _flatten_profile(str(key), value, facts)
         elif profile:
-            lines.append(str(profile)[:300])
-    return lines[:30]
+            facts.append({"label": "", "text": str(profile)})
+    seen: set[tuple[str, str]] = set()
+    unique = []
+    for fact in facts:
+        item = {"label": fact["label"][:40], "text": fact["text"][:300]}
+        if (item["label"], item["text"]) not in seen:
+            seen.add((item["label"], item["text"]))
+            unique.append(item)
+    return unique[:40]
 
 
 def _episode_items(response: httpx.Response) -> list[dict[str, Any]]:
@@ -264,7 +344,15 @@ def _episode_items(response: httpx.Response) -> list[dict[str, Any]]:
         if not text:
             continue
         stamp = episode.get("timestamp") or episode.get("created_at") or episode.get("updated_at")
-        items.append({"id": str(episode.get("id") or episode.get("episode_id") or ""), "text": str(text)[:500], "at": stamp})
+        title = episode.get("subject") or episode.get("title") or ""
+        items.append(
+            {
+                "id": str(episode.get("id") or episode.get("episode_id") or ""),
+                "title": str(title)[:80] if title != text else "",
+                "text": str(text)[:500],
+                "at": stamp,
+            }
+        )
     return items
 
 

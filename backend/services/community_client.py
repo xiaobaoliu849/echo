@@ -24,6 +24,7 @@ import logging
 import os
 import ssl
 import time
+import weakref
 from typing import Any
 
 import httpx
@@ -74,6 +75,28 @@ class CommunityServerError(Exception):
         self.detail = detail
 
 
+# One pooled client per event loop. A fresh client per request paid a new
+# TCP + TLS handshake to the hosted server every time (about 0.6 s of a ~1 s
+# request), and the settings page makes several requests in a row.
+_SHARED_CLIENTS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _shared_client() -> httpx.AsyncClient:
+    loop = asyncio.get_running_loop()
+    client = _SHARED_CLIENTS.get(loop)
+    if client is None or client.is_closed:
+        # Idle connections are dropped well before nginx's keepalive_timeout
+        # (75 s by default), so a request is never sent on a socket the
+        # server is closing.
+        client = httpx.AsyncClient(
+            verify=_verify(), timeout=REQUEST_TIMEOUT, limits=httpx.Limits(keepalive_expiry=30.0)
+        )
+        _SHARED_CLIENTS[loop] = client
+    return client
+
+
 async def forward(method: str, path: str, *, token: str = "", json: Any = None, client_id: str = "") -> Any:
     """Call the hosted server and return its JSON, raising on HTTP errors."""
     headers: dict[str, str] = {}
@@ -81,13 +104,14 @@ async def forward(method: str, path: str, *, token: str = "", json: Any = None, 
         headers["Authorization"] = f"Bearer {token}"
     if client_id:
         headers["X-Client-ID"] = client_id
-    async with httpx.AsyncClient(verify=_verify(), timeout=REQUEST_TIMEOUT) as client:
-        try:
-            response = await client.request(method, f"{community_server_url()}{path}", headers=headers, json=json)
-        except httpx.HTTPError as exc:
-            raise CommunityServerError(
-                503, {"code": "COMMUNITY_SERVER_UNREACHABLE", "message": "连接服务器失败，请检查网络。", "meta": {}}
-            ) from exc
+    try:
+        response = await _shared_client().request(
+            method, f"{community_server_url()}{path}", headers=headers, json=json
+        )
+    except httpx.HTTPError as exc:
+        raise CommunityServerError(
+            503, {"code": "COMMUNITY_SERVER_UNREACHABLE", "message": "连接服务器失败，请检查网络。", "meta": {}}
+        ) from exc
     try:
         body = response.json()
     except ValueError:

@@ -1,13 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Brain, Flame, GraduationCap, Languages, ShieldCheck, Wallet, type LucideIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  Brain,
+  Flame,
+  GraduationCap,
+  Languages,
+  MessagesSquare,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import echoIcon from "../assets/echo-icon.png";
 import {
   AUTH_REJECTED_EVENT,
   changeAuthPassword,
   clearAuthRuntime,
   clearHostedMemory,
-  fetchHostedHistory,
   fetchHostedMemory,
   fetchHostedPrefs,
   fetchHostedRenewal,
@@ -25,11 +36,15 @@ import {
   formatDate,
   formatElapsed,
   formatTime,
+  memoryEpochSeconds,
+  memoryFacts,
+  memoryLabel,
   minutes,
   modelLabel,
   useSubmit,
   hostedErrorMessage,
 } from "../hostedFormat";
+import { PREFS_KEY, PROGRESS_KEY, loadCached, loadProgressHistory, useCachedResource } from "../hostedCache";
 import { applyHostedPrefs } from "../hostedPrefs";
 import { createInlineTranslator } from "../i18n";
 import HostedProgress from "./HostedProgress";
@@ -46,6 +61,36 @@ export type SettingsTab = "progress" | "account" | "learning" | "memory" | "gene
 const HISTORY_DAYS = 30;
 const CALLS_SHOWN = 10;
 const LOW_BALANCE_SECONDS = 10 * 60;
+const EPISODES_SHOWN = 6;
+
+// The server sends at most this many episodes (hosted_memory.overview).
+const EPISODE_PAGE = 30;
+
+// Cache keys (scoped per account by hostedCache).
+const RENEWAL_KEY = "renewal";
+const MEMORY_KEY = "memory";
+
+/**
+ * Start the cheap tabs' requests at once, so switching tabs rarely waits.
+ * Memory is left out: it costs two EverOS round trips abroad, so it loads
+ * only when its tab is pointed at or opened.
+ */
+function prefetchSettings() {
+  const loads: [string, () => Promise<unknown>][] = [
+    [PROGRESS_KEY, loadProgressHistory],
+    [RENEWAL_KEY, fetchHostedRenewal],
+    [PREFS_KEY, fetchHostedPrefs],
+  ];
+  for (const [key, load] of loads) {
+    loadCached(key, load).catch(() => undefined); // each tab shows its own error
+  }
+}
+
+function prefetchTab(id: SettingsTab) {
+  if (id === "memory") {
+    loadCached(MEMORY_KEY, fetchHostedMemory).catch(() => undefined);
+  }
+}
 
 function useT() {
   return createInlineTranslator(getHostedLanguage());
@@ -110,6 +155,8 @@ export default function HostedSettings({ initialTab = "account", onClose }: { in
   ];
   const current = tabs.find((item) => item.id === tab) ?? tabs[0];
 
+  useEffect(prefetchSettings, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -148,6 +195,8 @@ export default function HostedSettings({ initialTab = "account", onClose }: { in
                 aria-current={tab === item.id ? "page" : undefined}
                 className={tab === item.id ? "is-active" : ""}
                 onClick={() => select(item.id)}
+                onPointerEnter={() => prefetchTab(item.id)}
+                onFocus={() => prefetchTab(item.id)}
               >
                 <span className="hostedSettingsNavIcon"><Icon size={18} aria-hidden="true" /></span>
                 <span className="hostedSettingsNavText">
@@ -182,34 +231,28 @@ export default function HostedSettings({ initialTab = "account", onClose }: { in
 
 function AccountTab() {
   const t = useT();
-  const [history, setHistory] = useState<HostedHistory | null>(null);
-  const [renewal, setRenewal] = useState<HostedRenewal | null>(null);
-  const [error, setError] = useState("");
+  // One 26-week request serves both this tab and Practice; cut it to 30 days here.
+  const historyResource = useCachedResource<HostedHistory>(PROGRESS_KEY, loadProgressHistory);
+  const renewalResource = useCachedResource<HostedRenewal>(RENEWAL_KEY, fetchHostedRenewal);
+  const history = historyResource.data ?? null;
+  const renewal = renewalResource.data ?? null;
+  const loadError = (!history && historyResource.error) || (!renewal && renewalResource.error);
+  const error = loadError ? hostedErrorMessage(loadError, t("加载失败", "Could not load")) : "";
   const [showAllCalls, setShowAllCalls] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
+  const lowBalance = history !== null && history.remaining_seconds < LOW_BALANCE_SECONDS;
 
   useEffect(() => {
-    let cancelled = false;
-    Promise.all([fetchHostedHistory(HISTORY_DAYS), fetchHostedRenewal()])
-      .then(([nextHistory, nextRenewal]) => {
-        if (!cancelled) {
-          setHistory(nextHistory);
-          setRenewal(nextRenewal);
-          // Running low: show how to top up without an extra click.
-          if (nextHistory.remaining_seconds < LOW_BALANCE_SECONDS) {
-            setRenewOpen(true);
-          }
-        }
-      })
-      .catch((err) => !cancelled && setError(hostedErrorMessage(err, t("加载失败", "Could not load"))));
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
+    // Running low: show how to top up without an extra click.
+    if (lowBalance) {
+      setRenewOpen(true);
+    }
+  }, [lowBalance]);
 
   const remaining = history?.remaining_seconds ?? null;
-  const used = (history?.daily ?? []).reduce((sum, d) => sum + d.wall_seconds, 0);
-  const calls = history?.calls ?? [];
+  const since = recentSince(HISTORY_DAYS);
+  const used = (history?.daily ?? []).filter((d) => d.day >= since.day).reduce((sum, d) => sum + d.wall_seconds, 0);
+  const calls = (history?.calls ?? []).filter((call) => call.started_at >= since.epoch);
   const shownCalls = showAllCalls ? calls : calls.slice(0, CALLS_SHOWN);
 
   return (
@@ -281,6 +324,17 @@ function AccountTab() {
   );
 }
 
+/** The start of the last ``days`` local days (today included), as a day key and epoch seconds. */
+function recentSince(days: number): { day: string; epoch: number } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    day: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
+    epoch: Math.floor(start.getTime() / 1000),
+  };
+}
+
 /** What can be bought (the shared price list) and how to pay (the operator's QR and note). */
 function RenewalBlock({ renewal }: { renewal: HostedRenewal | null }) {
   const t = useT();
@@ -323,18 +377,12 @@ function RenewalBlock({ renewal }: { renewal: HostedRenewal | null }) {
 // ── learning preferences ─────────────────────────────────────────────────
 
 function usePrefs() {
-  const [prefs, setPrefs] = useState<HostedPrefs | null>(null);
-  const [error, setError] = useState("");
+  const resource = useCachedResource<HostedPrefs>(PREFS_KEY, fetchHostedPrefs);
+  const prefs = resource.data ?? null;
+  const setPrefs = resource.setData;
+  const [saveError, setError] = useState("");
+  const error = saveError || (!prefs && resource.error ? hostedErrorMessage(resource.error, "") : "");
   const [saved, setSaved] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    fetchHostedPrefs()
-      .then((value) => !cancelled && setPrefs(value))
-      .catch((err) => !cancelled && setError(hostedErrorMessage(err, "")));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   const save = async (patch: Partial<HostedPrefs>): Promise<HostedPrefs | null> => {
     if (!prefs) {
       return null;
@@ -565,26 +613,28 @@ function ChangePasswordForm() {
 /** Membership, the user's own on/off switch, what is remembered, and a full wipe. */
 function MemorySection() {
   const t = useT();
-  const [memory, setMemory] = useState<HostedMemory | null>(null);
+  const zh = getHostedLanguage() !== "en-US";
+  const resource = useCachedResource<HostedMemory>(MEMORY_KEY, fetchHostedMemory);
+  const memory = resource.data ?? null;
+  const setMemory = resource.setData;
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const locked = busy || refreshing;
+  const [showAllEpisodes, setShowAllEpisodes] = useState(false);
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [actionError, setError] = useState("");
+  const loadError = !memory && resource.error ? hostedErrorMessage(resource.error, t("读取记忆失败", "Could not load memories")) : "";
+  const error = actionError || loadError;
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchHostedMemory()
-      .then((value) => !cancelled && setMemory(value))
-      .catch((err) => !cancelled && setError(hostedErrorMessage(err, t("读取记忆失败", "Could not load memories"))));
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
-
-  if (error && !memory) {
-    return <p className="hostedAdminError" role="alert">{error}</p>;
+  if (loadError) {
+    return <p className="hostedAdminError" role="alert">{loadError}</p>;
   }
   if (!memory) {
-    return <p className="hostedAdminMuted">{t("加载中…", "Loading…")}</p>;
+    return (
+      <div className="hostedMemory">
+        <p className="hostedAdminMuted">{t("正在读取外教记住的内容…", "Loading what the tutor remembers…")}</p>
+      </div>
+    );
   }
   const header = (
     <div className="hostedMemoryBrand">
@@ -614,6 +664,18 @@ function MemorySection() {
     );
   }
 
+  const refresh = async () => {
+    setRefreshing(true);
+    setError("");
+    try {
+      setMemory(await loadCached(MEMORY_KEY, fetchHostedMemory, true));
+    } catch (err) {
+      setError(hostedErrorMessage(err, t("读取记忆失败", "Could not load memories")));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const toggle = async () => {
     setBusy(true);
     setError("");
@@ -635,7 +697,7 @@ function MemorySection() {
     setError("");
     try {
       await clearHostedMemory();
-      setMemory({ ...memory, profile: [], episodes: [] });
+      setMemory({ ...memory, profile: [], facts: [], episodes: [], error: undefined });
       setMessage(t("已清除。之后的通话会重新开始记。", "Erased. Future calls start a fresh memory."));
     } catch (err) {
       setError(hostedErrorMessage(err, t("清除失败", "Could not erase")));
@@ -644,45 +706,131 @@ function MemorySection() {
     }
   };
 
-  const profile = memory.profile ?? [];
-  const episodes = memory.episodes ?? [];
+  const facts = memoryFacts(memory);
+  const episodes = (memory.episodes ?? [])
+    .map((item) => ({ ...item, seconds: memoryEpochSeconds(item.at) }))
+    .sort((a, b) => (b.seconds ?? 0) - (a.seconds ?? 0));
+  const shownEpisodes = showAllEpisodes ? episodes : episodes.slice(0, EPISODES_SHOWN);
+  const empty = facts.length === 0 && episodes.length === 0;
+  const refreshButton = (
+    <button type="button" className="hostedAdminGhost hostedMemoryRefresh" disabled={locked} onClick={() => void refresh()}>
+      <RefreshCw size={14} aria-hidden="true" className={refreshing ? "is-spinning" : ""} />
+      {refreshing ? t("刷新中…", "Refreshing…") : t("刷新", "Refresh")}
+    </button>
+  );
+
   return (
-    <div className="hostedMemory">
-      {header}
-      <div className="hostedMemoryHead">
-        <span className="hostedAdminMuted">{t("有效期至", "Valid until")} {formatDate(memory.memory_until ?? 0)}</span>
-        <label className="hostedAdminCheck">
-          <input type="checkbox" checked={!memory.opted_out} disabled={busy} onChange={() => void toggle()} />
-          <span>{t("通话时让 AI 记住我", "Let the AI remember me in calls")}</span>
-        </label>
+    <>
+      <div className="hostedMemory">
+        {header}
+        <div className="hostedMemorySwitch">
+          <div className="hostedSettingLabel">
+            <strong>{t("通话时让 AI 记住我", "Let the AI remember me in calls")}</strong>
+            <span className="hostedAdminMuted">
+              {memory.opted_out
+                ? t("已关闭：通话时 AI 不会读取也不会记录你的内容。", "Off: calls neither read nor record anything about you.")
+                : t(`会员有效期至 ${formatDate(memory.memory_until ?? 0)}`, `Membership valid until ${formatDate(memory.memory_until ?? 0)}`)}
+            </span>
+          </div>
+          <label className="hostedSwitch">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label={t("通话时让 AI 记住我", "Let the AI remember me in calls")}
+              checked={!memory.opted_out}
+              disabled={locked}
+              onChange={() => void toggle()}
+            />
+            <span aria-hidden="true" />
+          </label>
+        </div>
+        {memory.error || empty ? null : (
+          <div className="hostedMemoryStats">
+            <span><strong>{facts.length}</strong>{t(" 条关于你", " things about you")}</span>
+            <span>
+              <strong>{episodes.length >= EPISODE_PAGE ? `${EPISODE_PAGE}+` : episodes.length}</strong>
+              {t(" 段聊天回忆", " past conversations")}
+            </span>
+            {refreshButton}
+          </div>
+        )}
       </div>
-      {memory.opted_out ? (
-        <p className="hostedAdminMuted">{t("已关闭：通话时 AI 不会读取也不会记录你的内容。", "Off: calls neither read nor record anything about you.")}</p>
-      ) : null}
-      {memory.error ? <p className="hostedAdminMuted">{memory.error}</p> : null}
-      {memory.error ? null : profile.length === 0 && episodes.length === 0 ? (
-        <p className="hostedAdminMuted">{t("AI 还没有记住关于你的内容，多聊几次就会有了。", "Nothing remembered yet; it builds up as you talk.")}</p>
+
+      {memory.error ? (
+        <div className="hostedMemory">
+          <p className="hostedAdminMuted">{memory.error}</p>
+          <div>{refreshButton}</div>
+        </div>
+      ) : empty ? (
+        <div className="hostedMemory hostedMemoryEmpty">
+          <Sparkles size={28} aria-hidden="true" />
+          <strong>{t("外教还没有记住关于你的内容", "Nothing remembered yet")}</strong>
+          <p className="hostedAdminMuted">
+            {t(
+              "多聊几次，说说你的名字、爱好和最近的事，这里就会慢慢出现外教记住的你。刚结束的通话需要几分钟整理。",
+              "Talk a few times about your name, hobbies and your week, and it builds up here. A call that just ended takes a few minutes to sort out.",
+            )}
+          </p>
+          <div>{refreshButton}</div>
+        </div>
       ) : (
         <>
-          {profile.length > 0 ? (
-            <ul className="hostedMemoryList">
-              {profile.map((line, index) => <li key={`p-${index}`}>{line}</li>)}
-            </ul>
+          {facts.length > 0 ? (
+            <section className="hostedMemory">
+              <h3 className="hostedMemoryTitle">
+                <Brain size={16} aria-hidden="true" />
+                {t("外教眼中的你", "What the tutor knows about you")}
+              </h3>
+              <ul className="hostedMemoryFacts">
+                {facts.map((fact, index) => (
+                  <li key={`${fact.label}-${index}`}>
+                    {fact.label ? <span>{memoryLabel(fact.label, zh)}</span> : null}
+                    <strong>{fact.text}</strong>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
           {episodes.length > 0 ? (
-            <ul className="hostedMemoryList is-episodes">
-              {episodes.map((item, index) => <li key={item.id || `e-${index}`}>{item.text}</li>)}
-            </ul>
+            <section className="hostedMemory">
+              <h3 className="hostedMemoryTitle">
+                <MessagesSquare size={16} aria-hidden="true" />
+                {t("聊过的事", "Past conversations")}
+              </h3>
+              <ol className="hostedMemoryTimeline">
+                {shownEpisodes.map((item, index) => (
+                  <li key={item.id || `e-${index}`}>
+                    <time className="hostedAdminMuted">{item.seconds ? formatDate(item.seconds) : ""}</time>
+                    <div>
+                      {item.title ? <strong>{item.title}</strong> : null}
+                      <p>{item.text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              {episodes.length > EPISODES_SHOWN && !showAllEpisodes ? (
+                <button type="button" className="hostedAdminGhost hostedPanelMore" onClick={() => setShowAllEpisodes(true)}>
+                  {episodes.length >= EPISODE_PAGE
+                    ? t(`显示最近 ${episodes.length} 段`, `Show the latest ${episodes.length}`)
+                    : t(`显示全部 ${episodes.length} 段`, `Show all ${episodes.length}`)}
+                </button>
+              ) : null}
+            </section>
           ) : null}
         </>
       )}
-      {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
-      {message ? <p className="hostedAdminNotice" role="status">{message}</p> : null}
-      <div>
-        <button type="button" className="hostedAdminGhost" disabled={busy} onClick={() => void clearAll()}>
-          {t("清除我的全部记忆", "Erase all my memories")}
+
+      <div className="hostedMemory hostedMemoryDanger">
+        <div className="hostedSettingLabel">
+          <strong>{t("清除我的全部记忆", "Erase all my memories")}</strong>
+          <span className="hostedAdminMuted">{t("外教会忘掉关于你的一切，无法恢复。", "The tutor forgets everything about you. This cannot be undone.")}</span>
+        </div>
+        <button type="button" className="hostedAdminGhost is-danger" disabled={locked} onClick={() => void clearAll()}>
+          {t("清除", "Erase")}
         </button>
       </div>
-    </div>
+      {error ? <p className="hostedAdminError" role="alert">{error}</p> : null}
+      {message ? <p className="hostedAdminNotice" role="status">{message}</p> : null}
+    </>
   );
 }
