@@ -639,6 +639,14 @@ class RealtimeVoiceService(
         ``break``), or ``None`` if *command_type* is not a common command
         and the provider should handle it itself.
         """
+        if command_type == "audio_stats":
+            logger.info(
+                "realtime_client_audio_stats: provider=%s underruns=%s underrun_s=%s total_s=%s avg_latency=%s max_latency=%s base_latency=%s",
+                provider, *(payload.get(key) for key in (
+                    "underrunEvents", "underrunDuration", "totalDuration", "averageLatency", "maximumLatency", "baseLatency",
+                )),
+            )
+            return "handled"
         if command_type == "config":
             memory_session.configure(payload.get("memory"))
             # Fetch recent memories in the background so the first turn can

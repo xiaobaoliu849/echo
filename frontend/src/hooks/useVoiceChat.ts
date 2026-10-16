@@ -106,11 +106,34 @@ const COACH_PENDING_TTL_MS = 30_000;
 const PLAYBACK_START_LEAD_SECONDS = 0.2;
 const PLAYBACK_FADE_SECONDS = 0.004;
 const PLAYBACK_STOP_FADE_SECONDS = 0.012;
+const PLAYBACK_OUTPUT_LATENCY_SECONDS = 0.08;
 // Vercel runs server VAD on whatever the mic sends; on loudspeakers the
 // AI's own voice leaks back and trips false barge-ins. While it is talking,
 // mic frames are held back unless local speech is detected. The pre-roll
 // keeps the onset of a real interruption.
 const VERCEL_ECHO_GATE_PREROLL_FRAMES = 6;
+
+type PlaybackStatsContext = AudioContext & {
+  playbackStats?: { underrunEvents: number; underrunDuration: number; totalDuration: number; averageLatency: number; maximumLatency: number };
+};
+
+// Underruns are what the user hears as a buzz; log them server-side so a
+// report can be checked against numbers instead of a screen recording.
+function sendPlaybackStats(ws: WebSocket, context: AudioContext | null) {
+  const stats = (context as PlaybackStatsContext | null)?.playbackStats;
+  if (!stats || ws.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  ws.send(JSON.stringify({
+    type: "audio_stats",
+    underrunEvents: stats.underrunEvents,
+    underrunDuration: stats.underrunDuration,
+    totalDuration: stats.totalDuration,
+    averageLatency: stats.averageLatency,
+    maximumLatency: stats.maximumLatency,
+    baseLatency: context?.baseLatency,
+  }));
+}
 
 export default function useVoiceChat({
   formatErrorMessage,
@@ -662,6 +685,7 @@ export default function useVoiceChat({
     audioInputReadyRef.current = false;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
       try {
+        sendPlaybackStats(ws, audioContextRef.current);
         ws.close();
       } catch {
         // Ignore close failures.
@@ -2026,8 +2050,8 @@ export default function useVoiceChat({
 
       // The default "interactive" output buffer (~10 ms) underruns on any CPU
       // hiccup, and the device then repeats its last 128-frame block — an
-      // audible 375 Hz buzz. A playback-sized buffer costs a few tens of ms.
-      const audioContext = new AudioContextCtor({ latencyHint: "playback" });
+      // audible 375 Hz buzz. "playback" only buys 20 ms in Chromium 152.
+      const audioContext = new AudioContextCtor({ latencyHint: PLAYBACK_OUTPUT_LATENCY_SECONDS });
       audioContextRef.current = audioContext;
       await audioContext.resume();
       if (sessionEpochRef.current !== sessionEpoch) {
