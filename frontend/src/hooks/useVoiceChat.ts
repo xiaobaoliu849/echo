@@ -105,6 +105,12 @@ const COACH_PENDING_TTL_MS = 30_000;
 // fade applied at the edges of playback gaps to avoid clicks.
 const PLAYBACK_START_LEAD_SECONDS = 0.2;
 const PLAYBACK_FADE_SECONDS = 0.004;
+const PLAYBACK_STOP_FADE_SECONDS = 0.012;
+// Vercel runs server VAD on whatever the mic sends; on loudspeakers the
+// AI's own voice leaks back and trips false barge-ins. While it is talking,
+// mic frames are held back unless local speech is detected. The pre-roll
+// keeps the onset of a real interruption.
+const VERCEL_ECHO_GATE_PREROLL_FRAMES = 6;
 
 export default function useVoiceChat({
   formatErrorMessage,
@@ -346,6 +352,7 @@ export default function useVoiceChat({
   const micAnalyserRef = useRef<AnalyserNode | null>(null);
   const assistantAnalyserRef = useRef<AnalyserNode | null>(null);
   const playingSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const playingSourceGainsRef = useRef(new WeakMap<AudioBufferSourceNode, GainNode>());
   const assistantPlaybackGenerationRef = useRef(0);
   const nextPlaybackTimeRef = useRef(0);
   // Tail of the playback queue, so a chunk that arrives in time can cancel
@@ -568,9 +575,21 @@ export default function useVoiceChat({
 
   function stopAssistantPlayback() {
     assistantPlaybackGenerationRef.current += 1;
+    const context = audioContextRef.current;
     playingSourcesRef.current.forEach((source) => {
       try {
-        source.stop();
+        // Cutting a chunk mid-waveform is an audible "bi" click on every
+        // barge-in; ramp it out first.
+        const gain = playingSourceGainsRef.current.get(source);
+        if (context && gain) {
+          const now = context.currentTime;
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(gain.gain.value, now);
+          gain.gain.linearRampToValueAtTime(0, now + PLAYBACK_STOP_FADE_SECONDS);
+          source.stop(now + PLAYBACK_STOP_FADE_SECONDS);
+        } else {
+          source.stop();
+        }
       } catch {
         // Ignore already-finished nodes.
       }
@@ -1078,6 +1097,7 @@ export default function useVoiceChat({
       source.start(startAt);
       nextPlaybackTimeRef.current = endAt;
       playingSourcesRef.current.push(source);
+      playingSourceGainsRef.current.set(source, chunkGain);
       setVoiceChatAssistantSpeaking(true);
       source.addEventListener("ended", () => {
         playingSourcesRef.current = playingSourcesRef.current.filter((item) => item !== source);
@@ -2143,6 +2163,7 @@ export default function useVoiceChat({
         let localSpeechActive = false;
         let localSpeechFrames = 0;
         let localSilenceFrames = 0;
+        const echoGatePreroll: ArrayBuffer[] = [];
 
         processor.onaudioprocess = (audioEvent) => {
           if (sessionEpochRef.current !== sessionEpoch || ws.readyState !== WebSocket.OPEN || isMutedRef.current) {
@@ -2152,7 +2173,8 @@ export default function useVoiceChat({
             return;
           }
           const input = audioEvent.inputBuffer.getChannelData(0);
-          if ((voiceChatProvider === GOOGLE_PROVIDER || voiceChatProvider === AGENT_PLATFORM_PROVIDER || voiceChatLiveTranslate) && input.length > 0) {
+          let gateEcho = false;
+          if ((voiceChatProvider === GOOGLE_PROVIDER || voiceChatProvider === AGENT_PLATFORM_PROVIDER || voiceChatProvider === VERCEL_PROVIDER || voiceChatLiveTranslate) && input.length > 0) {
             let energy = 0;
             for (let index = 0; index < input.length; index += 1) {
               energy += input[index] * input[index];
@@ -2163,6 +2185,7 @@ export default function useVoiceChat({
                 playingSourcesRef.current.length > 0 ||
                 (audioContextRef.current && nextPlaybackTimeRef.current > audioContextRef.current.currentTime)
               );
+            gateEcho = voiceChatProvider === VERCEL_PROVIDER && Boolean(isAssistantActive);
             const speechRmsThreshold = isAssistantActive ? 0.055 : 0.025;
             const requiredSpeechFrames = isAssistantActive ? 5 : 2;
             if (rms >= speechRmsThreshold) {
@@ -2191,9 +2214,21 @@ export default function useVoiceChat({
             }
           }
           const pcm = encodePcm16k(input, audioContext.sampleRate);
-          if (pcm.byteLength > 0) {
-            ws.send(pcm);
+          if (pcm.byteLength === 0) {
+            return;
           }
+          if (gateEcho && !localSpeechActive) {
+            echoGatePreroll.push(pcm);
+            if (echoGatePreroll.length > VERCEL_ECHO_GATE_PREROLL_FRAMES) {
+              echoGatePreroll.shift();
+            }
+            return;
+          }
+          if (localSpeechActive) {
+            echoGatePreroll.forEach((frame) => ws.send(frame));
+          }
+          echoGatePreroll.length = 0;
+          ws.send(pcm);
         };
 
         source.connect(processor);
