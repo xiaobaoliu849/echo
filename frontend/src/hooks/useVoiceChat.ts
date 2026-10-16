@@ -2024,7 +2024,10 @@ export default function useVoiceChat({
         });
       }
 
-      const audioContext = new AudioContextCtor();
+      // The default "interactive" output buffer (~10 ms) underruns on any CPU
+      // hiccup, and the device then repeats its last 128-frame block — an
+      // audible 375 Hz buzz. A playback-sized buffer costs a few tens of ms.
+      const audioContext = new AudioContextCtor({ latencyHint: "playback" });
       audioContextRef.current = audioContext;
       await audioContext.resume();
       if (sessionEpochRef.current !== sessionEpoch) {

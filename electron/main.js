@@ -221,7 +221,10 @@ async function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Calls keep running while the user looks at another window; a
+      // throttled renderer starves voice playback into a buzz.
+      backgroundThrottling: false
     }
   });
 
