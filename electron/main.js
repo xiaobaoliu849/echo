@@ -1,7 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage, desktopCapturer, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut, nativeImage, desktopCapturer, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { BackendRuntime } = require('./backend-runtime');
+const { BackendRuntime, pickFreePort, DEFAULT_PORT } = require('./backend-runtime');
 const { autoUpdater } = require('electron-updater');
 const { UpdateController, isTrustedUpdateSender } = require('./update-controller');
 const { installScreenSharing } = require('./screen-sharing');
@@ -19,12 +19,39 @@ const DEV_MODE = !app.isPackaged;
 // Community build: the bundled backend defers accounts and minutes to the
 // operator's hosted server (see community-mode.js).
 const COMMUNITY = loadCommunityConfig({ resourcesPath: process.resourcesPath, appDir: __dirname });
+// Community copies run on someone else's PC, where 8000 may belong to another
+// program. They fall back to these and remember the pick, because the page's
+// origin (and so the saved login) depends on the port.
+const COMMUNITY_FALLBACK_PORTS = [18760, 18761, 18762, 28760, 38760];
+let backendPort = DEFAULT_PORT;
 
 function getFrontendUrl() {
   if (DEV_MODE) {
     return 'http://localhost:5173';
   }
-  return 'http://127.0.0.1:8000/app/';
+  return `http://127.0.0.1:${backendPort}/app/`;
+}
+
+async function resolveBackendPort() {
+  // The regular desktop frontend is built against 127.0.0.1:8000.
+  if (DEV_MODE || !COMMUNITY) return DEFAULT_PORT;
+  const portFile = path.join(app.getPath('userData'), 'backend-port.json');
+  let saved = null;
+  try {
+    saved = JSON.parse(fs.readFileSync(portFile, 'utf8')).port;
+  } catch { /* first run */ }
+  const port = await pickFreePort([saved, DEFAULT_PORT, ...COMMUNITY_FALLBACK_PORTS]);
+  // None free: keep the default so startup reports the busy port.
+  if (port === null) return DEFAULT_PORT;
+  if (port !== saved) {
+    try {
+      fs.mkdirSync(path.dirname(portFile), { recursive: true });
+      fs.writeFileSync(portFile, JSON.stringify({ port }), 'utf8');
+    } catch (err) {
+      console.error('Cannot save backend port:', err.message);
+    }
+  }
+  return port;
 }
 
 // Configure BACKEND_PATH
@@ -128,7 +155,7 @@ async function startBackend() {
           'python3'
         ];
     const pythonCmd = pythonCandidates.find((candidate) => candidate === 'python' || candidate === 'python3' || fs.existsSync(candidate));
-    await backendRuntime.start(pythonCmd, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8000'], { cwd: BACKEND_PATH, env });
+    await backendRuntime.start(pythonCmd, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(backendPort)], { cwd: BACKEND_PATH, env });
   } else {
     // Production: spawn path.join(process.resourcesPath, 'backend-dist', 'voicespirit-backend.exe')
     const prodBackendExe = path.join(process.resourcesPath, 'backend-dist', 'voicespirit-backend.exe');
@@ -236,7 +263,9 @@ async function createWindow() {
   installScreenSharing(mainWindow, { desktopCapturer, BrowserWindow, ipcMain, appUrl: getFrontendUrl() });
 
   mainWindow.on('close', (event) => {
-    if (!app.isQuiting) {
+    // Community users expect the close button to end the app, and with it
+    // any call still running; hiding it in the tray kept billing the call.
+    if (!app.isQuiting && !COMMUNITY) {
       event.preventDefault();
       mainWindow.hide();
     }
@@ -249,20 +278,70 @@ async function createWindow() {
 
   // Set up context menu
   mainWindow.webContents.on('context-menu', (e, params) => {
+    const label = (zh, en) => (COMMUNITY ? zh : en);
     const contextMenu = Menu.buildFromTemplate([
-      { role: 'cut', enabled: params.editFlags.canCut },
-      { role: 'copy', enabled: params.editFlags.canCopy },
-      { role: 'paste', enabled: params.editFlags.canPaste },
+      { role: 'cut', label: label('剪切', 'Cut'), enabled: params.editFlags.canCut },
+      { role: 'copy', label: label('复制', 'Copy'), enabled: params.editFlags.canCopy },
+      { role: 'paste', label: label('粘贴', 'Paste'), enabled: params.editFlags.canPaste },
       { type: 'separator' },
-      { role: 'selectAll', enabled: params.editFlags.canSelectAll }
+      { role: 'selectAll', label: label('全选', 'Select All'), enabled: params.editFlags.canSelectAll }
     ]);
     contextMenu.popup();
   });
   await mainWindow.loadURL(getFrontendUrl());
 }
 
+// Community menu: Chinese, no developer links, and a way to hand logs over.
+function communityMenuTemplate() {
+  return [
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' }
+      ]
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload', label: '刷新' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: '实际大小' },
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: '全屏' }
+      ]
+    },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '打开日志文件夹',
+          click: () => {
+            const logs = path.join(app.getPath('userData'), 'logs');
+            fs.mkdirSync(logs, { recursive: true });
+            shell.openPath(logs);
+          }
+        },
+        { type: 'separator' },
+        { role: 'toggleDevTools', label: '开发者工具' }
+      ]
+    }
+  ];
+}
+
 // Menu setup
 function setupMenus() {
+  if (COMMUNITY) {
+    Menu.setApplicationMenu(Menu.buildFromTemplate(communityMenuTemplate()));
+    return;
+  }
   const template = [
     {
       label: 'Edit',
@@ -304,7 +383,6 @@ function setupMenus() {
         {
           label: 'Learn More',
           click: async () => {
-            const { shell } = require('electron');
             await shell.openExternal('https://github.com/xiaobaoliu849/echo');
           }
         }
@@ -430,7 +508,9 @@ if (!gotTheLock) {
 
   // App lifecycle
   app.whenReady().then(async () => {
+    backendPort = await resolveBackendPort();
     backendRuntime = new BackendRuntime({
+      port: backendPort,
       logPath: path.join(app.getPath('userData'), 'logs', 'desktop-startup.log'),
       onUnexpectedExit: (message) => {
         if (!app.isQuiting) {
@@ -445,7 +525,8 @@ if (!gotTheLock) {
       setupAutoUpdaterEvents();
       setupIpcHandlers();
       await createWindow();
-      createTray();
+      // Community windows quit on close, so there is nothing to keep in the tray.
+      if (!COMMUNITY) createTray();
       setupMenus();
       if (!process.argv.includes('--smoke-test')) updateController.start();
     } catch (err) {
@@ -457,10 +538,14 @@ if (!gotTheLock) {
       return;
     }
 
-    // Load and register configured global shortcut
-    const settings = loadShortcutSettings();
-    const accelerator = translateShortcutToAccelerator(settings.shortcut);
-    registerGlobalShortcut(accelerator);
+    // Load and register configured global shortcut. Not in community builds:
+    // without a tray, a shortcut-hidden window would be hard to find again,
+    // and Ctrl+Alt+V belongs to other apps on many PCs.
+    if (!COMMUNITY) {
+      const settings = loadShortcutSettings();
+      const accelerator = translateShortcutToAccelerator(settings.shortcut);
+      registerGlobalShortcut(accelerator);
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

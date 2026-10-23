@@ -15,22 +15,41 @@ function terminateOwnedProcess(child) {
   child.kill();
 }
 
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const DEFAULT_PORT = 8000;
 
-async function assertPortAvailable() {
-  await new Promise((resolve, reject) => {
+function isPortFree(port) {
+  return new Promise((resolve) => {
     const server = net.createServer();
-    server.once('error', () => reject(new Error(
-      '端口 8000 已被占用，请先关闭其他 Echo 或后端实例。 / Port 8000 is in use; close the other Echo or backend instance.'
-    )));
-    server.listen({ port: 8000, host: '127.0.0.1', exclusive: true }, () => server.close(resolve));
+    server.once('error', () => resolve(false));
+    server.listen({ port, host: '127.0.0.1', exclusive: true }, () => server.close(() => resolve(true)));
   });
 }
 
+async function assertPortAvailable(port = DEFAULT_PORT) {
+  if (!await isPortFree(port)) {
+    throw new Error(
+      `端口 ${port} 已被占用，请先关闭其他 Echo 或后端实例。 / Port ${port} is in use; close the other Echo or backend instance.`
+    );
+  }
+}
+
+/** First free port among ``candidates`` (duplicates and junk skipped), or null. */
+async function pickFreePort(candidates, isFree = isPortFree) {
+  const seen = new Set();
+  for (const raw of candidates) {
+    const port = Number(raw);
+    if (!Number.isInteger(port) || port < 1024 || port > 65535 || seen.has(port)) continue;
+    seen.add(port);
+    if (await isFree(port)) return port;
+  }
+  return null;
+}
+
 class BackendRuntime {
-  constructor({ logPath, onUnexpectedExit = () => {}, spawnProcess = spawn, fetchUrl = fetch,
-    checkPort = assertPortAvailable, pollMs = 250, terminateProcess = terminateOwnedProcess }) {
-    Object.assign(this, { logPath, onUnexpectedExit, spawnProcess, fetchUrl, checkPort, pollMs, terminateProcess });
+  constructor({ logPath, port = DEFAULT_PORT, onUnexpectedExit = () => {}, spawnProcess = spawn, fetchUrl = fetch,
+    checkPort = () => assertPortAvailable(port), pollMs = 250, terminateProcess = terminateOwnedProcess }) {
+    Object.assign(this, { logPath, port, onUnexpectedExit, spawnProcess, fetchUrl, checkPort, pollMs, terminateProcess });
+    this.baseUrl = `http://127.0.0.1:${port}`;
     this.child = null;
     this.failure = null;
     this.ready = false;
@@ -55,7 +74,7 @@ class BackendRuntime {
     await this.checkPort();
     this.log(`Starting backend: ${command}`);
     this.child = this.spawnProcess(command, args, {
-      cwd, env: { ...env, ECHO_DESKTOP_INSTANCE_ID: this.instanceId, PYTHONUTF8: '1' },
+      cwd, env: { ...env, ECHO_DESKTOP_INSTANCE_ID: this.instanceId, ECHO_PORT: String(this.port), PYTHONUTF8: '1' },
       windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe']
     });
     this.child.stdout?.on('data', (data) => this.log(data.toString().trim()));
@@ -78,17 +97,17 @@ class BackendRuntime {
     while (Date.now() < deadline) {
       if (this.failure) throw this.failure;
       try {
-        const response = await this.fetchUrl(`${BACKEND_URL}/`, {
+        const response = await this.fetchUrl(`${this.baseUrl}/`, {
           signal: AbortSignal.timeout(Math.max(1, Math.min(1000, deadline - Date.now())))
         });
         if (response.ok) {
           const payload = await response.json();
           if (payload.desktop_instance_id !== this.instanceId) {
-            this.fail('端口 8000 上的服务不是本次启动的后端 / Another service owns port 8000.');
+            this.fail(`端口 ${this.port} 上的服务不是本次启动的后端 / Another service owns port ${this.port}.`);
             throw this.failure;
           }
           if (this.failure) throw this.failure;
-          const page = await this.fetchUrl(`${BACKEND_URL}/app/`, {
+          const page = await this.fetchUrl(`${this.baseUrl}/app/`, {
             signal: AbortSignal.timeout(Math.max(1, Math.min(1000, deadline - Date.now())))
           });
           const html = await page.text();
@@ -121,4 +140,4 @@ class BackendRuntime {
   }
 }
 
-module.exports = { BackendRuntime, assertPortAvailable };
+module.exports = { BackendRuntime, assertPortAvailable, pickFreePort, DEFAULT_PORT };

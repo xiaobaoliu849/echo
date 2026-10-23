@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
-const { BackendRuntime, assertPortAvailable } = require('./backend-runtime');
+const { BackendRuntime, assertPortAvailable, pickFreePort } = require('./backend-runtime');
 
 function harness(t, overrides = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'echo-runtime-'));
@@ -99,4 +99,27 @@ test('busy port fails without spawning another backend', async (t) => {
   }
   t.after(() => new Promise((resolve) => server.close(resolve)));
   await assert.rejects(assertPortAvailable(), /8000/);
+});
+
+test('picks the first free port, skipping junk, duplicates and busy ones', async () => {
+  const busy = new Set([8000, 18760]);
+  const isFree = async (port) => !busy.has(port);
+  assert.equal(await pickFreePort([null, 'x', 80, 8000, 8000, 18760, 18761], isFree), 18761);
+  assert.equal(await pickFreePort([18760, 8000], isFree), null);
+  assert.equal(await pickFreePort([18770, 8000], isFree), 18770);
+});
+
+test('a runtime on another port probes and launches the backend there', async (t) => {
+  const urls = [];
+  const h = harness(t, { port: 18760 });
+  h.runtime.fetchUrl = async (url) => {
+    urls.push(url);
+    return url.endsWith('/app/')
+      ? { ok: true, text: async () => '<div id="root"></div>' }
+      : { ok: true, json: async () => ({ desktop_instance_id: h.runtime.instanceId }) };
+  };
+  await h.runtime.start('backend', [], { env: {} });
+  assert.equal(h.options.env.ECHO_PORT, '18760');
+  await h.runtime.waitUntilReady();
+  assert.deepEqual(urls, ['http://127.0.0.1:18760/', 'http://127.0.0.1:18760/app/']);
 });

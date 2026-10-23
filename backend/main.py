@@ -440,6 +440,12 @@ if __name__ == "__main__":
     import uvicorn
 
     if getattr(sys, "frozen", False):
-        uvicorn.run(app, host="127.0.0.1", port=8000)
+        # The desktop shell picks the port (a community build falls back to
+        # another one when 8000 is taken) and passes it in ECHO_PORT.
+        try:
+            port = int(os.environ.get("ECHO_PORT", "") or 8000)
+        except ValueError:
+            port = 8000
+        uvicorn.run(app, host="127.0.0.1", port=port if 1024 <= port <= 65535 else 8000)
     else:
         uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
