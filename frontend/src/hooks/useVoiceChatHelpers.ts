@@ -1285,6 +1285,13 @@ export function normalizeVoiceCaptureError(
     lowerMessage.includes("requested device not found") ||
     lowerMessage.includes("device not found")
   ) {
+    // Hosted/community users need what to check, not developer setups.
+    if (IS_HOSTED_BUILD) {
+      return t(
+        "没有找到麦克风。请插好耳机或麦克风，确认 Windows「设置 → 系统 → 声音」里能选到它，然后再开始通话。",
+        "No microphone was found. Plug in a headset or microphone, check that Windows Settings → System → Sound lists it, then start the call again."
+      );
+    }
     return t(
       "未检测到可用麦克风设备。若你在 Ubuntu/WSL 中运行桌面版，请改用 Windows 的 run_web_desktop.bat，或先配置麦克风透传。",
       "No microphone device was detected. If you are running the desktop app from Ubuntu/WSL, use Windows run_web_desktop.bat or configure microphone passthrough first."
@@ -1292,6 +1299,19 @@ export function normalizeVoiceCaptureError(
   }
 
   if (name === "NotAllowedError" || lowerMessage.includes("permission denied")) {
+    if (IS_HOSTED_BUILD) {
+      const inDesktopApp =
+        typeof window !== "undefined" && (window as { isElectron?: boolean }).isElectron === true;
+      return inDesktopApp
+        ? t(
+            "麦克风被系统禁止了。请打开 Windows「设置 → 隐私和安全性 → 麦克风」，打开「麦克风访问权限」和「允许桌面应用访问麦克风」，然后再开始通话。",
+            "The microphone is blocked. Open Windows Settings → Privacy & security → Microphone, turn on microphone access and \"Let desktop apps access your microphone\", then start the call again."
+          )
+        : t(
+            "浏览器没有允许使用麦克风。请点地址栏左边的图标，把「麦克风」改成允许，刷新页面后再开始通话。",
+            "The browser blocked the microphone. Click the icon at the left of the address bar, allow the microphone, reload the page and start the call again."
+          );
+    }
     return t(
       "麦克风权限被拒绝。请允许当前页面/桌面壳访问麦克风后重试：浏览器中打开地址栏左侧站点权限，允许 http://127.0.0.1 的麦克风；桌面版请在 Windows 麦克风隐私里允许 Python/Echo/WebView，并可通过菜单「系统 -> 重置桌面缓存并重启」清掉之前的拒绝记录。注意：打开 Codex 的麦克风权限不会授权 Echo。",
       "Microphone access was denied. Allow microphone access for the current page/desktop shell and try again: in a browser, open the site permissions beside the address bar and allow microphone access for http://127.0.0.1; in the desktop app, allow Python/Echo/WebView in Windows microphone privacy settings, and use System -> Reset Cache to clear a previously denied WebView permission. Enabling microphone access for Codex does not grant it to Echo."
