@@ -119,8 +119,11 @@ describe("VoiceCallSettingsPopover", () => {
 
     // Hover a realtime model in Level 2 to auto-open the Voice flyout in Level 3
     fireEvent.mouseEnter(screen.getByText("qwen3.5-omni-plus-realtime"));
-    expect(screen.getByText("像温热的奶茶，甜甜的暖暖的")).toBeInTheDocument();
-    const selectedVoice = screen.getByText("Tina · 甜甜 · 女声").closest("button");
+    // Voice tiles show the name and trait; the full description is the tooltip.
+    const selectedVoice = screen.getByRole("button", { name: "Tina · 甜甜 · 女声" });
+    expect(selectedVoice).toHaveTextContent("Tina");
+    expect(selectedVoice).toHaveTextContent("甜甜 · 女声");
+    expect(selectedVoice).toHaveAttribute("title", expect.stringContaining("像温热的奶茶，甜甜的暖暖的"));
     expect(selectedVoice).toHaveClass("selected");
   });
 
@@ -129,7 +132,7 @@ describe("VoiceCallSettingsPopover", () => {
     openPanel();
     fireEvent.mouseEnter(screen.getByText("DashScope"));
     fireEvent.mouseEnter(screen.getByText("qwen3.5-omni-plus-realtime"));
-    fireEvent.click(screen.getByText("Ethan · 晨煦 · 男声"));
+    fireEvent.click(screen.getByRole("button", { name: "Ethan · 晨煦 · 男声" }));
     expect(voiceChat.onVoiceChange).toHaveBeenCalledWith("Ethan");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -662,20 +665,63 @@ describe("VoiceCallSettingsPopover", () => {
     expect(screen.getByText("qwen3.8-livetranslate-flash-realtime")).toBeInTheDocument();
   });
 
-  it("constrains Level-2 flyout maxHeight to available space below flyoutTop", () => {
+  it("keeps a tall voice flyout inside the window instead of hanging below the composer", () => {
+    // The panel opens upward and is short (its bottom sits on the composer);
+    // a long voice list must slide up and use the window height, not run off
+    // the bottom edge.
+    Object.defineProperty(window, "innerHeight", { writable: true, configurable: true, value: 600 });
     vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
-      const text = this.textContent || "";
-      if (text.includes("DashScope")) return 50;
+      return (this.textContent || "").includes("Google") ? 90 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("vsVoiceSettingsPanel")) {
+        return { top: 220, bottom: 400, left: 60, right: 276, width: 216, height: 180, x: 60, y: 220, toJSON: () => ({}) } as DOMRect;
+      }
+      return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("vsVoiceLevel3Flyout")) return 900;
+      if (this.classList.contains("vsModelFlyout")) return 120;
       return 0;
     });
     renderPopover();
     openPanel();
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    fireEvent.mouseEnter(screen.getByText("gemini-3.1-flash-live-preview"));
 
-    const flyout = screen.getByText("qwen3.5-omni-plus-realtime").closest(".vsModelFlyout");
-    expect(flyout).toBeInTheDocument();
-    // Default panelMaxHeight is capped at 520, with flyoutTop=50, maxHeight should be 470px
-    expect(flyout).toHaveStyle("top: 50px");
-    expect(flyout).toHaveStyle("max-height: 470px");
+    // Short model list stays on the provider row.
+    const modelFlyout = document.querySelector(".vsModelFlyout") as HTMLElement;
+    expect(modelFlyout).toHaveStyle("top: 90px");
+    // Tall options flyout: full window height minus 12px margins, top at 12px
+    // in the window (panel top 220 → -208px relative to the panel).
+    const voiceFlyout = document.querySelector(".vsVoiceLevel3Flyout") as HTMLElement;
+    expect(voiceFlyout).toHaveStyle("max-height: 576px");
+    expect(voiceFlyout).toHaveStyle("top: -208px");
+  });
+
+  it("slides a medium voice flyout up just enough to end above the window bottom", () => {
+    Object.defineProperty(window, "innerHeight", { writable: true, configurable: true, value: 600 });
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      return (this.textContent || "").includes("Google") ? 90 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("vsVoiceSettingsPanel")) {
+        return { top: 220, bottom: 400, left: 60, right: 276, width: 216, height: 180, x: 60, y: 220, toJSON: () => ({}) } as DOMRect;
+      }
+      return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("vsVoiceLevel3Flyout") ? 400 : 0;
+    });
+    renderPopover();
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    fireEvent.mouseEnter(screen.getByText("gemini-3.1-flash-live-preview"));
+
+    // Row is at 220 + 90 = 310 in the window; 400px of content must end by
+    // 600 - 12 = 588, so the flyout starts at 188 (-32px relative to the panel).
+    const voiceFlyout = document.querySelector(".vsVoiceLevel3Flyout") as HTMLElement;
+    expect(voiceFlyout).toHaveStyle("top: -32px");
   });
 
   it("calls scrollIntoView on the active provider row when popover opens", () => {

@@ -324,18 +324,208 @@
   color: var(--text);
 }
 
-.vsCoachSettings {
+/* ── Voice options flyout: coach card, accent, voice tiles ── */
+.vsVoiceOptionsBody {
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+}
+
+.vsCoachCard {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--bg-card) 88%, var(--brand-soft));
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.vsCoachCard.on {
+  border-color: color-mix(in oklab, var(--brand) 32%, var(--line));
+  background: color-mix(in oklab, var(--bg-card) 55%, var(--brand-soft));
+}
+
+.vsCoachToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.vsCoachToggle:has(input:disabled) {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .vsCoachHint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.vsCoachFields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in oklab, var(--brand) 14%, var(--line));
+}
+
+.vsCoachFields .vsPresetPillsGroup,
+.vsCoachFields .vsVoiceSettingsEcho {
+  margin: 0;
+}
+
+.vsSwitch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--muted) 38%, var(--bg-card));
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.vsSwitch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px color-mix(in oklab, black 25%, transparent);
+  transition: transform 0.15s ease;
+}
+
+.vsSwitch:checked {
+  background: var(--brand-dark);
+}
+
+.vsSwitch:checked::before {
+  transform: translateX(16px);
+}
+
+.vsSwitch:disabled {
+  cursor: default;
+}
+
+.vsSwitch:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Label on the left, select on the right: one line per setting. */
+.vsFlyoutField {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.vsFlyoutFieldStandalone {
+  margin-top: 10px;
+  padding: 0 4px 0 13px;
+}
+
+.vsFlyoutField select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-card)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23898e89' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    no-repeat right 10px center / 10px 6px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.vsFlyoutField select:hover {
+  border-color: color-mix(in oklab, var(--brand) 40%, var(--line));
+}
+
+.vsFlyoutField select:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.vsVoiceOptionsBody .vsVoiceSettingsSectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 0 4px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.vsVoiceCount {
+  font-weight: 500;
+  color: var(--text-soft);
+}
+
+.vsVoiceTileGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.vsVoiceSettingsRow.vsVoiceTile {
+  gap: 1px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-card);
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.vsVoiceSettingsRow.vsVoiceTile:hover {
+  border-color: color-mix(in oklab, var(--brand) 40%, var(--line));
+  background: color-mix(in oklab, var(--bg-card) 80%, var(--brand-soft));
+}
+
+.vsVoiceSettingsRow.vsVoiceTile.selected {
+  border-color: var(--brand);
+  background: color-mix(in oklab, var(--bg-card) 45%, var(--brand-soft));
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+
+.vsVoiceTile .vsVoiceSettingsRowLabel,
+.vsVoiceTile .vsVoiceSettingsRowHint {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vsVoiceTile .vsVoiceSettingsRowLabel {
+  font-weight: 600;
+}
+
+.vsVoiceTile .vsVoiceSettingsRowHint {
   font-size: 11.5px;
-  color: var(--text-muted);
 }
 
 /* ── Interactive English Word Token for Lookup ── */

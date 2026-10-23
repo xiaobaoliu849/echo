@@ -446,9 +446,10 @@
   position: absolute;
   top: -1px;
   left: calc(100% + 292px);
-  min-width: 260px;
+  width: 328px;
   max-width: calc(100vw - 48px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--bg-card);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -470,6 +471,11 @@
   left: auto;
   right: calc(100% + 292px);
   animation: vsFlyoutLeft 0.12s ease-out;
+}
+
+/* Models flew left for lack of room; options take the free side instead. */
+.vsVoiceLevel3Flyout.splitRight {
+  left: calc(100% + 6px);
 }
 
 /* Chat composer model select (provider → model cascading picker) */

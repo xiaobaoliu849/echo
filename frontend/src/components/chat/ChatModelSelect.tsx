@@ -6,7 +6,7 @@ function hostedModelLabel(model: string): string {
   return HOSTED_MODEL_LABELS[model] || model;
 }
 import { getProviderBadge, getProviderDisplayName, getProviderSortOrder } from "../../hooks/useVoiceChatHelpers";
-import { useProviderFlyoutTop } from "../../hooks/useProviderFlyoutTop";
+import { useFlyoutViewportFit, useProviderFlyoutTop } from "../../hooks/useProviderFlyoutTop";
 
 type Translator = (zh: string, en: string) => string;
 
@@ -31,6 +31,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
 
   const rootRef = useRef<HTMLDivElement>(null);
   const { panelRef, onRowRef, flyoutTop } = useProviderFlyoutTop(open, activeProvider);
+  const modelFlyoutRef = useFlyoutViewportFit(panelRef, flyoutTop);
 
   useEffect(() => {
     if (!open) return;
@@ -199,7 +200,7 @@ export default function ChatModelSelect({ chat, t, onOpenSettings }: Props) {
           {activeGroup ? (
             <div
               className={`vsModelFlyout${flyoutToLeft ? " flyLeft" : ""}`}
-              style={{ top: flyoutTop, maxHeight: `${Math.max(160, panelMaxHeight - flyoutTop)}px` }}
+              ref={modelFlyoutRef}
             >
               {activeGroup.choices.map((choice) => {
                 const isCurrentModel =

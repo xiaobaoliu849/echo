@@ -1,4 +1,51 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type RefObject } from "react";
+
+const FLYOUT_VIEWPORT_MARGIN = 12;
+const FLYOUT_MAX_HEIGHT = 720;
+
+/**
+ * Keeps a cascading flyout (absolutely positioned inside the settings panel)
+ * inside the window. It starts on the browsed row (`preferredTop`, relative to
+ * the panel) and slides up only as far as its content needs, so a long list
+ * uses the whole window height before it scrolls. The panel itself opens
+ * upward and is only as tall as its rows, so sizing a flyout against the
+ * panel's max height pushes it off the bottom of the window.
+ */
+export function useFlyoutViewportFit(panelRef: RefObject<HTMLElement | null>, preferredTop: number) {
+  const flyoutRef = useRef<HTMLDivElement | null>(null);
+  const [, bumpResize] = useReducer((n: number) => n + 1, 0);
+
+  useEffect(() => {
+    window.addEventListener("resize", bumpResize);
+    return () => window.removeEventListener("resize", bumpResize);
+  }, []);
+
+  // Runs after every render: content (coach fields, voice lists) changes the
+  // flyout's height without changing any input of this hook. The position is
+  // written straight onto the element so measuring never costs a re-render.
+  useLayoutEffect(() => {
+    const flyout = flyoutRef.current;
+    const panel = panelRef.current;
+    if (!flyout || !panel) return;
+    const panelRect = panel.getBoundingClientRect();
+    if (panelRect.height === 0) {
+      // Not laid out (hidden, or a test DOM): keep the row alignment.
+      flyout.style.top = `${preferredTop}px`;
+      flyout.style.maxHeight = "";
+      return;
+    }
+    const viewportHeight = window.innerHeight;
+    const maxHeight = Math.max(160, Math.min(FLYOUT_MAX_HEIGHT, viewportHeight - FLYOUT_VIEWPORT_MARGIN * 2));
+    const borders = flyout.offsetHeight - flyout.clientHeight;
+    const height = Math.min(flyout.scrollHeight + borders, maxHeight);
+    const lowestTop = viewportHeight - FLYOUT_VIEWPORT_MARGIN - height;
+    const viewportTop = Math.max(FLYOUT_VIEWPORT_MARGIN, Math.min(panelRect.top + preferredTop, lowestTop));
+    flyout.style.maxHeight = `${maxHeight}px`;
+    flyout.style.top = `${Math.round(viewportTop - panelRect.top)}px`;
+  });
+
+  return flyoutRef;
+}
 
 /**
  * Aligns a cascading Level-2 model flyout with the currently hovered/selected

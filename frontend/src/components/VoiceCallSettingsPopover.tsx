@@ -19,7 +19,7 @@ import {
   isLiveTranslateModel as isLiveTranslateModelHelper,
 } from "../hooks/useVoiceChatHelpers";
 import { useLocalVoiceStatus } from "../hooks/useLocalVoiceStatus";
-import { useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
+import { useFlyoutViewportFit, useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
 import { traceSelection } from "../hooks/voiceSelectionTrace";
 import LiveAvatarSettings from "./LiveAvatarSettings";
 import { GEMINI_LIVE_ACCENTS, formatAvatarCallLabel, supportsGeminiAccent } from "../utils/geminiLivePreferences";
@@ -53,7 +53,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const [open, setOpen] = useState(false);
   const [configureAvatar, setConfigureAvatar] = useState(false);
   const [openUpward, setOpenUpward] = useState(true);
-  const [flyoutToLeft, setFlyoutToLeft] = useState(false);
+  // "split": models fly left and options fly right when neither side fits both.
+  const [flyoutSide, setFlyoutSide] = useState<"right" | "left" | "split">("right");
   const [panelMaxHeight, setPanelMaxHeight] = useState(480);
   const [panelPosition, setPanelPosition] = useState({ left: 0, top: 0, bottom: 0 });
 
@@ -180,6 +181,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const committedProvider = voiceChat.voiceChatProvider || chat?.chatProvider || providerGroups[0]?.provider || "";
   const committedModel = voiceChat.voiceChatModel || chat?.chatModel || "";
   const coachConfig = voiceChat.voiceChatCoachConfig;
+  const coachOn = coachConfig.tutor && voiceChat.voiceChatCoachSupported;
 
   const candidateProvider = open
     ? (activeProvider ||
@@ -195,6 +197,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   // The Level-2 flyout aligns with the row of the browsed provider (falling back
   // to the current provider when nothing is hovered).
   const { panelRef, onRowRef, flyoutTop, scrollToRow } = useProviderFlyoutTop(open, activeProvider || currentProviderName);
+  const modelFlyoutRef = useFlyoutViewportFit(panelRef, flyoutTop);
+  const optionsFlyoutRef = useFlyoutViewportFit(panelRef, flyoutTop);
 
   // Model being browsed for the browsed provider: when popover is closed, strictly
   // reflect the committed model so the summary button cannot show a false selection.
@@ -354,12 +358,22 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - margin);
     const upward = spaceAbove >= spaceBelow;
     const panelWidth = Math.min(configureAvatar ? 360 : 216, window.innerWidth - margin * 2);
+    const panelLeft = Math.max(margin, Math.min(rect.left, window.innerWidth - panelWidth - margin));
     setOpenUpward(upward);
-    // Include both cascading flyouts when choosing their horizontal direction.
-    setFlyoutToLeft(rect.left + 768 > window.innerWidth);
+    // Room for the 280px model flyout and the 328px options flyout (+6px gaps).
+    const roomRight = window.innerWidth - margin - (panelLeft + panelWidth);
+    const roomLeft = panelLeft - margin;
+    const modelsWidth = 286;
+    const optionsWidth = 334;
+    setFlyoutSide(
+      roomRight >= modelsWidth + optionsWidth ? "right"
+        : roomLeft >= modelsWidth + optionsWidth ? "left"
+        : roomLeft >= modelsWidth && roomRight >= optionsWidth ? "split"
+        : roomRight >= roomLeft ? "right" : "left"
+    );
     setPanelMaxHeight(Math.min(520, upward ? spaceAbove : spaceBelow));
     setPanelPosition({
-      left: Math.max(margin, Math.min(rect.left, window.innerWidth - panelWidth - margin)),
+      left: panelLeft,
       top: rect.bottom + gap,
       bottom: window.innerHeight - rect.top + gap,
     });
@@ -514,6 +528,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isSelectedProvider ? " selected" : ""}`}
                     ref={(el) => onRowRef(group.provider, el)}
                     onMouseEnter={() => {
+                      // Split layout: the pointer crosses this list on its way from
+                      // the models (left) to the open options (right); switch on click.
+                      if (flyoutSide === "split" && activeCategory) return;
                       setActiveProvider(group.provider);
                       setActiveCategory("");
                       setHoveredModel("");
@@ -580,8 +597,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           {/* LEVEL 2: SPECIFIC MODELS LIST (具体的模型) */}
           {currentProviderGroup ? (
             <div
-              className={`vsModelFlyout${flyoutToLeft ? " flyLeft" : ""}`}
-              style={{ top: flyoutTop, maxHeight: `${Math.max(160, panelMaxHeight - flyoutTop)}px` }}
+              className={`vsModelFlyout${flyoutSide !== "right" ? " flyLeft" : ""}`}
+              ref={modelFlyoutRef}
             >
               {/* List of Specific Models under Active Provider */}
               <div className="vsVoiceSettingsList">
@@ -646,10 +663,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           {/* LEVEL 3: VOICE TIMBRE & TRANSLATION SETTINGS (音色与同传/扩展设定) */}
           {activeCategory && currentProviderName !== TAVUS_PROVIDER ? (
             <div
-              className={`vsVoiceLevel3Flyout${flyoutToLeft ? " flyLeft" : ""}`}
-              // Share the Level-2 offset so the voice list stays on the row of the
-              // browsed provider instead of snapping back to the top of the panel.
-              style={{ top: flyoutTop, maxHeight: `${Math.max(160, panelMaxHeight - flyoutTop)}px` }}
+              className={`vsVoiceLevel3Flyout${flyoutSide === "left" ? " flyLeft" : flyoutSide === "split" ? " splitRight" : ""}`}
+              // Starts on the row of the browsed provider (like Level 2) and slides
+              // up only as far as the coach settings and voice list need.
+              ref={optionsFlyoutRef}
             >
               {/* Category Tab Bar: only useful when there is more than one category */}
               {canShowVoiceCategory && canShowTranslationCategory ? (
@@ -671,20 +688,22 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                 </div>
               ) : null}
 
-              {/* LEVEL 3 - VOICE LIST */}
+              {/* LEVEL 3 - COACH, ACCENT AND VOICES */}
               {activeCategory === "voice" ? (
-                <div className="vsVoiceSettingsSection">
-                  <div className="vsCoachSettings">
+                <div className="vsVoiceSettingsSection vsVoiceOptionsBody">
+                  <div className={`vsCoachCard${coachOn ? " on" : ""}`}>
                     <label
-                      className="vsVoiceSettingsEcho"
+                      className="vsCoachToggle"
                       title={t(
                         "语音 AI 变成你的口语老师：用练习语言陪你聊，听到说错就在回复里马上纠正",
                         "The voice AI becomes your speaking coach: it talks with you in the practice language and corrects you right in its replies"
                       )}
                     >
+                      <span>{t("🎓 口语教练", "🎓 Speaking coach")}</span>
                       <input
                         type="checkbox"
-                        checked={coachConfig.tutor && voiceChat.voiceChatCoachSupported}
+                        className="vsSwitch"
+                        checked={coachOn}
                         disabled={!voiceChat.voiceChatCoachSupported}
                         onChange={(e) => {
                           voiceChat.onCoachConfigChange({ tutor: e.target.checked });
@@ -696,14 +715,13 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                           }
                         }}
                       />
-                      <span style={{ fontWeight: 600 }}>{t("🎓 口语教练", "🎓 Speaking coach")}</span>
                     </label>
                     <span className="vsCoachHint">
                       {voiceChat.voiceChatLiveTranslate
                         ? t("同声传译模式下不启用口语教练", "The speaking coach is off during live translation")
                         : !voiceChat.voiceChatCoachSupported
                         ? t("纯转写模型不支持口语教练，请换一个实时对话模型", "Transcription-only models can't coach; pick a realtime conversation model")
-                        : coachConfig.tutor
+                        : coachOn
                         ? t(
                             "AI 用练习语言和你实时对话，说错时直接在回复里纠正；通话中修改会自动重连，按新设置开始新一轮练习",
                             "The AI talks with you live and corrects mistakes in its replies; changing this during a call reconnects and starts a fresh lesson"
@@ -713,9 +731,9 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                             "Turn on to make the voice AI your speaking coach, correcting you live in the conversation"
                           )}
                     </span>
-                    {coachConfig.tutor && voiceChat.voiceChatCoachSupported ? (
-                      <>
-                        <label className="vsGeminiAccentField">
+                    {coachOn ? (
+                      <div className="vsCoachFields">
+                        <label className="vsFlyoutField">
                           <span>{t("练习场景", "Scenario")}</span>
                           <select
                             value={coachConfig.scenario}
@@ -731,13 +749,13 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                           // practice language is always English there.
                           <span className="vsCoachHint">
                             {t(
-                              `水平：${hostedLevelLabel(coachConfig.level, t)}${coachConfig.learner === "child" ? " · 孩子" : ""}（在「设置 → 学习偏好」修改）`,
-                              `Level: ${hostedLevelLabel(coachConfig.level, t)}${coachConfig.learner === "child" ? " · child" : ""} (change it in Settings → Learning)`,
+                              `水平：${coachLevelLabel(coachConfig.level, t)}${coachConfig.learner === "child" ? " · 孩子" : ""}（在「设置 → 学习偏好」修改）`,
+                              `Level: ${coachLevelLabel(coachConfig.level, t)}${coachConfig.learner === "child" ? " · child" : ""} (change it in Settings → Learning)`,
                             )}
                           </span>
                         ) : (
                         <>
-                        <label className="vsGeminiAccentField">
+                        <label className="vsFlyoutField">
                           <span>{t("练习语言", "Practice language")}</span>
                           <select
                             value={coachConfig.target_language}
@@ -756,13 +774,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                               className={`vsPresetPillBtn ${coachConfig.level === level ? "active" : ""}`}
                               onClick={() => voiceChat.onCoachConfigChange({ level })}
                             >
-                              {level === "beginner"
-                                ? t("入门", "Beginner")
-                                : level === "intermediate"
-                                ? t("中级", "Intermediate")
-                                : level === "advanced"
-                                ? t("高级", "Advanced")
-                                : t("雅思", "IELTS")}
+                              {coachLevelLabel(level, t)}
                             </button>
                           ))}
                         </div>
@@ -782,11 +794,11 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                         </label>
                         </>
                         )}
-                      </>
+                      </div>
                     ) : null}
                   </div>
                   {supportsGeminiAccent(currentProviderName, previewModel) && (
-                    <label className="vsGeminiAccentField">
+                    <label className="vsFlyoutField vsFlyoutFieldStandalone">
                       <span>{t("口音", "Accent")}</span>
                       <select value={voiceChat.voiceChatAccent} onChange={(e) => {
                         commitProviderModel(currentProviderName, previewModel, hoveredAvatar);
@@ -803,7 +815,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       className="vsVoiceCloneActiveBadge"
                       style={{
                         padding: "8px 12px",
-                        marginBottom: 8,
+                        marginTop: 8,
                         background: "rgba(96, 165, 250, 0.12)",
                         border: "1px solid rgba(96, 165, 250, 0.3)",
                         borderRadius: 8,
@@ -814,37 +826,47 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       ✨ {t("声音复刻已激活：将使用您本人的声音朗读外语", "Voice Clone active: Speaking in your own voice")}
                     </div>
                   ) : null}
+                  {previewVoiceOptions.length > 0 ? (
+                    <div className="vsVoiceSettingsSectionTitle">
+                      {t("音色", "Voices")}
+                      <span className="vsVoiceCount">{previewVoiceOptions.length}</span>
+                    </div>
+                  ) : null}
                   {/* The flyout scrolls as a whole; a second scroller inside it nests scrollbars. */}
-                  <div className="vsVoiceSettingsList">
-                    {previewVoiceOptions.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        className={`vsVoiceSettingsRow${
-                          !voiceChat.voiceChatEnableVoiceClone &&
-                          item.value === voiceChat.voiceChatVoice &&
-                          currentProviderName === voiceChat.voiceChatProvider &&
-                          previewModel === voiceChat.voiceChatModel
-                            ? " selected"
-                            : ""
-                        }`}
-                        onClick={() => {
-                          if (previewModel) {
-                            commitProviderModel(currentProviderName, previewModel, hoveredAvatar);
-                          }
-                          if (voiceChat.voiceChatEnableVoiceClone) {
-                            voiceChat.onVoiceCloneToggle?.(false);
-                          }
-                          voiceChat.onVoiceChange(item.value);
-                          setOpen(false);
-                        }}
-                      >
-                        <span className="vsVoiceSettingsRowLabel">{item.label}</span>
-                        {item.description ? (
-                          <span className="vsVoiceSettingsRowHint">{item.description}</span>
-                        ) : null}
-                      </button>
-                    ))}
+                  <div className="vsVoiceTileGrid">
+                    {previewVoiceOptions.map((item) => {
+                      // "Puck · 活泼灵动 · 男声" → name "Puck", trait "活泼灵动 · 男声".
+                      const [name, ...traits] = item.label.split(" · ");
+                      const trait = traits.join(" · ") || item.description || "";
+                      const selected =
+                        !voiceChat.voiceChatEnableVoiceClone &&
+                        item.value === voiceChat.voiceChatVoice &&
+                        currentProviderName === voiceChat.voiceChatProvider &&
+                        previewModel === voiceChat.voiceChatModel;
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          className={`vsVoiceSettingsRow vsVoiceTile${selected ? " selected" : ""}`}
+                          aria-label={item.label}
+                          aria-pressed={selected}
+                          title={item.description ? `${item.label}\n${item.description}` : item.label}
+                          onClick={() => {
+                            if (previewModel) {
+                              commitProviderModel(currentProviderName, previewModel, hoveredAvatar);
+                            }
+                            if (voiceChat.voiceChatEnableVoiceClone) {
+                              voiceChat.onVoiceCloneToggle?.(false);
+                            }
+                            voiceChat.onVoiceChange(item.value);
+                            setOpen(false);
+                          }}
+                        >
+                          <span className="vsVoiceSettingsRowLabel">{name}</span>
+                          {trait ? <span className="vsVoiceSettingsRowHint">{trait}</span> : null}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
@@ -1085,7 +1107,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   );
 }
 
-function hostedLevelLabel(level: CoachLevel, t: (zh: string, en: string) => string): string {
+function coachLevelLabel(level: CoachLevel, t: (zh: string, en: string) => string): string {
   return level === "beginner"
     ? t("入门", "Beginner")
     : level === "intermediate"
