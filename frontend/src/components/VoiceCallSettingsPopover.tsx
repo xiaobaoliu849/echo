@@ -53,8 +53,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   const [open, setOpen] = useState(false);
   const [configureAvatar, setConfigureAvatar] = useState(false);
   const [openUpward, setOpenUpward] = useState(true);
-  // "split": models fly left and options fly right when neither side fits both.
-  const [flyoutSide, setFlyoutSide] = useState<"right" | "left" | "split">("right");
+  // "row": provider list, models and options side by side, left to right.
+  // "stacked": too narrow for three columns, so the options open over the
+  // models (on click) with a back button.
+  const [cascadeLayout, setCascadeLayout] = useState<"row" | "stacked">("row");
   const [panelMaxHeight, setPanelMaxHeight] = useState(480);
   const [panelPosition, setPanelPosition] = useState({ left: 0, top: 0, bottom: 0 });
 
@@ -358,19 +360,15 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
     const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - margin);
     const upward = spaceAbove >= spaceBelow;
     const panelWidth = Math.min(configureAvatar ? 360 : 216, window.innerWidth - margin * 2);
-    const panelLeft = Math.max(margin, Math.min(rect.left, window.innerWidth - panelWidth - margin));
-    setOpenUpward(upward);
-    // Room for the 280px model flyout and the 328px options flyout (+6px gaps).
-    const roomRight = window.innerWidth - margin - (panelLeft + panelWidth);
-    const roomLeft = panelLeft - margin;
+    // The flyouts always read left to right: 280px models, then 328px options
+    // (+6px gaps). Slide the whole menu left when that keeps them on screen.
     const modelsWidth = 286;
     const optionsWidth = 334;
-    setFlyoutSide(
-      roomRight >= modelsWidth + optionsWidth ? "right"
-        : roomLeft >= modelsWidth + optionsWidth ? "left"
-        : roomLeft >= modelsWidth && roomRight >= optionsWidth ? "split"
-        : roomRight >= roomLeft ? "right" : "left"
-    );
+    const rowFits = window.innerWidth - margin * 2 >= panelWidth + modelsWidth + optionsWidth;
+    const flyoutsWidth = configureAvatar ? 0 : rowFits ? modelsWidth + optionsWidth : optionsWidth;
+    const panelLeft = Math.max(margin, Math.min(rect.left, window.innerWidth - margin - panelWidth - flyoutsWidth));
+    setOpenUpward(upward);
+    setCascadeLayout(rowFits ? "row" : "stacked");
     setPanelMaxHeight(Math.min(520, upward ? spaceAbove : spaceBelow));
     setPanelPosition({
       left: panelLeft,
@@ -528,9 +526,6 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     className={`vsVoiceSettingsRow vsVoiceSettingsProviderRow${isActiveProvider ? " active" : ""}${isSelectedProvider ? " selected" : ""}`}
                     ref={(el) => onRowRef(group.provider, el)}
                     onMouseEnter={() => {
-                      // Split layout: the pointer crosses this list on its way from
-                      // the models (left) to the open options (right); switch on click.
-                      if (flyoutSide === "split" && activeCategory) return;
                       setActiveProvider(group.provider);
                       setActiveCategory("");
                       setHoveredModel("");
@@ -597,7 +592,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           {/* LEVEL 2: SPECIFIC MODELS LIST (具体的模型) */}
           {currentProviderGroup ? (
             <div
-              className={`vsModelFlyout${flyoutSide !== "right" ? " flyLeft" : ""}`}
+              className={`vsModelFlyout${cascadeLayout === "stacked" && activeCategory ? " covered" : ""}`}
               ref={modelFlyoutRef}
             >
               {/* List of Specific Models under Active Provider */}
@@ -626,6 +621,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       onMouseEnter={() => {
                         setHoveredModel(item.model);
                         setHoveredAvatar(Boolean(item.avatar));
+                        // Stacked options would cover this list on hover; open them on click.
+                        if (cascadeLayout === "stacked") return;
                         if (item.avatar || currentProviderGroup.provider === TAVUS_PROVIDER) {
                           setActiveCategory("");
                         } else if (isLiveTranslateModelHelper(currentProviderGroup.provider, item.model)) {
@@ -663,11 +660,28 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
           {/* LEVEL 3: VOICE TIMBRE & TRANSLATION SETTINGS (音色与同传/扩展设定) */}
           {activeCategory && currentProviderName !== TAVUS_PROVIDER ? (
             <div
-              className={`vsVoiceLevel3Flyout${flyoutSide === "left" ? " flyLeft" : flyoutSide === "split" ? " splitRight" : ""}`}
+              className={`vsVoiceLevel3Flyout${cascadeLayout === "stacked" ? " stacked" : ""}`}
               // Starts on the row of the browsed provider (like Level 2) and slides
               // up only as far as the coach settings and voice list need.
               ref={optionsFlyoutRef}
             >
+              {/* Which model these settings belong to; stacked, also the way back. */}
+              <div className="vsOptionsHeader">
+                {cascadeLayout === "stacked" ? (
+                  <button
+                    type="button"
+                    className="vsOptionsBack"
+                    onClick={() => setActiveCategory("")}
+                    aria-label={t("返回模型列表", "Back to models")}
+                  >
+                    ‹
+                  </button>
+                ) : null}
+                <span className="vsOptionsHeaderModel">
+                  {IS_HOSTED_BUILD ? HOSTED_MODEL_LABELS[currentModelName] || currentModelName : currentModelName}
+                </span>
+                <span className="vsOptionsHeaderCaption">{t("通话设置", "Call settings")}</span>
+              </div>
               {/* Category Tab Bar: only useful when there is more than one category */}
               {canShowVoiceCategory && canShowTranslationCategory ? (
                 <div className="vsCascadingTabBar">
@@ -691,7 +705,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
               {/* LEVEL 3 - COACH, ACCENT AND VOICES */}
               {activeCategory === "voice" ? (
                 <div className="vsVoiceSettingsSection vsVoiceOptionsBody">
-                  <div className={`vsCoachCard${coachOn ? " on" : ""}`}>
+                  <div className={`vsCoachSettingsCard${coachOn ? " on" : ""}`}>
                     <label
                       className="vsCoachToggle"
                       title={t(
@@ -702,7 +716,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       <span>{t("🎓 口语教练", "🎓 Speaking coach")}</span>
                       <input
                         type="checkbox"
-                        className="vsSwitch"
+                        className="vsCoachSwitch"
                         checked={coachOn}
                         disabled={!voiceChat.voiceChatCoachSupported}
                         onChange={(e) => {

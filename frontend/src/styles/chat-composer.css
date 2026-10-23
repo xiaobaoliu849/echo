@@ -473,9 +473,13 @@
   animation: vsFlyoutLeft 0.12s ease-out;
 }
 
-/* Models flew left for lack of room; options take the free side instead. */
-.vsVoiceLevel3Flyout.splitRight {
+/* Too narrow for three columns: the options open in the models' place. */
+.vsVoiceLevel3Flyout.stacked {
   left: calc(100% + 6px);
+}
+
+.vsModelFlyout.covered {
+  visibility: hidden;
 }
 
 /* Chat composer model select (provider → model cascading picker) */

@@ -8,7 +8,17 @@ const t = (zh: string, _en: string) => zh;
 afterEach(() => {
   vi.restoreAllMocks();
   Object.defineProperty(window, "innerHeight", { writable: true, configurable: true, value: 768 });
+  Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 1024 });
 });
+
+function mockSummaryAt(left: number) {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const rect = this.classList.contains("vsVoiceSettings")
+      ? { top: 700, bottom: 740, left, right: left + 300, width: 300, height: 40 }
+      : { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 };
+    return { ...rect, x: rect.left, y: rect.top, toJSON: () => ({}) } as DOMRect;
+  });
+}
 
 function renderPopover(overrides: Parameters<typeof createVoiceChatController>[0] = {}) {
   const voiceChat = createVoiceChatController({
@@ -722,6 +732,41 @@ describe("VoiceCallSettingsPopover", () => {
     // 600 - 12 = 588, so the flyout starts at 188 (-32px relative to the panel).
     const voiceFlyout = document.querySelector(".vsVoiceLevel3Flyout") as HTMLElement;
     expect(voiceFlyout).toHaveStyle("top: -32px");
+  });
+
+  it("keeps models and options left to right, sliding the menu left to fit", () => {
+    // 1200px window (e.g. a laptop at 167% scaling): the three columns do not
+    // fit right of the summary at 363px, so the menu slides left instead of
+    // splitting the columns to both sides.
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 1200 });
+    mockSummaryAt(363);
+    renderPopover();
+    const dialog = openPanel();
+    expect(dialog.style.left).toBe("348px");
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    fireEvent.mouseEnter(screen.getByText("gemini-3.1-flash-live-preview"));
+    expect(document.querySelector(".vsModelFlyout")).not.toHaveClass("flyLeft");
+    expect(document.querySelector(".vsVoiceLevel3Flyout")).not.toHaveClass("stacked");
+    expect(screen.queryByRole("button", { name: "返回模型列表" })).not.toBeInTheDocument();
+  });
+
+  it("opens options over the models on click, with a way back, when the window is too narrow", () => {
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 760 });
+    mockSummaryAt(200);
+    renderPopover();
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("Google"));
+    // Hover alone must not cover the model list.
+    fireEvent.mouseEnter(screen.getByText("gemini-3.1-flash-live-preview"));
+    expect(document.querySelector(".vsVoiceLevel3Flyout")).toBeNull();
+
+    fireEvent.click(screen.getByText("gemini-3.1-flash-live-preview"));
+    expect(document.querySelector(".vsVoiceLevel3Flyout")).toHaveClass("stacked");
+    expect(document.querySelector(".vsModelFlyout")).toHaveClass("covered");
+
+    fireEvent.click(screen.getByRole("button", { name: "返回模型列表" }));
+    expect(document.querySelector(".vsVoiceLevel3Flyout")).toBeNull();
+    expect(document.querySelector(".vsModelFlyout")).not.toHaveClass("covered");
   });
 
   it("calls scrollIntoView on the active provider row when popover opens", () => {

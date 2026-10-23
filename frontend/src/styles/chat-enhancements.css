@@ -331,7 +331,48 @@
   padding: 2px;
 }
 
-.vsCoachCard {
+.vsOptionsHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px 10px;
+}
+
+.vsOptionsHeaderModel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.vsOptionsHeaderCaption {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.vsOptionsBack {
+  align-self: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.vsOptionsBack:hover {
+  border-color: color-mix(in oklab, var(--brand) 40%, var(--line));
+}
+
+.vsCoachSettingsCard {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -342,7 +383,7 @@
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.vsCoachCard.on {
+.vsCoachSettingsCard.on {
   border-color: color-mix(in oklab, var(--brand) 32%, var(--line));
   background: color-mix(in oklab, var(--bg-card) 55%, var(--brand-soft));
 }
@@ -383,7 +424,7 @@
   margin: 0;
 }
 
-.vsSwitch {
+.vsCoachSwitch {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
@@ -397,7 +438,7 @@
   transition: background 0.15s ease;
 }
 
-.vsSwitch::before {
+.vsCoachSwitch::before {
   content: "";
   position: absolute;
   top: 2px;
@@ -410,19 +451,19 @@
   transition: transform 0.15s ease;
 }
 
-.vsSwitch:checked {
+.vsCoachSwitch:checked {
   background: var(--brand-dark);
 }
 
-.vsSwitch:checked::before {
+.vsCoachSwitch:checked::before {
   transform: translateX(16px);
 }
 
-.vsSwitch:disabled {
+.vsCoachSwitch:disabled {
   cursor: default;
 }
 
-.vsSwitch:focus-visible {
+.vsCoachSwitch:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
