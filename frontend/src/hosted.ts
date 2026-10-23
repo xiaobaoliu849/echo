@@ -88,3 +88,25 @@ export function setHostedLanguage(language: string): void {
   }
 }
 
+const REOPEN_SETTINGS_KEY = "echo:hosted-reopen-settings";
+
+/** Reopen Settings at this tab after the next reload (a language switch reloads the page). */
+export function reopenHostedSettingsAfterReload(tab: string): void {
+  try {
+    sessionStorage.setItem(REOPEN_SETTINGS_KEY, tab);
+  } catch {
+    // Storage blocked: the reload just lands on the chat page.
+  }
+}
+
+/** The tab to reopen after a reload, if any; reading it clears it. */
+export function takeHostedSettingsToReopen(): string | null {
+  try {
+    const tab = sessionStorage.getItem(REOPEN_SETTINGS_KEY);
+    sessionStorage.removeItem(REOPEN_SETTINGS_KEY);
+    return tab;
+  } catch {
+    return null;
+  }
+}
+

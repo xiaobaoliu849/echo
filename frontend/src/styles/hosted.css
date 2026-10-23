@@ -1354,22 +1354,18 @@
   color: var(--text-secondary);
 }
 
-.hostedAdminOverlay .hostedSettingsBack {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  padding: 7px 14px;
-  font-size: var(--step--1);
-  color: var(--text-secondary);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
+/* "Back to chat" sits at the bottom of the settings sidebar. */
+.hostedAdminOverlay .hostedSettingsNav .hostedSettingsBack {
+  margin-top: auto;
 }
 
-.hostedAdminOverlay .hostedSettingsBack:hover {
+.hostedAdminOverlay .hostedSettingsNav .hostedSettingsBack:hover {
+  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+}
+
+.hostedAdminOverlay .hostedSettingsNav .hostedSettingsBack:hover .hostedSettingsNavIcon {
   color: var(--brand-dark);
-  border-color: color-mix(in oklab, var(--brand) 45%, var(--border-color));
+  background: var(--brand-soft);
 }
 
 .hostedSettings {
@@ -1731,6 +1727,12 @@
     flex: none;
     padding: 8px 12px;
     white-space: nowrap;
+  }
+
+  /* In the narrow tab strip, keep "Back to chat" first so it is never scrolled away. */
+  .hostedAdminOverlay .hostedSettingsNav .hostedSettingsBack {
+    order: -1;
+    margin-top: 0;
   }
 
   .hostedSettingsNavIcon {

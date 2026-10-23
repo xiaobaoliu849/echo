@@ -8,7 +8,7 @@ import {
   type HostedExpiringSoon,
 } from "../api";
 import { formatTime, minutes as formatMinutes } from "../hostedFormat";
-import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, HOSTED_OPEN_SETTINGS_EVENT, formatRemainingMinutes, getHostedLanguage, type HostedBalanceDetail } from "../hosted";
+import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, HOSTED_OPEN_SETTINGS_EVENT, formatRemainingMinutes, getHostedLanguage, takeHostedSettingsToReopen, type HostedBalanceDetail } from "../hosted";
 import { createInlineTranslator } from "../i18n";
 
 /** Account card in the sidebar footer: who is logged in and minutes left. */
@@ -16,7 +16,9 @@ export default function HostedAccountCard() {
   const t = createInlineTranslator(getHostedLanguage());
   const [account, setAccount] = useState("");
   const [remaining, setRemaining] = useState<number | null>(null);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(
+    () => takeHostedSettingsToReopen() as SettingsTab | null,
+  );
   const [expiring, setExpiring] = useState<HostedExpiringSoon>(null);
 
   useEffect(() => {

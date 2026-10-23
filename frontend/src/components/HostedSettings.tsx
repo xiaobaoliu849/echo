@@ -29,7 +29,7 @@ import {
   type HostedPrefs,
   type HostedRenewal,
 } from "../api";
-import { getHostedLanguage } from "../hosted";
+import { getHostedLanguage, reopenHostedSettingsAfterReload } from "../hosted";
 import EvermindBadge from "./EvermindBadge";
 import {
   USER_PACKAGES,
@@ -179,10 +179,6 @@ export default function HostedSettings({ initialTab = "account", onClose }: { in
         <img src={echoIcon} alt="" className="hostedSettingsTopbarIcon" />
         <strong>Echo</strong>
         <span className="hostedSettingsTopbarTitle">{t("设置", "Settings")}</span>
-        <button type="button" className="hostedSettingsBack" onClick={onClose} title={t("返回 (Esc)", "Back (Esc)")}>
-          <ArrowLeft size={16} aria-hidden="true" />
-          {t("返回对话", "Back to chat")}
-        </button>
       </header>
       <div className="hostedSettings">
         <nav className="hostedSettingsNav" aria-label={t("设置分类", "Settings sections")}>
@@ -206,6 +202,12 @@ export default function HostedSettings({ initialTab = "account", onClose }: { in
               </button>
             );
           })}
+          <button type="button" className="hostedSettingsBack" onClick={onClose} title={t("返回对话 (Esc)", "Back to chat (Esc)")}>
+            <span className="hostedSettingsNavIcon"><ArrowLeft size={18} aria-hidden="true" /></span>
+            <span className="hostedSettingsNavText">
+              <strong>{t("返回对话", "Back to chat")}</strong>
+            </span>
+          </button>
         </nav>
         <main className="hostedSettingsMain" ref={mainRef}>
           <div className="hostedSettingsBody">
@@ -469,6 +471,7 @@ function GeneralTab() {
   const changeLanguage = async (ui_language: HostedPrefs["ui_language"]) => {
     const next = await save({ ui_language });
     if (next && applyHostedPrefs(next)) {
+      reopenHostedSettingsAfterReload("general"); // come back here, not to the chat
       window.location.reload(); // re-render every screen in the new language
     }
   };
