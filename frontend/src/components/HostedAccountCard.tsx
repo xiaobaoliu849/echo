@@ -8,7 +8,7 @@ import {
   type HostedExpiringSoon,
 } from "../api";
 import { formatTime, minutes as formatMinutes } from "../hostedFormat";
-import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, HOSTED_OPEN_SETTINGS_EVENT, formatRemainingMinutes, getHostedLanguage, takeHostedSettingsToReopen, type HostedBalanceDetail } from "../hosted";
+import { HOSTED_ADMIN_HASH, HOSTED_BALANCE_EVENT, HOSTED_SETTINGS_TABS, HOSTED_OPEN_SETTINGS_EVENT, formatRemainingMinutes, clearHostedSettingsToReopen, getHostedLanguage, peekHostedSettingsToReopen, type HostedBalanceDetail } from "../hosted";
 import { createInlineTranslator } from "../i18n";
 
 /** Account card in the sidebar footer: who is logged in and minutes left. */
@@ -16,9 +16,13 @@ export default function HostedAccountCard() {
   const t = createInlineTranslator(getHostedLanguage());
   const [account, setAccount] = useState("");
   const [remaining, setRemaining] = useState<number | null>(null);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(
-    () => takeHostedSettingsToReopen() as SettingsTab | null,
-  );
+  // Read without clearing (StrictMode runs initializers twice); cleared below.
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(() => {
+    const tab = peekHostedSettingsToReopen();
+    return HOSTED_SETTINGS_TABS.includes(tab as SettingsTab) ? (tab as SettingsTab) : null;
+  });
+
+  useEffect(clearHostedSettingsToReopen, []);
   const [expiring, setExpiring] = useState<HostedExpiringSoon>(null);
 
   useEffect(() => {

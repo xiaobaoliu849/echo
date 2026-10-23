@@ -29,7 +29,7 @@ import {
   type HostedPrefs,
   type HostedRenewal,
 } from "../api";
-import { getHostedLanguage, reopenHostedSettingsAfterReload } from "../hosted";
+import { HOSTED_SETTINGS_TABS, getHostedLanguage, reopenHostedSettingsAfterReload } from "../hosted";
 import EvermindBadge from "./EvermindBadge";
 import {
   USER_PACKAGES,
@@ -56,7 +56,7 @@ import { GrantList, LotList } from "./HostedUi";
  * account, and nothing about the operator's server (keys, providers).
  */
 
-export type SettingsTab = "progress" | "account" | "learning" | "memory" | "general" | "security";
+export type SettingsTab = (typeof HOSTED_SETTINGS_TABS)[number];
 
 const HISTORY_DAYS = 30;
 const CALLS_SHOWN = 10;

@@ -88,25 +88,43 @@ export function setHostedLanguage(language: string): void {
   }
 }
 
+/** Tabs of hosted Settings, in sidebar order. */
+export const HOSTED_SETTINGS_TABS = ["progress", "account", "learning", "memory", "general", "security"] as const;
+
 const REOPEN_SETTINGS_KEY = "echo:hosted-reopen-settings";
+// Long enough for the reload and the prefs round trip; a stale request (the
+// reload ended on the login screen, say) must not pop Settings open later.
+const REOPEN_SETTINGS_MAX_AGE_MS = 60_000;
 
 /** Reopen Settings at this tab after the next reload (a language switch reloads the page). */
 export function reopenHostedSettingsAfterReload(tab: string): void {
   try {
-    sessionStorage.setItem(REOPEN_SETTINGS_KEY, tab);
+    sessionStorage.setItem(REOPEN_SETTINGS_KEY, JSON.stringify({ tab, at: Date.now() }));
   } catch {
     // Storage blocked: the reload just lands on the chat page.
   }
 }
 
-/** The tab to reopen after a reload, if any; reading it clears it. */
-export function takeHostedSettingsToReopen(): string | null {
+/** The tab to reopen after a reload, if one was asked for recently. Does not clear it. */
+export function peekHostedSettingsToReopen(): string | null {
   try {
-    const tab = sessionStorage.getItem(REOPEN_SETTINGS_KEY);
-    sessionStorage.removeItem(REOPEN_SETTINGS_KEY);
-    return tab;
+    const raw = sessionStorage.getItem(REOPEN_SETTINGS_KEY);
+    if (!raw) {
+      return null;
+    }
+    const { tab, at } = JSON.parse(raw) as { tab?: unknown; at?: unknown };
+    const fresh = typeof at === "number" && Date.now() - at < REOPEN_SETTINGS_MAX_AGE_MS;
+    return fresh && typeof tab === "string" ? tab : null;
   } catch {
     return null;
+  }
+}
+
+export function clearHostedSettingsToReopen(): void {
+  try {
+    sessionStorage.removeItem(REOPEN_SETTINGS_KEY);
+  } catch {
+    // Nothing stored.
   }
 }
 
