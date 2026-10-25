@@ -90,8 +90,14 @@ def _shared_client() -> httpx.AsyncClient:
         # Idle connections are dropped well before nginx's keepalive_timeout
         # (75 s by default), so a request is never sent on a socket the
         # server is closing.
+        # trust_env=False: on Windows httpx also picks up the system proxy
+        # (e.g. Clash), which would send these mainland requests abroad and
+        # back; the relay socket below opts out of proxies the same way.
         client = httpx.AsyncClient(
-            verify=_verify(), timeout=REQUEST_TIMEOUT, limits=httpx.Limits(keepalive_expiry=30.0)
+            verify=_verify(),
+            timeout=REQUEST_TIMEOUT,
+            limits=httpx.Limits(keepalive_expiry=30.0),
+            trust_env=False,
         )
         _SHARED_CLIENTS[loop] = client
     return client
@@ -168,6 +174,11 @@ class CommunityCallMeter:
                 verdict = await self._beat(final=False)
                 self._failures = 0
             except CommunityServerError as exc:
+                if exc.status_code in (401, 403):
+                    # A revoked login or disabled account is final; retrying
+                    # would only keep the call going unbilled.
+                    await self._hang_up("auth_revoked", "登录已失效，请退出后重新登录。")
+                    return
                 self._failures += 1
                 logger.warning("community heartbeat failed (%d): %s", self._failures, exc)
                 # The server reaps calls it has not heard from for a minute;

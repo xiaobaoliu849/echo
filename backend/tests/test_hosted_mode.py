@@ -800,7 +800,10 @@ class CommunityClientTests(unittest.TestCase):
                         "ws_url": "wss://gw/realtime", "heartbeat_seconds": 0.05, "remaining_seconds": 300,
                         "memory": True}
             if path == "/api/billing/direct/heartbeat":
-                return self.heartbeat_verdicts.pop(0) if self.heartbeat_verdicts else {"remaining_seconds": 290, "stop": False}
+                verdict = self.heartbeat_verdicts.pop(0) if self.heartbeat_verdicts else {"remaining_seconds": 290, "stop": False}
+                if isinstance(verdict, Exception):
+                    raise verdict
+                return verdict
             raise AssertionError(path)
 
         self._patches = [
@@ -987,6 +990,40 @@ class CommunityClientTests(unittest.TestCase):
         beats = [c for c in self.calls if c[1] == "/api/billing/direct/heartbeat"]
         self.assertTrue(beats[0][2]["active"])  # the assistant spoke before the first beat
         self.assertTrue(any(b[2]["final"] for b in beats))
+
+    def test_revoked_login_hangs_up_at_the_next_heartbeat(self) -> None:
+        self.heartbeat_verdicts = [self.cc.CommunityServerError(401, {"code": "AUTH_INVALID"})]
+
+        async def fake_session(websocket: Any, **kwargs: Any) -> None:
+            from starlette.websockets import WebSocketState
+
+            for _ in range(200):
+                if websocket.application_state != WebSocketState.CONNECTED:
+                    return
+                await asyncio.sleep(0.05)
+
+        with patch.object(
+            voice_chat_router.voice_chat_service, "stream_vercel_session", AsyncMock(side_effect=fake_session)
+        ):
+            client = TestClient(self.app)
+            events = []
+            with client.websocket_connect("/api/voice-chat/ws?provider=Vercel&token=remote-token") as ws:
+                try:
+                    while True:
+                        events.append(ws.receive_json())
+                except WebSocketDisconnect:
+                    pass
+        self.assertEqual(events[-1]["type"], "billing_end")
+        self.assertEqual(events[-1]["reason"], "auth_revoked")
+        # Hung up on the first refusal instead of retrying for 45 s.
+        beats = [c for c in self.calls if c[1] == "/api/billing/direct/heartbeat" and not c[2]["final"]]
+        self.assertEqual(len(beats), 1)
+
+    def test_shared_client_ignores_system_proxies(self) -> None:
+        async def run() -> bool:
+            return self.cc._shared_client()._trust_env
+
+        self.assertFalse(asyncio.run(run()))
 
     def test_call_refused_by_server_shows_its_reason(self) -> None:
         client = TestClient(self.app)
