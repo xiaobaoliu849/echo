@@ -49,6 +49,7 @@ export function isVoiceRealtimeModel(provider: string, model: string): boolean {
     normalizedProvider === "doubao" ||
     normalizedProvider === "cartesia" ||
     normalizedProvider === "gradium" ||
+    normalizedProvider === "moss" ||
     normalizedProvider === "vercel"
   ) {
     return true;
@@ -91,6 +92,9 @@ export function formatModelHint(provider: string, model: string, t: (zh: string,
   }
   if (normalizedProv === "gradium" || model.toLowerCase().includes("gradium")) {
     return t("Gradium 实时语音", "Gradium Voice AI");
+  }
+  if (normalizedProv === "moss") {
+    return t("MOSS-Live 全双工", "MOSS-Live full-duplex");
   }
   if (normalizedProv === "vercel") {
     if (model.toLowerCase().includes("extended-thinking")) {

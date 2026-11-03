@@ -28,6 +28,7 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   Doubao: t("火山引擎 豆包", "Volcengine Doubao"),
   Cartesia: t("Cartesia 极速语音", "Cartesia Sonic Voice"),
   Gradium: t("Gradium 实时语音", "Gradium Voice AI"),
+  MOSS: t("MOSS-Live 全双工语音 (MOSI)", "MOSS-Live full-duplex voice (MOSI)"),
   Vercel: t("Vercel AI Gateway 实时语音与语音合成", "Vercel AI Gateway Realtime and TTS"),
   PersonaPlex: t("PersonaPlex 语音模型", "PersonaPlex"),
   GLM4Voice: t("智谱 GLM-4-Voice", "Zhipu GLM-4-Voice"),

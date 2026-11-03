@@ -49,6 +49,8 @@ import {
   CARTESIA_REALTIME_VOICES,
   GRADIUM_PROVIDER,
   GRADIUM_REALTIME_VOICES,
+  DEFAULT_MOSS_VOICE,
+  MOSS_PROVIDER,
   OPENAI_PROVIDER,
   OPENAI_REALTIME_VOICES,
   PERSONAPLEX_PROVIDER,
@@ -154,6 +156,7 @@ export default function useVoiceChat({
       DOUBAO_PROVIDER,
       CARTESIA_PROVIDER,
       GRADIUM_PROVIDER,
+      MOSS_PROVIDER,
       OPENAI_PROVIDER,
       PERSONAPLEX_PROVIDER,
       GLM4VOICE_PROVIDER,
@@ -201,6 +204,7 @@ export default function useVoiceChat({
       : initialProvider === DOUBAO_PROVIDER ? "zh_female_vv_jupiter_bigtts"
       : initialProvider === CARTESIA_PROVIDER ? "f786b574-daa5-4673-aa0c-cbe3e8534c02"
       : initialProvider === GRADIUM_PROVIDER ? "YTpq7expH9539ERJ"
+      : initialProvider === MOSS_PROVIDER ? DEFAULT_MOSS_VOICE
       : "Puck"
   );
   const [voiceChatTranslationMode, setVoiceChatTranslationMode] = useState<TranslationMode>("bidirectional");
@@ -576,6 +580,10 @@ export default function useVoiceChat({
     } else if (voiceChatProvider === GRADIUM_PROVIDER) {
       if (!GRADIUM_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice("YTpq7expH9539ERJ");
+      }
+    } else if (voiceChatProvider === MOSS_PROVIDER) {
+      if (voiceChatVoice !== DEFAULT_MOSS_VOICE) {
+        setVoiceChatVoice(DEFAULT_MOSS_VOICE);
       }
     }
     // voiceChatModel must be a dependency: switching between qwen-audio and other

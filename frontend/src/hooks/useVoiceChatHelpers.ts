@@ -64,6 +64,7 @@ export const PERSONAPLEX_PROVIDER = "PersonaPlex";
 export const GLM4VOICE_PROVIDER = "GLM4Voice";
 export const CARTESIA_PROVIDER = "Cartesia";
 export const GRADIUM_PROVIDER = "Gradium";
+export const MOSS_PROVIDER = "MOSS";
 export const STEPFUN_PROVIDER = "StepFun";
 export const VERCEL_PROVIDER = "Vercel";
 export const TAVUS_PROVIDER = "Tavus";
@@ -104,6 +105,9 @@ export const DEFAULT_PERSONAPLEX_MODEL = "personaplex-7b-v1-bnb-4bit";
 export const DEFAULT_GLM4VOICE_MODEL = "glm-4-voice-9b";
 export const DEFAULT_CARTESIA_MODEL = "cartesia-realtime";
 export const DEFAULT_GRADIUM_MODEL = "gradium-realtime";
+export const DEFAULT_MOSS_MODEL = "moss-live-1.0";
+// MOSS-Live has no voice selection; mirrors DEFAULT_MOSS_REALTIME_VOICE in the backend.
+export const DEFAULT_MOSS_VOICE = "default";
 export const DEFAULT_VERCEL_MODEL = "openai/gpt-realtime-2";
 export const DEFAULT_TAVUS_MODEL = "tavus-video-pal";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
@@ -566,6 +570,8 @@ export function formatRealtimeVoiceOptions(
     options = CARTESIA_REALTIME_VOICES;
   } else if (provider === GRADIUM_PROVIDER) {
     options = GRADIUM_REALTIME_VOICES;
+  } else if (provider === MOSS_PROVIDER) {
+    options = [{ value: DEFAULT_MOSS_VOICE, label: "Default · 默认音色", description: "MOSS-Live 原生音色" }];
   } else if (provider === TAVUS_PROVIDER) {
     options = [{ value: "default", label: "Tavus Avatar · 默认分身", description: "CVI 实时视频分身" }];
   } else if (provider === DASHSCOPE_PROVIDER) {
@@ -644,6 +650,7 @@ export const CANONICAL_PROVIDER_ORDER = [
   "Doubao",
   "Cartesia",
   "Gradium",
+  "MOSS",
   "Vercel",
   "DeepSeek",
   "Xiaomi",
@@ -692,6 +699,7 @@ export function getProviderBadge(
     norm === "doubao" ||
     norm === "cartesia" ||
     norm === "gradium" ||
+    norm === "moss" ||
     norm === "vercel" ||
     norm === "openai"
   ) {
@@ -744,6 +752,7 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
     DOUBAO_PROVIDER,
     CARTESIA_PROVIDER,
     GRADIUM_PROVIDER,
+    MOSS_PROVIDER,
     VERCEL_PROVIDER,
     OPENAI_PROVIDER,
     PERSONAPLEX_PROVIDER,
@@ -779,6 +788,9 @@ export function resolveRealtimeProvider(preferredProvider: string | undefined, p
   }
   if (providerOptions.includes(GRADIUM_PROVIDER)) {
     return GRADIUM_PROVIDER;
+  }
+  if (providerOptions.includes(MOSS_PROVIDER)) {
+    return MOSS_PROVIDER;
   }
   if (providerOptions.includes(VERCEL_PROVIDER)) {
     return VERCEL_PROVIDER;
@@ -819,6 +831,9 @@ export function isRealtimeVoiceModel(provider: string, model: string): boolean {
   }
   if (normalizedProvider === GRADIUM_PROVIDER.toLowerCase()) {
     return normalizedModel.includes("gradium");
+  }
+  if (normalizedProvider === MOSS_PROVIDER.toLowerCase()) {
+    return normalizedModel.startsWith("moss-live");
   }
   if (normalizedProvider === VERCEL_PROVIDER.toLowerCase()) {
     // Gateway model ids are creator/model-name; realtime ones carry a
@@ -895,6 +910,9 @@ export function resolveRealtimeFallbackModel(provider: string): string {
   }
   if (normalized === GRADIUM_PROVIDER) {
     return DEFAULT_GRADIUM_MODEL;
+  }
+  if (normalized === MOSS_PROVIDER) {
+    return DEFAULT_MOSS_MODEL;
   }
   if (normalized === TAVUS_PROVIDER) {
     return DEFAULT_TAVUS_MODEL;
@@ -982,6 +1000,9 @@ export function resolveRealtimeModelOptions(
   const gradiumBuiltIns = provider === GRADIUM_PROVIDER
     ? [DEFAULT_GRADIUM_MODEL]
     : [];
+  const mossBuiltIns = provider === MOSS_PROVIDER
+    ? [DEFAULT_MOSS_MODEL]
+    : [];
   const vercelBuiltIns = provider === VERCEL_PROVIDER
     ? [
         "google/gemini-3.8-live",
@@ -1004,6 +1025,7 @@ export function resolveRealtimeModelOptions(
     ...glm4voiceBuiltIns,
     ...cartesiaBuiltIns,
     ...gradiumBuiltIns,
+    ...mossBuiltIns,
     ...vercelBuiltIns,
   ];
   const ordered = fallbackModel ? [fallbackModel, ...allBuiltIns, ...realtimeModels] : [...allBuiltIns, ...realtimeModels];
