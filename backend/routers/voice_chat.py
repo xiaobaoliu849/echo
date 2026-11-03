@@ -318,7 +318,7 @@ async def voice_chat_ws(
         )
         await websocket.close(code=1003)
         return
-    if selected_provider not in {"Google", "AgentPlatform", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia", "Gradium", "Vercel", "StepFun"}:
+    if selected_provider not in {"Google", "AgentPlatform", "DashScope", "OpenAI", "Doubao", "PersonaPlex", "GLM4Voice", "Cartesia", "Gradium", "Vercel", "StepFun", "MOSS"}:
         await websocket.send_json(
             {
                 "type": "error",
@@ -471,6 +471,9 @@ async def voice_chat_ws(
     elif selected_provider == "StepFun":
         if not _cfg.get_setting("stepfun_api_key"):
             _missing.append("StepFun API Key")
+    elif selected_provider == "MOSS":
+        if not _cfg.get_setting("moss_api_key"):
+            _missing.append("MOSS API Key")
 
     if _missing:
         if hosted_user_email:
@@ -523,6 +526,8 @@ async def voice_chat_ws(
                 model=model,
                 voice=(voice or DEFAULT_GRADIUM_REALTIME_VOICE).strip(),
             )
+        elif selected_provider == "MOSS":
+            await voice_chat_service.stream_moss_session(websocket, model=model)
         elif selected_provider == "Doubao":
             await voice_chat_service.stream_doubao_session(
                 websocket,

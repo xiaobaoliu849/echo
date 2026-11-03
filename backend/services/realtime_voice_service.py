@@ -9,6 +9,7 @@ Provider-specific logic lives in the mixin modules:
 - ``realtime_qwen_audio_provider``— Qwen-Audio (raw WebSocket)
 - ``realtime_doubao_provider``    — Doubao OpenSpeech dialogue
 - ``realtime_personaplex_provider``— PersonaPlex (local moshi server)
+- ``realtime_moss_provider``      — MOSS-Live (MOSI full-duplex)
 
 Shared infrastructure (interruption arbitration, output delivery, turn
 finalization, event emission) stays here.  All names that external code
@@ -134,6 +135,7 @@ from .realtime_cartesia_provider import CartesiaRealtimeMixin
 from .realtime_gradium_provider import GradiumRealtimeMixin
 from .realtime_vercel_provider import VercelRealtimeMixin
 from .realtime_stepfun_provider import StepFunRealtimeMixin
+from .realtime_moss_provider import MossRealtimeMixin
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +156,7 @@ class RealtimeVoiceService(
     GradiumRealtimeMixin,
     VercelRealtimeMixin,
     StepFunRealtimeMixin,
+    MossRealtimeMixin,
 ):
     """Orchestrates realtime voice sessions across multiple providers.
 

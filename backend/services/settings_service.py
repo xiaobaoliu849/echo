@@ -95,6 +95,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "doubao_websearch_api_key": "",
         "cartesia_api_key": "",
         "gradium_api_key": "",
+        "moss_api_key": "",
         "tavus_api_key": "",
         "soniox_api_key": "",
     },
@@ -117,6 +118,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Doubao": "",
         "Cartesia": "",
         "Gradium": "",
+        "MOSS": "",
         "Tavus": "",
     },
     "realtime_api_urls": {
@@ -124,6 +126,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Doubao": "",
         "Cartesia": "",
         "Gradium": "",
+        "MOSS": "",
     },
     "default_models": {
         "DeepSeek": {"default": "deepseek-v4-flash", "available": ["deepseek-v4-flash", "deepseek-v4-pro"], "enabled": ["deepseek-v4-flash", "deepseek-v4-pro"]},
@@ -144,6 +147,7 @@ DEFAULT_SETTINGS_TEMPLATE: dict[str, Any] = {
         "Doubao": {"default": "doubao-realtime", "available": ["doubao-realtime"], "enabled": ["doubao-realtime"]},
         "Cartesia": {"default": "cartesia-realtime", "available": ["cartesia-realtime"], "enabled": ["cartesia-realtime"], "tts_default": "sonic-preview", "tts_available": ["sonic-preview", "sonic-3.5", "sonic-3"], "tts_enabled": ["sonic-preview", "sonic-3.5"]},
         "Gradium": {"default": "gradium-realtime", "available": ["gradium-realtime"], "enabled": ["gradium-realtime"], "tts_default": "default", "tts_available": ["default"], "tts_enabled": ["default"]},
+        "MOSS": {"default": "moss-live-1.0", "available": ["moss-live-1.0"], "enabled": ["moss-live-1.0"]},
         "PersonaPlex": {"default": "personaplex-7b-v1-bnb-4bit", "available": ["personaplex-7b-v1-bnb-4bit"], "enabled": ["personaplex-7b-v1-bnb-4bit"]},
         "GLM4Voice": {"default": "glm-4-voice-9b", "available": ["glm-4-voice-9b"], "enabled": ["glm-4-voice-9b"]},
     },

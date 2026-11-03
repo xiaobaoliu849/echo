@@ -268,6 +268,9 @@ GRADIUM_MODEL_LIST_SUPPLEMENTS = [
     "gradium-realtime",
     "default",
 ]
+MOSS_MODEL_LIST_SUPPLEMENTS = [
+    "moss-live-1.0",
+]
 VERCEL_MODEL_LIST_SUPPLEMENTS = [
     "google/gemini-3.8-live",
     "google/gemini-3.8-live-extended-thinking",
@@ -530,6 +533,9 @@ def _merge_dashscope_supplements(ds_entry: dict[str, Any]) -> None:
 async def fetch_models(provider: str, payload: FetchModelsRequest) -> FetchModelsResponse:
     from services.config_loader import normalize_provider_name
     provider = normalize_provider_name(provider)
+    if provider == "MOSS":
+        # MOSI has no public /models listing for its realtime model.
+        return FetchModelsResponse(provider=provider, models=list(MOSS_MODEL_LIST_SUPPLEMENTS), tts_models=[])
     cfg_settings = {}
     try:
         cfg_settings = settings_service.config.get_provider_settings(provider)

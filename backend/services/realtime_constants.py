@@ -236,6 +236,12 @@ PERSONAPLEX_REALTIME_VOICES = (
 )
 DEFAULT_PERSONAPLEX_REALTIME_VOICE = "NATF2.pt"
 
+# MOSS-Live (MOSI) 全双工实时语音: 自有 action 事件协议,上行 16k / 下行 48k
+# 裸 PCM 二进制帧,无音色选择。Docs: platform.moss.cn/en/docs/reference/moss-live
+DEFAULT_MOSS_REALTIME_MODEL = "moss-live-1.0"
+DEFAULT_MOSS_REALTIME_VOICE = "default"
+DEFAULT_MOSS_REALTIME_WS_URL = "wss://api.mosi.cn/v1/realtime"
+
 # StepFun (StepAudio 3 Realtime) 全双工实时语音交互
 DEFAULT_STEPFUN_REALTIME_MODEL = "stepaudio-3-realtime-preview"
 DEFAULT_STEPFUN_REALTIME_VOICE = "cixingnansheng"
