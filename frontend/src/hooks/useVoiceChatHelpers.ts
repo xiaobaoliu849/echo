@@ -108,6 +108,11 @@ export const DEFAULT_GRADIUM_MODEL = "gradium-realtime";
 export const DEFAULT_MOSS_MODEL = "moss-live-1.0";
 // MOSS-Live has no voice selection; mirrors DEFAULT_MOSS_REALTIME_VOICE in the backend.
 export const DEFAULT_MOSS_VOICE = "default";
+export const MOSS_REALTIME_VOICES = [
+  { value: DEFAULT_MOSS_VOICE, label: "Default · 默认音色", description: "MOSS-Live 原生默认音色" },
+  { value: "6c3152b1-1d4f-4e49-ade3-09f447712fec", label: "Nuannuan (Female)", description: "暖暖 · 温柔女声" },
+  { value: "6cc93520-3207-4f7a-bca9-2d560b9c306b", label: "Mumu (Male)", description: "沐沐 · 自然男声" },
+];
 export const DEFAULT_VERCEL_MODEL = "openai/gpt-realtime-2";
 export const DEFAULT_TAVUS_MODEL = "tavus-video-pal";
 export const SUPPORTED_GOOGLE_REALTIME_MODEL_PATTERNS = [
@@ -571,7 +576,7 @@ export function formatRealtimeVoiceOptions(
   } else if (provider === GRADIUM_PROVIDER) {
     options = GRADIUM_REALTIME_VOICES;
   } else if (provider === MOSS_PROVIDER) {
-    options = [{ value: DEFAULT_MOSS_VOICE, label: "Default · 默认音色", description: "MOSS-Live 原生音色" }];
+    options = MOSS_REALTIME_VOICES;
   } else if (provider === TAVUS_PROVIDER) {
     options = [{ value: "default", label: "Tavus Avatar · 默认分身", description: "CVI 实时视频分身" }];
   } else if (provider === DASHSCOPE_PROVIDER) {

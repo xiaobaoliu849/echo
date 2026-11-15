@@ -47,9 +47,14 @@ GOOGLE_REALTIME_ACCENT_INSTRUCTIONS: dict[str, str] = {
 }
 
 
-def resolve_google_accent_instruction(accent: str | None) -> str:
+def resolve_realtime_accent_instruction(accent: str | None) -> str:
     """Return the fixed accent instruction for a whitelisted id, else ``""``."""
     return GOOGLE_REALTIME_ACCENT_INSTRUCTIONS.get(str(accent or "").strip(), "")
+
+
+def resolve_google_accent_instruction(accent: str | None) -> str:
+    """Back-compat alias for ``resolve_realtime_accent_instruction``."""
+    return resolve_realtime_accent_instruction(accent)
 
 
 # Shipped DashScope default. ``qwen3.8-omni-flash-realtime`` was verified live
@@ -241,6 +246,11 @@ DEFAULT_PERSONAPLEX_REALTIME_VOICE = "NATF2.pt"
 DEFAULT_MOSS_REALTIME_MODEL = "moss-live-1.0"
 DEFAULT_MOSS_REALTIME_VOICE = "default"
 DEFAULT_MOSS_REALTIME_WS_URL = "wss://api.mosi.cn/v1/realtime"
+MOSS_REALTIME_VOICES = (
+    "default",
+    "6c3152b1-1d4f-4e49-ade3-09f447712fec",  # Nuannuan (Female)
+    "6cc93520-3207-4f7a-bca9-2d560b9c306b",  # Mumu (Male)
+)
 
 # StepFun (StepAudio 3 Realtime) 全双工实时语音交互
 DEFAULT_STEPFUN_REALTIME_MODEL = "stepaudio-3-realtime-preview"

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import VoiceCallSettingsPopover from "./VoiceCallSettingsPopover";
+import { formatRealtimeVoiceOptions } from "../hooks/useVoiceChatHelpers";
 import { createVoiceChatController } from "../test/factories";
 
 const t = (zh: string, _en: string) => zh;
@@ -777,5 +778,29 @@ describe("VoiceCallSettingsPopover", () => {
     });
     openPanel();
     expect(scrollSpy).toHaveBeenCalled();
+  });
+
+  it("shows MOSS-Live voices and accent selector when MOSS is hovered", () => {
+    const onAccentChange = vi.fn();
+    renderPopover({
+      voiceChatProvider: "MOSS",
+      voiceChatModel: "moss-live-1.0",
+      voiceChatModelOptions: ["moss-live-1.0"],
+      voiceChatRealtimeChoicesByProvider: [{ provider: "MOSS", models: ["moss-live-1.0"] }],
+      voiceChatVoice: "default",
+      voiceChatVoiceOptions: formatRealtimeVoiceOptions("MOSS", "zh-CN", "moss-live-1.0"),
+      voiceChatAccent: "",
+      onAccentChange,
+    });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("MOSS"));
+    fireEvent.mouseEnter(screen.getAllByText("moss-live-1.0").at(-1)!);
+
+    expect(screen.getByText(/Nuannuan/)).toBeInTheDocument();
+    expect(screen.getByText(/Mumu/)).toBeInTheDocument();
+    const accentSelect = screen.getByLabelText("口音") as HTMLSelectElement;
+    expect(accentSelect).toBeInTheDocument();
+    fireEvent.change(accentSelect, { target: { value: "en-GB" } });
+    expect(onAccentChange).toHaveBeenCalledWith("en-GB");
   });
 });

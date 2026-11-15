@@ -27,6 +27,7 @@ from services.realtime_voice_service import (
     DEFAULT_GLM4VOICE_REALTIME_VOICE,
     DEFAULT_CARTESIA_REALTIME_VOICE,
     DEFAULT_GRADIUM_REALTIME_VOICE,
+    DEFAULT_MOSS_REALTIME_VOICE,
     DEFAULT_VERCEL_REALTIME_VOICE,
     DEFAULT_STEPFUN_REALTIME_VOICE,
     RealtimeVoiceService,
@@ -527,7 +528,12 @@ async def voice_chat_ws(
                 voice=(voice or DEFAULT_GRADIUM_REALTIME_VOICE).strip(),
             )
         elif selected_provider == "MOSS":
-            await voice_chat_service.stream_moss_session(websocket, model=model)
+            await voice_chat_service.stream_moss_session(
+                websocket,
+                model=model,
+                voice=(voice or DEFAULT_MOSS_REALTIME_VOICE).strip(),
+                accent=accent,
+            )
         elif selected_provider == "Doubao":
             await voice_chat_service.stream_doubao_session(
                 websocket,

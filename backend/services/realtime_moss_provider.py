@@ -35,6 +35,7 @@ from .realtime_constants import (
     DEFAULT_MOSS_REALTIME_MODEL,
     DEFAULT_MOSS_REALTIME_VOICE,
     DEFAULT_MOSS_REALTIME_WS_URL,
+    resolve_realtime_accent_instruction,
 )
 from .realtime_memory_session import RealtimeMemorySession
 from .realtime_session_recorder import VoiceAgentSessionRecorder
@@ -152,12 +153,14 @@ class MossRealtimeMixin:
         return {"api_key": api_key, "model": resolved_model, "endpoint": endpoint}
 
     @staticmethod
-    def _moss_instructions(memory_context: str, tutor_block: str) -> str:
+    def _moss_instructions(memory_context: str, tutor_block: str, accent_instruction: str = "") -> str:
         import datetime
 
         instructions = (
             f"{BASE_REALTIME_INSTRUCTIONS}\nCurrent Date: {datetime.date.today().isoformat()}."
         )
+        if accent_instruction:
+            instructions = f"{instructions}\n\n{accent_instruction}"
         if memory_context:
             instructions += (
                 "\n\n以下是从长期记忆中检索到的相关历史信息，仅在与用户当前问题相关时参考，不要主动复述：\n"
@@ -187,10 +190,21 @@ class MossRealtimeMixin:
                 err = (event.get("data") or {}).get("error") or event
                 raise RuntimeError(f"MOSS-Live 会话启动失败: {json.dumps(err, ensure_ascii=False)}")
 
-    async def _moss_handshake(self, moss_ws: Any, *, persona: str | None, instructions: str) -> str:
-        """attach_session → session.update → mic on. Returns the server session id."""
+    async def _moss_handshake(
+        self,
+        moss_ws: Any,
+        *,
+        persona: str | None,
+        instructions: str,
+        voice: str | None = None,
+    ) -> str:
+        """attach_session → (optional change_voice) → session.update → mic on. Returns the server session id."""
         await moss_ws.send(json.dumps({"action": "attach_session"}))
         attached = await self._moss_await(moss_ws, "session_attached")
+        selected_voice = (voice or "").strip()
+        if selected_voice and selected_voice != DEFAULT_MOSS_REALTIME_VOICE:
+            await moss_ws.send(json.dumps({"action": "change_voice", "voice_name": selected_voice}))
+            await self._moss_await(moss_ws, "voice_changed")
         session: dict[str, Any] = {"instructions": instructions}
         if persona:
             session["persona"] = {"name": "Echo", "prompt": persona[:8000]}
@@ -301,7 +315,13 @@ class MossRealtimeMixin:
             state["memory_injected"] = memory_context
             await moss_ws.send(json.dumps({
                 "action": "session.update",
-                "session": {"instructions": self._moss_instructions(memory_context, state["tutor_block"])},
+                "session": {
+                    "instructions": self._moss_instructions(
+                        memory_context,
+                        state["tutor_block"],
+                        state.get("accent_instruction", ""),
+                    )
+                },
             }, ensure_ascii=False))
 
         if action == "input.speech.started":
@@ -477,6 +497,8 @@ class MossRealtimeMixin:
         self,
         websocket: WebSocket,
         model: str | None = None,
+        voice: str | None = None,
+        accent: str | None = None,
         instructions: str | None = None,
         memory_session: RealtimeMemorySession | None = None,
         tool_session: VoiceAgentToolSession | None = None,
@@ -488,6 +510,8 @@ class MossRealtimeMixin:
             await self._send_event(websocket, "error", message=str(exc))
             return
 
+        selected_voice = (voice or "").strip() or DEFAULT_MOSS_REALTIME_VOICE
+        accent_instruction = resolve_realtime_accent_instruction(accent)
         url = f"{settings['endpoint']}?{urlencode({'model': settings['model']})}"
         ws_kwargs: dict[str, Any] = {"max_size": 2**24, "ping_interval": 30, "ping_timeout": 30}
         ws_kwargs.update(_get_websockets_header_kwargs({"Authorization": f"Bearer {settings['api_key']}"}))
@@ -506,6 +530,7 @@ class MossRealtimeMixin:
             "audio_contexts": [],     # response.audio.context 待配对的二进制帧
             "stopped_runs": set(),    # 已被打断、残余下行须丢弃的 run_id
             "tutor_block": tutor_block,
+            "accent_instruction": accent_instruction,
         }
 
         try:
@@ -514,7 +539,8 @@ class MossRealtimeMixin:
                     server_session_id = await self._moss_handshake(
                         moss_ws,
                         persona=instructions,
-                        instructions=self._moss_instructions("", tutor_block),
+                        instructions=self._moss_instructions("", tutor_block, accent_instruction),
+                        voice=selected_voice,
                     )
                 except Exception as exc:
                     logger.error("moss_handshake_failed: %s", exc)
@@ -527,7 +553,7 @@ class MossRealtimeMixin:
                     "session_open",
                     provider="MOSS",
                     model=settings["model"],
-                    voice=DEFAULT_MOSS_REALTIME_VOICE,
+                    voice=selected_voice,
                     session_id=recorder.session_id if recorder is not None else "",
                     mode="duplex_dialogue",
                 )
@@ -575,16 +601,24 @@ class MossRealtimeMixin:
         self,
         websocket: WebSocket,
         model: str | None = None,
+        voice: str | None = None,
+        accent: str | None = None,
         instructions: str | None = None,
     ) -> None:
+        selected_voice = (voice or "").strip() or DEFAULT_MOSS_REALTIME_VOICE
         recorder = await self._create_voice_session_recorder(
             provider="MOSS",
             model=model or DEFAULT_MOSS_REALTIME_MODEL,
-            voice=DEFAULT_MOSS_REALTIME_VOICE,
+            voice=selected_voice,
         )
         try:
             await self._run_moss_session(
-                websocket, model=model, instructions=instructions, recorder=recorder,
+                websocket,
+                model=model,
+                voice=selected_voice,
+                accent=accent,
+                instructions=instructions,
+                recorder=recorder,
             )
         finally:
             if recorder is not None:

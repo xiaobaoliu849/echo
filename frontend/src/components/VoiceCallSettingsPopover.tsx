@@ -22,7 +22,7 @@ import { useLocalVoiceStatus } from "../hooks/useLocalVoiceStatus";
 import { useFlyoutViewportFit, useProviderFlyoutTop } from "../hooks/useProviderFlyoutTop";
 import { traceSelection } from "../hooks/voiceSelectionTrace";
 import LiveAvatarSettings from "./LiveAvatarSettings";
-import { GEMINI_LIVE_ACCENTS, formatAvatarCallLabel, supportsGeminiAccent } from "../utils/geminiLivePreferences";
+import { GEMINI_LIVE_ACCENTS, formatAvatarCallLabel, supportsRealtimeAccent } from "../utils/geminiLivePreferences";
 import { COACH_LEVELS, COACH_TARGET_LANGUAGES, TUTOR_SCENARIOS } from "../utils/speakingCoach";
 import type { CoachLevel, TutorScenario } from "../api";
 
@@ -811,7 +811,7 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                       </div>
                     ) : null}
                   </div>
-                  {supportsGeminiAccent(currentProviderName, previewModel) && (
+                  {supportsRealtimeAccent(currentProviderName, previewModel) && (
                     <label className="vsFlyoutField vsFlyoutFieldStandalone">
                       <span>{t("口音", "Accent")}</span>
                       <select value={voiceChat.voiceChatAccent} onChange={(e) => {

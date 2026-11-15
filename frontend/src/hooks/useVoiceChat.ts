@@ -51,6 +51,7 @@ import {
   GRADIUM_REALTIME_VOICES,
   DEFAULT_MOSS_VOICE,
   MOSS_PROVIDER,
+  MOSS_REALTIME_VOICES,
   OPENAI_PROVIDER,
   OPENAI_REALTIME_VOICES,
   PERSONAPLEX_PROVIDER,
@@ -90,7 +91,7 @@ import {
 } from "./useVoiceChatHelpers";
 import { serializeSelectionTrace, traceSelection } from "./voiceSelectionTrace";
 import { IS_HOSTED_BUILD, publishHostedBalance } from "../hosted";
-import { GEMINI_LIVE_ACCENTS, supportsGeminiAccent } from "../utils/geminiLivePreferences";
+import { GEMINI_LIVE_ACCENTS, supportsRealtimeAccent } from "../utils/geminiLivePreferences";
 import useLiveScreenShare from "./useLiveScreenShare";
 import { supportsLiveScreenShare } from "../utils/liveScreenShare";
 
@@ -582,7 +583,7 @@ export default function useVoiceChat({
         setVoiceChatVoice("YTpq7expH9539ERJ");
       }
     } else if (voiceChatProvider === MOSS_PROVIDER) {
-      if (voiceChatVoice !== DEFAULT_MOSS_VOICE) {
+      if (!MOSS_REALTIME_VOICES.some(v => v.value === voiceChatVoice)) {
         setVoiceChatVoice(DEFAULT_MOSS_VOICE);
       }
     }
@@ -2091,7 +2092,7 @@ export default function useVoiceChat({
         model: effectiveModel || undefined,
         voice: voiceChatVoice,
         avatarName: voiceChatLiveAvatar ? voiceChatAvatarName : undefined,
-        accent: supportsGeminiAccent(voiceChatProvider, effectiveModel) ? voiceChatAccent : undefined,
+        accent: supportsRealtimeAccent(voiceChatProvider, effectiveModel) ? voiceChatAccent : undefined,
         translationMode: voiceChatLiveTranslate ? voiceChatTranslationMode : undefined,
         sourceLanguageCode: voiceChatLiveTranslate ? voiceChatSourceLanguageCode : undefined,
         targetLanguageCode: voiceChatLiveTranslate ? voiceChatTargetLanguageCode : undefined,

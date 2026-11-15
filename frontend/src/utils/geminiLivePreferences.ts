@@ -15,6 +15,10 @@ export function supportsGeminiAccent(provider: string, model: string): boolean {
     model.split("/").pop()?.startsWith("gemini-3.8-live") === true && !model.endsWith("-avatar");
 }
 
+export function supportsRealtimeAccent(provider: string, model: string): boolean {
+  return supportsGeminiAccent(provider, model) || provider.toLowerCase() === "moss";
+}
+
 export function formatAvatarCallLabel(avatarName: string, voiceLabel: string, t: (zh: string, en: string) => string): string {
   return `Gemini 3.8 Live · Avatar · ${avatarName.trim() || t("选择形象", "Choose avatar")} · ${voiceLabel}`;
 }
