@@ -11,6 +11,7 @@ export const HOSTED_PROVIDER_LABELS: Record<string, string> = {
   Vercel: "谷歌 Gemini",
   DashScope: "通义千问",
   Doubao: "豆包",
+  MOSS: "MOSS-Live",
 };
 
 /** Location hash of the operator console (admin accounts only). */
@@ -43,6 +44,7 @@ export const HOSTED_MODEL_LABELS: Record<string, string> = {
   "google/gemini-3.8-live-extended-thinking": "Gemini 3.8 Live（深度思考）",
   "qwen3.8-omni-flash-realtime": "通义千问 Omni",
   "doubao-realtime": "豆包实时语音",
+  "moss-live-1.0": "MOSS-Live 1.0",
 };
 
 // Minutes deducted per minute of talk, per model, from /api/billing/hosted-info.

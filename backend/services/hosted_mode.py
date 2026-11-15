@@ -50,6 +50,7 @@ DEFAULT_HOSTED_PROVIDERS: dict[str, dict[str, Any]] = {
     },
     "DashScope": {"multiplier": 0.5, "models": ["qwen3.8-omni-flash-realtime"]},
     "Doubao": {"multiplier": 1.0, "models": ["doubao-realtime"]},
+    "MOSS": {"multiplier": 1.0, "models": ["moss-live-1.0"]},
 }
 DEFAULT_IDLE_TIMEOUT_SECONDS = 60
 DEFAULT_LOW_BALANCE_WARNING_SECONDS = 300

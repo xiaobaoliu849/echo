@@ -762,7 +762,7 @@ class CommunityClientTests(unittest.TestCase):
     """Local backend deferring to a hosted server (ECHO_COMMUNITY_SERVER)."""
 
     def setUp(self) -> None:
-        from services import community_client
+        from services import community_client, hosted_mode
 
         self.cc = community_client
         self.calls: list[tuple[str, str, Any]] = []
@@ -876,8 +876,12 @@ class CommunityClientTests(unittest.TestCase):
         self.assertEqual(self._request("GET", "/api/billing/admin/users").status_code, 401)
 
     def test_direct_and_relayed_models_are_offered(self) -> None:
+        from services import community_client, hosted_mode
+
         body = self._request("GET", "/api/billing/hosted-info").json()
         self.assertEqual([p["provider"] for p in body["providers"]], ["Vercel", "DashScope"])
+        self.assertIn("MOSS", community_client.RELAY_PROVIDERS)
+        self.assertIn("MOSS", hosted_mode.DEFAULT_HOSTED_PROVIDERS)
 
     def test_qwen_and_doubao_calls_are_relayed_through_the_server(self) -> None:
         upstreams: list[Any] = []

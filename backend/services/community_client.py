@@ -11,7 +11,7 @@ backend then:
   network* — the operator's key never leaves the server and the audio never
   crosses it; a heartbeat every few seconds lets the server bill by its own
   clock and tell us when to hang up;
-* providers that cannot mint client secrets (Qwen Omni, Doubao) are
+* providers that cannot mint client secrets (Qwen Omni, Doubao, MOSS-Live) are
   *relayed*: the call is piped to the hosted server's own voice socket,
   which talks to the provider and meters the call. Both are mainland
   services, so the extra hop through the (mainland) server costs little.
@@ -39,7 +39,7 @@ REQUEST_TIMEOUT = httpx.Timeout(15.0, connect=10.0)
 # Calls that go direct from this machine (the server mints a client secret)
 # and calls piped through the hosted server.
 DIRECT_PROVIDERS = frozenset({"Vercel"})
-RELAY_PROVIDERS = frozenset({"DashScope", "Doubao"})
+RELAY_PROVIDERS = frozenset({"DashScope", "Doubao", "MOSS"})
 
 
 def community_server_url() -> str:
