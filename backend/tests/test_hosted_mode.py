@@ -883,7 +883,7 @@ class CommunityClientTests(unittest.TestCase):
         self.assertIn("MOSS", community_client.RELAY_PROVIDERS)
         self.assertIn("MOSS", hosted_mode.DEFAULT_HOSTED_PROVIDERS)
 
-    def test_qwen_and_doubao_calls_are_relayed_through_the_server(self) -> None:
+    def test_community_calls_preserve_provider_model_and_voice_through_the_relay(self) -> None:
         upstreams: list[Any] = []
 
         class FakeUpstream:
@@ -924,27 +924,35 @@ class CommunityClientTests(unittest.TestCase):
 
         import websockets
 
-        with patch.object(websockets, "connect", side_effect=fake_connect):
-            client = TestClient(self.app)
-            url = "/api/voice-chat/ws?provider=Doubao&model=doubao-realtime&voice=v1&token=remote-token"
-            with client.websocket_connect(url) as ws:
-                ws.send_text('{"type": "ping"}')
-                ws.send_bytes(b"pcm")
-                self.assertEqual(ws.receive_text(), '{"type": "pong"}')
-                self.assertEqual(ws.receive_bytes(), b"\x01\x02")
-                with self.assertRaises(WebSocketDisconnect) as closed:
-                    ws.receive_text()
-        self.assertEqual(closed.exception.code, 4402)  # the server's reason reaches the app
-        [upstream] = upstreams
-        self.assertEqual(
-            upstream.url,
-            "wss://hosted.test:8443/api/voice-chat/ws?provider=Doubao&model=doubao-realtime&voice=v1&token=remote-token",
-        )
-        self.assertIsNone(upstream.kwargs["proxy"])
-        self.assertEqual(upstream.sent[0], '{"type": "ping"}')
-        self.assertTrue(upstream.closed)
-        # A relayed call never asks the server for a direct-call grant.
-        self.assertFalse([c for c in self.calls if c[1] == "/api/billing/direct/start"])
+        offerings = [
+            ("DashScope", "qwen3.8-omni-flash-realtime", "Tina"),
+            ("Doubao", "doubao-realtime", "v1"),
+            ("MOSS", "moss-live-1.0", "5e36ed14-b48a-5cb9-8c81-f61b00bab50e"),
+        ]
+        for provider, model, voice in offerings:
+            with self.subTest(provider=provider):
+                upstreams.clear()
+                with patch.object(websockets, "connect", side_effect=fake_connect):
+                    client = TestClient(self.app)
+                    url = f"/api/voice-chat/ws?provider={provider}&model={model}&voice={voice}&token=remote-token"
+                    with client.websocket_connect(url) as ws:
+                        ws.send_text('{"type": "ping"}')
+                        ws.send_bytes(b"pcm")
+                        self.assertEqual(ws.receive_text(), '{"type": "pong"}')
+                        self.assertEqual(ws.receive_bytes(), b"\x01\x02")
+                        with self.assertRaises(WebSocketDisconnect) as closed:
+                            ws.receive_text()
+                self.assertEqual(closed.exception.code, 4402)  # the server's reason reaches the app
+                [upstream] = upstreams
+                self.assertEqual(
+                    upstream.url,
+                    f"wss://hosted.test:8443{url}",
+                )
+                self.assertIsNone(upstream.kwargs["proxy"])
+                self.assertEqual(upstream.sent[0], '{"type": "ping"}')
+                self.assertTrue(upstream.closed)
+                # A relayed call never asks the server for a direct-call grant.
+                self.assertFalse([c for c in self.calls if c[1] == "/api/billing/direct/start"])
 
     def test_balance_is_forwarded_with_the_token(self) -> None:
         body = self._request("GET", "/api/billing/me", headers={"Authorization": "Bearer remote-token"}).json()
