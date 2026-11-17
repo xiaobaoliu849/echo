@@ -241,7 +241,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("MOSS API Key", client.of_type("error")[0]["message"])
 
     async def test_change_voice_is_sent_before_session_update_when_non_default(self) -> None:
-        voice_id = "6c3152b1-1d4f-4e49-ade3-09f447712fec"
+        voice_id = "5e36ed14-b48a-5cb9-8c81-f61b00bab50e"
         client, server = await _run_session([], voice=voice_id)
         actions = [item["action"] for item in server.sent_actions()]
         self.assertEqual(actions[:4], ["attach_session", "change_voice", "session.update", "mic_state"])

@@ -782,6 +782,7 @@ describe("VoiceCallSettingsPopover", () => {
 
   it("shows MOSS-Live voices and accent selector when MOSS is hovered", () => {
     const onAccentChange = vi.fn();
+    const onVoiceChange = vi.fn();
     renderPopover({
       voiceChatProvider: "MOSS",
       voiceChatModel: "moss-live-1.0",
@@ -791,6 +792,7 @@ describe("VoiceCallSettingsPopover", () => {
       voiceChatVoiceOptions: formatRealtimeVoiceOptions("MOSS", "zh-CN", "moss-live-1.0"),
       voiceChatAccent: "",
       onAccentChange,
+      onVoiceChange,
     });
     openPanel();
     fireEvent.mouseEnter(screen.getByText("MOSS"));
@@ -802,5 +804,7 @@ describe("VoiceCallSettingsPopover", () => {
     expect(accentSelect).toBeInTheDocument();
     fireEvent.change(accentSelect, { target: { value: "en-GB" } });
     expect(onAccentChange).toHaveBeenCalledWith("en-GB");
+    fireEvent.click(screen.getByRole("button", { name: "English · 英语" }));
+    expect(onVoiceChange).toHaveBeenCalledWith("5e36ed14-b48a-5cb9-8c81-f61b00bab50e");
   });
 });
