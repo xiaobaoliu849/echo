@@ -26,25 +26,35 @@ Design rules (from the review's risk list):
 
 ## Phase 1a — shipped: Tutor mode (the 🎓 Speaking coach switch)
 
-The realtime model itself is the coach: it hears the learner and corrects them live, inside its
-spoken reply (one short "say X, not Y" per turn at most, density by level; the IELTS mock holds
-corrections for the end), keeps replies short with one question per turn, helps in the native
-language when the learner is stuck, and uses no emoji since replies are spoken. The block is
-appended **last** in the system prompt so it outranks the generic assistant/tool rules.
+The realtime model itself is the coach, giving feedback inside its spoken replies. In the default
+conversation mode it lets the learner finish, responds to their meaning, and naturally models at
+most one useful correction. It treats hesitation, self-correction and incomplete transcripts
+conservatively. A learner can choose **When I ask** for uninterrupted practice; the IELTS mock
+holds feedback for the end. A retry is optional and is the only prompt in that reply. Replies stay
+short, with native-language help when needed. The tutor block is appended **last** in the system
+prompt after the generic assistant/tool rules.
 
 Since 2026-10-07 the UI has a single 🎓 口语教练 switch (= `tutor`). The text-model cards
 (`enabled`) are an optional sub-option and never run without the coach; legacy saves with only
-the old cards toggle on are migrated to the coach (`v: 2` in `vs_speaking_coach`). Changing
+the old cards toggle on are migrated to the coach. The `v: 3` settings migration starts existing
+learners with spoken feedback alone and requires a fresh opt-in to transcript review, while
+preserving an explicitly disabled v2 tutor. Transcript cards are paused in requested-only mode
+and IELTS mocks. Disabling review also discards pending reviews and late client events. Changing
 coach settings mid-call reconnects automatically (800 ms debounce) because providers only read
 the system prompt at session start.
 
 | Piece | Where |
 |---|---|
 | Scenarios (free talk, daily life, workplace, travel, job interview, IELTS mock with Part 1/2/3) + tutor prompt | `TUTOR_SCENARIOS`, `build_tutor_instructions` in `backend/services/speaking_coach.py` |
-| Per-session binding: WS query params `tutor`, `tutor_language`, `tutor_native_language`, `tutor_level`, `tutor_scenario` → `ContextVar` set in `routers/voice_chat.py` before the provider connects; `_get_base_instructions()` appends the block, so every provider built on it (DashScope, Google, OpenAI, Doubao, StepFun, Vercel, Cartesia, Gradium, Qwen-Audio, PersonaPlex, GLM-4-Voice) gets it | `routers/voice_chat.py`, `realtime_voice_service.py` |
+| Per-session binding: WS query params `tutor`, `tutor_language`, `tutor_native_language`, `tutor_level`, `tutor_scenario`, `tutor_feedback_mode` → `ContextVar` set in `routers/voice_chat.py` before the provider connects; `_get_base_instructions()` appends the block, so every provider built on it (DashScope, Google, OpenAI, Doubao, StepFun, Vercel, Cartesia, Gradium, Qwen-Audio, PersonaPlex, GLM-4-Voice) gets it | `routers/voice_chat.py`, `realtime_voice_service.py` |
 | UI: 🎓 口语教练 switch + 练习场景 / 练习语言 / level, nested 📝 文字纠错卡片 option; mid-call changes reconnect | `VoiceCallSettingsPopover.tsx`, `useVoiceChat.ts` |
 
-Not covered: live-translate sessions. Text-model cards need the shared command handler, so they don't run on PersonaPlex / GLM-4-Voice (the spoken coaching does).
+Not covered: live-translate and transcription-only sessions. Pronunciation tips must be grounded in
+audio actually heard; the tutor should request repetition when unsure and never invent acoustic
+scores. Cartesia and Gradium send only ASR text to their language model, so their tutor instructions
+explicitly prohibit pronunciation and acoustic fluency assessment. Optional transcript reviewers
+also have no audio; their parser drops pronunciation and fluency issues even if the model returns
+them. This is conversational guidance, not the dedicated acoustic assessment planned in Phase 2.
 
 ## Phase 1b — shipped: saved phrases + spaced review
 

@@ -67,6 +67,7 @@ describe("speakingCoach utils", () => {
       level: "ielts",
       tutor: true,
       scenario: "travel",
+      feedback_mode: "conversation",
     } as const;
     writeStoredCoachConfig(stored);
     expect(readStoredCoachConfig()).toEqual(stored);
@@ -78,9 +79,25 @@ describe("speakingCoach utils", () => {
 
   it("migrates a legacy cards-only coach to the live voice coach", () => {
     localStorage.setItem("vs_speaking_coach", JSON.stringify({ enabled: true, tutor: false }));
-    expect(readStoredCoachConfig()).toMatchObject({ enabled: true, tutor: true });
+    expect(readStoredCoachConfig()).toMatchObject({ enabled: false, tutor: true });
     localStorage.setItem("vs_speaking_coach", JSON.stringify({ enabled: false, tutor: false }));
     expect(readStoredCoachConfig().tutor).toBe(false);
+  });
+
+  it("migrates v2 to spoken feedback alone while preserving an explicitly disabled tutor", () => {
+    for (const tutor of [true, false]) {
+      localStorage.setItem("vs_speaking_coach", JSON.stringify({ v: 2, enabled: true, tutor, scenario: "travel" }));
+      expect(readStoredCoachConfig()).toMatchObject({ enabled: false, tutor, scenario: "travel", feedback_mode: "conversation" });
+    }
+  });
+
+  it("persists requested-only feedback and suppresses automatic cards during requests and exams", () => {
+    const config = { ...readStoredCoachConfig(), tutor: true, enabled: true, feedback_mode: "on_request" } as const;
+    writeStoredCoachConfig(config);
+    expect(readStoredCoachConfig()).toEqual(config);
+    expect(coachCardsActive(config)).toBe(false);
+    expect(coachCardsActive({ ...config, feedback_mode: "conversation", scenario: "ielts" })).toBe(false);
+    expect(tutorPromptKey(config)).not.toBe(tutorPromptKey({ ...config, feedback_mode: "conversation" }));
   });
 
   it("only runs feedback cards while the coach is on", () => {
@@ -103,13 +120,14 @@ describe("buildVoiceChatWebSocketUrl tutor params", () => {
     const tutored = new URL(
       buildVoiceChatWebSocketUrl({
         provider: "DashScope",
-        tutor: { targetLanguage: "English", nativeLanguage: "Chinese", level: "ielts", scenario: "ielts" },
+        tutor: { targetLanguage: "English", nativeLanguage: "Chinese", level: "ielts", scenario: "ielts", feedbackMode: "on_request" },
       })
     );
     expect(tutored.searchParams.get("tutor")).toBe("true");
     expect(tutored.searchParams.get("tutor_level")).toBe("ielts");
     expect(tutored.searchParams.get("tutor_scenario")).toBe("ielts");
     expect(tutored.searchParams.get("tutor_language")).toBe("English");
+    expect(tutored.searchParams.get("tutor_feedback_mode")).toBe("on_request");
   });
 });
 

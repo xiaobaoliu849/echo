@@ -775,6 +775,7 @@ export function buildVoiceChatWebSocketUrl(params: {
     nativeLanguage: string;
     level: string;
     scenario: string;
+    feedbackMode?: "conversation" | "on_request";
     learner?: string;
   };
 }): string {
@@ -830,6 +831,7 @@ export function buildVoiceChatWebSocketUrl(params: {
     wsUrl.searchParams.set("tutor_native_language", params.tutor.nativeLanguage);
     wsUrl.searchParams.set("tutor_level", params.tutor.level);
     wsUrl.searchParams.set("tutor_scenario", params.tutor.scenario);
+    wsUrl.searchParams.set("tutor_feedback_mode", params.tutor.feedbackMode || "conversation");
     if (params.tutor.learner) {
       wsUrl.searchParams.set("tutor_learner", params.tutor.learner);
     }

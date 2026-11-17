@@ -285,6 +285,7 @@ export default function useVoiceChat({
     coachConfigRef.current = next;
     setVoiceChatCoachConfigState(next);
     writeStoredCoachConfig(next);
+    if (!coachCardsActive(next)) coachFeedbackByTextRef.current.clear();
     sendCoachConfig(websocketRef.current, next);
     if (sessionTutorKeyRef.current === null) return;
     if (coachRestartTimerRef.current !== null) clearTimeout(coachRestartTimerRef.current);
@@ -1922,6 +1923,7 @@ export default function useVoiceChat({
         setVoiceChatStatus(t("实时语音会话已结束", "Realtime voice session ended"));
         return;
       case "coach_feedback": {
+        if (!coachCardsActive(coachConfigRef.current)) return;
         const { type: _type, ...feedback } = event;
         void _type;
         attachCoachFeedback(feedback);
@@ -2107,6 +2109,7 @@ export default function useVoiceChat({
                 nativeLanguage: coachConfigRef.current.native_language,
                 level: coachConfigRef.current.level,
                 scenario: coachConfigRef.current.scenario,
+                feedbackMode: coachConfigRef.current.feedback_mode,
                 learner: coachConfigRef.current.learner,
               }
             : undefined,

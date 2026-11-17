@@ -4,10 +4,9 @@ const STORAGE_KEY = "vs_speaking_coach";
 
 /** Window event carrying a Partial<CoachConfig> for the running voice chat (hosted settings use it). */
 export const COACH_CONFIG_EVENT = "echo:coach-config";
-// v2: "tutor" is the coach switch (the voice AI coaches live) and "enabled"
-// only adds written feedback cards on top. Older saves had them as two
-// independent toggles, where "enabled" alone was what users knew as the coach.
-const STORAGE_VERSION = 2;
+// v3: start with spoken coaching alone. Transcript review needs a fresh opt-in
+// so inherited cards do not compete with feedback from the conversation partner.
+const STORAGE_VERSION = 3;
 
 export const COACH_LEVELS: CoachLevel[] = ["beginner", "intermediate", "advanced", "ielts"];
 
@@ -29,6 +28,7 @@ export const DEFAULT_COACH_CONFIG: CoachConfig = {
   level: "intermediate",
   tutor: false,
   scenario: "free_talk",
+  feedback_mode: "conversation",
 };
 
 export function readStoredCoachConfig(): CoachConfig {
@@ -36,9 +36,9 @@ export function readStoredCoachConfig(): CoachConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_COACH_CONFIG;
     const parsed = JSON.parse(raw) as Partial<CoachConfig> & { v?: number };
-    const legacyCoachOn = parsed.v !== STORAGE_VERSION && parsed.enabled === true;
+    const legacyCoachOn = (parsed.v ?? 0) < 2 && parsed.enabled === true;
     return {
-      enabled: parsed.enabled === true,
+      enabled: parsed.v === STORAGE_VERSION && parsed.enabled === true,
       target_language:
         typeof parsed.target_language === "string" && parsed.target_language.trim()
           ? parsed.target_language
@@ -54,6 +54,7 @@ export function readStoredCoachConfig(): CoachConfig {
       scenario: TUTOR_SCENARIOS.some((item) => item.value === parsed.scenario)
         ? (parsed.scenario as TutorScenario)
         : DEFAULT_COACH_CONFIG.scenario,
+      feedback_mode: parsed.feedback_mode === "on_request" ? "on_request" : "conversation",
       ...(parsed.learner === "child" || parsed.learner === "adult" ? { learner: parsed.learner } : {}),
     };
   } catch {
@@ -71,7 +72,7 @@ export function writeStoredCoachConfig(config: CoachConfig): void {
 
 /** Written feedback cards are an add-on to the coach, never active on their own. */
 export function coachCardsActive(config: CoachConfig): boolean {
-  return config.tutor && config.enabled;
+  return config.tutor && config.enabled && config.feedback_mode !== "on_request" && config.scenario !== "ielts";
 }
 
 /** Transcription-only realtime models take no system prompt, so they cannot coach. */
@@ -82,7 +83,7 @@ export function coachSupportedModel(model: string): boolean {
 /** Fields baked into the realtime system prompt at call start. */
 export function tutorPromptKey(config: CoachConfig): string {
   return config.tutor
-    ? [config.target_language, config.native_language, config.level, config.scenario, config.learner ?? ""].join("|")
+    ? [config.target_language, config.native_language, config.level, config.scenario, config.learner ?? "", config.feedback_mode ?? "conversation"].join("|")
     : "";
 }
 

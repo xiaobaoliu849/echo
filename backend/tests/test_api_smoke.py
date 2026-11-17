@@ -2955,6 +2955,34 @@ class ApiAuthHardeningTests(unittest.TestCase):
             ) as ws:
                 mock_stream.assert_awaited_once()
 
+    def test_voice_chat_ws_binds_spoken_feedback_mode_and_audio_capability(self) -> None:
+        from fastapi.testclient import TestClient
+        from services.speaking_coach import current_tutor_instructions
+
+        async def capture_prompt(websocket, **kwargs):
+            await websocket.send_json({"prompt": current_tutor_instructions()})
+
+        client = TestClient(self.app)
+        for provider, method in (
+            ("Google", "stream_google_session"),
+            ("Cartesia", "stream_cartesia_session"),
+            ("Gradium", "stream_gradium_session"),
+        ):
+            with self.subTest(provider=provider), patch.object(
+                BackendConfig, "get_setting", side_effect=lambda key, default="": {
+                    "google_api_key": "test-key", "cartesia_api_key": "test-key", "gradium_api_key": "test-key",
+                }.get(key, default)
+            ), patch.object(voice_chat_router.voice_chat_service, method, side_effect=capture_prompt):
+                with client.websocket_connect(
+                    f"/api/voice-chat/ws?provider={provider}&token=test-api-token&tutor=true&tutor_feedback_mode=on_request"
+                ) as ws:
+                    prompt = ws.receive_json()["prompt"]
+                    self.assertIn("Feedback is on request", prompt)
+                    if provider == "Google":
+                        self.assertIn("learner audio you actually receive", prompt)
+                    else:
+                        self.assertIn("only speech-recognition text to you, not learner audio", prompt)
+
     def test_voice_chat_ws_agent_platform_accepts_service_account(self) -> None:
         """AgentPlatform authenticates by Google Cloud service account as well
         as by key. The pre-check used to demand ``vertex_api_key`` (or the ADC

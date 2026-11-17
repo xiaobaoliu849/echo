@@ -709,8 +709,8 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                     <label
                       className="vsCoachToggle"
                       title={t(
-                        "语音 AI 变成你的口语老师：用练习语言陪你聊，听到说错就在回复里马上纠正",
-                        "The voice AI becomes your speaking coach: it talks with you in the practice language and corrects you right in its replies"
+                        "和语音 AI 自然练习口语，反馈融入它的语音回复",
+                        "Practice with the voice AI and receive feedback in its spoken replies"
                       )}
                     >
                       <span>{t("🎓 口语教练", "🎓 Speaking coach")}</span>
@@ -737,12 +737,12 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                         ? t("纯转写模型不支持口语教练，请换一个实时对话模型", "Transcription-only models can't coach; pick a realtime conversation model")
                         : coachOn
                         ? t(
-                            "AI 用练习语言和你实时对话，说错时直接在回复里纠正；通话中修改会自动重连，按新设置开始新一轮练习",
-                            "The AI talks with you live and corrects mistakes in its replies; changing this during a call reconnects and starts a fresh lesson"
+                            "先聊你想表达的内容，再自然带出一个有用的改进。通话中修改设置会自动重连，开始新一轮练习",
+                            "The AI responds to your meaning, then works in one useful improvement. Changing settings during a call reconnects and starts a fresh lesson"
                           )
                         : t(
-                            "开启后语音 AI 会当你的口语老师，在对话里实时纠正你",
-                            "Turn on to make the voice AI your speaking coach, correcting you live in the conversation"
+                            "开启后直接在语音对话中获得反馈，文字转写点评需另行开启",
+                            "Get feedback in the voice conversation; transcript review is a separate opt-in"
                           )}
                     </span>
                     {coachOn ? (
@@ -758,6 +758,27 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                             ))}
                           </select>
                         </label>
+                        {coachConfig.scenario === "ielts" ? (
+                          <span className="vsCoachHint">
+                            {t("模考过程中不打断纠错，结束时再给反馈", "Feedback comes at the end of the mock test")}
+                          </span>
+                        ) : (
+                          <label className="vsFlyoutField">
+                            <span>{t("反馈方式", "Feedback style")}</span>
+                            <select
+                              value={coachConfig.feedback_mode ?? "conversation"}
+                              onChange={(e) => voiceChat.onCoachConfigChange({ feedback_mode: e.target.value as "conversation" | "on_request" })}
+                            >
+                              <option value="conversation">{t("自然融入对话", "During conversation")}</option>
+                              <option value="on_request">{t("我提问时再反馈", "When I ask")}</option>
+                            </select>
+                          </label>
+                        )}
+                        <span className="vsCoachHint">
+                          {voiceChat.voiceChatProvider === "Cartesia" || voiceChat.voiceChatProvider === "Gradium"
+                            ? t("当前模式通过文字理解语音，可口头讲解语法和表达；发音评估需要能直接听取音频的对话模型", "This mode can explain grammar and wording aloud. Pronunciation feedback needs a model that receives your audio")
+                            : t("发音建议仅依据实际听到的声音；听不清时会请你重说，不凭转写文字判断发音", "Pronunciation tips need clear audio; the coach should ask you to repeat when unsure")}
+                        </span>
                         {IS_HOSTED_BUILD ? (
                           // Level and learner are account settings on the hosted build; the
                           // practice language is always English there.
@@ -795,16 +816,17 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
                         <label
                           className="vsVoiceSettingsEcho"
                           title={t(
-                            "另一个文字模型在后台逐句点评，生成可收藏到「复习」的纠错卡片，不打断对话",
-                            "A separate text model reviews each sentence in the background and makes cards you can save for review"
+                            "可选：另一个模型根据转写文字点评语法和用词，无法评估发音。仅在自然对话反馈模式下启用",
+                            "Optional: a separate model reviews transcript grammar and wording, with no pronunciation assessment. Available with conversation feedback"
                           )}
                         >
                           <input
                             type="checkbox"
-                            checked={coachConfig.enabled}
+                            checked={coachConfig.enabled && coachConfig.feedback_mode !== "on_request" && coachConfig.scenario !== "ielts"}
+                            disabled={coachConfig.feedback_mode === "on_request" || coachConfig.scenario === "ielts"}
                             onChange={(e) => voiceChat.onCoachConfigChange({ enabled: e.target.checked })}
                           />
-                          <span>{t("📝 同时显示文字纠错卡片", "📝 Also show written feedback cards")}</span>
+                          <span>{t("📝 另行开启转写文字点评", "📝 Optional transcript review")}</span>
                         </label>
                         </>
                         )}

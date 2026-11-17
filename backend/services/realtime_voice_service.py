@@ -980,7 +980,7 @@ class RealtimeVoiceService(
             self._run_coach_review(
                 websocket,
                 coach_state,
-                dict(coach_state["config"]),
+                coach_state["config"],
                 user_text=user_text,
                 context=context,
                 turn_id=turn_id,
@@ -1003,7 +1003,7 @@ class RealtimeVoiceService(
     ) -> None:
         try:
             review = await self.speaking_coach.review(config, user_text, context)
-            if review is None or review["verdict"] == "skip":
+            if coach_state.get("config") is not config or review is None or review["verdict"] == "skip":
                 return
             feedback_id = 0
             try:
@@ -1017,6 +1017,8 @@ class RealtimeVoiceService(
                 )
             except Exception:
                 logger.exception("speaking_coach persist failed")
+            if coach_state.get("config") is not config:
+                return
             await self._send_event(
                 websocket,
                 "coach_feedback",

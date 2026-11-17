@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import VoiceCallSettingsPopover from "./VoiceCallSettingsPopover";
 import { formatRealtimeVoiceOptions } from "../hooks/useVoiceChatHelpers";
 import { createVoiceChatController } from "../test/factories";
+import { DEFAULT_COACH_CONFIG } from "../utils/speakingCoach";
 
 const t = (zh: string, _en: string) => zh;
 
@@ -49,6 +50,32 @@ function openPanel() {
 }
 
 describe("VoiceCallSettingsPopover", () => {
+  it("offers spoken feedback timing separately from optional transcript review", () => {
+    const voiceChat = renderPopover({ voiceChatCoachConfig: { ...DEFAULT_COACH_CONFIG, tutor: true } });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("qwen3.5-omni-plus-realtime"));
+    const style = screen.getByLabelText("反馈方式");
+    expect(style).toHaveValue("conversation");
+    expect(screen.getByLabelText("📝 另行开启转写文字点评")).not.toBeChecked();
+    fireEvent.change(style, { target: { value: "on_request" } });
+    expect(voiceChat.onCoachConfigChange).toHaveBeenCalledWith({ feedback_mode: "on_request" });
+  });
+
+  it.each(["on_request", "ielts"])("pauses transcript cards during %s feedback", (mode) => {
+    renderPopover({ voiceChatCoachConfig: {
+      ...DEFAULT_COACH_CONFIG, tutor: true, enabled: true,
+      ...(mode === "ielts" ? { scenario: "ielts" as const } : { feedback_mode: "on_request" as const }),
+    } });
+    openPanel();
+    fireEvent.mouseEnter(screen.getByText("qwen3.5-omni-plus-realtime"));
+    expect(screen.getByLabelText("📝 另行开启转写文字点评")).toBeDisabled();
+    expect(screen.getByLabelText("📝 另行开启转写文字点评")).not.toBeChecked();
+    if (mode === "ielts") {
+      expect(screen.queryByLabelText("反馈方式")).toBeNull();
+      expect(screen.getByText("模考过程中不打断纠错，结束时再给反馈")).toBeInTheDocument();
+    }
+  });
+
   it("closes the model menu after picking Cloud Gemini Live instead of navigating to faces", () => {
     const onOpenPal = vi.fn();
     const voiceChat = createVoiceChatController({

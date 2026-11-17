@@ -77,7 +77,8 @@ TUTOR_SCENARIOS: dict[str, str] = {
         "IELTS Speaking mock test: you are the examiner. Run Part 1 (short questions about familiar topics), "
         "then Part 2 (give a cue card topic and ask the learner to speak for 1-2 minutes), "
         "then Part 3 (abstract discussion questions). Stay in examiner role; at the end give a brief, "
-        "honest estimate of fluency, vocabulary, grammar and pronunciation."
+        "honest summary of vocabulary and grammar, and of fluency and pronunciation only when you have "
+        "actually heard enough learner audio. Do not invent an exam band or acoustic score."
     ),
 }
 DEFAULT_TUTOR_SCENARIO = "free_talk"
@@ -93,6 +94,8 @@ def normalize_tutor_config(
     level: str | None = None,
     scenario: str | None = None,
     learner: str | None = None,
+    feedback_mode: str | None = None,
+    audio_available: bool = True,
 ) -> dict[str, Any] | None:
     """Sanitized tutor config, or None when tutor mode is off."""
     if not enabled:
@@ -109,6 +112,8 @@ def normalize_tutor_config(
     clean_scenario = str(scenario or "").strip().lower()
     base["scenario"] = clean_scenario if clean_scenario in TUTOR_SCENARIOS else DEFAULT_TUTOR_SCENARIO
     base["learner"] = "child" if str(learner or "").strip().lower() == "child" else "adult"
+    base["feedback_mode"] = "on_request" if feedback_mode == "on_request" else "conversation"
+    base["audio_available"] = audio_available
     return base
 
 
@@ -147,42 +152,71 @@ def build_tutor_instructions(config: dict[str, Any]) -> str:
         "- The learner is a child (about 6-12 years old). Be warm, playful and very encouraging; use "
         "simple concrete words and topics children enjoy (animals, school, games, family, food, "
         "cartoons). Keep corrections gentle: praise the attempt first, then model the right sentence "
-        "for them to repeat. Never bring up topics unsuitable for children.\n"
+        "for them to try if they want. Never bring up topics unsuitable for children.\n"
         if config.get("learner") == "child"
         else ""
     )
     correction_timing = (
         "- While the mock test is running, stay in examiner role and do not correct; at the end give the "
-        "estimate plus the three most useful corrections, each as 'you said ..., better: ...'.\n"
+        "summary plus up to three useful corrections grounded in this conversation.\n"
         if examiner
         else (
-            "- When the learner makes a real mistake, fix it right away in your spoken reply: say the "
-            "correct version in one short sentence (for example: 'Quick tip: for yesterday, say I went, "
-            "not I go.'), then carry on with the conversation. "
+            "- Feedback is on request: do not volunteer corrections, evaluations, scores or practice drills. "
+            "Respond naturally to the learner's meaning. Give concrete spoken feedback only when they ask "
+            "for it, then return to the conversation.\n"
+        )
+        if config.get("feedback_mode") == "on_request"
+        else (
+            "- First respond to what the learner means; then, if useful, weave a short corrected version "
+            "into your spoken reply. For example, after 'I go to the park yesterday', say 'You went to the "
+            "park yesterday! What did you do there?' Prefer this natural recast to announcing an error. "
+            "For a repeated mistake or a misunderstanding, briefly explain one correction after acknowledging "
+            "their meaning. Do not turn every reply into an assessment. "
             f"{correction_hint}\n"
             "- At most ONE correction per turn: pick the most useful one. If what the learner said was "
             "correct, do not correct anything; now and then briefly praise a good expression instead.\n"
         )
     )
+    listening_hint = (
+        "- Ground feedback in the learner audio you actually receive. A transcript is a fallible aid, not "
+        "evidence of how a word was pronounced. Only offer pronunciation feedback when you clearly hear "
+        "a specific sound problem: model the word and give one simple mouth or stress cue. If the audio "
+        "is unclear or speech overlaps, ask for a repeat instead of guessing. Never infer pronunciation "
+        "or fluency from spelling, punctuation, missing words or a partial transcript.\n"
+        if config.get("audio_available", True)
+        else (
+            "- This session supplies only speech-recognition text to you, not learner audio. You cannot "
+            "hear pronunciation, rhythm, stress or fluency: never claim to hear them or assess them. "
+            "You can model how to say a word if asked, but explain that you cannot assess their pronunciation "
+            "in this session. Treat uncertain wording as a possible recognition error and ask for clarification.\n"
+        )
+    )
     return (
         "\n\n[Language Tutor Mode]\n"
         f"You are now a friendly {target} speaking coach in a live voice call with a learner whose native "
-        f"language is {native}. You hear the learner directly and coach them inside the conversation. "
+        f"language is {native}. Coach them in your own spoken replies inside the conversation. "
         "These rules override the general assistant persona and language rules above.\n"
         f"- Scenario: {TUTOR_SCENARIOS[config['scenario']]}\n"
         f"- Speak {target} by default. {level_hint}\n"
         f"{child_hint}"
         "- Keep the conversation going: each reply is short (1-3 sentences) so the learner does most of the "
-        "talking, and ends with exactly one question or prompt.\n"
+        "talking, with at most one question or prompt. When offering a retry, that is the only prompt; "
+        "wait for their attempt before moving on. Never require repetition after every correction.\n"
+        "- Let the learner finish their thought before giving feedback. In a full-duplex conversation, "
+        "a pause, filler or unfinished phrase is not a mistake. If they interrupt you, stop and listen; "
+        "respond to their latest completed thought instead of resuming an outdated correction.\n"
         f"{correction_timing}"
-        "- Never invent mistakes, never comment on accent, and only mention pronunciation when a word was "
-        "clearly mispronounced. Be patient with hesitation; never finish the learner's sentences.\n"
+        f"{listening_hint}"
+        "- Never invent mistakes or penalize accent, hesitation or self-correction. Never finish the learner's "
+        "sentences. Keep their intended meaning; an acceptable alternative is not an error. Do not give "
+        "per-turn grades or numerical pronunciation scores.\n"
         "- If the learner asks whether something was correct, how to say something, or for feedback, answer "
         "directly and concretely.\n"
         f"- If the learner speaks {native} or is stuck, help briefly in {native}, give them the {target} "
         f"phrase to try, then switch back to {target}.\n"
         "- Your replies are spoken aloud: no emoji, markdown, lists or special symbols.\n"
-        "- In your first reply, greet the learner and open the scenario with a simple question."
+        "- In your first reply, respond to any opening message from the learner; otherwise briefly greet "
+        "them and open the scenario with a simple question."
     )
 
 
@@ -225,6 +259,8 @@ def build_coach_instructions(config: dict[str, Any]) -> str:
         "(e.g. 'ok', 'yeah', 'hmm'), return verdict \"skip\".\n"
         "- Punctuation and capitalization come from the speech recognizer, not the learner: NEVER comment on "
         "or change them. Also ignore obvious speech-recognition artifacts.\n"
+        "- You receive text only, never audio. Do not assess pronunciation, accent, rhythm, speaking speed "
+        "or fluency, or put acoustic advice or scores in any field. If recognition is uncertain, skip.\n"
         "- Only flag REAL problems: a grammar error, a wrong word, or phrasing a native speaker would find "
         "clearly unnatural. Do NOT flag stylistic preferences, synonyms, making it more formal/enthusiastic/"
         "specific, or adding information the learner did not say. Short, simple sentences can be perfect.\n"
@@ -240,7 +276,7 @@ def build_coach_instructions(config: dict[str, Any]) -> str:
         "Return ONLY a JSON object, no markdown:\n"
         '{"verdict": "good" | "improve" | "skip", '
         '"corrected": "the full utterance rewritten correctly and naturally (empty if good/skip)", '
-        '"issues": [{"severity": "error" | "style", "type": "grammar" | "word_choice" | "naturalness" | "fluency", '
+        '"issues": [{"severity": "error" | "style", "type": "grammar" | "word_choice" | "naturalness", '
         f'"original": "exact fragment", "suggestion": "better fragment", "explanation": "why, in {native}"}}], '
         f'"vocabulary": [{{"term": "useful word or phrase for this context", "meaning": "short gloss in {native}"}}], '
         f'"tip": "one short encouraging tip in {native}, may be empty"}}'
@@ -289,6 +325,10 @@ def parse_coach_reply(reply: str, user_text: str = "") -> dict[str, Any] | None:
         if original and _surface_key(original) == _surface_key(suggestion):
             continue
         issue_type = str(raw.get("type") or "").strip().lower()
+        # A text reviewer has no acoustic evidence, even if the model ignores
+        # its instructions. Do not turn these claims into errors or phrases.
+        if issue_type in {"pronunciation", "fluency"}:
+            continue
         if str(raw.get("severity") or "error").strip().lower() == "style":
             # Acceptable as said: offer the alternative as a phrase, not a mistake.
             style_vocabulary.append(

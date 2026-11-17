@@ -257,6 +257,7 @@ async def voice_chat_ws(
     tutor_native_language: str | None = Query(default=None, max_length=40),
     tutor_level: str | None = Query(default=None, max_length=20),
     tutor_scenario: str | None = Query(default=None, max_length=40),
+    tutor_feedback_mode: str | None = Query(default=None, max_length=20),
     tutor_learner: str | None = Query(default=None, max_length=10),
     token: str | None = None,
 ) -> None:
@@ -510,6 +511,8 @@ async def voice_chat_ws(
             native_language=tutor_native_language,
             level=tutor_level,
             scenario=tutor_scenario,
+            feedback_mode=tutor_feedback_mode,
+            audio_available=selected_provider not in {"Cartesia", "Gradium"},
             learner=tutor_learner,
         )
     )

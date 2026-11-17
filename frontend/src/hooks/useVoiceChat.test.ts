@@ -295,6 +295,32 @@ describe("useVoiceChat", () => {
     expect(socket.sent.some((item) => typeof item === "string" && JSON.parse(item).type === "coach_config")).toBe(false);
   });
 
+  it("starts a migrated coach with spoken feedback and no automatic transcript reviews", async () => {
+    localStorage.setItem("vs_speaking_coach", JSON.stringify({ v: 2, tutor: true, enabled: true }));
+    const { socket } = await startTranscriptTestSession();
+    expect(new URL(socket.url).searchParams.get("tutor")).toBe("true");
+    expect(new URL(socket.url).searchParams.get("tutor_feedback_mode")).toBe("conversation");
+    expect(socket.sent.some((item) => typeof item === "string" && JSON.parse(item).type === "coach_config")).toBe(false);
+  });
+
+  it("applies requested-only feedback to the next call and ignores late transcript reviews", async () => {
+    localStorage.setItem("vs_speaking_coach", JSON.stringify({ v: 3, tutor: true, enabled: true }));
+    const { result, socket } = await startTranscriptTestSession();
+    act(() => {
+      // Feedback arrives before the message is committed, then the user switches modes.
+      socket.emitMessage({ type: "coach_feedback", id: 1, verdict: "improve", user_text: "I go yesterday", corrected: "I went yesterday", issues: [], vocabulary: [], tip: "" });
+      result.current.onCoachConfigChange({ feedback_mode: "on_request" });
+      socket.emitMessage({ type: "user_transcript", text: "I go yesterday" });
+      socket.emitMessage({ type: "turn_complete" });
+      socket.emitMessage({ type: "coach_feedback", id: 2, verdict: "improve", user_text: "I go yesterday", corrected: "I went yesterday", issues: [], vocabulary: [], tip: "" });
+    });
+    expect(result.current.voiceChatMessages.find((message) => message.role === "user")?.coach).toBeUndefined();
+    expect(JSON.parse(socket.sent.filter((item): item is string => typeof item === "string").at(-1)!))
+      .toEqual({ type: "coach_config", coach: null });
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), { timeout: 2000 });
+    expect(new URL(FakeWebSocket.instances[1].url).searchParams.get("tutor_feedback_mode")).toBe("on_request");
+  });
+
   it("keeps a typed opening message for the session that replaces a superseded one", async () => {
     const { result } = renderHook(() => useVoiceChat({
       formatErrorMessage: createFormatErrorMessageStub(),
@@ -360,6 +386,7 @@ describe("useVoiceChat", () => {
   });
 
   it("attaches each coach review only to its own turn, never to a later identical sentence", async () => {
+    localStorage.setItem("vs_speaking_coach", JSON.stringify({ v: 3, tutor: true, enabled: true }));
     const { result, socket } = await startTranscriptTestSession();
     const review = (id: number) => ({
       type: "coach_feedback", id, verdict: "improve", user_text: "Thank you very much.",

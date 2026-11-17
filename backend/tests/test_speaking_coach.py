@@ -401,7 +401,10 @@ def test_tutor_coaches_live_except_during_the_ielts_mock_test() -> None:
     from services.speaking_coach import build_tutor_instructions, normalize_tutor_config
 
     chat = build_tutor_instructions(normalize_tutor_config(enabled=True, level="beginner", scenario="travel"))
-    assert "fix it right away in your spoken reply" in chat
+    assert "First respond to what the learner means" in chat
+    assert "Let the learner finish their thought" in chat
+    assert "partial transcript" in chat
+    assert "stop and listen" in chat
     assert "At most ONE correction per turn" in chat
     assert "short explanation in Chinese" in chat
     # Feedback is the voice model's job now; it must not defer to cards that may be off.
@@ -410,6 +413,70 @@ def test_tutor_coaches_live_except_during_the_ielts_mock_test() -> None:
     exam = build_tutor_instructions(normalize_tutor_config(enabled=True, level="ielts", scenario="ielts"))
     assert "do not correct" in exam
     assert "fix it right away" not in exam
+
+
+def test_requested_feedback_preserves_conversation_and_exam_timing() -> None:
+    from services.speaking_coach import build_tutor_instructions, normalize_tutor_config
+
+    config = normalize_tutor_config(enabled=True, feedback_mode="on_request")
+    prompt = build_tutor_instructions(config)
+    assert "do not volunteer corrections" in prompt
+    assert "Give concrete spoken feedback only when they ask" in prompt
+    assert "natural recast" not in prompt
+    exam = build_tutor_instructions({**config, "scenario": "ielts"})
+    assert "stay in examiner role and do not correct" in exam
+    assert "Feedback is on request" not in exam
+    assert normalize_tutor_config(enabled=True, feedback_mode="bogus")["feedback_mode"] == "conversation"
+
+
+def test_transcript_only_tutor_does_not_claim_to_hear_the_learner() -> None:
+    from services.speaking_coach import build_tutor_instructions, normalize_tutor_config
+
+    prompt = build_tutor_instructions(normalize_tutor_config(enabled=True, audio_available=False))
+    assert "only speech-recognition text to you, not learner audio" in prompt
+    assert "never claim to hear them or assess them" in prompt
+    assert "You hear the learner directly" not in prompt
+    assert "specific sound problem" not in prompt
+
+
+@pytest.mark.parametrize("issue_type", ["pronunciation", "fluency"])
+def test_text_reviewer_cannot_create_acoustic_corrections(issue_type: str) -> None:
+    review = parse_coach_reply(json.dumps({
+        "verdict": "improve", "corrected": "Say it clearly",
+        "issues": [{"type": issue_type, "original": "word", "suggestion": "stress it"}],
+    }))
+    assert review["verdict"] == "good"
+    assert review["issues"] == []
+    assert review["corrected"] == ""
+    assert review["vocabulary"] == []
+
+
+def test_disabling_transcript_review_discards_in_flight_feedback(tmp_path) -> None:
+    async def scenario() -> None:
+        started, finish = asyncio.Event(), asyncio.Event()
+
+        class SlowLLM(FakeLLM):
+            async def chat_completion(self, **kwargs: Any) -> dict[str, Any]:
+                started.set()
+                await finish.wait()
+                return await super().chat_completion(**kwargs)
+
+        service = RealtimeVoiceService()
+        repo = CoachRepository(db_path=tmp_path / "coach.db")
+        service.speaking_coach = SpeakingCoach(llm_service=SlowLLM(IMPROVE_REPLY), repository=repo)
+        websocket = FakeWebSocket()
+        memory = RealtimeMemorySession()
+        await service._apply_coach_config(websocket, {"coach": {"enabled": True}}, memory_session=memory, recorder=None)
+        memory.note_user_transcript("I go to the park yesterday")
+        await memory.flush_turn()
+        await started.wait()
+        await service._apply_coach_config(websocket, {"coach": None}, memory_session=memory, recorder=None)
+        finish.set()
+        await asyncio.gather(*list(service._coach_tasks))
+        assert not [event for event in websocket.sent if event["type"] == "coach_feedback"]
+        assert repo.list_recent() == []
+
+    asyncio.run(scenario())
 
 
 def test_tutor_mode_reaches_local_voice_models() -> None:
