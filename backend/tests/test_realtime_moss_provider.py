@@ -241,7 +241,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("MOSS API Key", client.of_type("error")[0]["message"])
 
     async def test_change_voice_is_sent_before_session_update_when_non_default(self) -> None:
-        voice_id = "5e36ed14-b48a-5cb9-8c81-f61b00bab50e"
+        voice_id = "6c3152b1-1d4f-4e49-ade3-09f447712fec"
         client, server = await _run_session([], voice=voice_id)
         actions = [item["action"] for item in server.sent_actions()]
         self.assertEqual(actions[:4], ["attach_session", "change_voice", "session.update", "mic_state"])
@@ -250,7 +250,20 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         [session_open] = client.of_type("session_open")
         self.assertEqual(session_open["voice"], voice_id)
 
-    async def test_default_voice_skips_change_voice(self) -> None:
+    async def test_unspecified_voice_selects_recommended_english_before_mic_on(self) -> None:
+        for voice in (None, "", " "):
+            with self.subTest(voice=voice):
+                client, server = await _run_session([], voice=voice)
+                actions = server.sent_actions()
+                self.assertEqual(
+                    [item["action"] for item in actions[:4]],
+                    ["attach_session", "change_voice", "session.update", "mic_state"],
+                )
+                self.assertEqual(actions[1]["voice_name"], "5e36ed14-b48a-5cb9-8c81-f61b00bab50e")
+                [session_open] = client.of_type("session_open")
+                self.assertEqual(session_open["voice"], "5e36ed14-b48a-5cb9-8c81-f61b00bab50e")
+
+    async def test_native_voice_skips_change_voice(self) -> None:
         client, server = await _run_session([], voice="default")
         actions = [item["action"] for item in server.sent_actions()]
         self.assertEqual(actions[:3], ["attach_session", "session.update", "mic_state"])

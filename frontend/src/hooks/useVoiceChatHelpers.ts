@@ -107,12 +107,12 @@ export const DEFAULT_CARTESIA_MODEL = "cartesia-realtime";
 export const DEFAULT_GRADIUM_MODEL = "gradium-realtime";
 export const DEFAULT_MOSS_MODEL = "moss-live-1.0";
 // Mirrors DEFAULT_MOSS_REALTIME_VOICE in the backend.
-export const DEFAULT_MOSS_VOICE = "default";
+export const DEFAULT_MOSS_VOICE = "5e36ed14-b48a-5cb9-8c81-f61b00bab50e";
 export const MOSS_REALTIME_VOICES = [
-  { value: DEFAULT_MOSS_VOICE, label: "Default · 默认音色", description: "MOSS-Live 原生默认音色" },
+  { value: DEFAULT_MOSS_VOICE, label: "English · 英语", description: "默认英语音色 · Default English voice" },
+  { value: "default", label: "Default · 默认音色", description: "MOSS-Live 原生默认音色" },
   { value: "6c3152b1-1d4f-4e49-ade3-09f447712fec", label: "Nuannuan (Female)", description: "暖暖 · 温柔女声" },
   { value: "6cc93520-3207-4f7a-bca9-2d560b9c306b", label: "Mumu (Male)", description: "沐沐 · 自然男声" },
-  { value: "5e36ed14-b48a-5cb9-8c81-f61b00bab50e", label: "English · 英语", description: "英语音色 · English voice" },
 ];
 export const DEFAULT_VERCEL_MODEL = "openai/gpt-realtime-2";
 export const DEFAULT_TAVUS_MODEL = "tavus-video-pal";

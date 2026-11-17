@@ -160,6 +160,20 @@ class FakeWebSocket {
 }
 
 describe("useVoiceChat", () => {
+  it("starts MOSS calls with the recommended English voice and preserves explicit voice choices", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["MOSS"],
+      preferredProvider: "MOSS", preferredModel: "moss-live-1.0",
+    }));
+    expect(result.current.voiceChatVoice).toBe("5e36ed14-b48a-5cb9-8c81-f61b00bab50e");
+    await act(async () => { await result.current.onToggleRecording(); });
+    expect(new URL(FakeWebSocket.instances[0].url).searchParams.get("voice"))
+      .toBe("5e36ed14-b48a-5cb9-8c81-f61b00bab50e");
+    await act(async () => { await result.current.onToggleRecording(); });
+    act(() => result.current.onVoiceChange("default"));
+    expect(result.current.voiceChatVoice).toBe("default");
+  });
+
   it("keeps Vercel realtime choices available without claiming screen-share support", () => {
     const { result } = renderHook(() => useVoiceChat({
       formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["Vercel"],

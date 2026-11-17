@@ -201,8 +201,10 @@ class MossRealtimeMixin:
         """attach_session → (optional change_voice) → session.update → mic on. Returns the server session id."""
         await moss_ws.send(json.dumps({"action": "attach_session"}))
         attached = await self._moss_await(moss_ws, "session_attached")
-        selected_voice = (voice or "").strip()
-        if selected_voice and selected_voice != DEFAULT_MOSS_REALTIME_VOICE:
+        selected_voice = (voice or "").strip() or DEFAULT_MOSS_REALTIME_VOICE
+        # "default" explicitly keeps the provider's native voice. The app's
+        # default is an English voice that must be selected on every session.
+        if selected_voice != "default":
             await moss_ws.send(json.dumps({"action": "change_voice", "voice_name": selected_voice}))
             await self._moss_await(moss_ws, "voice_changed")
         session: dict[str, Any] = {"instructions": instructions}

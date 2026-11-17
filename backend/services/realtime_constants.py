@@ -244,7 +244,7 @@ DEFAULT_PERSONAPLEX_REALTIME_VOICE = "NATF2.pt"
 # MOSS-Live (MOSI) 全双工实时语音: 自有 action 事件协议,上行 16k / 下行 48k
 # 裸 PCM 二进制帧,通过 change_voice 选择音色。Docs: platform.moss.cn/en/docs/reference/moss-live
 DEFAULT_MOSS_REALTIME_MODEL = "moss-live-1.0"
-DEFAULT_MOSS_REALTIME_VOICE = "default"
+DEFAULT_MOSS_REALTIME_VOICE = "5e36ed14-b48a-5cb9-8c81-f61b00bab50e"
 DEFAULT_MOSS_REALTIME_WS_URL = "wss://api.mosi.cn/v1/realtime"
 MOSS_REALTIME_VOICES = (
     "default",
