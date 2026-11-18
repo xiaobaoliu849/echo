@@ -3,6 +3,7 @@ import { saveHostedPrefs } from "../api";
 import { PREFS_KEY, putCached } from "../hostedCache";
 import { HOSTED_MODEL_LABELS, HOSTED_PROVIDER_LABELS, IS_HOSTED_BUILD, hostedBillingNote, isHostedModelSold } from "../hosted";
 import { createPortal } from "react-dom";
+import { Layers2 } from "lucide-react";
 import type { UseVoiceChatResult } from "../hooks/useVoiceChat";
 import { buildModelChoiceValue, formatModelHint, isVoiceRealtimeModel, type UseChatResult } from "../hooks/useChat";
 import {
@@ -282,13 +283,13 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
   }
 
   function handleModelSelect(provider: string, model: string, avatar = false) {
-    setHoveredModel(model);
-    commitProviderModel(provider, model, avatar);
     if (provider === TAVUS_PROVIDER) {
       closePopover();
       onOpenPal?.();
       return;
     }
+    setHoveredModel(model);
+    commitProviderModel(provider, model, avatar);
     if (supportsLiveAvatar(provider, model)) {
       if (avatar) {
         setConfigureAvatar(true);
@@ -484,8 +485,10 @@ export default function VoiceCallSettingsPopover({ voiceChat, chat, t, disabled 
         disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-label={t(`选择模型 · ${summaryText}`, `Choose model · ${summaryText}`)}
         title={t("通话设置", "Call settings")}
       >
+        <Layers2 size={15} className="vsVoiceSettingsSummaryIcon" aria-hidden="true" />
         <span className="vsVoiceSettingsSummaryText">{summaryText}</span>
         <svg
           className="vsVoiceSettingsSummaryChevron"

@@ -32,7 +32,7 @@
 
 .vsWelcomeHero {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: clamp(12px, 3cqw, 26px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -60,14 +60,15 @@
 
 .vsWelcomeHeroTitle {
   font-size: 32px;
-  font-weight: 600;
+  font-weight: 650;
+  letter-spacing: -0.035em;
   color: var(--text-primary);
   margin: 0 0 8px 0;
 }
 
 .vsWelcomeHeroSubtitle {
   font-size: 15px;
-  color: var(--text-soft);
+  color: var(--text-secondary);
   margin: 0;
 }
 
@@ -226,7 +227,6 @@
 .vsComposerToolbarLeft {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
@@ -339,6 +339,38 @@
 .vsVoiceSettingsSummaryChevron {
   flex: 0 0 auto;
   color: var(--muted);
+}
+
+.vsComposerToolbarLeft > .vsToolbarBtn {
+  flex: none;
+}
+
+.vsComposerToolbarLeft .vsVoiceSettingsSummary {
+  display: flex;
+  max-width: min(100%, 360px);
+  gap: 7px;
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.vsVoiceSettingsSummaryIcon {
+  flex: none;
+  color: var(--brand-dark);
+}
+
+@container chat-pane (max-width: 520px) {
+  .vsComposer:not(.liveActive) {
+    padding: 16px;
+  }
+
+  .vsComposerToolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .vsComposerToolbarRight {
+    justify-self: end;
+  }
 }
 
 .vsVoiceSettingsPanel {

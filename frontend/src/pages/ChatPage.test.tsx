@@ -100,7 +100,7 @@ describe('ChatPage', () => {
         expect(screen.getByRole('button', { name: '挂断实时通话' })).toBeEnabled();
         fireEvent.click(screen.getByRole('button', { name: '关闭侧边画布' }));
         expect(screen.queryByTitle('画布预览')).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: '画布' }));
+        fireEvent.click(screen.getByRole('button', { name: '代码画布' }));
         expect(screen.getByTitle('画布预览')).toHaveAttribute('srcdoc', expect.stringContaining('<h1>Cat</h1>'));
     });
 
@@ -267,7 +267,7 @@ describe('ChatPage', () => {
 
         const callButton = screen.getByRole('button', { name: '实时通话' });
         expect(callButton).toBeDisabled();
-        expect(callButton).toHaveAttribute('title', expect.stringContaining('当前选择的是文本/多模态模型'));
+        expect(callButton).toHaveAttribute('title', expect.stringContaining('在左侧选择实时语音模型'));
 
         fireEvent.click(callButton);
         expect(mockToggle).not.toHaveBeenCalled();

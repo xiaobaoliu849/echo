@@ -199,7 +199,7 @@ describe("ChatInputBar", () => {
     expect(voiceChat.onToggleRecording).toHaveBeenCalledTimes(1);
   });
 
-  it("handles Tavus video PAL mode when provider is Tavus", () => {
+  it("starts the displayed realtime model when the chat provider is still Tavus", () => {
     const onOpenPal = vi.fn();
     const chat = createChatController({
       chatProvider: "Tavus",
@@ -207,18 +207,19 @@ describe("ChatInputBar", () => {
       chatInput: "",
     });
     const voiceChat = createVoiceChatController({
-      voiceChatProvider: "Tavus",
+      voiceChatProvider: "DashScope",
+      voiceChatModel: "qwen3.8-omni-flash-realtime",
       voiceChatSupported: true,
       voiceChatBusy: false,
     });
 
     render(<ChatInputBar chat={chat} voiceChat={voiceChat} onOpenPal={onOpenPal} />);
 
-    const palBtn = screen.getByLabelText("开启视频分身");
-    expect(palBtn).toBeInTheDocument();
-
-    fireEvent.click(palBtn);
-    expect(onOpenPal).toHaveBeenCalledTimes(1);
+    const callButton = screen.getByRole("button", { name: "实时通话" });
+    expect(callButton).toHaveAttribute("title", expect.stringContaining("qwen3.8-omni-flash-realtime"));
+    fireEvent.click(callButton);
+    expect(voiceChat.onToggleRecording).toHaveBeenCalledOnce();
+    expect(onOpenPal).not.toHaveBeenCalled();
   });
 
   it("opens the real Video PAL page from the Tavus model menu", () => {
@@ -234,6 +235,8 @@ describe("ChatInputBar", () => {
     fireEvent.mouseEnter(screen.getByText("Tavus"));
     fireEvent.click(screen.getByText("打开视频分身"));
     expect(onOpenPal).toHaveBeenCalledTimes(1);
+    expect(chat.onModelChoiceChange).not.toHaveBeenCalled();
+    expect(voiceChat.onProviderChange).not.toHaveBeenCalled();
     expect(voiceChat.onToggleRecording).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog", { name: "通话设置" })).not.toBeInTheDocument();
   });

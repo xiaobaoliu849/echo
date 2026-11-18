@@ -14,7 +14,7 @@ import type { UseSettingsResult } from "../hooks/useSettings";
 import CanvasPreview from "../components/canvas/CanvasPreview";
 import CanvasCodeView from "../components/canvas/CanvasCodeView";
 import { useCanvasLayout } from "../hooks/useCanvasLayout";
-import { PanelRight, Code2, Monitor, X, Trash2 } from "lucide-react";
+import { AudioLines, Code2, Monitor, PanelRight, Video, X, Trash2 } from "lucide-react";
 import { useI18n } from "../i18n";
 import echoIcon from "../assets/echo-icon.png";
 import type { ErrorRuntimeContext } from "../types/ui";
@@ -25,6 +25,7 @@ type Props = {
   settings?: UseSettingsResult;
   errorRuntimeContext: ErrorRuntimeContext;
   onOpenSettings?: () => void;
+  onOpenTts?: () => void;
   onOpenPal?: () => void;
 };
 
@@ -431,6 +432,7 @@ export default function ChatPage({
   settings,
   errorRuntimeContext,
   onOpenSettings,
+  onOpenTts,
   onOpenPal,
 }: Props) {
   const { t } = useI18n();
@@ -856,12 +858,6 @@ export default function ChatPage({
     const attachments = chat.chatAttachments || [];
     if (!userText && attachments.length === 0) return;
 
-    if (chat.chatProvider === "Tavus") {
-      if (onOpenPal) {
-        onOpenPal();
-      }
-      return;
-    }
     if (isVoiceActive) {
       voiceChat.sendTextMessage(userText, attachments);
       chat.onInputChange("");
@@ -873,7 +869,7 @@ export default function ChatPage({
     } else {
       chat.onSubmit(e);
     }
-  }, [chat, voiceChat, isVoiceActive, onOpenPal]);
+  }, [chat, voiceChat, isVoiceActive]);
 
   return (
     <div
@@ -883,21 +879,37 @@ export default function ChatPage({
     >
       {/* ── Main Chat Workspace ── */}
       <section className="vsChatWorkspace">
-      {/* ── Top Bar Controls (Canvas Toggle) ── */}
-      <div className="vsChatCanvasToggleWrap">
-        <button
-          type="button"
-          className={`vsChatCanvasToggleBtn ${showCanvas ? "active" : ""}`}
-          onClick={() => setShowCanvas((prev) => !prev)}
-          aria-expanded={showCanvas}
-          aria-controls={showCanvas ? "chat-canvas-panel" : undefined}
-          title={showCanvas ? t("关闭侧边画布", "Close Canvas") : t("打开侧边画布", "Open Canvas")}
-        >
-          <PanelRight size={15} />
-          <span>{t("画布", "Canvas")}</span>
-          {Boolean(canvasCode) && <span className="vsCanvasBadgeDot" />}
-        </button>
-      </div>
+        <div className="vsChatToolsHeader">
+          <nav className="vsChatTools" aria-label={t("工作区工具", "Workspace tools")}>
+            {!isVoiceActive && onOpenTts && (
+              <button type="button" onClick={onOpenTts}>
+                <AudioLines size={16} aria-hidden="true" />
+                <span>{t("文本转语音", "Text to Speech")}</span>
+              </button>
+            )}
+            {!isVoiceActive && onOpenPal && (
+              <button
+                type="button"
+                onClick={onOpenPal}
+                title={t("打开 Tavus 视频分身工作区", "Open the Tavus Video Avatar workspace")}
+              >
+                <Video size={16} aria-hidden="true" />
+                <span>{t("视频分身", "Video Avatar")}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="vsChatCanvasToggleBtn"
+              onClick={() => setShowCanvas((prev) => !prev)}
+              aria-expanded={showCanvas}
+              aria-controls={showCanvas ? "chat-canvas-panel" : undefined}
+            >
+              <Code2 size={17} aria-hidden="true" />
+              <span>{t("代码画布", "Coding Canvas")}</span>
+              {Boolean(canvasCode) && <span className="vsCanvasBadgeDot" aria-hidden="true" />}
+            </button>
+          </nav>
+        </div>
 
         {/* ── Body ── */}
         <div

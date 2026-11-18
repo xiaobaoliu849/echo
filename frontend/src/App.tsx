@@ -25,6 +25,7 @@ import useAudioOverview from "./hooks/useAudioOverview";
 import useSettings from "./hooks/useSettings";
 import useTts from "./hooks/useTts";
 import useVoiceChat from "./hooks/useVoiceChat";
+import { DASHSCOPE_PROVIDER, TAVUS_PROVIDER, VERCEL_PROVIDER } from "./hooks/useVoiceChatHelpers";
 import useVoiceManagement from "./hooks/useVoiceManagement";
 const AudioOverviewPage = lazyWithRetry(() => import("./pages/AudioOverviewPage"));
 const ChatPage = lazyWithRetry(() => import("./pages/ChatPage"));
@@ -129,11 +130,15 @@ export default function App() {
     formatErrorMessage,
     language: uiLanguage,
   });
+  const chatProviders = useMemo(
+    () => settings.providerOptions.filter((provider) => provider !== TAVUS_PROVIDER),
+    [settings.providerOptions],
+  );
   const chat = useChat({
     formatErrorMessage,
-    providerOptions: settings.providerOptions,
+    providerOptions: chatProviders,
     providerModelCatalog: settings.providerModelCatalog,
-    preferredProvider: settings.settingsProvider,
+    preferredProvider: IS_HOSTED_BUILD ? VERCEL_PROVIDER : DASHSCOPE_PROVIDER,
     language: uiLanguage,
   });
   const voiceChat = useVoiceChat({
@@ -472,6 +477,7 @@ export default function App() {
                     settings={settings}
                     errorRuntimeContext={errorRuntimeContext}
                     onOpenSettings={IS_HOSTED_BUILD ? undefined : () => setIsSettingsOpen(true)}
+                    onOpenTts={IS_HOSTED_BUILD ? undefined : () => setActiveTab("voice_center")}
                     onOpenPal={IS_HOSTED_BUILD ? undefined : () => setActiveTab("pal")}
                   />
                 ) : null}

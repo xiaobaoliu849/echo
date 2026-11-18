@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import * as api from "./api";
@@ -364,6 +364,48 @@ describe("App interactions", () => {
     // EverMem UI Badges verification
     expect(await screen.findByText("✓ 已记忆")).toBeInTheDocument();
     expect(await screen.findByText(/🧠 回忆了 2 条/)).toBeInTheDocument();
+  }, 15000);
+
+  it("opens the workspace tools independently of provider settings and restores the Chat launch layout", async () => {
+    const response = await mockedFetchSettings();
+    const realtimeModel = "qwen3.8-omni-flash-realtime";
+    mockedFetchSettings.mockResolvedValue({
+      ...response,
+      providers: ["Tavus", ...response.providers],
+      settings: {
+        ...response.settings,
+        default_models: {
+          ...response.settings.default_models,
+          DashScope: { default: realtimeModel, available: [realtimeModel], enabled: [realtimeModel] },
+        },
+      },
+    });
+    const { unmount } = render(<App />);
+    const getTools = () => within(screen.getByRole("navigation", { name: "工作区工具" }));
+    await screen.findByRole("button", { name: new RegExp(`选择模型 · ${realtimeModel}`) });
+    fireEvent.click(screen.getByTestId("nav-settings"));
+    const settingsDialog = within(await screen.findByRole("dialog", { name: "Settings" }));
+    fireEvent.click(await settingsDialog.findByText("Tavus", { selector: ".vsProviderNameText" }));
+    fireEvent.click(screen.getByRole("button", { name: "返回工作区" }));
+    expect(screen.getByPlaceholderText(/输入文字发送启动实时会话/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "实时通话" })).toHaveAttribute("title", expect.stringContaining(realtimeModel));
+
+    fireEvent.click(getTools().getByRole("button", { name: "代码画布" }));
+    expect(screen.getByRole("complementary", { name: "画布" })).toBeInTheDocument();
+    fireEvent.click(getTools().getByRole("button", { name: "代码画布" }));
+    fireEvent.click(getTools().getByRole("button", { name: "文本转语音" }));
+    expect(await screen.findByTestId("voicecenter-tab-tts")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新建对话" }));
+
+    fireEvent.click(getTools().getByRole("button", { name: "视频分身" }));
+    expect(await screen.findByTestId("pal-select")).toBeInTheDocument();
+    expect(api.createTavusConversation).not.toHaveBeenCalled();
+    unmount();
+
+    render(<App />);
+    await screen.findByRole("button", { name: new RegExp(`选择模型 · ${realtimeModel}`) });
+    expect(getTools().getAllByRole("button")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "实时通话" })).toHaveAttribute("title", expect.stringContaining(realtimeModel));
   }, 15000);
 
   it("archives the previous conversation into the sidebar and restores it on click", async () => {
