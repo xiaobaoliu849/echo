@@ -232,6 +232,20 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         await service._client_to_moss_loop(_Client(), _Server(), None, None, None, None)
         self.assertEqual([len(frame) for frame in sent], [640, 640])
 
+    async def test_abrupt_upstream_loss_after_open_requests_recovery(self) -> None:
+        client = _FakeClientSocket()
+        server = _FakeMossSocket([], client)
+        original_recv = server.recv
+
+        async def recv():
+            if client.of_type("session_open"):
+                raise moss.websockets.exceptions.ConnectionClosedError(None, None)
+            return await original_recv()
+
+        with patch.object(server, "recv", recv), patch.object(moss.websockets, "connect", return_value=server):
+            await asyncio.wait_for(_service()._run_moss_session(client), timeout=2)
+        self.assertEqual(client.of_type("error")[0]["code"], "upstream_disconnected")
+
     async def test_missing_key_is_reported_without_connecting(self) -> None:
         client = _FakeClientSocket()
         service = RealtimeVoiceService(config=_FakeConfig(api_key=""))

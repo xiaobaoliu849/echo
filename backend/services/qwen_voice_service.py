@@ -16,6 +16,10 @@ QWEN_VOICE_CLONE_MODEL = "qwen-voice-enrollment"
 QWEN_VOICE_CLONE_TARGET = "qwen3-tts-vc-realtime-2025-11-27"
 
 
+class QwenModelUnavailable(RuntimeError):
+    pass
+
+
 class QwenVoiceService:
     def __init__(self, config: BackendConfig | None = None):
         self.config = config or BackendConfig()
@@ -46,6 +50,12 @@ class QwenVoiceService:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500] if exc.response is not None else str(exc)
+            try:
+                error = exc.response.json()
+            except ValueError:
+                error = {}
+            if isinstance(error, dict) and error.get("code") == "InvalidParameter" and error.get("message") == "Model not exist.":
+                raise QwenModelUnavailable(f"Qwen voice request failed: {detail}") from exc
             raise RuntimeError(f"Qwen voice request failed: {detail}") from exc
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Qwen voice network error: {exc}") from exc
@@ -173,7 +183,26 @@ class QwenVoiceService:
                 "page_size": page_size,
             },
         }
-        result = await self._request(payload)
+        try:
+            result = await self._request(payload)
+        except QwenModelUnavailable:
+            if voice_type != "voice_design":
+                raise
+            # Workspaces without the legacy VD model use the unified catalog.
+            result = await self._request({
+                "model": "voice-enrollment",
+                "input": {"action": "list_voice", "page_index": page_index, "page_size": page_size},
+            })
+            items = []
+            for row in result.get("output", {}).get("voice_list", []):
+                voice_id = row.get("voice_id") if isinstance(row, dict) else None
+                if not isinstance(voice_id, str) or "-vd-" not in voice_id:
+                    continue
+                items.append({
+                    "voice": voice_id, "type": voice_type, "name": voice_id, "gender": "AI",
+                    "target_model": voice_id.split("-vd-", 1)[0], "language": row.get("language") or "multi",
+                })
+            return {"voice_type": voice_type, "count": len(items), "voices": items}
         output = result.get("output", {})
         expected_target_prefix = "qwen3-tts-vd" if voice_type == "voice_design" else "qwen3-tts-vc"
 
@@ -218,6 +247,8 @@ class QwenVoiceService:
                 "voice": target_voice,
             },
         }
+        if voice_type == "voice_design" and target_voice.startswith(("qwen-audio-", "cosyvoice-")) and "-vd-" in target_voice:
+            payload = {"model": "voice-enrollment", "input": {"action": "delete_voice", "voice_id": target_voice}}
         await self._request(payload)
         return {
             "voice": target_voice,

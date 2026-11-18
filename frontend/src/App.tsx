@@ -144,7 +144,6 @@ export default function App() {
     preferredModel: chat.chatModel,
     language: uiLanguage,
   });
-  const audioOverview = useAudioOverview({ voices: tts.voices, formatErrorMessage, language: uiLanguage });
   const voiceManagement = useVoiceManagement({
     formatErrorMessage,
     language: uiLanguage,
@@ -152,6 +151,11 @@ export default function App() {
     xiaomiApiKeyConfigured: settings.xiaomiApiKeyConfigured,
     elevenlabsApiKeyConfigured: settings.elevenlabsApiKeyConfigured,
     googleApiKeyConfigured: settings.googleApiKeyConfigured,
+  });
+  const audioOverview = useAudioOverview({
+    voices: tts.voices, formatErrorMessage, language: uiLanguage,
+    designVoices: voiceManagement.design.designVoices,
+    cloneVoices: voiceManagement.clone.cloneVoices,
   });
   const { errorRuntimeContext } = settings;
 

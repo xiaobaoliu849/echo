@@ -23,7 +23,7 @@ import {
   type AudioOverviewScriptLine,
   type VoiceInfo,
   fetchVoices,
-  listCustomVoices
+  type CustomVoice
 } from "../api";
 import { createInlineTranslator, type UiLanguage } from "../i18n";
 import type { FormatErrorMessage } from "../utils/errorFormatting";
@@ -42,6 +42,8 @@ export type AudioOverviewWorkspaceMode = "podcast" | "multi_dialogue";
 
 type Options = {
   voices: VoiceInfo[];
+  designVoices?: CustomVoice[];
+  cloneVoices?: CustomVoice[];
   formatErrorMessage: FormatErrorMessage;
   language?: UiLanguage;
 };
@@ -143,61 +145,7 @@ export default function useAudioOverview(options: Options) {
         const engineResults = await Promise.all(
           engines.map(engine => fetchVoices(undefined, engine).catch(() => ({ voices: [] })))
         );
-        // Fetch custom designed and cloned voices across providers
-        const [
-          qwenDesign,
-          geminiDesign,
-          qwenClone,
-          geminiClone,
-          elevenClone,
-        ] = await Promise.all([
-          listCustomVoices("voice_design", "qwen").catch(() => ({ voices: [] })),
-          listCustomVoices("voice_design", "gemini").catch(() => ({ voices: [] })),
-          listCustomVoices("voice_clone", "qwen").catch(() => ({ voices: [] })),
-          listCustomVoices("voice_clone", "gemini").catch(() => ({ voices: [] })),
-          listCustomVoices("voice_clone", "elevenlabs").catch(() => ({ voices: [] })),
-        ]);
-
-        if (disposed) return;
-
-        const combined: VoiceInfo[] = [];
-
-        // Prepend custom designed voices
-        for (const item of [...geminiDesign.voices, ...qwenDesign.voices]) {
-          combined.push({
-            name: item.voice,
-            short_name: `${item.name || item.voice} [${t("设计", "Designed")}]`,
-            locale: item.language || "multi",
-            gender: "custom"
-          });
-        }
-
-        // Prepend custom cloned voices
-        for (const item of [...geminiClone.voices, ...qwenClone.voices, ...elevenClone.voices]) {
-          combined.push({
-            name: item.voice,
-            short_name: `${item.name || item.voice} [${t("克隆", "Cloned")}]`,
-            locale: item.language || "multi",
-            gender: "custom"
-          });
-        }
-
-        // Add standard engine voices
-        for (const res of engineResults) {
-          combined.push(...res.voices);
-        }
-
-        // De-duplicate by name
-        const unique: VoiceInfo[] = [];
-        const seen = new Set<string>();
-        for (const v of combined) {
-          if (!seen.has(v.name)) {
-            seen.add(v.name);
-            unique.push(v);
-          }
-        }
-
-        setAllVoices(unique);
+        if (!disposed) setAllVoices(engineResults.flatMap(result => result.voices));
       } catch (err) {
         console.error("Failed to load all voices for podcast:", err);
       }
@@ -206,12 +154,26 @@ export default function useAudioOverview(options: Options) {
     return () => {
       disposed = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const audioOverviewVoiceOptions = useMemo(() => {
     const localePrefix = audioOverviewLanguage === "en" ? "en-US" : "zh-CN";
-    const preferred = allVoices.filter((item) => {
+    const translate = createInlineTranslator(language);
+    const custom = [...(options.designVoices ?? []), ...(options.cloneVoices ?? [])]
+      .filter(item => item.provider !== "gpt_sovits")
+      .map(item => ({
+        name: item.voice,
+        short_name: `${item.name || item.voice} [${item.type === "voice_design" ? translate("设计", "Designed") : translate("克隆", "Cloned")}]`,
+        locale: item.language || "multi",
+        gender: "custom",
+      }));
+    const seen = new Set<string>();
+    const unique = [...custom, ...allVoices].filter(item => {
+      if (seen.has(item.name)) return false;
+      seen.add(item.name);
+      return true;
+    });
+    const preferred = unique.filter((item) => {
       const loc = (item.locale || "").toLowerCase();
       return (
         loc.startsWith(localePrefix.toLowerCase()) ||
@@ -219,8 +181,8 @@ export default function useAudioOverview(options: Options) {
         item.gender === "custom"
       );
     });
-    return preferred.length ? preferred : allVoices;
-  }, [allVoices, audioOverviewLanguage]);
+    return preferred.length ? preferred : unique;
+  }, [allVoices, audioOverviewLanguage, language, options.designVoices, options.cloneVoices]);
 
   useEffect(() => {
     return () => {

@@ -231,6 +231,9 @@ class MossRealtimeMixin:
         interruption: InterruptionDecisionCoordinator,
     ) -> None:
         pending = bytearray()
+        loop = asyncio.get_running_loop()
+        next_frame = loop.time()
+        frame_duration = MOSS_INPUT_FRAME_BYTES / (2 * MOSS_INPUT_SAMPLE_RATE)
         while True:
             message = await websocket.receive()
             if message.get("type") == "websocket.disconnect":
@@ -267,6 +270,13 @@ class MossRealtimeMixin:
                 # Re-frame into the 20 ms frames the server expects.
                 pending.extend(audio_bytes)
                 while len(pending) >= MOSS_INPUT_FRAME_BYTES:
+                    # Browser callbacks deliver several frames at once. Pace them
+                    # against a monotonic clock, even after a capture pause.
+                    now = loop.time()
+                    delay = next_frame - now
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                    next_frame = max(next_frame, now) + frame_duration
                     await moss_ws.send(bytes(pending[:MOSS_INPUT_FRAME_BYTES]))
                     del pending[:MOSS_INPUT_FRAME_BYTES]
 
@@ -455,14 +465,7 @@ class MossRealtimeMixin:
         interruption: InterruptionDecisionCoordinator,
     ) -> None:
         while True:
-            try:
-                raw = await moss_ws.recv()
-            except websockets.exceptions.ConnectionClosed as exc:
-                if getattr(exc, "code", None) == 1008:
-                    await self._send_event(websocket, "error", message=f"MOSS-Live 会话参数无效: {exc}")
-                break
-            except Exception:
-                break
+            raw = await moss_ws.recv()
 
             if isinstance(raw, bytes):
                 ctx = state["audio_contexts"].pop(0) if state["audio_contexts"] else {}
@@ -585,10 +588,28 @@ class MossRealtimeMixin:
                     await asyncio.gather(playback_task, return_exceptions=True)
         except WebSocketDisconnect:
             return
+        except websockets.exceptions.ConnectionClosedOK:
+            return
+        except websockets.exceptions.ConnectionClosedError as exc:
+            received = exc.rcvd
+            if received is not None and received.code == 1008:
+                await self._send_event(websocket, "error", message=f"MOSS-Live 会话参数无效: {received.reason}")
+            else:
+                logger.warning("MOSS upstream closed: %s", exc)
+                await self._send_event(
+                    websocket, "error", code="upstream_disconnected" if received is None else "upstream_closed", provider="MOSS",
+                    message="MOSS-Live 连接中断，请重新开始通话。",
+                )
         except _WS_INVALID_STATUS as exc:
             status_code = getattr(exc, "status_code", None) or getattr(
                 getattr(exc, "response", None), "status_code", None
             )
+            if status_code == 402:
+                await self._send_event(
+                    websocket, "error", provider="MOSS", code="payment_required",
+                    message="MOSS-Live 要求付款（HTTP 402）。请检查 MOSS 账户的余额和计费状态。",
+                )
+                return
             if status_code in (401, 403):
                 err_msg = f"MOSS-Live 鉴权失败 (HTTP {status_code})：请检查 设置 → MOSS 中的 API Key 是否正确、是否已过期。"
             else:

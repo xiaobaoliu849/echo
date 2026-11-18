@@ -277,6 +277,8 @@ export default function useVoiceChat({
   const coachRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCoachRestartRef = useRef(false);
   // A muted learner stays muted across the reconnect.
+  const canRetryDropRef = useRef(true);
+  const pendingDropRestartRef = useRef(false);
   const restartMutedRef = useRef(false);
   const stopSessionRef = useRef<() => void>(() => {});
 
@@ -1900,9 +1902,29 @@ export default function useVoiceChat({
           );
           return;
         }
-      case "error":
+      case "error": {
+        if (event.provider === "MOSS" && event.code === "upstream_disconnected" &&
+            voiceChatConnectedRef.current && canRetryDropRef.current) {
+          canRetryDropRef.current = false;
+          pendingDropRestartRef.current = true;
+          restartMutedRef.current = isMutedRef.current;
+          commitCompletedTurn();
+          markNewSessionEpoch();
+          stopSessionResources();
+          setVoiceChatStatus(t("MOSS-Live 连接中断，正在重新连接…", "MOSS-Live disconnected. Reconnecting…"));
+          return;
+        }
+        let message = event.message;
+        if (event.provider === "MOSS") {
+          if (event.code === "payment_required") {
+            message = t("MOSS-Live 要求付款（HTTP 402）。请检查 MOSS 账户的余额和计费状态。",
+              "MOSS-Live requires payment (HTTP 402). Check your MOSS account balance and billing status.");
+          } else if (event.code === "upstream_disconnected" || event.code === "upstream_closed") {
+            message = t("MOSS-Live 连接中断，请重新开始通话。", "MOSS-Live disconnected. Start the call again.");
+          }
+        }
         setVoiceChatError(
-          event.message ||
+          message ||
           (IS_HOSTED_BUILD
             ? t(
                 "通话出了点问题，请重新开始通话；一直这样的话，换一个模型试试。",
@@ -1916,6 +1938,7 @@ export default function useVoiceChat({
         setVoiceChatStatus(t("实时语音会话出错", "Realtime voice session failed"));
         stopSessionResources();
         return;
+      }
       case "session_finished":
         commitPendingLiveTranslatePair();
         markNewSessionEpoch();
@@ -1949,10 +1972,11 @@ export default function useVoiceChat({
     }
   }
 
-  async function startSession({ muted = false }: { muted?: boolean } = {}) {
+  async function startSession({ muted = false, retry = false }: { muted?: boolean; retry?: boolean } = {}) {
     if (voiceChatBusy || voiceChatConnected || voiceChatRecording) {
       return;
     }
+    canRetryDropRef.current = !retry;
     pendingCoachRestartRef.current = false;
     setVoiceChatBusy(true);
     setVoiceChatError("");
@@ -2345,11 +2369,13 @@ export default function useVoiceChat({
   // Second half of a coach-settings reconnect: start again once the old
   // session has fully torn down.
   useEffect(() => {
-    if (!pendingCoachRestartRef.current || voiceChatConnected || voiceChatBusy || voiceChatRecording) return;
+    if ((!pendingCoachRestartRef.current && !pendingDropRestartRef.current) || voiceChatConnected || voiceChatBusy || voiceChatRecording) return;
     pendingCoachRestartRef.current = false;
     const muted = restartMutedRef.current;
     restartMutedRef.current = false;
-    void startSessionRef.current({ muted });
+    const retry = pendingDropRestartRef.current;
+    pendingDropRestartRef.current = false;
+    void startSessionRef.current({ muted, retry });
   }, [voiceChatConnected, voiceChatBusy, voiceChatRecording]);
 
   useEffect(() => () => {

@@ -275,6 +275,27 @@ describe("useVoiceChat", () => {
     expect(coachCommands.at(-1)?.coach?.level).toBe("beginner");
   });
 
+  it("recovers one established MOSS call after a transport reset and preserves mute", async () => {
+    const { result } = renderHook(() => useVoiceChat({
+      formatErrorMessage: createFormatErrorMessageStub(),
+      providerOptions: ["MOSS"], preferredProvider: "MOSS", preferredModel: "moss-live-1.0",
+    }));
+    await act(async () => { await result.current.onToggleRecording(); });
+    const open = { type: "session_open", provider: "MOSS", model: "moss-live-1.0" };
+    const drop = { type: "error", provider: "MOSS", code: "upstream_disconnected", message: "disconnected" };
+    const first = FakeWebSocket.instances[0];
+    act(() => { first.emitOpen(); first.emitMessage(open); });
+    act(() => result.current.onToggleMute());
+    act(() => first.emitMessage(drop));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+    expect(result.current.voiceChatMuted).toBe(true);
+    const second = FakeWebSocket.instances[1];
+    act(() => { second.emitOpen(); second.emitMessage(open); second.emitMessage(drop); });
+    expect(result.current.voiceChatConnected).toBe(false);
+    expect(result.current.voiceChatError).toContain("MOSS-Live");
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
   it("never sends the coach to a transcription-only model", async () => {
     localStorage.setItem("vs_speaking_coach", JSON.stringify({ v: 2, tutor: true, enabled: true }));
     const { result } = renderHook(() => useVoiceChat({

@@ -983,7 +983,7 @@ export type VoiceChatServerEvent =
   | { type: "turn_complete"; turn_id?: string; interrupted?: boolean }
   | { type: "pong" }
   | { type: "session_finished" }
-  | { type: "error"; message: string; provider?: string }
+  | { type: "error"; message: string; provider?: string; code?: string }
   // Hosted (paid) server only: minutes balance during a call.
   | { type: "billing"; remaining_seconds: number }
   | { type: "billing_warning"; remaining_seconds: number; message: string }
