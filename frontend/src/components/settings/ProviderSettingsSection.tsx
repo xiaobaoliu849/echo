@@ -150,37 +150,55 @@ export default function ProviderSettingsSection({ settings }: Props) {
     <div className="vsProviderSettingsGrid">
       {/* Middle Column: Providers List */}
       <div className="vsProviderListColumn">
-        <h2 className="vsProviderDirectoryTitle">{t("服务商", "Providers")}</h2>
-        <div className="vsProviderFilters">
-          <button type="button" aria-pressed={!configuredOnly} onClick={() => setConfiguredOnly(false)}>{t("全部", "All")} · {providerOptions.length}</button>
-          <button type="button" aria-pressed={configuredOnly} onClick={() => setConfiguredOnly(true)}>{t("已配置", "Configured")} · {providerOptions.filter(configured).length}</button>
+        <div className="vsProviderListHeader">
+          <div className="vsProviderListTitleRow">
+            <h2 className="vsProviderDirectoryTitle">{t("服务商", "Providers")}</h2>
+            <span className="vsProviderCountPill">
+              {providerOptions.filter(configured).length}/{providerOptions.length}
+            </span>
+          </div>
+          <div className="vsProviderFilters">
+            <button type="button" aria-pressed={!configuredOnly} onClick={() => setConfiguredOnly(false)}>{t("全部", "All")} · {providerOptions.length}</button>
+            <button type="button" aria-pressed={configuredOnly} onClick={() => setConfiguredOnly(true)}>{t("已配置", "Configured")} · {providerOptions.filter(configured).length}</button>
+          </div>
+          <div className="vsProviderSearchBar">
+            <Search size={15} className="vsProviderSearchIcon" aria-hidden="true" />
+            <input
+              type="text"
+              value={providerSearch}
+              onChange={(e) => setProviderSearch(e.target.value)}
+              placeholder={t("搜索供应商...", "Search providers...")}
+            />
+            {providerSearch && (
+              <button
+                type="button"
+                className="vsProviderSearchClear"
+                onClick={() => setProviderSearch("")}
+                aria-label={t("清空搜索", "Clear search")}
+                title={t("清空搜索", "Clear search")}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            className="vsAddCustomProviderBtn"
+            onClick={() => {
+              setCustomName("");
+              setCustomBaseUrl("");
+              setCustomApiKey("");
+              setCustomUseMaxTokens(false);
+              setCustomHeadersJson("{}");
+              setCustomModalError("");
+              setShowAddCustomModal(true);
+            }}
+          >
+            <Plus size={15} aria-hidden="true" /> {t("添加自定义服务商", "Add Custom Provider")}
+          </button>
         </div>
-        <div className="vsProviderSearchBar">
-          <Search size={15} className="vsProviderSearchIcon" aria-hidden="true" />
-          <input
-            type="text"
-            value={providerSearch}
-            onChange={(e) => setProviderSearch(e.target.value)}
-            placeholder={t("搜索供应商...", "Search providers...")}
-          />
-        </div>
-        <button
-          type="button"
-          className="vsAddCustomProviderBtn"
-          onClick={() => {
-            setCustomName("");
-            setCustomBaseUrl("");
-            setCustomApiKey("");
-            setCustomUseMaxTokens(false);
-            setCustomHeadersJson("{}");
-            setCustomModalError("");
-            setShowAddCustomModal(true);
-          }}
-        >
-          <Plus size={15} aria-hidden="true" /> {t("添加自定义服务商", "Add Custom Provider")}
-        </button>
-        <div className="vsProviderSelectGroup">
-          {!visibleProviders.length && <p>{t("没有匹配的服务商", "No matching providers")}</p>}
+        <div className="vsProviderSelectGroup custom-scrollbar">
+          {!visibleProviders.length && <p className="vsProviderEmptySearch">{t("没有匹配的服务商", "No matching providers")}</p>}
           {visibleProviders.map((providerName) => {
             const isActive = settings.settingsProvider === providerName;
             const hasKey = configured(providerName);
@@ -204,13 +222,16 @@ export default function ProviderSettingsSection({ settings }: Props) {
       </div>
 
       {/* Right Column: Config Details */}
-      <div className="vsProviderConfigColumn">
+      <div className="vsProviderConfigColumn custom-scrollbar">
         <div className="vsProviderConfigHeader">
-          <div className="vsProviderConfigTitleRow" style={{ width: "100%", display: "flex", alignItems: "center" }}>
-            <h2 className="vsProviderConfigTitle" style={{ display: "flex", alignItems: "center" }}>
+          <div className="vsProviderConfigTitleRow">
+            <span className="vsProviderConfigHeroIcon" aria-hidden="true">
+              {renderProviderIcon(settings.settingsProvider)}
+            </span>
+            <h2 className="vsProviderConfigTitle">
               {providerDisplayNames[settings.settingsProvider] || settings.settingsProvider}
               {settings.isCustomProvider && (
-                <span style={{ fontSize: "11px", marginLeft: "8px", padding: "2px 6px", borderRadius: "4px", backgroundColor: "#e0e7ff", color: "#3730a3", fontWeight: "normal" }}>CUSTOM</span>
+                <span className="vsProviderCustomTag">CUSTOM</span>
               )}
             </h2>
             {configured(settings.settingsProvider)
@@ -446,59 +467,66 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </>
           )}
 
-          {settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && settings.settingsProvider !== "Tavus" && settings.settingsProvider !== "Soniox" && (
-            <label className="vsField">
-              <span className="vsFieldLabel">{t("默认主模型", "Default Model")}</span>
-              <select
-                className="vsSelect"
-                value={settings.settingsDefaultModel || ""}
-                onChange={(e) => settings.onDefaultModelChange(e.target.value)}
-                disabled={settings.settingsBusy || settings.settingsSaving}
-              >
-                <option value="">{t("-- 请选择 --", "-- Select --")}</option>
-                {availableModels.map((modelId) => (
-                  <option key={modelId} value={modelId}>
-                    {modelId}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {isTtsSupported && (
-            <label className="vsField">
-              <span className="vsFieldLabel">{t("默认 TTS 语音模型", "Default TTS Model")}</span>
-              {ttsAvailableModels.length > 0 ? (
-                <select
-                  className="vsSelect"
-                  value={settings.settingsTtsDefaultModel || ""}
-                  onChange={(e) => settings.onTtsDefaultModelChange?.(e.target.value)}
-                  disabled={settings.settingsBusy || settings.settingsSaving}
-                >
-                  <option value="">{t("-- 请选择或使用默认 --", "-- Select or use default --")}</option>
-                  {ttsAvailableModels.map((modelId) => (
-                    <option key={modelId} value={modelId}>
-                      {modelId}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  className="vsInput"
-                  value={settings.settingsTtsDefaultModel || ""}
-                  onChange={(e) => settings.onTtsDefaultModelChange?.(e.target.value)}
-                  placeholder={t("输入或选择 TTS 模型 ID", "Enter or select TTS model ID")}
-                />
-              )}
-              <span className="vsFieldHint">
-                {t(
-                  "用于语音中心合成的标准 TTS 模型 (例如 sonic-preview, qwen-audio-3.0-tts-flash, speech-02-hd, tts-1-hd 等)",
-                  "Model used for Voice Center synthesis (e.g. sonic-preview, qwen-audio-3.0-tts-flash, speech-02-hd, tts-1-hd, etc.)"
-                )}
-              </span>
-            </label>
-          )}
         </div>
+
+        {((settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && settings.settingsProvider !== "Tavus" && settings.settingsProvider !== "Soniox") || isTtsSupported) && (
+          <div className="vsProviderConfigFields vsProviderDefaultModelsCard">
+            <div className="vsProviderDefaultModelsGrid">
+              {settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && settings.settingsProvider !== "Tavus" && settings.settingsProvider !== "Soniox" && (
+                <label className="vsField">
+                  <span className="vsFieldLabel">{t("默认主模型", "Default Model")}</span>
+                  <select
+                    className="vsSelect"
+                    value={settings.settingsDefaultModel || ""}
+                    onChange={(e) => settings.onDefaultModelChange(e.target.value)}
+                    disabled={settings.settingsBusy || settings.settingsSaving}
+                  >
+                    <option value="">{t("-- 请选择 --", "-- Select --")}</option>
+                    {availableModels.map((modelId) => (
+                      <option key={modelId} value={modelId}>
+                        {modelId}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {isTtsSupported && (
+                <label className="vsField">
+                  <span className="vsFieldLabel">{t("默认 TTS 语音模型", "Default TTS Model")}</span>
+                  {ttsAvailableModels.length > 0 ? (
+                    <select
+                      className="vsSelect"
+                      value={settings.settingsTtsDefaultModel || ""}
+                      onChange={(e) => settings.onTtsDefaultModelChange?.(e.target.value)}
+                      disabled={settings.settingsBusy || settings.settingsSaving}
+                    >
+                      <option value="">{t("-- 请选择或使用默认 --", "-- Select or use default --")}</option>
+                      {ttsAvailableModels.map((modelId) => (
+                        <option key={modelId} value={modelId}>
+                          {modelId}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className="vsInput"
+                      value={settings.settingsTtsDefaultModel || ""}
+                      onChange={(e) => settings.onTtsDefaultModelChange?.(e.target.value)}
+                      placeholder={t("输入或选择 TTS 模型 ID", "Enter or select TTS model ID")}
+                    />
+                  )}
+                  <span className="vsFieldHint">
+                    {t(
+                      "用于语音中心合成的标准 TTS 模型 (例如 sonic-preview, qwen-audio-3.0-tts-flash, speech-02-hd, tts-1-hd 等)",
+                      "Model used for Voice Center synthesis (e.g. sonic-preview, qwen-audio-3.0-tts-flash, speech-02-hd, tts-1-hd, etc.)"
+                    )}
+                  </span>
+                </label>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Model Management Section */}
         {settings.settingsProvider === "Tavus" ? (
