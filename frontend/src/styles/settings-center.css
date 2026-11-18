@@ -18,8 +18,8 @@
 /* ── Left Navigation Sidebar ── */
 .vsSettingsNav {
   width: 208px;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-line);
+  background: var(--canvas);
+  border-right: 1px solid var(--border-color);
   padding: 14px 12px 20px;
   display: flex;
   flex-direction: column;
@@ -237,10 +237,9 @@ button.vsSettingsNavItem.active .vsSettingsNavIcon {
   justify-content: space-between;
   gap: 16px;
   min-height: 58px;
-  padding: 11px 32px;
+  padding: 11px 36px;
   border-top: 1px solid var(--border-color);
-  background: color-mix(in oklab, var(--bg-card) 92%, var(--canvas));
-  backdrop-filter: blur(8px);
+  background: var(--canvas);
   flex-shrink: 0;
   z-index: 10;
 }

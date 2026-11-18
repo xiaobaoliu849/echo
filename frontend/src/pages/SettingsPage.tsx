@@ -72,11 +72,14 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
               type="button"
               className="vsSettingsBackBtn"
               onClick={onClose}
-              title={t("返回工作区", "Back to Workspace")}
+              title={t("返回工作区 (Esc)", "Back to Workspace (Esc)")}
               aria-label={t("返回工作区", "Back to Workspace")}
             >
-              <ArrowLeft size={15} />
-              <span>{t("返回工作区", "Back to Workspace")}</span>
+              <span className="vsSettingsBackIcon" aria-hidden="true">
+                <ArrowLeft size={14} />
+              </span>
+              <span className="vsSettingsBackLabel">{t("返回工作区", "Back to Workspace")}</span>
+              <kbd className="vsBackKbd" aria-hidden="true">Esc</kbd>
             </button>
           </div>
         )}
