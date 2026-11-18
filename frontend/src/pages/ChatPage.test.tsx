@@ -78,20 +78,25 @@ describe('ChatPage', () => {
         expect(container.querySelector('.bubble.user.live')).toBeNull();
     });
 
-    it('keeps a live canvas mounted while resizing and preserves it when reopened', () => {
+    it('opens the canvas when a voice call produces content and preserves it when reopened', () => {
         const toggleMute = vi.fn();
-        render(<ChatPage
-            chat={createChatController()}
-            voiceChat={createVoiceChatController({
-                voiceChatProvider: 'AgentPlatform',
-                voiceChatModel: 'gemini-live-2.5-flash-native-audio',
-                voiceChatConnected: true,
-                voiceChatRecording: true,
-                onToggleMute: toggleMute,
-                voiceChatCanvas: { mode: 'html', title: 'Cat', code: '<h1>Cat</h1>' },
-            })}
+        const chat = createChatController();
+        const voiceChat = createVoiceChatController({
+            voiceChatProvider: 'AgentPlatform',
+            voiceChatModel: 'gemini-live-2.5-flash-native-audio',
+            voiceChatConnected: true,
+            voiceChatRecording: true,
+            onToggleMute: toggleMute,
+        });
+        const { rerender } = render(<ChatPage chat={chat} voiceChat={voiceChat} errorRuntimeContext={{}} />);
+        expect(screen.queryByTitle('画布预览')).not.toBeInTheDocument();
+
+        rerender(<ChatPage
+            chat={chat}
+            voiceChat={{ ...voiceChat, voiceChatCanvas: { mode: 'html', title: 'Cat', code: '<h1>Cat</h1>' } }}
             errorRuntimeContext={{}}
         />);
+        expect(screen.getByRole('button', { name: '画布' })).toHaveAttribute('aria-expanded', 'true');
         const preview = screen.getByTitle('画布预览');
         fireEvent.keyDown(screen.getByRole('separator', { name: '调整画布宽度' }), { key: 'ArrowLeft' });
         expect(screen.getByTitle('画布预览')).toBe(preview);
@@ -100,7 +105,7 @@ describe('ChatPage', () => {
         expect(screen.getByRole('button', { name: '挂断实时通话' })).toBeEnabled();
         fireEvent.click(screen.getByRole('button', { name: '关闭侧边画布' }));
         expect(screen.queryByTitle('画布预览')).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: '代码画布' }));
+        fireEvent.click(screen.getByRole('button', { name: '画布' }));
         expect(screen.getByTitle('画布预览')).toHaveAttribute('srcdoc', expect.stringContaining('<h1>Cat</h1>'));
     });
 

@@ -239,10 +239,12 @@ button.vsCanvasIconActionBtn.danger:hover:not(:disabled) {
   container-name: chat-pane;
 }
 
-.vsChatToolsHeader {
+.vsChatCanvasToggleWrap {
   display: flex;
   justify-content: flex-end;
-  padding: 14px clamp(12px, 3cqw, 26px) 6px;
+  padding: 10px 20px 6px;
+  z-index: 35;
+  pointer-events: auto;
 }
 
 .hasCanvasSidePanel .vsChatBody {
@@ -256,62 +258,41 @@ button.vsCanvasIconActionBtn.danger:hover:not(:disabled) {
   min-width: 0;
 }
 
-.vsChatTools {
+.vsChatCanvasToggleBtn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  min-width: 0;
-  padding: 4px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
-}
-
-.vsChatTools button {
-  gap: 7px;
-  min-height: 34px;
-  min-width: 0;
-  padding: 5px 10px;
-  border-radius: 9px;
-  background: transparent;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in oklab, var(--bg-card) 90%, transparent);
   color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.2;
-  box-shadow: none;
-  transition: background 0.16s ease, color 0.16s ease;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.vsChatTools button svg {
-  flex: none;
+.vsChatCanvasToggleBtn:hover {
+  background: var(--bg-card);
+  border-color: var(--brand);
   color: var(--brand-dark);
+  transform: translateY(-1px);
 }
 
-.vsChatTools button:hover:not(:disabled),
-.vsChatTools button[aria-expanded="true"] {
+.vsChatCanvasToggleBtn.active {
   background: var(--brand-soft);
+  border-color: var(--brand);
   color: var(--brand-dark);
-  transform: none;
-  filter: none;
-}
-
-@container chat-pane (max-width: 390px) {
-  .vsChatTools button {
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px 7px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .vsChatTools button { transition: none; }
+  box-shadow: 0 2px 12px color-mix(in oklab, var(--brand) 25%, transparent);
 }
 
 .vsCanvasBadgeDot {
   width: 7px;
   height: 7px;
-  flex: none;
   border-radius: 50%;
   background: var(--brand);
   display: inline-block;

@@ -366,7 +366,7 @@ describe("App interactions", () => {
     expect(await screen.findByText(/🧠 回忆了 2 条/)).toBeInTheDocument();
   }, 15000);
 
-  it("opens the workspace tools independently of provider settings and restores the Chat launch layout", async () => {
+  it("keeps the voice model and standalone Canvas available after browsing Settings and reopening Echo", async () => {
     const response = await mockedFetchSettings();
     const realtimeModel = "qwen3.8-omni-flash-realtime";
     mockedFetchSettings.mockResolvedValue({
@@ -381,7 +381,6 @@ describe("App interactions", () => {
       },
     });
     const { unmount } = render(<App />);
-    const getTools = () => within(screen.getByRole("navigation", { name: "工作区工具" }));
     await screen.findByRole("button", { name: new RegExp(`选择模型 · ${realtimeModel}`) });
     fireEvent.click(screen.getByTestId("nav-settings"));
     const settingsDialog = within(await screen.findByRole("dialog", { name: "Settings" }));
@@ -390,21 +389,18 @@ describe("App interactions", () => {
     expect(screen.getByPlaceholderText(/输入文字发送启动实时会话/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "实时通话" })).toHaveAttribute("title", expect.stringContaining(realtimeModel));
 
-    fireEvent.click(getTools().getByRole("button", { name: "代码画布" }));
+    const canvas = screen.getByRole("button", { name: "画布" });
+    fireEvent.click(canvas);
     expect(screen.getByRole("complementary", { name: "画布" })).toBeInTheDocument();
-    fireEvent.click(getTools().getByRole("button", { name: "代码画布" }));
-    fireEvent.click(getTools().getByRole("button", { name: "文本转语音" }));
-    expect(await screen.findByTestId("voicecenter-tab-tts")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "新建对话" }));
-
-    fireEvent.click(getTools().getByRole("button", { name: "视频分身" }));
-    expect(await screen.findByTestId("pal-select")).toBeInTheDocument();
-    expect(api.createTavusConversation).not.toHaveBeenCalled();
+    fireEvent.click(canvas);
+    expect(screen.queryByRole("complementary", { name: "画布" })).not.toBeInTheDocument();
     unmount();
 
     render(<App />);
     await screen.findByRole("button", { name: new RegExp(`选择模型 · ${realtimeModel}`) });
-    expect(getTools().getAllByRole("button")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "画布" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "文本转语音" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "视频分身" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "实时通话" })).toHaveAttribute("title", expect.stringContaining(realtimeModel));
   }, 15000);
 

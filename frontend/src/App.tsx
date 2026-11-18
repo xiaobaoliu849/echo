@@ -477,7 +477,6 @@ export default function App() {
                     settings={settings}
                     errorRuntimeContext={errorRuntimeContext}
                     onOpenSettings={IS_HOSTED_BUILD ? undefined : () => setIsSettingsOpen(true)}
-                    onOpenTts={IS_HOSTED_BUILD ? undefined : () => setActiveTab("voice_center")}
                     onOpenPal={IS_HOSTED_BUILD ? undefined : () => setActiveTab("pal")}
                   />
                 ) : null}
