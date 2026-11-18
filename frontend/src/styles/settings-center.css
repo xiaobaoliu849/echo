@@ -3,22 +3,24 @@
    ========================================================= */
 
 .vsSettingsLayout {
+  --settings-rail-width: clamp(164px, 15vw, 216px);
+  --settings-directory-width: clamp(220px, 21vw, 288px);
+  --settings-inset: clamp(16px, 3vw, 48px);
+  --settings-workspace: color-mix(in oklab, var(--bg-secondary) 75%, var(--brand-soft));
   display: flex;
   flex: 1;
   height: 100%;
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
-  background: var(--canvas);
-  border-radius: 0;
-  box-shadow: none;
+  background: var(--settings-workspace);
 }
 
 .vsSettingsNav {
-  width: 216px;
+  width: var(--settings-rail-width);
   background: var(--sidebar-bg);
   border-right: 1px solid var(--sidebar-line);
-  padding: 16px 10px;
+  padding: 18px 12px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -26,28 +28,24 @@
 }
 
 .vsSettingsNavSection {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .vsSettingsNavSectionTitle {
   font-size: 11px;
-  font-weight: 600;
-  color: var(--text-soft);
+  font-weight: 650;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 4px 10px 6px;
+  padding: 4px 10px 8px;
   margin: 0;
 }
 
 .vsSettingsNavTitle {
-  margin: 0 0 16px 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: 0.02em;
+  margin: 14px 10px 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
 }
 
 .vsSettingsNavList {
@@ -60,58 +58,43 @@
 }
 
 .vsSettingsNavItem {
-  width: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-start !important;
-  gap: 10px !important;
-  padding: 8px 12px !important;
-  border: 0 !important;
-  border-radius: 8px !important;
-  background: transparent !important;
-  color: var(--sidebar-text) !important;
-  text-align: left !important;
-  cursor: pointer !important;
-  box-shadow: none !important;
-  transform: none !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease !important;
+  width: 100%;
+  min-height: 38px;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--sidebar-text);
+  text-align: left;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 550;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.vsSettingsNavItem:hover {
-  background: var(--vs-sidebar-hover-bg) !important;
-  color: var(--sidebar-text-strong) !important;
-  box-shadow: var(--vs-sidebar-hover-shadow) !important;
-  transform: none !important;
+.vsSettingsNavItem:hover:not(:disabled) {
+  background: var(--bg-card);
+  color: var(--sidebar-text-strong);
+  filter: none;
+  transform: none;
 }
 
-.vsSettingsNavItem.active {
-  background: var(--brand-soft) !important;
-  color: var(--brand-dark) !important;
-  font-weight: 600 !important;
-  box-shadow: none !important;
-  transform: none !important;
-}
-
-.vsSettingsNavIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: inherit;
-  opacity: 0.85;
-}
-
-.vsSettingsNavItem.active .vsSettingsNavIcon {
-  opacity: 1;
+.vsSettingsNavItem[aria-current] {
+  border-color: color-mix(in oklab, var(--brand) 22%, transparent);
+  background: var(--brand-soft);
   color: var(--brand-dark);
+  font-weight: 650;
 }
 
-.vsSettingsNavItemTitle {
-  font-size: 13px !important;
-  font-weight: inherit !important;
+.vsSettingsNavItem svg {
+  flex: none;
+}
+
+.vsSettingsLayout button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .vsSettingsContent {
@@ -119,16 +102,16 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 32px 48px 60px;
-  background: var(--canvas);
+  padding: 32px var(--settings-inset) 0;
   display: flex;
   flex-direction: column;
 }
 
 .vsSettingsForm {
-  max-width: 860px;
+  max-width: 880px;
   margin: 0 auto;
   width: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -149,9 +132,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 4px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--line);
+  padding: 3px 0;
 }
 
 .vsSettingsHeadInfo {
@@ -159,11 +140,11 @@
 }
 
 .vsSettingsTitle {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 700;
+  margin: 0;
+  font-size: clamp(22px, 2.5vw, 30px);
+  font-weight: 650;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
 }
 
 .vsSettingsDesc {
@@ -182,7 +163,7 @@
 .vsSettingsCard {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 22px 24px;
   box-shadow: var(--shadow-sm);
   display: flex;

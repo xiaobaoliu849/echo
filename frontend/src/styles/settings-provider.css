@@ -38,353 +38,457 @@
   animation: spin 1.2s linear infinite;
 }
 
-/* =========================================================
-   Provider Settings — ZCode-Style Master-Detail Layout
-   ========================================================= */
+/* Provider directory and editor */
 .vsProviderSettingsGrid {
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--settings-directory-width) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
-  width: 100%;
 }
 
 .vsProviderListColumn {
-  width: 250px;
-  flex-shrink: 0;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-line);
-  padding: 16px 12px;
+  min-height: 0;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--line);
 }
 
-.vsProviderConfigColumn {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 24px 40px 60px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  background: var(--canvas);
+.vsProviderDirectoryTools {
+  display: grid;
+  gap: 12px;
+  padding: 22px 14px 12px;
 }
 
-/* ── Provider tab: override content area for full-width layout ── */
+.vsProviderDirectoryTitle {
+  margin: 0 2px 2px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
 .vsSettingsContent.provider-tab {
-  overflow: hidden !important;
-  padding: 0 !important;
+  overflow: hidden;
+  padding: 0;
 }
 
 .vsSettingsContent.provider-tab .vsSettingsForm {
   height: 100%;
   max-width: none;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
   gap: 0;
-  padding: 0;
 }
 
 .vsSettingsContent.provider-tab .vsSettingsHeader {
   display: none;
 }
 
-/* ErrorNotice inside provider tab — put it in the grid area */
-.vsSettingsContent.provider-tab .vsSettingsNotice,
-.vsSettingsContent.provider-tab > form > .vsSettingsNotice {
-  margin: 0;
-  border-radius: 0;
-}
-
-.vsSettingsContent.provider-tab .vsProviderSettingsGrid {
-  flex: 1;
-  min-height: 0;
-}
-
 .vsSettingsContent.provider-tab .vsSettingsFormFooter {
+  --editor-inset: max(var(--settings-inset), calc((100% - var(--settings-directory-width) - 840px) / 2));
   margin: 0;
   position: static;
-  border-top: 1px solid var(--line);
-  padding: 12px 28px;
-  background: var(--bg-card);
-  flex-shrink: 0;
+  padding-inline: calc(var(--settings-directory-width) + var(--editor-inset)) var(--editor-inset);
 }
 
-/* ── Provider list search bar ── */
 .vsProviderSearchBar {
   position: relative;
-  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
 }
 
 .vsProviderSearchBar input {
-  width: 100%;
-  height: 34px;
-  padding: 0 10px 0 32px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  height: 37px;
+  padding: 0 34px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
   background: var(--bg-card);
   font-size: 13px;
-  color: var(--text-primary);
-  outline: none;
-  transition: all 0.2s;
 }
 
 .vsProviderSearchBar input:focus {
   border-color: var(--brand);
-  background: var(--bg-card);
-  box-shadow: 0 0 0 3px var(--brand-soft);
 }
 
 .vsProviderSearchBar input::placeholder {
-  color: var(--text-soft);
+  color: var(--text-secondary);
 }
 
 .vsProviderSearchIcon {
   position: absolute;
   left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 13px;
-  color: var(--text-soft);
+  color: var(--text-secondary);
   pointer-events: none;
 }
 
-.vsAddCustomProviderBtn {
-  margin: 0 2px 10px 2px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  height: 34px;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 8px;
+.vsProviderSearchBar button {
+  position: absolute;
+  right: 5px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.vsProviderSearchBar button:hover:not(:disabled) {
   background: var(--surface);
-  border: 1px dashed var(--line-strong);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all 0.15s ease;
+  transform: none;
 }
 
-.vsAddCustomProviderBtn:hover {
-  background: var(--vs-sidebar-hover-bg);
-  border-color: var(--brand);
-  color: var(--brand-dark);
-}
-
-/* ── Provider list items ── */
-.vsProviderSelectGroup {
+.vsProviderFilters {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.vsProviderFilters button {
+  flex: 1;
+  min-height: 30px;
+  padding: 3px 5px;
+  gap: 5px;
+  border-radius: 7px;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.vsProviderFilters button:hover:not(:disabled) {
+  color: var(--text);
+  transform: none;
+}
+
+.vsProviderFilters button[aria-pressed="true"] {
+  background: var(--bg-card);
+  color: var(--brand-dark);
+  font-weight: 650;
+  box-shadow: 0 1px 3px color-mix(in oklab, var(--brand-dark) 12%, transparent);
+}
+
+.vsProviderFilters span {
+  min-width: 20px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--brand) 11%, transparent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vsAddCustomProviderBtn {
+  margin: 0 14px 12px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--brand-dark);
+  font-size: 12px;
+  font-weight: 650;
+  box-shadow: none;
+}
+
+.vsAddCustomProviderBtn:hover:not(:disabled) {
+  background: var(--brand-soft);
+  border-color: color-mix(in oklab, var(--brand) 32%, var(--line));
+  filter: none;
+  transform: none;
+}
+
+.vsProviderSelectGroup {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 3px 10px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.vsProviderEmpty {
+  margin: 0;
+  padding: 20px 10px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .vsProviderSelectorItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   width: 100%;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: none;
+  min-height: 44px;
+  gap: 9px;
+  margin-block: 2px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
   background: transparent;
+  color: var(--text-primary);
   text-align: left;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  color: var(--sidebar-text);
+  box-shadow: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.vsProviderSelectorItem:hover {
-  background: var(--vs-sidebar-hover-bg);
-  color: var(--sidebar-text-strong);
+.vsProviderSelectorItem:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  filter: none;
+  transform: none;
 }
 
-.vsProviderSelectorItem.active {
+.vsProviderSelectorItem[aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--brand) 22%, transparent);
   background: var(--brand-soft);
-}
-
-.vsProviderSelectorItem.active .vsProviderNameText {
   color: var(--brand-dark);
-  font-weight: 600;
 }
 
-.vsProviderSelectorMeta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-}
-
-.vsProviderItemIcon {
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  flex-shrink: 0;
-  border-radius: 6px;
+.vsProviderMark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text-primary);
-}
-
-.vsProviderSquircleIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  flex-shrink: 0;
-  background: var(--surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-.vsProviderSelectorItem.active .vsProviderSquircleIcon {
-  background: var(--brand);
-  color: #ffffff;
-  border-color: var(--brand-dark);
+.vsProviderMark svg {
+  width: 58%;
+  height: 58%;
+}
+
+.vsProviderSelectorItem[aria-pressed="true"] .vsProviderMark {
+  background: var(--brand-dark);
+  color: var(--bg-card);
 }
 
 .vsProviderNameText {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
-  font-weight: 500;
-  color: inherit;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 550;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
-.vsActiveDot {
-  width: 7px;
-  height: 7px;
+.vsProviderSelectorItem[aria-pressed="true"] .vsProviderNameText {
+  font-weight: 650;
+}
+
+.vsProviderRowStatus {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 4px;
+  border: 1px solid var(--line-strong);
   border-radius: 50%;
-  background: var(--brand);
-  flex-shrink: 0;
-  margin-left: auto;
 }
 
-.vsActiveDot.inactive {
-  background: var(--line-strong);
+.vsProviderRowStatus.configured {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 0;
+  background: color-mix(in oklab, var(--brand) 16%, transparent);
+  color: var(--brand-dark);
 }
 
-/* ── Provider Config Column (right pane) ── */
+.vsProviderConfigColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px var(--settings-inset) 32px;
+  container-type: inline-size;
+}
+
+.vsProviderConfigColumn > * {
+  flex: none;
+  width: min(100%, 840px);
+}
+
 .vsProviderConfigHeader {
+  position: relative;
+  isolation: isolate;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  padding-bottom: 16px;
-  margin-bottom: 2px;
-  border-bottom: 1px solid var(--line);
+  gap: 14px;
+  overflow: hidden;
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid color-mix(in oklab, var(--brand) 22%, var(--line));
+  border-radius: 16px;
+  background: linear-gradient(115deg, var(--bg-card), var(--brand-soft));
 }
 
-.vsProviderConfigTitleRow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.vsProviderConfigHeader::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: repeating-radial-gradient(circle at 100% 150%, transparent 0 17px, color-mix(in oklab, var(--brand) 18%, transparent) 18px 19px);
+  mask-image: linear-gradient(90deg, transparent 58%, black);
+  content: "";
+}
+
+.vsProviderConfigHeader .vsProviderMark {
+  width: clamp(42px, 5vw, 54px);
+  height: clamp(42px, 5vw, 54px);
+  border: 1px solid color-mix(in oklab, var(--brand) 22%, var(--line));
+  border-radius: 14px;
+  background: var(--brand-dark);
+  color: var(--bg-card);
+  font-size: 22px;
+}
+
+.vsProviderIdentity {
+  flex: 1 1 160px;
+  min-width: 0;
 }
 
 .vsProviderConfigTitle {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
+  margin: 0 0 6px;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  font-size: clamp(19px, 2.1vw, 28px);
+  font-weight: 680;
+  letter-spacing: -0.035em;
+  line-height: 1.13;
+  overflow-wrap: anywhere;
 }
 
 .vsProviderStatusBadge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 10px;
-  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--text-secondary);
-  border: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 650;
 }
+
 .vsProviderStatusBadge.active {
-  background: var(--brand-soft);
+  background: color-mix(in oklab, var(--brand) 16%, var(--brand-soft));
   color: var(--brand-dark);
-  border-color: color-mix(in oklab, var(--brand) 25%, transparent);
 }
 
 .vsProviderInfoCallout {
-  background: var(--brand-soft);
-  border: 1px solid color-mix(in oklab, var(--brand) 25%, transparent);
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklab, var(--brand) 24%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--brand-soft) 66%, var(--bg-card));
   color: var(--brand-dark);
-  border-radius: 8px;
-  padding: 12px 16px;
   font-size: 13px;
   line-height: 1.5;
-  margin-top: 8px;
+}
+
+.vsProviderSetupGuide {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.vsProviderSetupGuide > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.vsProviderSetupGuide p {
+  margin: 4px 0 8px;
+}
+
+.vsProviderSetupGuide a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .vsDeleteProviderBtn {
   margin-left: auto;
-  background: color-mix(in oklab, #ef4444 10%, transparent);
-  color: #b91c1c;
-  border: 1px solid color-mix(in oklab, #ef4444 25%, transparent);
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in oklab, var(--danger) 24%, var(--line));
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: #9f2929;
   font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  font-weight: 600;
+  box-shadow: none;
 }
 
-.vsDeleteProviderBtn:hover {
-  background: color-mix(in oklab, #ef4444 20%, transparent);
-}
-
-.vsProviderConfigDesc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0 0 8px 0;
-  line-height: 1.5;
-}
-
-/* ── Config form fields in the right pane ── */
-.vsProviderConfigFields {
+.vsProviderConfigFields,
+.vsProviderModelSection .vsModelCardSection {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
+  padding: clamp(14px, 2vw, 24px);
+  border: 1px solid var(--line);
+  border-radius: 16px;
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 6px color-mix(in oklab, var(--brand-dark) 4%, transparent);
+}
+
+.vsProviderCardTitle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.vsProviderCardTitle svg {
+  color: var(--brand-dark);
+}
+
+.vsProviderFieldPair {
+  display: grid;
+  gap: 14px;
+}
+
+@container (min-width: 470px) {
+  .vsProviderFieldPair {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
 }
 
 .vsProviderConfigFields .vsField {
-  max-width: 100%;
+  gap: 5px;
+  min-width: 0;
 }
 
-.vsProviderConfigFields .vsInput {
-  width: 100%;
-  max-width: 100%;
+.vsProviderConfigFields .vsFieldLabel {
+  color: var(--text-primary);
 }
 
-.vsProviderConfigFields .vsFieldHint {
-  display: block;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.4;
+.vsProviderConfigFields :is(.vsInput, .vsSelect) {
+  min-height: 37px;
+  padding-block: 7px;
+  border-color: var(--line);
+  background: color-mix(in oklab, var(--bg-card) 65%, white);
+}
+
+.vsProviderConfigFields :is(.vsInput, .vsSelect):focus {
+  border-color: var(--brand);
 }
 
 .vsProviderConfigFields .vsFieldHint a {
-  color: var(--brand);
-  text-decoration: none;
+  color: var(--brand-dark);
+  text-underline-offset: 3px;
 }
 
-.vsProviderConfigFields .vsFieldHint a:hover {
-  text-decoration: underline;
-}
 
 /* Password field with toggle */
 .vsPasswordFieldWrap {
@@ -440,11 +544,56 @@ button.vsPasswordToggleBtn:focus-visible {
   outline-offset: 1px;
 }
 
-/* ── Model section separator ── */
 .vsProviderModelSection {
+  display: grid;
+  gap: 16px;
+}
+
+.vsProviderModelSection .vsModelManagerHeader {
+  margin: 0;
+}
+
+.vsModelListContainer {
+  max-height: 270px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-primary);
+}
+
+.vsModelListItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 12px;
+}
+
+.vsModelListItem + .vsModelListItem {
   border-top: 1px solid var(--line);
-  padding-top: 20px;
-  margin-top: 4px;
+}
+
+.vsModelListItemName {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.vsModelListItemTag {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.vsModelListEmpty {
+  padding: 14px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 /* ── Modal Dialog (Add Custom Provider & Settings Popups) ── */
@@ -573,94 +722,80 @@ button.vsPasswordToggleBtn:focus-visible {
   transform: translate(0, 0);
 }
 
-/* Settings Navigation Header (ZCode-Style top-of-sidebar Back Button) */
 .vsSettingsNavHeader {
-  padding: 2px 2px 12px 2px;
-  margin-bottom: 12px;
+  padding-bottom: 16px;
+  margin-bottom: 14px;
   border-bottom: 1px solid var(--sidebar-line);
 }
 
 .vsSettingsBackBtn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
+  justify-content: flex-start;
   gap: 8px;
-  padding: 8px 12px;
+  min-height: 36px;
+  padding: 6px 9px;
   border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--vs-sidebar-hover-bg);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  box-shadow: none;
 }
 
-.vsSettingsBackBtn:hover {
-  background: var(--surface-strong);
-  border-color: var(--line-strong);
+.vsSettingsBackBtn:hover:not(:disabled) {
+  background: var(--bg-card);
   color: var(--text);
-  transform: translateX(-1px);
+  filter: none;
+  transform: none;
 }
 
-/* Settings Form Footer matching Echo design tokens */
 .vsSettingsFormFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 48px;
+  gap: 14px;
+  padding: 10px var(--settings-inset);
   border-top: 1px solid var(--line);
   background: var(--bg-card);
-  margin: auto -48px -60px -48px;
+  margin: auto calc(-1 * var(--settings-inset)) 0;
   position: sticky;
-  bottom: -60px;
+  bottom: 0;
   z-index: 10;
   flex-shrink: 0;
 }
 
 .vsSettingsFooterStatus {
+  min-width: 0;
   font-size: 13px;
-  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
-.vsSettingsFooterStatus .status-saving {
-  color: var(--brand);
-  display: inline-flex;
+.vsSettingsFooterStatus :is(.status-saving, .status-saved) {
+  display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.vsSettingsFooterStatus .status-loading {
-  color: var(--muted);
-}
-
-.vsSettingsFooterStatus .status-saved.ok {
+  gap: 7px;
   color: var(--brand-dark);
-  font-weight: 600;
 }
 
-.vsSettingsFooterStatus .status-ready {
-  color: var(--muted);
+.vsSettingsFooterStatus svg {
+  flex: none;
 }
 
 .vsSettingsFooterActions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  flex: none;
+  margin-left: auto;
 }
 
 .vsFooterSaveBtn {
-  height: 36px;
-  padding: 0 20px;
+  min-height: 38px;
+  min-width: 100px;
+  gap: 7px;
+  padding: 6px 16px;
   font-size: 13px;
-  font-weight: 600;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: #ffffff;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.15s ease;
+  font-weight: 650;
+  background: var(--brand-dark);
+  color: var(--bg-card);
+  border-radius: 9px;
 }
 
 .vsFooterSaveBtn:hover:not(:disabled) {
@@ -844,27 +979,52 @@ button.vsPasswordToggleBtn:focus-visible {
   margin-right: -4px;
 }
 
-/* ── Provider key text (hidden in list, only used if needed) ── */
-.vsProviderKeyText {
-  display: none;
-}
-
-.vsProviderDirectoryTitle { margin: 0 4px 8px; font-size: 18px; }
-.vsProviderFilters { display: flex; padding: 3px; gap: 3px; margin-bottom: 12px; border-radius: 10px; background: var(--surface); }
-.vsProviderFilters button { flex: 1; padding: 6px 4px; font: inherit; font-size: 12px; border: 0; box-shadow: none; background: transparent; color: var(--text-secondary); }
-.vsProviderFilters button[aria-pressed="true"] { background: var(--bg-card); color: var(--brand-dark); font-weight: 650; box-shadow: 0 1px 4px #0001; }
-.vsProviderListColumn .vsProviderSelectorItem { box-shadow: none; background: transparent; border: 1px solid transparent; padding: 9px; }
-.vsProviderListColumn .vsProviderSelectorItem:hover { background: var(--surface); }
-.vsProviderListColumn .vsProviderSelectorItem.active { background: var(--brand-soft); border-color: var(--line); box-shadow: inset 3px 0 var(--brand); }
-.vsProviderNameText { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
-.vsProviderConfigTitleRow { flex-wrap: wrap; }
 .vsProviderUnavailable { margin: auto; padding: clamp(20px, 5vw, 54px); max-width: 560px; color: var(--text-primary); }
 .vsProviderUnavailable svg { color: var(--brand); }
 .vsProviderUnavailable h2 { margin: 14px 0 8px; }
 .vsProviderUnavailable p { color: var(--text-secondary); }
 .vsProviderUnavailable div { display: flex; gap: 10px; margin-top: 18px; }
-@media (max-width: 760px) {
-  .vsProviderSettingsGrid { flex-direction: column; overflow-y: auto; }
-  .vsProviderListColumn { width: 100%; max-height: 240px; box-sizing: border-box; border-bottom: 1px solid var(--line); }
-  .vsProviderConfigColumn { flex: none; overflow: visible; padding: 18px; }
+@media (max-width: 860px) {
+  .vsSettingsLayout { --settings-rail-width: 60px; }
+  .vsSettingsNav { padding-inline: 8px; }
+  .vsSettingsNavTitle,
+  .vsSettingsNavSectionTitle,
+  .vsSettingsNavItem span,
+  .vsSettingsBackBtn span { display: none; }
+  .vsSettingsNavItem,
+  .vsSettingsBackBtn { width: 100%; justify-content: center; padding-inline: 0; }
+  .vsSettingsNavHeader:not(:has(.vsSettingsBackBtn)) { display: none; }
+}
+
+@media (max-width: 660px) {
+  .vsSettingsLayout { flex-direction: column; }
+  .vsSettingsNav {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    overflow-x: auto;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .vsSettingsNavHeader,
+  .vsSettingsNavSection { flex: none; margin: 0; padding: 0; border: 0; }
+  .vsSettingsNavHeader:has(.vsSettingsBackBtn) { padding-right: 6px; border-right: 1px solid var(--line); }
+  .vsSettingsNavList { flex-direction: row; }
+  .vsSettingsNavItem,
+  .vsSettingsBackBtn { width: 36px; }
+  .vsSettingsContent { padding-top: 18px; }
+  .vsSettingsContent.provider-tab .vsSettingsFormFooter { padding-inline: var(--settings-inset); }
+  .vsProviderSettingsGrid { display: block; overflow-y: auto; }
+  .vsProviderListColumn { border-right: 0; border-bottom: 1px solid var(--line); }
+  .vsProviderDirectoryTools { padding-top: 14px; }
+  .vsProviderSelectGroup { max-height: 155px; }
+  .vsProviderConfigColumn { overflow: visible; padding-top: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vsSettingsModalShell { animation: none; }
+  .vsSettingsLayout :is(button, input, select, textarea) { transition: none; }
+  .vsFooterSaveBtn:hover:not(:disabled) { transform: none; }
 }

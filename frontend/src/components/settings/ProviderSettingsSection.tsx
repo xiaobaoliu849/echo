@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, ReactNode } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Terminal, Brain, X, Search, Plus } from "lucide-react";
+import { Terminal, Brain, X, Search, Plus, Cloud, Check, KeyRound, Info, Trash2, ArrowUpRight } from "lucide-react";
 import type { UseSettingsResult } from "../../hooks/useSettings";
 import { PROVIDER_API_KEY_FIELD } from "../../hooks/useSettings";
 import SecretInput from "./SecretInput";
@@ -34,58 +34,19 @@ const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<
   GLM4Voice: t("智谱 GLM-4-Voice", "Zhipu GLM-4-Voice"),
 });
 
-const getLobeProviderKey = (name: string): string => {
-  let lower = (name || "").toLowerCase();
-  if (lower.startsWith("custom_")) {
-    lower = lower.substring(7);
-  }
-  if (lower.includes("doubao") || lower.includes("bytedance")) return "doubao";
-  if (lower.includes("dashscope")) return "qwen";
-  if (lower.includes("siliconflow")) return "siliconcloud";
-  if (lower === "xiaomi") return "xiaomimimo";
-  if (lower === "google") return "google";
-  if (lower === "agentplatform" || lower === "vertexai") return "vertexai";
-  if (lower === "openai") return "openai";
-  if (lower === "anthropic") return "anthropic";
-  if (lower === "deepseek") return "deepseek";
-  if (lower === "nvidia") return "nvidia";
-  if (lower === "groq") return "groq";
-  if (lower === "openrouter") return "openrouter";
-  if (lower === "zenmux") return "zenmux";
-  if (lower === "ollama") return "ollama";
-  if (lower === "deepgram") return "deepgram";
-  if (lower === "soniox") return "soniox";
-  if (lower === "tavus") return "tavus";
-  if (lower === "cartesia") return "cartesia";
-  if (lower === "gradium") return "gradium";
-  if (lower === "vercel") return "vercel";
-  return lower;
-};
+function ProviderMark({ provider, name = provider }: { provider: string; name?: string }) {
+  const Icon = provider === "AgentPlatform" ? Cloud
+    : provider.includes("(ACP)") ? Terminal
+    : provider === "GPT-SoVITS" ? Brain
+    : null;
+  const initial = provider === "DashScope" ? "Q" : (provider.startsWith("custom_") ? name : provider).charAt(0).toUpperCase();
 
-const LocalProviderIcon = ({ provider, size = 18 }: { provider: string; size?: number }) => (
-  <span
-    className="vsProviderSquircleIcon"
-    style={{
-      width: size,
-      height: size,
-      fontSize: Math.round(size * 0.55),
-    }}
-  >
-    {(provider || "").charAt(0).toUpperCase()}
-  </span>
-);
-
-export const renderProviderIcon = (providerName: string): ReactNode => {
-  if (!providerName) return null;
-  if (providerName.includes("(ACP)")) {
-    return <Terminal size={18} />;
-  }
-  if (providerName === "GPT-SoVITS") {
-    return <Brain size={18} />;
-  }
-  const key = getLobeProviderKey(providerName);
-  return <LocalProviderIcon provider={key} size={18} />;
-};
+  return (
+    <span className="vsProviderMark" aria-hidden="true">
+      {Icon ? <Icon /> : initial}
+    </span>
+  );
+}
 
 export default function ProviderSettingsSection({ settings }: Props) {
   const { t } = useI18n();
@@ -94,6 +55,9 @@ export default function ProviderSettingsSection({ settings }: Props) {
   const [ttsModelSearch, setTtsModelSearch] = useState("");
   const [showRawTtsModels, setShowRawTtsModels] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
+  const providerList = useRef<HTMLDivElement>(null);
+  const providerDetails = useRef<HTMLElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
 
   const [showAddCustomModal, setShowAddCustomModal] = useState(false);
   const [customName, setCustomName] = useState("");
@@ -126,6 +90,8 @@ export default function ProviderSettingsSection({ settings }: Props) {
   }, [t, settings.customProviders]);
 
   const providerOptions = settings.providerOptions || [];
+  const selectedProvider = settings.settingsProvider;
+  const selectedName = providerDisplayNames[selectedProvider] || selectedProvider;
   const availableModels = settings.settingsAvailableModels || [];
   const ttsAvailableModels = settings.settingsTtsAvailableModels || [];
   const isTtsSupported =
@@ -141,28 +107,54 @@ export default function ProviderSettingsSection({ settings }: Props) {
       (name === "Doubao" && keys.doubao_access_token) ||
       (name === "Xiaomi" && settings.settingsData?.xiaomi?.api_key) || name === "Ollama");
   }
+  const configuredCount = providerOptions.filter(configured).length;
+  const selectedConfigured = configured(selectedProvider);
   const query = providerSearch.trim().toLowerCase();
   const visibleProviders = providerOptions.filter(name =>
     (!configuredOnly || configured(name)) &&
     (name.toLowerCase().includes(query) || providerDisplayNames[name]?.toLowerCase().includes(query))
   );
+
+  useEffect(() => {
+    if (providerDetails.current) providerDetails.current.scrollTop = 0;
+  }, [selectedProvider]);
+
+  useEffect(() => {
+    if (providerList.current) providerList.current.scrollTop = 0;
+  }, [query, configuredOnly]);
+
   return (
     <div className="vsProviderSettingsGrid">
-      {/* Middle Column: Providers List */}
-      <div className="vsProviderListColumn">
-        <h2 className="vsProviderDirectoryTitle">{t("服务商", "Providers")}</h2>
-        <div className="vsProviderFilters">
-          <button type="button" aria-pressed={!configuredOnly} onClick={() => setConfiguredOnly(false)}>{t("全部", "All")} · {providerOptions.length}</button>
-          <button type="button" aria-pressed={configuredOnly} onClick={() => setConfiguredOnly(true)}>{t("已配置", "Configured")} · {providerOptions.filter(configured).length}</button>
-        </div>
-        <div className="vsProviderSearchBar">
-          <Search size={15} className="vsProviderSearchIcon" aria-hidden="true" />
-          <input
-            type="text"
-            value={providerSearch}
-            onChange={(e) => setProviderSearch(e.target.value)}
-            placeholder={t("搜索供应商...", "Search providers...")}
-          />
+      <section className="vsProviderListColumn" aria-labelledby="vs-provider-directory-title">
+        <div className="vsProviderDirectoryTools">
+          <h2 id="vs-provider-directory-title" className="vsProviderDirectoryTitle">{t("服务商", "Providers")}</h2>
+          <div className="vsProviderSearchBar">
+            <Search size={16} className="vsProviderSearchIcon" aria-hidden="true" />
+            <input
+              ref={searchInput}
+              type="text"
+              value={providerSearch}
+              onChange={(e) => setProviderSearch(e.target.value)}
+              aria-label={t("搜索供应商", "Search providers")}
+              placeholder={t("搜索供应商...", "Search providers...")}
+            />
+            {providerSearch && (
+              <button type="button" aria-label={t("清除搜索", "Clear search")} onClick={() => {
+                setProviderSearch("");
+                searchInput.current?.focus();
+              }}>
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <div className="vsProviderFilters" role="group" aria-label={t("筛选服务商", "Filter providers")}>
+            <button type="button" aria-pressed={!configuredOnly} onClick={() => setConfiguredOnly(false)}>
+              {t("全部", "All")} <span>{providerOptions.length}</span>
+            </button>
+            <button type="button" aria-pressed={configuredOnly} onClick={() => setConfiguredOnly(true)}>
+              {t("已配置", "Configured")} <span>{configuredCount}</span>
+            </button>
+          </div>
         </div>
         <button
           type="button"
@@ -177,62 +169,62 @@ export default function ProviderSettingsSection({ settings }: Props) {
             setShowAddCustomModal(true);
           }}
         >
-          <Plus size={15} aria-hidden="true" /> {t("添加自定义服务商", "Add Custom Provider")}
+          <Plus size={16} aria-hidden="true" /> {t("添加自定义服务商", "Add Custom Provider")}
         </button>
-        <div className="vsProviderSelectGroup">
-          {!visibleProviders.length && <p>{t("没有匹配的服务商", "No matching providers")}</p>}
+        <div className="vsProviderSelectGroup custom-scrollbar" ref={providerList}>
+          {!visibleProviders.length && <p className="vsProviderEmpty" role="status">
+            {query ? t("没有匹配的服务商", "No matching providers") : t("暂无服务商", "No providers to show")}
+          </p>}
           {visibleProviders.map((providerName) => {
-            const isActive = settings.settingsProvider === providerName;
-            const hasKey = configured(providerName);
+            const isActive = selectedProvider === providerName;
+            const isConfigured = configured(providerName);
+            const name = providerDisplayNames[providerName] || providerName;
             return (
               <button
                 key={providerName}
                 aria-pressed={isActive}
                 type="button"
-                className={`vsProviderSelectorItem ${isActive ? "active" : ""}`}
+                className="vsProviderSelectorItem"
                 onClick={() => settings.onProviderChange(providerName)}
               >
-                <div className="vsProviderSelectorMeta">
-                  <span className="vsProviderItemIcon">{renderProviderIcon(providerName)}</span>
-                  <span className="vsProviderNameText">{providerDisplayNames[providerName] || providerName}</span>
-                </div>
-                <span className={`vsActiveDot ${hasKey ? "" : "inactive"}`} title={hasKey ? t("已配置", "Configured") : t("未配置", "Not configured")} />
+                <ProviderMark provider={providerName} name={name} />
+                <span className="vsProviderNameText">{name}</span>
+                <span className={`vsProviderRowStatus${isConfigured ? " configured" : ""}`} role="img" aria-label={isConfigured ? t("已配置", "Configured") : t("未配置", "Not configured")} title={isConfigured ? t("已配置", "Configured") : t("未配置", "Not configured")}>
+                  {isConfigured && <Check size={11} strokeWidth={2.4} aria-hidden="true" />}
+                </span>
               </button>
             );
           })}
         </div>
-      </div>
+      </section>
 
-      {/* Right Column: Config Details */}
-      <div className="vsProviderConfigColumn">
-        <div className="vsProviderConfigHeader">
-          <div className="vsProviderConfigTitleRow" style={{ width: "100%", display: "flex", alignItems: "center" }}>
-            <h2 className="vsProviderConfigTitle" style={{ display: "flex", alignItems: "center" }}>
-              {providerDisplayNames[settings.settingsProvider] || settings.settingsProvider}
-              {settings.isCustomProvider && (
-                <span style={{ fontSize: "11px", marginLeft: "8px", padding: "2px 6px", borderRadius: "4px", backgroundColor: "#e0e7ff", color: "#3730a3", fontWeight: "normal" }}>CUSTOM</span>
-              )}
-            </h2>
-            {configured(settings.settingsProvider)
-              ? <span className="vsProviderStatusBadge active">{t("已配置", "Configured")}</span>
-              : <span className="vsProviderStatusBadge">{t("待配置", "Setup needed")}</span>}
-            {settings.isCustomProvider && (
-              <button
-                type="button"
-                className="vsDeleteProviderBtn"
-                onClick={() => {
-                  if (confirm(t(`确定要删除服务商 "${providerDisplayNames[settings.settingsProvider]}" 吗？`, `Are you sure you want to delete provider "${providerDisplayNames[settings.settingsProvider]}"?`))) {
-                    void settings.onDeleteCustomProvider(settings.settingsProvider);
-                  }
-                }}
-              >
-                🗑️ {t("删除服务商", "Delete Provider")}
-              </button>
-            )}
+      <section className="vsProviderConfigColumn custom-scrollbar" aria-labelledby="vs-provider-config-title" ref={providerDetails}>
+        <header className="vsProviderConfigHeader">
+          <ProviderMark provider={selectedProvider} name={selectedName} />
+          <div className="vsProviderIdentity">
+            <h2 id="vs-provider-config-title" className="vsProviderConfigTitle">{selectedName}</h2>
+            <span className={`vsProviderStatusBadge${selectedConfigured ? " active" : ""}`}>
+              {selectedConfigured && <Check size={13} aria-hidden="true" />}
+              {selectedConfigured ? t("已配置", "Configured") : t("待配置", "Setup needed")}
+            </span>
           </div>
-        </div>
+          {settings.isCustomProvider && (
+            <button
+              type="button"
+              className="vsDeleteProviderBtn"
+              onClick={() => {
+                if (confirm(t(`确定要删除服务商 "${selectedName}" 吗？`, `Are you sure you want to delete provider "${selectedName}"?`))) {
+                  void settings.onDeleteCustomProvider(selectedProvider);
+                }
+              }}
+            >
+              <Trash2 size={14} aria-hidden="true" /> {t("删除服务商", "Delete Provider")}
+            </button>
+          )}
+        </header>
 
         <div className="vsProviderConfigFields">
+          <h3 className="vsProviderCardTitle"><KeyRound size={17} aria-hidden="true" />{t("连接设置", "Connection settings")}</h3>
           <label className="vsField">
             <span className="vsFieldLabel">
               {settings.settingsProvider === "Doubao"
@@ -276,7 +268,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 className="vsInput"
                 value={settings.settingsApiUrl || ""}
                 onChange={(e) => settings.onApiUrlChange(e.target.value)}
-                placeholder={t("留空则使用默认地址", "Leave empty to use the default URL")}
+                placeholder="https://"
               />
               <span className="vsFieldHint">{t("留空则使用该供应商的默认 API 端点", "Leave empty to use the default API endpoint for this provider")}</span>
             </label>
@@ -298,24 +290,31 @@ export default function ProviderSettingsSection({ settings }: Props) {
 
           {settings.settingsProvider === "AgentPlatform" && (
             <>
-            <label className="vsField">
-              <span className="vsFieldLabel">{t("Google Cloud 项目 ID", "Google Cloud project ID")}</span>
-              <input className="vsInput" value={settings.settingsCloudProjectId} onChange={(e) => settings.onCloudProjectIdChange(e.target.value)} placeholder="my-cloud-project" />
-            </label>
-            <label className="vsField">
-              <span className="vsFieldLabel">{t("Google Cloud 区域", "Google Cloud region")}</span>
-              <input className="vsInput" value={settings.settingsCloudLocation} onChange={(e) => settings.onCloudLocationChange(e.target.value)} placeholder="us-central1" />
-            </label>
-            <label className="vsField">
-              <span className="vsFieldLabel">{t("服务账号 JSON 文件路径（可选）", "Service-account JSON file path (optional)")}</span>
-              <input className="vsInput" value={settings.settingsCloudSaFile} onChange={(e) => settings.onCloudSaFileChange(e.target.value)} placeholder="C:\\credentials\\service-account.json" />
-              <span className="vsFieldHint">{t("填写后端电脑上的文件路径；留空使用 gcloud auth application-default login 登录的 ADC。", "Use a file path on the backend computer, or leave empty to use ADC from gcloud auth application-default login.")}</span>
-            </label>
-            <div className="vsProviderInfoCallout">
-              <div><strong>{t("Google Agent Platform（企业云专区）", "Google Agent Platform (Enterprise Cloud)")}</strong></div>
-              <div style={{ marginTop: 4 }}>{t("Live Avatar 需要 Google Cloud OAuth/ADC 或服务账号，不能使用 AI Studio API Key。区域选择 us-central1、us 或 eu，并启用项目 API、结算和 IAM 权限。选择 gemini-3.8-live 后，在聊天输入框开启 Live Avatar。自定义人脸需向 Google Cloud 客户团队申请。", "Live Avatar requires Cloud OAuth/ADC or a service account. An AI Studio API key cannot enable it. Use us-central1, us, or eu with project API, billing, and IAM access enabled. Select gemini-3.8-live, then enable Live Avatar in Chat. Request custom-face access from your Google Cloud account team.")}</div>
-              <a href="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api/configure-live-avatars" target="_blank" rel="noreferrer">{t("Google 官方接入说明", "Google setup documentation")}</a>
-            </div>
+              <div className="vsProviderFieldPair">
+                <label className="vsField">
+                  <span className="vsFieldLabel">{t("Google Cloud 项目 ID", "Google Cloud project ID")}</span>
+                  <input className="vsInput" value={settings.settingsCloudProjectId} onChange={(e) => settings.onCloudProjectIdChange(e.target.value)} placeholder="my-cloud-project" />
+                </label>
+                <label className="vsField">
+                  <span className="vsFieldLabel">{t("Google Cloud 区域", "Google Cloud region")}</span>
+                  <input className="vsInput" value={settings.settingsCloudLocation} onChange={(e) => settings.onCloudLocationChange(e.target.value)} placeholder="us-central1" />
+                </label>
+              </div>
+              <label className="vsField">
+                <span className="vsFieldLabel">{t("服务账号 JSON 文件路径（可选）", "Service-account JSON file path (optional)")}</span>
+                <input className="vsInput" value={settings.settingsCloudSaFile} onChange={(e) => settings.onCloudSaFileChange(e.target.value)} placeholder={"C:\\credentials\\service-account.json"} />
+                <span className="vsFieldHint">{t("填写后端电脑上的文件路径；留空使用 gcloud auth application-default login 登录的 ADC。", "Use a file path on the backend computer, or leave empty to use ADC from gcloud auth application-default login.")}</span>
+              </label>
+              <aside className="vsProviderInfoCallout vsProviderSetupGuide">
+                <Info size={17} aria-hidden="true" />
+                <div>
+                  <strong>{t("设置 Live Avatar", "Set up Live Avatar")}</strong>
+                  <p>{t("使用 Google Cloud OAuth/ADC 或服务账号。区域选择 us-central1、us 或 eu，并启用项目 API、结算和 IAM 权限。选择 gemini-3.8-live 后，在聊天中开启 Live Avatar。自定义人脸需向 Google Cloud 客户团队申请。", "Use Google Cloud OAuth/ADC or a service account. Use us-central1, us, or eu with project API, billing, and IAM access enabled. Select gemini-3.8-live, then enable Live Avatar in Chat. Request custom-face access from your Google Cloud account team.")}</p>
+                  <a href="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api/configure-live-avatars" target="_blank" rel="noreferrer">
+                    {t("Google 官方接入说明", "Google setup documentation")} <ArrowUpRight size={14} aria-hidden="true" />
+                  </a>
+                </div>
+              </aside>
             </>
           )}
 
@@ -521,15 +520,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </div>
           </div>
         ) : (
-          <div className="vsProviderModelSection" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div className="vsProviderModelSection">
             {/* LLM / Chat Models Section */}
             <div className="vsModelCardSection">
               <div className="vsModelManagerHeader" style={{ flexWrap: "wrap", gap: "8px", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
                     {t(
-                      `💬 对话 / 大语言模型 (已启用 ${(settings.settingsEnabledModels || []).length} / 共 ${availableModels.length})`,
-                      `💬 LLM Models (Enabled ${(settings.settingsEnabledModels || []).length} / Total ${availableModels.length})`
+                      `对话模型（已启用 ${(settings.settingsEnabledModels || []).length} / ${availableModels.length}）`,
+                      `Chat models (${(settings.settingsEnabledModels || []).length} of ${availableModels.length} enabled)`
                     )}
                   </h3>
                   {availableModels.length > 0 && (
@@ -588,6 +587,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
                       <input
                         type="checkbox"
                         className="vsSwitch vsSwitchSmall"
+                        aria-label={modelId}
                         checked={(settings.settingsEnabledModels || []).includes(modelId)}
                         onChange={() => settings.onToggleModelEnabled(modelId)}
                       />
@@ -624,13 +624,13 @@ export default function ProviderSettingsSection({ settings }: Props) {
 
             {/* TTS Models Management (when supported or present) */}
             {isTtsSupported && (
-              <div className="vsModelCardSection" style={{ marginTop: "4px", paddingTop: "12px", borderTop: "1px dashed var(--line)" }}>
+              <div className="vsModelCardSection">
                 <div className="vsModelManagerHeader" style={{ flexWrap: "wrap", gap: "8px", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
                       {t(
-                        `🔊 TTS 语音合成模型 (已启用 ${(settings.settingsTtsEnabledModels || []).length} / 共 ${ttsAvailableModels.length})`,
-                        `🔊 TTS Models (Enabled ${(settings.settingsTtsEnabledModels || []).length} / Total ${ttsAvailableModels.length})`
+                        `语音合成模型（已启用 ${(settings.settingsTtsEnabledModels || []).length} / ${ttsAvailableModels.length}）`,
+                        `Speech models (${(settings.settingsTtsEnabledModels || []).length} of ${ttsAvailableModels.length} enabled)`
                       )}
                     </h3>
                     {ttsAvailableModels.length > 0 && (
@@ -680,6 +680,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
                         <input
                           type="checkbox"
                           className="vsSwitch vsSwitchSmall"
+                          aria-label={modelId}
                           checked={(settings.settingsTtsEnabledModels || []).includes(modelId)}
                           onChange={() => settings.onToggleTtsModelEnabled?.(modelId)}
                         />
@@ -716,7 +717,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
             )}
           </div>
         )}
-      </div>
+      </section>
 
       {/* Modal: Add Custom Provider */}
       {showAddCustomModal &&

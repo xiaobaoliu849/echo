@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Globe, Cpu, Brain, Mic, Monitor, AudioLines, ArrowLeft, Flame } from "lucide-react";
+import { Globe, Cpu, Brain, Mic, Monitor, AudioLines, ArrowLeft, Flame, Check, Save } from "lucide-react";
 import VoiceTrajectoryHeatmap from "../components/VoiceTrajectoryHeatmap";
 import ErrorNotice from "../components/ErrorNotice";
 import type { UseSettingsResult } from "../hooks/useSettings";
@@ -21,6 +21,31 @@ type Props = {
 
 type SettingCategory = "general" | "trajectory" | "provider" | "transcription" | "memory" | "desktop" | "local-voice";
 
+const settingsNavigation = [
+  {
+    label: ["基础设置", "Basic Settings"],
+    items: [
+      { id: "general", label: ["通用", "General"], icon: Globe },
+      { id: "trajectory", label: ["语音足迹", "Voice Trajectory"], icon: Flame },
+      { id: "provider", label: ["提供商", "Providers"], icon: Cpu },
+    ],
+  },
+  {
+    label: ["Agent 能力", "Agent Capabilities"],
+    items: [
+      { id: "memory", label: ["记忆", "Memory"], icon: Brain },
+      { id: "transcription", label: ["转写", "Transcription"], icon: Mic },
+    ],
+  },
+  {
+    label: ["系统与环境", "System & Runtime"],
+    items: [
+      { id: "local-voice", label: ["本地语音", "Local Voice"], icon: AudioLines },
+      { id: "desktop", label: ["系统", "System"], icon: Monitor },
+    ],
+  },
+] as const;
+
 export default function SettingsPage({ settings, errorRuntimeContext, onClose, onSignIn, initialCategory = "provider" }: Props) {
   const { t } = useI18n();
   const [activeCategory, setActiveCategory] = useState<SettingCategory>(initialCategory);
@@ -30,10 +55,9 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
 
   return (
     <div className="vsSettingsLayout">
-      {/* ── Left Navigation ── */}
-      <nav className="vsSettingsNav">
-        {onClose && (
-          <div className="vsSettingsNavHeader">
+      <nav className="vsSettingsNav" aria-label={t("设置", "Settings")}>
+        <div className="vsSettingsNavHeader">
+          {onClose && (
             <button
               type="button"
               className="vsSettingsBackBtn"
@@ -41,113 +65,37 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
               title={t("返回工作区", "Back to Workspace")}
               aria-label={t("返回工作区", "Back to Workspace")}
             >
-              <ArrowLeft size={16} />
+              <ArrowLeft size={16} aria-hidden="true" />
               <span>{t("返回工作区", "Back to Workspace")}</span>
             </button>
+          )}
+          <p className="vsSettingsNavTitle">{t("设置", "Settings")}</p>
+        </div>
+        {settingsNavigation.map(({ label, items }) => (
+          <div className="vsSettingsNavSection" key={label[1]}>
+            <div className="vsSettingsNavSectionTitle">{t(label[0], label[1])}</div>
+            <ul className="vsSettingsNavList">
+              {items.map(({ id, label: itemLabel, icon: Icon }) => {
+                const title = t(itemLabel[0], itemLabel[1]);
+                return (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      className="vsSettingsNavItem"
+                      aria-current={activeCategory === id ? "page" : undefined}
+                      title={title}
+                      aria-label={title}
+                      onClick={() => setActiveCategory(id)}
+                    >
+                      <Icon size={17} aria-hidden="true" />
+                      <span>{title}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-        )}
-
-        <div className="vsSettingsNavSection">
-          <div className="vsSettingsNavSectionTitle">{t("基础设置", "Basic Settings")}</div>
-          <ul className="vsSettingsNavList">
-            <li>
-              <button
-                type="button"
-                className={`vsSettingsNavItem ${activeCategory === "general" ? "active" : ""}`}
-                onClick={() => setActiveCategory("general")}
-              >
-                <div className="vsSettingsNavIcon">
-                  <Globe size={16} />
-                </div>
-                <div className="vsSettingsNavItemTitle">{t("通用", "General")}</div>
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className={`vsSettingsNavItem ${activeCategory === "trajectory" ? "active" : ""}`}
-                onClick={() => setActiveCategory("trajectory")}
-              >
-                <div className="vsSettingsNavIcon">
-                  <Flame size={16} style={{ color: "#ef4444" }} />
-                </div>
-                <div className="vsSettingsNavItemTitle">{t("语音足迹", "Voice Trajectory")}</div>
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className={`vsSettingsNavItem ${activeCategory === "provider" ? "active" : ""}`}
-                onClick={() => setActiveCategory("provider")}
-              >
-                <div className="vsSettingsNavIcon">
-                  <Cpu size={16} />
-                </div>
-                <div className="vsSettingsNavItemTitle">{t("提供商", "Providers")}</div>
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <div className="vsSettingsNavSection">
-          <div className="vsSettingsNavSectionTitle">{t("Agent 能力", "Agent Capabilities")}</div>
-          <ul className="vsSettingsNavList">
-            <li>
-              <button
-                type="button"
-                className={`vsSettingsNavItem ${activeCategory === "memory" ? "active" : ""}`}
-                onClick={() => setActiveCategory("memory")}
-              >
-                <div className="vsSettingsNavIcon">
-                  <Brain size={16} />
-                </div>
-                <div className="vsSettingsNavItemTitle">{t("记忆", "Memory")}</div>
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className={`vsSettingsNavItem ${activeCategory === "transcription" ? "active" : ""}`}
-                onClick={() => setActiveCategory("transcription")}
-              >
-                <div className="vsSettingsNavIcon">
-                  <Mic size={16} />
-                </div>
-                <div className="vsSettingsNavItemTitle">{t("转写", "Transcription")}</div>
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <div className="vsSettingsNavSection">
-          <div className="vsSettingsNavSectionTitle">{t("系统与环境", "System & Runtime")}</div>
-          <ul className="vsSettingsNavList">
-            <li>
-              <button
-                type="button"
-                className={`vsSettingsNavItem ${activeCategory === "local-voice" ? "active" : ""}`}
-                onClick={() => setActiveCategory("local-voice")}
-              >
-                <div className="vsSettingsNavIcon">
-                  <AudioLines size={16} />
-                </div>
-                <div className="vsSettingsNavItemTitle">{t("本地语音", "Local Voice")}</div>
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className={`vsSettingsNavItem ${activeCategory === "desktop" ? "active" : ""}`}
-                onClick={() => setActiveCategory("desktop")}
-              >
-                <div className="vsSettingsNavIcon">
-                  <Monitor size={16} />
-                </div>
-                <div className="vsSettingsNavItemTitle">{t("系统", "System")}</div>
-              </button>
-            </li>
-          </ul>
-        </div>
+        ))}
       </nav>
 
       {/* ── Right Content Area ── */}
@@ -176,8 +124,6 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
               default_model: settings.settingsDefaultModel
             }}
           />
-          {settings.settingsInfo ? <div className="vsSettingsNotice ok">{settings.settingsInfo}</div> : null}
-
           {activeCategory === "general" && (
             <div className="vsSettingsCard">
               <div className="vsCardSection">
@@ -236,17 +182,15 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
           </fieldset>
           {activeCategory === "local-voice" && <LocalVoiceSettingsSection />}
 
-          <footer className="vsSettingsFormFooter">
-            <div className="vsSettingsFooterStatus">
+          {(activeCategory !== "trajectory" || settings.settingsSaving || settings.settingsInfo) && <footer className="vsSettingsFormFooter">
+            <div className="vsSettingsFooterStatus" role="status">
               {settings.settingsSaving ? (
                 <span className="status-saving">
-                  <span className="spinner-mini" /> {t("正在保存配置...", "Saving settings...")}
+                  <span className="spinner-mini" aria-hidden="true" /> {t("正在保存配置...", "Saving settings...")}
                 </span>
               ) : settings.settingsInfo ? (
-                <span className="status-saved ok">✓ {settings.settingsInfo}</span>
-              ) : (
-                <span className="status-ready">{settings.settingsData ? t("参数配置就绪", "Settings ready") : t("等待加载设置", "Awaiting settings")}</span>
-              )}
+                <span className="status-saved"><Check size={15} aria-hidden="true" />{settings.settingsInfo}</span>
+              ) : null}
             </div>
             {activeCategory !== "trajectory" && (
               <div className="vsSettingsFooterActions">
@@ -255,11 +199,12 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
                   className="vsBtnPrimary vsFooterSaveBtn"
                   disabled={!settings.settingsData || settings.settingsSaving || settings.settingsBusy}
                 >
+                  <Save size={16} aria-hidden="true" />
                   {settings.settingsSaving ? t("保存中...", "Saving...") : t("保存", "Save")}
                 </button>
               </div>
             )}
-          </footer>
+          </footer>}
         </form>
       </section>
     </div>
