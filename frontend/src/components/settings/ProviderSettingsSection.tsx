@@ -1,6 +1,20 @@
 import { useState, useMemo, useEffect, ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Terminal, Brain, X, Search, Plus } from "lucide-react";
+import {
+  Terminal,
+  Brain,
+  X,
+  Search,
+  Plus,
+  KeyRound,
+  Sparkles,
+  MessageSquare,
+  Volume2,
+  RefreshCw,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import type { UseSettingsResult } from "../../hooks/useSettings";
 import { PROVIDER_API_KEY_FIELD } from "../../hooks/useSettings";
 import SecretInput from "./SecretInput";
@@ -8,6 +22,7 @@ import { useI18n } from "../../i18n";
 
 type Props = {
   settings: UseSettingsResult;
+  footer?: ReactNode;
 };
 
 const getProviderDisplayNames = (t: (zh: string, en: string) => string): Record<string, string> => ({
@@ -87,7 +102,7 @@ const renderProviderIcon = (providerName: string): ReactNode => {
   return <LocalProviderIcon provider={key} size={18} />;
 };
 
-export default function ProviderSettingsSection({ settings }: Props) {
+export default function ProviderSettingsSection({ settings, footer }: Props) {
   const { t } = useI18n();
   const [modelSearch, setModelSearch] = useState("");
   const [showRawModels, setShowRawModels] = useState(false);
@@ -221,39 +236,48 @@ export default function ProviderSettingsSection({ settings }: Props) {
         </div>
       </div>
 
-      {/* Right Column: Config Details */}
-      <div className="vsProviderConfigColumn custom-scrollbar">
-        <div className="vsProviderConfigHeader">
-          <div className="vsProviderConfigTitleRow">
-            <span className="vsProviderConfigHeroIcon" aria-hidden="true">
-              {renderProviderIcon(settings.settingsProvider)}
-            </span>
-            <h2 className="vsProviderConfigTitle">
-              {providerDisplayNames[settings.settingsProvider] || settings.settingsProvider}
+      {/* Right Column: Config Details + Scoped Footer */}
+      <div className="vsProviderConfigPane">
+        <div className="vsProviderConfigColumn custom-scrollbar">
+        <div className="vsProviderConfigInner">
+          <div className="vsProviderConfigHeader">
+            <div className="vsProviderConfigTitleRow">
+              <span className={`vsProviderConfigHeroIcon ${configured(settings.settingsProvider) ? "configured" : ""}`} aria-hidden="true">
+                {renderProviderIcon(settings.settingsProvider)}
+              </span>
+              <div className="vsProviderConfigTitleBlock">
+                <h2 className="vsProviderConfigTitle">
+                  {providerDisplayNames[settings.settingsProvider] || settings.settingsProvider}
+                  {settings.isCustomProvider && (
+                    <span className="vsProviderCustomTag">CUSTOM</span>
+                  )}
+                </h2>
+              </div>
+              {configured(settings.settingsProvider)
+                ? <span className="vsProviderStatusBadge active"><span className="vsStatusDotInline" />{t("已配置", "Configured")}</span>
+                : <span className="vsProviderStatusBadge"><span className="vsStatusDotInline idle" />{t("待配置", "Setup needed")}</span>}
               {settings.isCustomProvider && (
-                <span className="vsProviderCustomTag">CUSTOM</span>
+                <button
+                  type="button"
+                  className="vsDeleteProviderBtn"
+                  onClick={() => {
+                    if (confirm(t(`确定要删除服务商 "${providerDisplayNames[settings.settingsProvider]}" 吗？`, `Are you sure you want to delete provider "${providerDisplayNames[settings.settingsProvider]}"?`))) {
+                      void settings.onDeleteCustomProvider(settings.settingsProvider);
+                    }
+                  }}
+                >
+                  <Trash2 size={13} aria-hidden="true" />
+                  <span>{t("删除服务商", "Delete Provider")}</span>
+                </button>
               )}
-            </h2>
-            {configured(settings.settingsProvider)
-              ? <span className="vsProviderStatusBadge active">{t("已配置", "Configured")}</span>
-              : <span className="vsProviderStatusBadge">{t("待配置", "Setup needed")}</span>}
-            {settings.isCustomProvider && (
-              <button
-                type="button"
-                className="vsDeleteProviderBtn"
-                onClick={() => {
-                  if (confirm(t(`确定要删除服务商 "${providerDisplayNames[settings.settingsProvider]}" 吗？`, `Are you sure you want to delete provider "${providerDisplayNames[settings.settingsProvider]}"?`))) {
-                    void settings.onDeleteCustomProvider(settings.settingsProvider);
-                  }
-                }}
-              >
-                🗑️ {t("删除服务商", "Delete Provider")}
-              </button>
-            )}
+            </div>
           </div>
-        </div>
 
-        <div className="vsProviderConfigFields">
+          <div className="vsProviderConfigFields">
+            <div className="vsProviderSectionEyebrow">
+              <KeyRound size={13} aria-hidden="true" />
+              <span>{t("凭证与连接", "Credentials & Connection")}</span>
+            </div>
           <label className="vsField">
             <span className="vsFieldLabel">
               {settings.settingsProvider === "Doubao"
@@ -471,6 +495,10 @@ export default function ProviderSettingsSection({ settings }: Props) {
 
         {((settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && settings.settingsProvider !== "Tavus" && settings.settingsProvider !== "Soniox") || isTtsSupported) && (
           <div className="vsProviderConfigFields vsProviderDefaultModelsCard">
+            <div className="vsProviderSectionEyebrow">
+              <Sparkles size={13} aria-hidden="true" />
+              <span>{t("默认模型", "Default Models")}</span>
+            </div>
             <div className="vsProviderDefaultModelsGrid">
               {settings.settingsProvider !== "Deepgram" && settings.settingsProvider !== "OpenAI" && settings.settingsProvider !== "Tavus" && settings.settingsProvider !== "Soniox" && (
                 <label className="vsField">
@@ -549,23 +577,40 @@ export default function ProviderSettingsSection({ settings }: Props) {
             </div>
           </div>
         ) : (
-          <div className="vsProviderModelSection" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div className="vsProviderModelSection">
             {/* LLM / Chat Models Section */}
             <div className="vsModelCardSection">
-              <div className="vsModelManagerHeader" style={{ flexWrap: "wrap", gap: "8px", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
-                    {t(
-                      `💬 对话 / 大语言模型 (已启用 ${(settings.settingsEnabledModels || []).length} / 共 ${availableModels.length})`,
-                      `💬 LLM Models (Enabled ${(settings.settingsEnabledModels || []).length} / Total ${availableModels.length})`
-                    )}
+              <div className="vsModelManagerHeader">
+                <div className="vsModelManagerTitleGroup">
+                  <span className="vsModelSectionIcon" aria-hidden="true">
+                    <MessageSquare size={15} />
+                  </span>
+                  <h3 className="vsCardSubTitle">
+                    {t("对话 / 大语言模型", "LLM Models")}
                   </h3>
+                  <span className="vsModelCountBadge">
+                    {t(
+                      `已启用 ${(settings.settingsEnabledModels || []).length} / ${availableModels.length}`,
+                      `${(settings.settingsEnabledModels || []).length} / ${availableModels.length} enabled`
+                    )}
+                  </span>
+                </div>
+                <div className="vsModelManagerToolbar">
+                  <div className="vsModelSearchWrap">
+                    <Search size={13} className="vsModelSearchIcon" aria-hidden="true" />
+                    <input
+                      type="text"
+                      className="vsModelFilterInput"
+                      value={modelSearch}
+                      onChange={(e) => setModelSearch(e.target.value)}
+                      placeholder={t("筛选对话模型...", "Filter LLM models...")}
+                    />
+                  </div>
                   {availableModels.length > 0 && (
-                    <div style={{ display: "flex", gap: "4px" }}>
+                    <div className="vsModelQuickActions">
                       <button
                         type="button"
-                        className="vsBtnSecondary vsBtnSmall"
-                        style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                        className="vsModelActionBtn"
                         onClick={() => settings.onEnableAllModels()}
                         title={t("启用当前所有可用对话模型", "Enable all available LLM models")}
                       >
@@ -573,8 +618,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
                       </button>
                       <button
                         type="button"
-                        className="vsBtnSecondary vsBtnSmall"
-                        style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                        className="vsModelActionBtn"
                         onClick={() => settings.onDisableAllModels()}
                         title={t("取消启用所有对话模型", "Disable all LLM models")}
                       >
@@ -582,45 +626,41 @@ export default function ProviderSettingsSection({ settings }: Props) {
                       </button>
                     </div>
                   )}
-                </div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <input
-                    type="text"
-                    className="vsInput vsInputSmall"
-                    style={{ width: "150px" }}
-                    value={modelSearch}
-                    onChange={(e) => setModelSearch(e.target.value)}
-                    placeholder={t("筛选对话模型...", "Filter LLM models...")}
-                  />
                   <button
                     type="button"
-                    className="vsBtnSecondary vsBtnSmall"
-                    style={{ whiteSpace: "nowrap", flexShrink: 0, padding: "0 12px", height: "32px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                    className="vsModelActionBtn vsModelFetchBtn"
                     onClick={() => void settings.onFetchModels()}
                     disabled={settings.settingsFetchingModels || settings.settingsBusy}
                   >
-                    {settings.settingsFetchingModels ? t("拉取中...", "Fetching...") : t("🔄 自动获取", "🔄 Auto Fetch")}
+                    <RefreshCw size={13} className={settings.settingsFetchingModels ? "spinner" : ""} aria-hidden="true" />
+                    <span>{settings.settingsFetchingModels ? t("拉取中...", "Fetching...") : t("自动获取", "Auto Fetch")}</span>
                   </button>
                 </div>
               </div>
 
-              <div className="vsModelListContainer">
+              <div className="vsModelListContainer custom-scrollbar">
                 {availableModels
                   .filter(m => !modelSearch.trim() || m.toLowerCase().includes(modelSearch.toLowerCase()))
-                  .map((modelId) => (
-                    <div key={modelId} className="vsModelListItem">
-                      <span className="vsModelListItemName" title={modelId}>{modelId}</span>
-                      {settings.settingsDefaultModel === modelId && (
-                        <span className="vsModelListItemTag default">{t("默认", "Default")}</span>
-                      )}
-                      <input
-                        type="checkbox"
-                        className="vsSwitch vsSwitchSmall"
-                        checked={(settings.settingsEnabledModels || []).includes(modelId)}
-                        onChange={() => settings.onToggleModelEnabled(modelId)}
-                      />
-                    </div>
-                  ))}
+                  .map((modelId) => {
+                    const isEnabled = (settings.settingsEnabledModels || []).includes(modelId);
+                    const isDefault = settings.settingsDefaultModel === modelId;
+                    return (
+                      <label key={modelId} className={`vsModelListItem ${isEnabled ? "enabled" : ""} ${isDefault ? "is-default" : ""}`}>
+                        <span className="vsModelListItemMeta">
+                          <span className="vsModelListItemName" title={modelId}>{modelId}</span>
+                          {isDefault && (
+                            <span className="vsModelListItemTag default">{t("默认", "Default")}</span>
+                          )}
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="vsSwitch vsSwitchCompact"
+                          checked={isEnabled}
+                          onChange={() => settings.onToggleModelEnabled(modelId)}
+                        />
+                      </label>
+                    );
+                  })}
                 {availableModels.length === 0 && (
                   <div className="vsModelListEmpty">
                     {t("暂无对话模型。点击“自动获取”或手动输入添加。", "No LLM models configured. Click Auto Fetch or enter manually.")}
@@ -633,12 +673,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 className="vsRawModelsToggle"
                 onClick={() => setShowRawModels(v => !v)}
               >
-                {showRawModels
-                  ? t("▾ 收起手动编辑", "▾ Hide raw editor")
-                  : t("▸ 手动编辑可用模型（高级）", "▸ Edit raw models (advanced)")}
+                {showRawModels ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                <span>
+                  {showRawModels
+                    ? t("收起手动编辑", "Hide raw editor")
+                    : t("手动编辑可用模型（高级）", "Edit raw models (advanced)")}
+                </span>
               </button>
               {showRawModels && (
-                <div style={{ marginTop: 8 }}>
+                <div className="vsRawModelsEditorWrap">
                   <textarea
                     className="vsTextarea"
                     rows={4}
@@ -652,21 +695,38 @@ export default function ProviderSettingsSection({ settings }: Props) {
 
             {/* TTS Models Management (when supported or present) */}
             {isTtsSupported && (
-              <div className="vsModelCardSection" style={{ marginTop: "4px", paddingTop: "12px", borderTop: "1px dashed var(--line)" }}>
-                <div className="vsModelManagerHeader" style={{ flexWrap: "wrap", gap: "8px", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <h3 className="vsCardSubTitle" style={{ margin: 0 }}>
-                      {t(
-                        `🔊 TTS 语音合成模型 (已启用 ${(settings.settingsTtsEnabledModels || []).length} / 共 ${ttsAvailableModels.length})`,
-                        `🔊 TTS Models (Enabled ${(settings.settingsTtsEnabledModels || []).length} / Total ${ttsAvailableModels.length})`
-                      )}
+              <div className="vsModelCardSection vsModelCardSectionDivider">
+                <div className="vsModelManagerHeader">
+                  <div className="vsModelManagerTitleGroup">
+                    <span className="vsModelSectionIcon" aria-hidden="true">
+                      <Volume2 size={15} />
+                    </span>
+                    <h3 className="vsCardSubTitle">
+                      {t("TTS 语音合成模型", "TTS Models")}
                     </h3>
+                    <span className="vsModelCountBadge">
+                      {t(
+                        `已启用 ${(settings.settingsTtsEnabledModels || []).length} / ${ttsAvailableModels.length}`,
+                        `${(settings.settingsTtsEnabledModels || []).length} / ${ttsAvailableModels.length} enabled`
+                      )}
+                    </span>
+                  </div>
+                  <div className="vsModelManagerToolbar">
+                    <div className="vsModelSearchWrap">
+                      <Search size={13} className="vsModelSearchIcon" aria-hidden="true" />
+                      <input
+                        type="text"
+                        className="vsModelFilterInput"
+                        value={ttsModelSearch}
+                        onChange={(e) => setTtsModelSearch(e.target.value)}
+                        placeholder={t("筛选 TTS 模型...", "Filter TTS models...")}
+                      />
+                    </div>
                     {ttsAvailableModels.length > 0 && (
-                      <div style={{ display: "flex", gap: "4px" }}>
+                      <div className="vsModelQuickActions">
                         <button
                           type="button"
-                          className="vsBtnSecondary vsBtnSmall"
-                          style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                          className="vsModelActionBtn"
                           onClick={() => settings.onEnableAllTtsModels?.()}
                           title={t("启用当前所有可用 TTS 语音模型", "Enable all available TTS models")}
                         >
@@ -674,8 +734,7 @@ export default function ProviderSettingsSection({ settings }: Props) {
                         </button>
                         <button
                           type="button"
-                          className="vsBtnSecondary vsBtnSmall"
-                          style={{ padding: "2px 8px", height: "26px", fontSize: "12px" }}
+                          className="vsModelActionBtn"
                           onClick={() => settings.onDisableAllTtsModels?.()}
                           title={t("取消启用所有 TTS 语音模型", "Disable all TTS models")}
                         >
@@ -684,35 +743,31 @@ export default function ProviderSettingsSection({ settings }: Props) {
                       </div>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    <input
-                      type="text"
-                      className="vsInput vsInputSmall"
-                      style={{ width: "150px" }}
-                      value={ttsModelSearch}
-                      onChange={(e) => setTtsModelSearch(e.target.value)}
-                      placeholder={t("筛选 TTS 模型...", "Filter TTS models...")}
-                    />
-                  </div>
                 </div>
 
-                <div className="vsModelListContainer">
+                <div className="vsModelListContainer custom-scrollbar">
                   {ttsAvailableModels
                     .filter(m => !ttsModelSearch.trim() || m.toLowerCase().includes(ttsModelSearch.toLowerCase()))
-                    .map((modelId) => (
-                      <div key={modelId} className="vsModelListItem">
-                        <span className="vsModelListItemName" title={modelId}>{modelId}</span>
-                        {settings.settingsTtsDefaultModel === modelId && (
-                          <span className="vsModelListItemTag default">{t("默认", "Default")}</span>
-                        )}
-                        <input
-                          type="checkbox"
-                          className="vsSwitch vsSwitchSmall"
-                          checked={(settings.settingsTtsEnabledModels || []).includes(modelId)}
-                          onChange={() => settings.onToggleTtsModelEnabled?.(modelId)}
-                        />
-                      </div>
-                    ))}
+                    .map((modelId) => {
+                      const isEnabled = (settings.settingsTtsEnabledModels || []).includes(modelId);
+                      const isDefault = settings.settingsTtsDefaultModel === modelId;
+                      return (
+                        <label key={modelId} className={`vsModelListItem ${isEnabled ? "enabled" : ""} ${isDefault ? "is-default" : ""}`}>
+                          <span className="vsModelListItemMeta">
+                            <span className="vsModelListItemName" title={modelId}>{modelId}</span>
+                            {isDefault && (
+                              <span className="vsModelListItemTag default">{t("默认", "Default")}</span>
+                            )}
+                          </span>
+                          <input
+                            type="checkbox"
+                            className="vsSwitch vsSwitchCompact"
+                            checked={isEnabled}
+                            onChange={() => settings.onToggleTtsModelEnabled?.(modelId)}
+                          />
+                        </label>
+                      );
+                    })}
                   {ttsAvailableModels.length === 0 && (
                     <div className="vsModelListEmpty">
                       {t("暂无 TTS 语音模型。点击上方“自动获取”或手动输入添加。", "No TTS models configured. Click Auto Fetch or enter manually.")}
@@ -725,12 +780,15 @@ export default function ProviderSettingsSection({ settings }: Props) {
                   className="vsRawModelsToggle"
                   onClick={() => setShowRawTtsModels(v => !v)}
                 >
-                  {showRawTtsModels
-                    ? t("▾ 收起手动编辑", "▾ Hide raw editor")
-                    : t("▸ 手动编辑可用 TTS 模型（高级）", "▸ Edit raw TTS models (advanced)")}
+                  {showRawTtsModels ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                  <span>
+                    {showRawTtsModels
+                      ? t("收起手动编辑", "Hide raw editor")
+                      : t("手动编辑可用 TTS 模型（高级）", "Edit raw TTS models (advanced)")}
+                  </span>
                 </button>
                 {showRawTtsModels && (
-                  <div style={{ marginTop: 8 }}>
+                  <div className="vsRawModelsEditorWrap">
                     <textarea
                       className="vsTextarea"
                       rows={3}
@@ -744,6 +802,9 @@ export default function ProviderSettingsSection({ settings }: Props) {
             )}
           </div>
         )}
+        </div>
+        </div>
+        {footer}
       </div>
 
       {/* Modal: Add Custom Provider */}
