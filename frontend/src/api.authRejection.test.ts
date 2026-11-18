@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AUTH_REJECTED_EVENT, clearAuthRuntime, fetchSettings, loginAuthUser } from "./api";
+import { AUTH_REJECTED_EVENT, clearAuthRuntime, configureAuthRuntime, fetchSettings, loginAuthUser } from "./api";
 
 function jsonResponse(status: number, body: unknown, url: string): Response {
   const response = new Response(JSON.stringify(body), {
@@ -27,7 +27,15 @@ describe("auth rejection notifications", () => {
     vi.restoreAllMocks();
   });
 
-  it("notifies listeners when a data endpoint rejects stored credentials", async () => {
+  it("reads protected settings with the configured admin credential", async () => {
+    configureAuthRuntime({ apiToken: "test-user", adminToken: "test-admin" });
+    const fetch = vi.fn().mockResolvedValue(jsonResponse(200, {}, "/api/settings/"));
+    vi.stubGlobal("fetch", fetch);
+    await fetchSettings();
+    expect(fetch.mock.calls[0][1].headers.get("Authorization")).toBe("Bearer test-admin");
+  });
+
+  it("keeps the account signed in when provider settings require admin access", async () => {
     const settingsUrl = "http://127.0.0.1:8000/api/settings/";
     vi.stubGlobal(
       "fetch",
@@ -38,8 +46,7 @@ describe("auth rejection notifications", () => {
 
     await expect(fetchSettings()).rejects.toThrow();
 
-    expect(handleRejectedMock).toHaveBeenCalledTimes(1);
-    expect(handleRejectedMock.mock.calls[0][0].detail).toEqual({ code: "AUTH_ADMIN_TOKEN_INVALID" });
+    expect(handleRejectedMock).not.toHaveBeenCalled();
   });
 
   it("does not notify for login endpoint failures", async () => {

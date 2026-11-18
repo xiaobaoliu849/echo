@@ -848,3 +848,23 @@ button.vsPasswordToggleBtn:focus-visible {
 .vsProviderKeyText {
   display: none;
 }
+
+.vsProviderDirectoryTitle { margin: 0 4px 8px; font-size: 18px; }
+.vsProviderFilters { display: flex; padding: 3px; gap: 3px; margin-bottom: 12px; border-radius: 10px; background: var(--surface); }
+.vsProviderFilters button { flex: 1; padding: 6px 4px; font: inherit; font-size: 12px; border: 0; box-shadow: none; background: transparent; color: var(--text-secondary); }
+.vsProviderFilters button[aria-pressed="true"] { background: var(--bg-card); color: var(--brand-dark); font-weight: 650; box-shadow: 0 1px 4px #0001; }
+.vsProviderListColumn .vsProviderSelectorItem { box-shadow: none; background: transparent; border: 1px solid transparent; padding: 9px; }
+.vsProviderListColumn .vsProviderSelectorItem:hover { background: var(--surface); }
+.vsProviderListColumn .vsProviderSelectorItem.active { background: var(--brand-soft); border-color: var(--line); box-shadow: inset 3px 0 var(--brand); }
+.vsProviderNameText { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+.vsProviderConfigTitleRow { flex-wrap: wrap; }
+.vsProviderUnavailable { margin: auto; padding: clamp(20px, 5vw, 54px); max-width: 560px; color: var(--text-primary); }
+.vsProviderUnavailable svg { color: var(--brand); }
+.vsProviderUnavailable h2 { margin: 14px 0 8px; }
+.vsProviderUnavailable p { color: var(--text-secondary); }
+.vsProviderUnavailable div { display: flex; gap: 10px; margin-top: 18px; }
+@media (max-width: 760px) {
+  .vsProviderSettingsGrid { flex-direction: column; overflow-y: auto; }
+  .vsProviderListColumn { width: 100%; max-height: 240px; box-sizing: border-box; border-bottom: 1px solid var(--line); }
+  .vsProviderConfigColumn { flex: none; overflow: visible; padding: 18px; }
+}

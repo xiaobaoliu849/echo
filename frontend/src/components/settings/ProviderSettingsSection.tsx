@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Terminal, Brain, X } from "lucide-react";
+import { Terminal, Brain, X, Search, Plus } from "lucide-react";
 import type { UseSettingsResult } from "../../hooks/useSettings";
 import { PROVIDER_API_KEY_FIELD } from "../../hooks/useSettings";
 import SecretInput from "./SecretInput";
@@ -132,12 +132,31 @@ export default function ProviderSettingsSection({ settings }: Props) {
     ["DashScope", "MiniMax", "Xiaomi", "OpenAI", "ElevenLabs", "Cartesia", "Soniox"].includes(settings.settingsProvider) ||
     ttsAvailableModels.length > 0;
 
+  const [configuredOnly, setConfiguredOnly] = useState(false);
+  function configured(name: string) {
+    const keys = settings.settingsData?.api_keys ?? {};
+    return Boolean(keys[PROVIDER_API_KEY_FIELD[name]] ||
+      settings.customProviders?.some(provider => provider.id === name && provider.apiKey) ||
+      (name === "AgentPlatform" && keys.vertex_project_id && keys.vertex_sa_file) ||
+      (name === "Doubao" && keys.doubao_access_token) ||
+      (name === "Xiaomi" && settings.settingsData?.xiaomi?.api_key) || name === "Ollama");
+  }
+  const query = providerSearch.trim().toLowerCase();
+  const visibleProviders = providerOptions.filter(name =>
+    (!configuredOnly || configured(name)) &&
+    (name.toLowerCase().includes(query) || providerDisplayNames[name]?.toLowerCase().includes(query))
+  );
   return (
     <div className="vsProviderSettingsGrid">
       {/* Middle Column: Providers List */}
       <div className="vsProviderListColumn">
+        <h2 className="vsProviderDirectoryTitle">{t("服务商", "Providers")}</h2>
+        <div className="vsProviderFilters">
+          <button type="button" aria-pressed={!configuredOnly} onClick={() => setConfiguredOnly(false)}>{t("全部", "All")} · {providerOptions.length}</button>
+          <button type="button" aria-pressed={configuredOnly} onClick={() => setConfiguredOnly(true)}>{t("已配置", "Configured")} · {providerOptions.filter(configured).length}</button>
+        </div>
         <div className="vsProviderSearchBar">
-          <span className="vsProviderSearchIcon">🔍</span>
+          <Search size={15} className="vsProviderSearchIcon" aria-hidden="true" />
           <input
             type="text"
             value={providerSearch}
@@ -158,31 +177,17 @@ export default function ProviderSettingsSection({ settings }: Props) {
             setShowAddCustomModal(true);
           }}
         >
-          ➕ {t("添加自定义服务商", "Add Custom Provider")}
+          <Plus size={15} aria-hidden="true" /> {t("添加自定义服务商", "Add Custom Provider")}
         </button>
         <div className="vsProviderSelectGroup">
-          {providerOptions
-            .filter(name => {
-              if (!providerSearch.trim()) return true;
-              const q = providerSearch.toLowerCase();
-              return name.toLowerCase().includes(q) || (providerDisplayNames[name] || "").toLowerCase().includes(q);
-            })
-            .map((providerName) => {
+          {!visibleProviders.length && <p>{t("没有匹配的服务商", "No matching providers")}</p>}
+          {visibleProviders.map((providerName) => {
             const isActive = settings.settingsProvider === providerName;
-            const apiKeyField = PROVIDER_API_KEY_FIELD[providerName];
-            const storedApiKeys = (settings.settingsData?.api_keys || {}) as Record<string, any>;
-            const isCustom = settings.customProviders?.some((cp) => cp.id === providerName && Boolean(cp.apiKey));
-            const hasKey = Boolean(
-              isCustom ||
-              (apiKeyField && storedApiKeys[apiKeyField]) ||
-              (providerName === "Doubao" && (storedApiKeys["doubao_access_token"] || storedApiKeys["doubao_api_key"])) ||
-              (providerName === "Xiaomi" && ((settings.settingsData as any)?.xiaomi?.api_key || storedApiKeys["xiaomi_api_key"])) ||
-              (providerName === "Ollama")
-            );
-            
+            const hasKey = configured(providerName);
             return (
               <button
                 key={providerName}
+                aria-pressed={isActive}
                 type="button"
                 className={`vsProviderSelectorItem ${isActive ? "active" : ""}`}
                 onClick={() => settings.onProviderChange(providerName)}
@@ -208,9 +213,9 @@ export default function ProviderSettingsSection({ settings }: Props) {
                 <span style={{ fontSize: "11px", marginLeft: "8px", padding: "2px 6px", borderRadius: "4px", backgroundColor: "#e0e7ff", color: "#3730a3", fontWeight: "normal" }}>CUSTOM</span>
               )}
             </h2>
-            {settings.settingsApiKey
-              ? <span className="vsProviderStatusBadge active">{t("活跃", "Active")}</span>
-              : <span className="vsProviderStatusBadge">{t("未激活", "Inactive")}</span>}
+            {configured(settings.settingsProvider)
+              ? <span className="vsProviderStatusBadge active">{t("已配置", "Configured")}</span>
+              : <span className="vsProviderStatusBadge">{t("待配置", "Setup needed")}</span>}
             {settings.isCustomProvider && (
               <button
                 type="button"

@@ -9,6 +9,15 @@ describe("SettingsPage", () => {
     expect(screen.getByText("系统与运行时状态")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("搜索供应商...")).not.toBeInTheDocument();
   });
+  it("shows an access recovery action instead of empty provider credentials", () => {
+    const settings = createSettingsController({ settingsData: null, settingsError: "AUTH_ADMIN_TOKEN_MISSING" });
+    render(<SettingsPage settings={settings} onSignIn={() => {}} />);
+    expect(screen.getByRole("button", { name: "管理员登录" })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("输入供应商 API Key")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    expect(settings.onReload).toHaveBeenCalledOnce();
+  });
   it("renders provider settings by default", () => {
     render(<SettingsPage settings={createSettingsController()} errorRuntimeContext={{}} />);
 

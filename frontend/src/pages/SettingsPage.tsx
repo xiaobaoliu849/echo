@@ -12,6 +12,7 @@ import DesktopSettingsSection from "../components/settings/DesktopSettingsSectio
 import LocalVoiceSettingsSection from "../components/settings/LocalVoiceSettingsSection";
 
 type Props = {
+  onSignIn?: () => void;
   settings: UseSettingsResult;
   errorRuntimeContext?: ErrorRuntimeContext;
   onClose?: () => void;
@@ -20,9 +21,12 @@ type Props = {
 
 type SettingCategory = "general" | "trajectory" | "provider" | "transcription" | "memory" | "desktop" | "local-voice";
 
-export default function SettingsPage({ settings, errorRuntimeContext, onClose, initialCategory = "provider" }: Props) {
+export default function SettingsPage({ settings, errorRuntimeContext, onClose, onSignIn, initialCategory = "provider" }: Props) {
   const { t } = useI18n();
   const [activeCategory, setActiveCategory] = useState<SettingCategory>(initialCategory);
+
+  const locked = !settings.settingsData && /AUTH_ADMIN_|AUTH_TOKEN_/.test(settings.settingsError);
+  const unavailable = ["provider", "memory", "transcription"].includes(activeCategory) && !settings.settingsData;
 
   return (
     <div className="vsSettingsLayout">
@@ -164,7 +168,7 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
           </header>
 
           <ErrorNotice
-            message={settings.settingsError}
+            message={unavailable && locked ? "" : settings.settingsError}
             scope="settings"
             context={{
               ...errorRuntimeContext,
@@ -215,9 +219,19 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
           {/* Locked while saving: the save response re-syncs every field, which
               would silently discard anything typed during the request. */}
           <fieldset className="vsSettingsFieldset" disabled={settings.settingsSaving}>
-            {activeCategory === "provider" && <ProviderSettingsSection settings={settings} />}
-            {activeCategory === "memory" && <MemorySettingsSection settings={settings} />}
-            {activeCategory === "transcription" && <TranscriptionSettingsSection settings={settings} />}
+            {unavailable ? (
+              <section className="vsProviderUnavailable" aria-live="polite">
+                <Cpu size={28} aria-hidden="true" />
+                <h2>{settings.settingsBusy ? t("正在读取设置", "Loading settings") : locked ? t("需要管理员权限", "Administrator access required") : t("无法读取设置", "Settings unavailable")}</h2>
+                {locked && <p>{t("请使用管理员账号登录，以查看和管理已保存的 API Key。", "Sign in with an administrator account to manage your saved API keys.")}</p>}
+                {!settings.settingsBusy && <div>
+                  {locked && onSignIn && <button type="button" className="vsBtnPrimary" onClick={onSignIn}>{t("管理员登录", "Admin sign-in")}</button>}
+                  <button type="button" onClick={() => void settings.onReload()}>{t("重新加载", "Retry")}</button>
+                </div>}
+              </section>
+            ) : activeCategory === "provider" && <ProviderSettingsSection settings={settings} />}
+            {!unavailable && activeCategory === "memory" && <MemorySettingsSection settings={settings} />}
+            {!unavailable && activeCategory === "transcription" && <TranscriptionSettingsSection settings={settings} />}
             {activeCategory === "desktop" && <DesktopSettingsSection settings={settings} />}
           </fieldset>
           {activeCategory === "local-voice" && <LocalVoiceSettingsSection />}
@@ -231,7 +245,7 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
               ) : settings.settingsInfo ? (
                 <span className="status-saved ok">✓ {settings.settingsInfo}</span>
               ) : (
-                <span className="status-ready">{t("参数配置就绪", "Settings ready")}</span>
+                <span className="status-ready">{settings.settingsData ? t("参数配置就绪", "Settings ready") : t("等待加载设置", "Awaiting settings")}</span>
               )}
             </div>
             {activeCategory !== "trajectory" && (
@@ -239,7 +253,7 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, i
                 <button
                   type="submit"
                   className="vsBtnPrimary vsFooterSaveBtn"
-                  disabled={settings.settingsSaving || settings.settingsBusy}
+                  disabled={!settings.settingsData || settings.settingsSaving || settings.settingsBusy}
                 >
                   {settings.settingsSaving ? t("保存中...", "Saving...") : t("保存", "Save")}
                 </button>

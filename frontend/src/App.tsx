@@ -122,7 +122,7 @@ export default function App() {
   const archiveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDesktopEmbedded = typeof window !== "undefined" &&
     (window.isElectron === true || Object.prototype.hasOwnProperty.call(window, "pywebview"));
-  const settings = useSettings({ formatErrorMessage });
+  const settings = useSettings({ formatErrorMessage, apiToken: authRuntime.apiToken, adminToken: authRuntime.adminToken });
   const uiLanguage = settings.displayLanguage;
   const tts = useTts({
     defaultText: getDefaultText(createInlineTranslator(uiLanguage)),
@@ -520,7 +520,8 @@ export default function App() {
       </main>
       {IS_HOSTED_BUILD ? null : <Suspense fallback={null}>
         <SettingsModal
-          open={isSettingsOpen}
+          open={isSettingsOpen && !authDialogOpen}
+          onSignIn={() => setAuthDialogOpen(true)}
           initialCategory={settingsInitialCategory}
           onClose={() => setIsSettingsOpen(false)}
           settings={settings}

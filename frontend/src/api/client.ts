@@ -169,7 +169,7 @@ function getStoredUserAdmin(): boolean {
 
 function resolveAuthToken(useAdminToken: boolean): string {
   if (useAdminToken) {
-    return getStoredAdminToken() || getStoredApiToken() || API_ADMIN_TOKEN || API_TOKEN;
+    return getStoredAdminToken() || API_ADMIN_TOKEN || getStoredApiToken() || API_TOKEN;
   }
   return getStoredApiToken() || API_TOKEN;
 }
@@ -1309,10 +1309,8 @@ function notifyAuthRejected(response: Response, detail: ApiErrorDetail | undefin
   if (response.url.includes("/api/auth/")) {
     return;
   }
-  // Hosted build: "this account is not an admin" is a valid session asking for
-  // the wrong page (e.g. another tab switched accounts), not a stale login;
-  // logging everyone out over it would also end the other tabs' sessions.
-  if (import.meta.env.VITE_HOSTED === "true" && code.startsWith("AUTH_ADMIN_")) {
+  // Admin-only requests can be denied while the account session is valid.
+  if (code.startsWith("AUTH_ADMIN_")) {
     return;
   }
   if (typeof window === "undefined") {
@@ -1947,7 +1945,7 @@ export async function fetchSettings(): Promise<SettingsResponse> {
       } as unknown as SettingsResponse["settings"],
     };
   }
-  const response = await apiFetch(`${API_BASE_URL}/api/settings/`, {}, { timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
+  const response = await apiFetch(`${API_BASE_URL}/api/settings/`, {}, { useAdminToken: true, timeoutMs: CONTROL_REQUEST_TIMEOUT_MS });
   if (!response.ok) {
     await throwApiError(response);
   }

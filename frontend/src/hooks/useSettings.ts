@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { IS_HOSTED_BUILD } from "../hosted";
 import {
   configureEverMemRuntime,
@@ -80,6 +80,8 @@ function parseModelValue(
 }
 
 type Options = {
+  apiToken?: string;
+  adminToken?: string;
   formatErrorMessage: FormatErrorMessage;
 };
 
@@ -99,7 +101,8 @@ type ProviderModelCatalog = Record<
   }
 >;
 
-export default function useSettings({ formatErrorMessage }: Options) {
+export default function useSettings({ formatErrorMessage, apiToken, adminToken }: Options) {
+  const loadRevision = useRef(0);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -458,10 +461,12 @@ export default function useSettings({ formatErrorMessage }: Options) {
   }
 
   async function loadSettings() {
+    const revision = ++loadRevision.current;
     setSettingsBusy(true);
     setSettingsError("");
     try {
       const result = await fetchSettings();
+      if (revision !== loadRevision.current) return;
       setSettingsData(result.settings);
       setSettingsConfigPath(result.config_path);
       setSettingsProviders(result.providers);
@@ -469,14 +474,23 @@ export default function useSettings({ formatErrorMessage }: Options) {
         setSettingsProvider(result.providers[0]);
       }
     } catch (err) {
+      if (revision !== loadRevision.current) return;
+      setSettingsData(null);
       setSettingsError(formatErrorMessage(err, t("加载设置失败。", "Failed to load settings.")));
     } finally {
-      setSettingsBusy(false);
+      if (revision === loadRevision.current) setSettingsBusy(false);
     }
   }
 
+  const reloadSettings = useRef(loadSettings);
+  reloadSettings.current = loadSettings;
   useEffect(() => {
-    void loadSettings();
+    setSettingsData(null);
+    void reloadSettings.current();
+    return () => { loadRevision.current += 1; };
+  }, [apiToken, adminToken]);
+
+  useEffect(() => {
     const runtimeConfig = getEverMemRuntimeConfig();
 
     setEvermemEnabled(runtimeConfig.enabled);
@@ -763,6 +777,7 @@ export default function useSettings({ formatErrorMessage }: Options) {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (!settingsData || settingsBusy || settingsSaving) return;
     setSettingsError("");
     setSettingsInfo("");
 
@@ -928,7 +943,9 @@ export default function useSettings({ formatErrorMessage }: Options) {
         };
       }
 
+      const revision = loadRevision.current;
       const result = await updateSettings(patch);
+      if (revision !== loadRevision.current) return;
       setSettingsData(result.settings);
       setSettingsConfigPath(result.config_path);
       setSettingsProviders(result.providers);
@@ -969,9 +986,11 @@ export default function useSettings({ formatErrorMessage }: Options) {
 
     setSettingsSaving(true);
     try {
+      const revision = loadRevision.current;
       const result = await updateSettings({
         custom_providers: updatedList
       });
+      if (revision !== loadRevision.current) return;
       setSettingsData(result.settings);
       setSettingsConfigPath(result.config_path);
       setSettingsProviders(result.providers);
@@ -993,9 +1012,11 @@ export default function useSettings({ formatErrorMessage }: Options) {
 
     setSettingsSaving(true);
     try {
+      const revision = loadRevision.current;
       const result = await updateSettings({
         custom_providers: updatedList
       });
+      if (revision !== loadRevision.current) return;
       setSettingsData(result.settings);
       setSettingsConfigPath(result.config_path);
       setSettingsProviders(result.providers);

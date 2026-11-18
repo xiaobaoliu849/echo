@@ -5,6 +5,7 @@ import SettingsPage from "../pages/SettingsPage";
 import type { ErrorRuntimeContext } from "../types/ui";
 
 type Props = {
+  onSignIn?: () => void;
   open: boolean;
   onClose: () => void;
   settings: UseSettingsResult;
@@ -12,7 +13,7 @@ type Props = {
   initialCategory?: "provider" | "desktop" | "trajectory";
 };
 
-export default function SettingsModal({ open, onClose, settings, errorRuntimeContext, initialCategory }: Props) {
+export default function SettingsModal({ open, onClose, onSignIn, settings, errorRuntimeContext, initialCategory }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Escape key dismisses the settings workspace
@@ -61,7 +62,7 @@ export default function SettingsModal({ open, onClose, settings, errorRuntimeCon
         className="vsSettingsModalStage"
         tabIndex={-1}
       >
-        <SettingsPage settings={settings} errorRuntimeContext={errorRuntimeContext} onClose={onClose} initialCategory={initialCategory} />
+        <SettingsPage onSignIn={onSignIn} settings={settings} errorRuntimeContext={errorRuntimeContext} onClose={onClose} initialCategory={initialCategory} />
       </div>
     </div>,
     document.body

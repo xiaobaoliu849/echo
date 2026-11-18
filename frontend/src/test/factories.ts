@@ -226,7 +226,7 @@ export function createSettingsController(
 ): UseSettingsResult {
   const displayLanguage: UiLanguage = overrides.displayLanguage ?? "zh-CN";
   return {
-    settingsData: null,
+    settingsData: { api_keys: {}, api_urls: {}, default_models: {}, general_settings: {}, memory_settings: {}, output_directory: "", tts_settings: {}, qwen_tts_settings: {}, transcription_settings: {}, minimax: {}, xiaomi: {}, ui_settings: {}, shortcuts: {} },
     settingsBusy: false,
     settingsSaving: false,
     settingsError: "",
