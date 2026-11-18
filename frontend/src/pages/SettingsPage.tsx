@@ -28,18 +28,44 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
   const locked = !settings.settingsData && /AUTH_ADMIN_|AUTH_TOKEN_/.test(settings.settingsError);
   const unavailable = ["provider", "memory", "transcription"].includes(activeCategory) && !settings.settingsData;
   const isProviderWorkspace = activeCategory === "provider" && !unavailable;
+  const showFooter = activeCategory !== "trajectory" && activeCategory !== "local-voice";
 
-  const footerNode = (
+  const [infoOrigin, setInfoOrigin] = useState<{
+    info: string;
+    category: SettingCategory;
+    provider: string;
+  }>(() => ({
+    info: settings.settingsInfo,
+    category: initialCategory,
+    provider: settings.settingsProvider,
+  }));
+
+  if (settings.settingsInfo !== infoOrigin.info) {
+    setInfoOrigin({
+      info: settings.settingsInfo,
+      category: activeCategory,
+      provider: settings.settingsProvider,
+    });
+  }
+
+  const visibleSettingsInfo =
+    settings.settingsInfo &&
+    infoOrigin.category === activeCategory &&
+    (activeCategory !== "provider" || infoOrigin.provider === settings.settingsProvider)
+      ? settings.settingsInfo
+      : "";
+
+  const footerNode = showFooter ? (
     <footer className="vsSettingsFormFooter">
       <div className="vsSettingsFooterStatus" aria-live="polite">
         {settings.settingsSaving ? (
           <span className="status-saving">
             <span className="spinner-mini" /> {t("正在保存配置...", "Saving settings...")}
           </span>
-        ) : settings.settingsInfo ? (
+        ) : visibleSettingsInfo ? (
           <span className="status-saved ok">
             <Check size={14} aria-hidden="true" />
-            <span>{settings.settingsInfo}</span>
+            <span>{visibleSettingsInfo}</span>
           </span>
         ) : (
           <span className="status-ready">
@@ -48,19 +74,17 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
           </span>
         )}
       </div>
-      {activeCategory !== "trajectory" && (
-        <div className="vsSettingsFooterActions">
-          <button
-            type="submit"
-            className="vsBtnPrimary vsFooterSaveBtn"
-            disabled={!settings.settingsData || settings.settingsSaving || settings.settingsBusy}
-          >
-            {settings.settingsSaving ? t("保存中...", "Saving...") : t("保存", "Save")}
-          </button>
-        </div>
-      )}
+      <div className="vsSettingsFooterActions">
+        <button
+          type="submit"
+          className="vsBtnPrimary vsFooterSaveBtn"
+          disabled={!settings.settingsData || settings.settingsSaving || settings.settingsBusy}
+        >
+          {settings.settingsSaving ? t("保存中...", "Saving...") : t("保存", "Save")}
+        </button>
+      </div>
     </footer>
-  );
+  ) : null;
 
   return (
     <div className="vsSettingsLayout">
@@ -72,14 +96,13 @@ export default function SettingsPage({ settings, errorRuntimeContext, onClose, o
               type="button"
               className="vsSettingsBackBtn"
               onClick={onClose}
-              title={t("返回工作区 (Esc)", "Back to Workspace (Esc)")}
+              title={t("返回工作区", "Back to Workspace")}
               aria-label={t("返回工作区", "Back to Workspace")}
             >
               <span className="vsSettingsBackIcon" aria-hidden="true">
-                <ArrowLeft size={14} />
+                <ArrowLeft size={13} />
               </span>
               <span className="vsSettingsBackLabel">{t("返回工作区", "Back to Workspace")}</span>
-              <kbd className="vsBackKbd" aria-hidden="true">Esc</kbd>
             </button>
           </div>
         )}

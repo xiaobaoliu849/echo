@@ -121,4 +121,41 @@ describe("SettingsPage", () => {
     expect(settings.onSubmit).toHaveBeenCalledTimes(1);
     expect(settings.onSubmit).toHaveBeenCalledWith(expect.any(Object));
   });
+
+  it("scopes provider status notices to their tab/provider and hides the footer on trajectory and local-voice", () => {
+    const notice = "已从 DashScope 获取 40 个模型（对话模型 30 个，TTS 语音模型 10 个）。";
+    const { rerender } = render(
+      <SettingsPage
+        settings={createSettingsController({ settingsProvider: "DashScope", settingsInfo: notice })}
+        errorRuntimeContext={{}}
+      />
+    );
+
+    expect(screen.getByText(notice)).toBeInTheDocument();
+
+    // Switching provider clears the stale DashScope notice.
+    rerender(
+      <SettingsPage
+        settings={createSettingsController({ settingsProvider: "Doubao", settingsInfo: notice })}
+        errorRuntimeContext={{}}
+      />
+    );
+    expect(screen.queryByText(notice)).not.toBeInTheDocument();
+
+    // Switching to General or Memory never shows DashScope's fetch notice.
+    fireEvent.click(screen.getByRole("button", { name: /通用/i }));
+    expect(screen.queryByText(notice)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /记忆/i }));
+    expect(screen.queryByText(notice)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存" })).toBeInTheDocument();
+
+    // Trajectory and Local Voice do not render the global form footer at all.
+    fireEvent.click(screen.getByRole("button", { name: /语音足迹|Voice Trajectory/i }));
+    expect(document.querySelector(".vsSettingsFormFooter")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /本地语音|Local Voice/i }));
+    expect(document.querySelector(".vsSettingsFormFooter")).not.toBeInTheDocument();
+  });
 });
