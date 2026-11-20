@@ -109,7 +109,7 @@ export const DEFAULT_MOSS_MODEL = "moss-live-1.0";
 // Mirrors DEFAULT_MOSS_REALTIME_VOICE in the backend.
 export const DEFAULT_MOSS_VOICE = "5e36ed14-b48a-5cb9-8c81-f61b00bab50e";
 export const MOSS_REALTIME_VOICES = [
-  { value: DEFAULT_MOSS_VOICE, label: "English · 英语", description: "默认英语音色 · Default English voice" },
+  { value: DEFAULT_MOSS_VOICE, label: "Donald Trump", description: "推荐 · Recommended" },
   { value: "default", label: "Default · 默认音色", description: "MOSS-Live 原生默认音色" },
   { value: "6c3152b1-1d4f-4e49-ade3-09f447712fec", label: "Nuannuan (Female)", description: "暖暖 · 温柔女声" },
   { value: "6cc93520-3207-4f7a-bca9-2d560b9c306b", label: "Mumu (Male)", description: "沐沐 · 自然男声" },

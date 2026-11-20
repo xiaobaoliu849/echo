@@ -807,7 +807,7 @@ describe("VoiceCallSettingsPopover", () => {
     expect(scrollSpy).toHaveBeenCalled();
   });
 
-  it("shows MOSS-Live voices and accent selector when MOSS is hovered", () => {
+  it("shows the Donald Trump voice and a separate accent selector for MOSS-Live", () => {
     const onAccentChange = vi.fn();
     const onVoiceChange = vi.fn();
     renderPopover({
@@ -831,7 +831,7 @@ describe("VoiceCallSettingsPopover", () => {
     expect(accentSelect).toBeInTheDocument();
     fireEvent.change(accentSelect, { target: { value: "en-GB" } });
     expect(onAccentChange).toHaveBeenCalledWith("en-GB");
-    fireEvent.click(screen.getByRole("button", { name: "English · 英语" }));
+    fireEvent.click(screen.getByRole("button", { name: "Donald Trump" }));
     expect(onVoiceChange).toHaveBeenCalledWith("5e36ed14-b48a-5cb9-8c81-f61b00bab50e");
   });
 });

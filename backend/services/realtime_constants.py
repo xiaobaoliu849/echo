@@ -250,7 +250,7 @@ MOSS_REALTIME_VOICES = (
     "default",
     "6c3152b1-1d4f-4e49-ade3-09f447712fec",  # Nuannuan (Female)
     "6cc93520-3207-4f7a-bca9-2d560b9c306b",  # Mumu (Male)
-    "5e36ed14-b48a-5cb9-8c81-f61b00bab50e",  # English
+    "5e36ed14-b48a-5cb9-8c81-f61b00bab50e",  # Donald Trump
 )
 
 # StepFun (StepAudio 3 Realtime) 全双工实时语音交互

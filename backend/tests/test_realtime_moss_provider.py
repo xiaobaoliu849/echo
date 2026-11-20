@@ -264,7 +264,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         [session_open] = client.of_type("session_open")
         self.assertEqual(session_open["voice"], voice_id)
 
-    async def test_unspecified_voice_selects_recommended_english_before_mic_on(self) -> None:
+    async def test_unspecified_voice_selects_donald_trump_before_mic_on(self) -> None:
         for voice in (None, "", " "):
             with self.subTest(voice=voice):
                 client, server = await _run_session([], voice=voice)

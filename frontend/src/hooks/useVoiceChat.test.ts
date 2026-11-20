@@ -160,7 +160,7 @@ class FakeWebSocket {
 }
 
 describe("useVoiceChat", () => {
-  it("starts MOSS calls with the recommended English voice and preserves explicit voice choices", async () => {
+  it("starts MOSS calls with the Donald Trump voice and preserves explicit voice choices", async () => {
     const { result } = renderHook(() => useVoiceChat({
       formatErrorMessage: createFormatErrorMessageStub(), providerOptions: ["MOSS"],
       preferredProvider: "MOSS", preferredModel: "moss-live-1.0",
