@@ -23,8 +23,9 @@ After restarting, verify:
   `hosted_settings.providers` is explicitly configured, it replaces the default
   offering and must include MOSS to make it available.
 - The same response through the community client's local backend includes MOSS.
-- A fresh community call selects English voice
-  `5e36ed14-b48a-5cb9-8c81-f61b00bab50e` and the provider acknowledges it during
+- The community voice picker displays **Donald Trump** under MOSS-Live. A fresh
+  community call selects that preset using voice ID
+  `5e36ed14-b48a-5cb9-8c81-f61b00bab50e`, which the provider acknowledges during
   session setup.
 
 Refresh or reopen the community client after changing the server offering so it
